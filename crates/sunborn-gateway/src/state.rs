@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use sunborn_cache::{ExactCacheStore, MemoryExactCache};
 use sunborn_core::AppConfig;
+use sunborn_db::MemoryDatabaseStore;
 use sunborn_invalidation::{DependencyGraph, InvalidationEngine};
 use sunborn_semantic::{
     DecisionConfig, DecisionEngine, DeterministicEmbeddingProvider, MemoryVectorStore,
@@ -15,12 +16,14 @@ pub struct AppState {
     pub decision_engine: Arc<DecisionEngine<DeterministicEmbeddingProvider, MemoryVectorStore>>,
     pub dependency_graph: Arc<DependencyGraph>,
     pub invalidation_engine: Arc<InvalidationEngine<MemoryExactCache, MemoryVectorStore>>,
+    pub db: Arc<MemoryDatabaseStore>,
 }
 
 impl AppState {
     pub fn new(config: AppConfig) -> Self {
         let memory_cache = Arc::new(MemoryExactCache::new());
         let vector_store = Arc::new(MemoryVectorStore::new());
+        let db = Arc::new(MemoryDatabaseStore::new());
         let embedder = DeterministicEmbeddingProvider::new();
         let decision_engine = Arc::new(DecisionEngine::new(
             embedder,
@@ -42,6 +45,7 @@ impl AppState {
             decision_engine,
             dependency_graph,
             invalidation_engine,
+            db,
         }
     }
 }

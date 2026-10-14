@@ -7,6 +7,7 @@ members = [
     "crates/sunborn-gateway",
     "crates/sunborn-semantic",
     "crates/sunborn-invalidation",
+    "crates/sunborn-db",
 ]
 
 [workspace.package]
