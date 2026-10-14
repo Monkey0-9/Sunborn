@@ -1,0 +1,36 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/sunborn-core",
+    "crates/sunborn-identity",
+    "crates/sunborn-cache",
+    "crates/sunborn-gateway",
+    "crates/sunborn-semantic",
+    "crates/sunborn-invalidation",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Sunborn Team"]
+license = "Apache-2.0"
+
+[workspace.dependencies]
+tokio = { version = "1.40", features = ["full"] }
+axum = { version = "0.8", features = ["json", "macros"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["trace", "cors"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+thiserror = "2.0"
+anyhow = "1.0"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+sha2 = "0.10"
+hex = "0.4"
+async-trait = "0.1"
+dotenvy = "0.15"
+http = "1.0"
+http-body-util = "0.1"

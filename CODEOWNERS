@@ -1,0 +1,25 @@
+# Global ownership
+* @sunborn-core-team
+
+# Architecture & Governance
+/docs/architecture/ @sunborn-architects
+/docs/adr/ @sunborn-architects
+
+# Backend & Rust Workspace
+/crates/ @sunborn-backend
+/Cargo.toml @sunborn-backend
+/Cargo.lock @sunborn-backend
+
+# Frontend Control Plane
+/frontend/ @sunborn-frontend
+
+# Infrastructure & Deployment
+/deploy/ @sunborn-sre
+/Dockerfile @sunborn-sre
+
+# CI/CD Workflows
+/.github/ @sunborn-devops
+
+# Research & Benchmarks
+/research/ @sunborn-research
+/benchmarks/ @sunborn-research
