@@ -59,6 +59,12 @@ export default function RootLayout({
               >
                 🛡️ Security & Tenants
               </a>
+              <a
+                href="/governance"
+                className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors"
+              >
+                ⚖️ Governance & Operations
+              </a>
             </nav>
           </div>
 

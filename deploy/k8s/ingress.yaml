@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sunborn-gateway-ingress
+  namespace: sunborn-system
+  labels:
+    app.kubernetes.io/name: sunborn-gateway
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "16m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+spec:
+  tls:
+    - hosts:
+        - gateway.sunborn.internal
+      secretName: sunborn-gateway-tls
+  rules:
+    - host: gateway.sunborn.internal
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sunborn-gateway
+                port:
+                  number: 8080

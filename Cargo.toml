@@ -9,6 +9,7 @@ members = [
     "crates/sunborn-invalidation",
     "crates/sunborn-db",
     "crates/sunborn-execution",
+    "apps/sunborn-rebuild",
 ]
 
 [workspace.package]
@@ -36,3 +37,5 @@ async-trait = "0.1"
 dotenvy = "0.15"
 http = "1.0"
 http-body-util = "0.1"
+bytes = "1.8"
+

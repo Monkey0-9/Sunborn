@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sunborn-gateway-config
+  namespace: sunborn-system
+  labels:
+    app.kubernetes.io/name: sunborn-gateway
+    app.kubernetes.io/part-of: sunborn
+data:
+  SUNBORN_SERVER__HOST: "0.0.0.0"
+  SUNBORN_SERVER__PORT: "8080"
+  SUNBORN_CACHE__EXACT_CACHE_ENABLED: "true"
+  SUNBORN_CACHE__SEMANTIC_CACHE_ENABLED: "true"
+  SUNBORN_CACHE__DEFAULT_TTL_SECS: "86400"
+  RUST_LOG: "info,sunborn_gateway=info,sunborn_cache=info"

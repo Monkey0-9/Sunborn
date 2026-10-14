@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Sunborn
 
 > **A full-stack enterprise semantic caching and execution-reuse platform for RAG and AI agents.**

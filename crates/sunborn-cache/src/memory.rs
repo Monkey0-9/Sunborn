@@ -8,13 +8,26 @@ use tokio::sync::RwLock;
 #[derive(Clone, Default)]
 pub struct MemoryExactCache {
     entries: Arc<RwLock<HashMap<String, CacheEntry>>>,
+    max_capacity: Option<usize>,
 }
 
 impl MemoryExactCache {
     pub fn new() -> Self {
         Self {
             entries: Arc::new(RwLock::new(HashMap::new())),
+            max_capacity: None,
         }
+    }
+
+    pub fn with_capacity(max_capacity: usize) -> Self {
+        Self {
+            entries: Arc::new(RwLock::new(HashMap::new())),
+            max_capacity: Some(max_capacity),
+        }
+    }
+
+    pub async fn entry_count(&self) -> usize {
+        self.entries.read().await.len()
     }
 }
 
@@ -37,6 +50,25 @@ impl ExactCacheStore for MemoryExactCache {
 
     async fn set(&self, entry: CacheEntry) -> Result<()> {
         let mut entries = self.entries.write().await;
+
+        if let Some(cap) = self.max_capacity {
+            if entries.len() >= cap && !entries.contains_key(&entry.key) {
+                // 1. Evict expired entries
+                entries.retain(|_, v| !v.is_expired());
+
+                // 2. If still at capacity, evict oldest entry
+                if entries.len() >= cap {
+                    if let Some(oldest_key) = entries
+                        .iter()
+                        .min_by_key(|(_, v)| v.created_at)
+                        .map(|(k, _)| k.clone())
+                    {
+                        entries.remove(&oldest_key);
+                    }
+                }
+            }
+        }
+
         entries.insert(entry.key.clone(), entry);
         Ok(())
     }
@@ -53,6 +85,20 @@ impl ExactCacheStore for MemoryExactCache {
         } else {
             Ok(false)
         }
+    }
+
+    async fn delete_by_prefix(&self, prefix: &str) -> Result<usize> {
+        let mut entries = self.entries.write().await;
+        let before = entries.len();
+        entries.retain(|k, _| !k.starts_with(prefix));
+        Ok(before - entries.len())
+    }
+
+    async fn sweep_expired(&self) -> Result<usize> {
+        let mut entries = self.entries.write().await;
+        let before = entries.len();
+        entries.retain(|_, v| !v.is_expired());
+        Ok(before - entries.len())
     }
 }
 
@@ -73,5 +119,55 @@ mod tests {
         let res = retrieved.unwrap();
         assert_eq!(res.content, "cached content");
         assert_eq!(res.hit_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_memory_cache_bounded_capacity() {
+        let cache = MemoryExactCache::with_capacity(3);
+        cache
+            .set(CacheEntry::new("k1", "v1", Some(60)))
+            .await
+            .unwrap();
+        cache
+            .set(CacheEntry::new("k2", "v2", Some(60)))
+            .await
+            .unwrap();
+        cache
+            .set(CacheEntry::new("k3", "v3", Some(60)))
+            .await
+            .unwrap();
+        assert_eq!(cache.entry_count().await, 3);
+
+        // Ingesting 4th entry should evict oldest
+        cache
+            .set(CacheEntry::new("k4", "v4", Some(60)))
+            .await
+            .unwrap();
+        assert_eq!(cache.entry_count().await, 3);
+        assert!(!cache.exists("k1").await.unwrap());
+        assert!(cache.exists("k4").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_memory_cache_delete_by_prefix() {
+        let cache = MemoryExactCache::new();
+        cache
+            .set(CacheEntry::new("tenant-a:1", "v1", Some(60)))
+            .await
+            .unwrap();
+        cache
+            .set(CacheEntry::new("tenant-a:2", "v2", Some(60)))
+            .await
+            .unwrap();
+        cache
+            .set(CacheEntry::new("tenant-b:1", "v3", Some(60)))
+            .await
+            .unwrap();
+
+        let count = cache.delete_by_prefix("tenant-a:").await.unwrap();
+        assert_eq!(count, 2);
+        assert!(!cache.exists("tenant-a:1").await.unwrap());
+        assert!(!cache.exists("tenant-a:2").await.unwrap());
+        assert!(cache.exists("tenant-b:1").await.unwrap());
     }
 }

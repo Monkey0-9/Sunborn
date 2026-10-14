@@ -1,0 +1,55 @@
+# Secrets and credentials
+**/.env
+**/.env.*
+**/.env.local
+**/.env.production
+**/.env.staging
+**/.env*.local
+**/*secret*
+**/*credential*
+**/*.pem
+**/*.key
+**/*.pkcs12
+**/*.pfx
+**/*.crt
+**/*.cer
+**/*.p12
+**/*.kdbx
+**/*.keystore
+
+# SSH & GPG
+**/.ssh/**
+**/.gnupg/**
+**/id_rsa
+**/id_rsa.pub
+**/id_ed25519
+**/id_ed25519.pub
+**/id_ecdsa
+**/known_hosts
+**/authorized_keys
+
+# Cloud & Auth Tokens
+**/.aws/**
+**/.azure/**
+**/.gcloud/**
+**/.config/gcloud/**
+**/.docker/config.json
+**/.npmrc
+**/.pypirc
+**/.git-credentials
+**/.netrc
+
+# System & OS
+/proc/**
+/sys/**
+/dev/**
+/etc/shadow*
+/etc/sudoers*
+/var/log/**
+
+# Build artifacts & dependencies (optional scan suppression)
+**/node_modules/**
+**/target/**
+**/dist/**
+**/build/**
+**/.venv/**

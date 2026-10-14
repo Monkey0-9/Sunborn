@@ -1,0 +1,54 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sunborn-gateway-netpol
+  namespace: sunborn-system
+  labels:
+    app.kubernetes.io/name: sunborn-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: sunborn-gateway
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow ingress traffic from ingress controller and internal proxies
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # Allow egress to PostgreSQL, Dragonfly, Qdrant, and DNS
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: dragonfly
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: qdrant
+      ports:
+        - protocol: TCP
+          port: 6333
+        - protocol: TCP
+          port: 6334
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

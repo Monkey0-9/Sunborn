@@ -28,6 +28,8 @@ uuid.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
+bytes.workspace = true
+
 
 [dev-dependencies]
 http.workspace = true

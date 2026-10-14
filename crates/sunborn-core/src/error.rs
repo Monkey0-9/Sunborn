@@ -58,6 +58,10 @@ impl SunbornError {
         Self::new(ErrorCode::InternalError, msg)
     }
 
+    pub fn tenant_not_found(msg: impl Into<String>) -> Self {
+        Self::new(ErrorCode::TenantNotFound, msg)
+    }
+
     pub fn rate_limit(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::RateLimitExceeded, msg)
     }

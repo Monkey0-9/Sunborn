@@ -1,6 +1,6 @@
 use crate::shadow::ShadowEvaluator;
 use std::sync::Arc;
-use sunborn_cache::{ExactCacheStore, MemoryExactCache};
+use sunborn_cache::{CircuitBreakerCache, ExactCacheStore, MemoryExactCache};
 use sunborn_core::AppConfig;
 use sunborn_db::MemoryDatabaseStore;
 use sunborn_execution::MemoryExecutionCacheStore;
@@ -13,6 +13,7 @@ use sunborn_semantic::{
 pub struct AppState {
     pub config: AppConfig,
     pub cache: Arc<dyn ExactCacheStore>,
+    pub circuit_breaker: Arc<CircuitBreakerCache<MemoryExactCache>>,
     pub memory_cache: Arc<MemoryExactCache>,
     pub vector_store: Arc<MemoryVectorStore>,
     pub decision_engine: Arc<DecisionEngine<DeterministicEmbeddingProvider, MemoryVectorStore>>,
@@ -26,6 +27,11 @@ pub struct AppState {
 impl AppState {
     pub fn new(config: AppConfig) -> Self {
         let memory_cache = Arc::new(MemoryExactCache::new());
+        let circuit_breaker = Arc::new(CircuitBreakerCache::new(
+            (*memory_cache).clone(),
+            3,
+            std::time::Duration::from_secs(5),
+        ));
         let vector_store = Arc::new(MemoryVectorStore::new());
         let db = Arc::new(MemoryDatabaseStore::new());
         let embedder = DeterministicEmbeddingProvider::new();
@@ -45,7 +51,8 @@ impl AppState {
 
         Self {
             config,
-            cache: memory_cache.clone(),
+            cache: circuit_breaker.clone(),
+            circuit_breaker,
             memory_cache,
             vector_store,
             decision_engine,

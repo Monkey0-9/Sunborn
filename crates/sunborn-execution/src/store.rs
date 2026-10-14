@@ -27,6 +27,7 @@ pub trait ExecutionCacheStore: Send + Sync {
         tenant_id: &TenantId,
         tool_name: &str,
     ) -> Result<usize, SunbornError>;
+    async fn evict_by_tenant(&self, tenant_id: &TenantId) -> Result<usize, SunbornError>;
 }
 
 struct CacheEntry {
@@ -112,6 +113,14 @@ impl ExecutionCacheStore for MemoryExecutionCacheStore {
         let mut map = self.entries.write().await;
         let initial_len = map.len();
         map.retain(|k, v| !(k.starts_with(&prefix) && v.result.tool_name == tool_name));
+        Ok(initial_len - map.len())
+    }
+
+    async fn evict_by_tenant(&self, tenant_id: &TenantId) -> Result<usize, SunbornError> {
+        let prefix = format!("tenant:{}:sig:", tenant_id.0);
+        let mut map = self.entries.write().await;
+        let initial_len = map.len();
+        map.retain(|k, _| !k.starts_with(&prefix));
         Ok(initial_len - map.len())
     }
 }

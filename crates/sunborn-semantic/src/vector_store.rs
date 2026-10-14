@@ -37,6 +37,8 @@ pub trait VectorStore: Send + Sync {
     ) -> Result<Vec<ScoredVectorEntry>>;
     async fn delete(&self, id: &str) -> Result<bool>;
     async fn count(&self, tenant_id: &TenantId) -> Result<usize>;
+    async fn delete_by_tenant(&self, tenant_id: &TenantId) -> Result<usize>;
+    async fn all_entries(&self) -> Result<Vec<VectorEntry>>;
 }
 
 #[derive(Clone, Default)]
@@ -113,6 +115,18 @@ impl VectorStore for MemoryVectorStore {
         let entries = self.entries.read().await;
         let count = entries.iter().filter(|e| e.tenant_id == *tenant_id).count();
         Ok(count)
+    }
+
+    async fn delete_by_tenant(&self, tenant_id: &TenantId) -> Result<usize> {
+        let mut entries = self.entries.write().await;
+        let before = entries.len();
+        entries.retain(|e| e.tenant_id != *tenant_id);
+        Ok(before - entries.len())
+    }
+
+    async fn all_entries(&self) -> Result<Vec<VectorEntry>> {
+        let entries = self.entries.read().await;
+        Ok(entries.clone())
     }
 }
 

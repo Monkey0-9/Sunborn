@@ -17,6 +17,13 @@ pub trait DatabaseStore: Send + Sync {
     async fn fetch_pending_outbox_events(&self, limit: usize) -> Result<Vec<OutboxRecord>>;
     async fn mark_outbox_processed(&self, id: i64) -> Result<()>;
     async fn record_audit_event(&self, audit: AuditRecord) -> Result<()>;
+    async fn scan_cache_entries(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<DurableCacheRecord>>;
+    async fn count_cache_entries(&self) -> Result<usize>;
+    async fn delete_tenant_data(&self, tenant_id: &str) -> Result<usize>;
 }
 
 #[derive(Clone, Default)]
@@ -100,6 +107,50 @@ impl DatabaseStore for MemoryDatabaseStore {
         let mut audits = self.audits.write().await;
         audits.push(audit);
         Ok(())
+    }
+
+    async fn scan_cache_entries(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<DurableCacheRecord>> {
+        let cache = self.cache_entries.read().await;
+        let mut entries: Vec<DurableCacheRecord> = cache.values().cloned().collect();
+        entries.sort_by_key(|a| a.created_at);
+        let paged = entries.into_iter().skip(offset).take(limit).collect();
+        Ok(paged)
+    }
+
+    async fn count_cache_entries(&self) -> Result<usize> {
+        let cache = self.cache_entries.read().await;
+        Ok(cache.len())
+    }
+
+    async fn delete_tenant_data(&self, tenant_id: &str) -> Result<usize> {
+        let mut tenants = self.tenants.write().await;
+        tenants.remove(tenant_id);
+
+        let mut cache = self.cache_entries.write().await;
+        let before_cache = cache.len();
+        cache.retain(|_, v| v.tenant_id != tenant_id);
+        let deleted_cache = before_cache - cache.len();
+
+        let mut outbox = self.outbox.write().await;
+        outbox.retain(|e| e.tenant_id != tenant_id);
+
+        let mut audits = self.audits.write().await;
+        audits.push(AuditRecord {
+            request_id: uuid::Uuid::new_v4(),
+            tenant_id: tenant_id.to_string(),
+            action: "TENANT_OFFBOARDING_ERASURE".to_string(),
+            details: serde_json::json!({
+                "deleted_cache_entries": deleted_cache,
+                "timestamp": Utc::now()
+            }),
+            created_at: Utc::now(),
+        });
+
+        Ok(deleted_cache)
     }
 }
 

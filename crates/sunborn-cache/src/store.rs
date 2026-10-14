@@ -42,4 +42,6 @@ pub trait ExactCacheStore: Send + Sync {
     async fn set(&self, entry: CacheEntry) -> Result<()>;
     async fn delete(&self, key: &str) -> Result<bool>;
     async fn exists(&self, key: &str) -> Result<bool>;
+    async fn delete_by_prefix(&self, prefix: &str) -> Result<usize>;
+    async fn sweep_expired(&self) -> Result<usize>;
 }

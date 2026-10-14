@@ -1,4 +1,6 @@
 pub mod handlers;
+pub mod origin;
+pub mod routing;
 pub mod shadow;
 pub mod state;
 
@@ -26,6 +28,15 @@ pub fn create_router(state: AppState) -> Router {
         .route("/v1/execution/results", post(handlers::record_tool_result))
         .route("/v1/execution/evict", post(handlers::evict_execution))
         .route("/v1/shadow/evaluate", post(handlers::shadow_evaluate))
+        .route("/v1/chaos/status", get(handlers::chaos_status))
+        .route("/v1/chaos/trip", post(handlers::chaos_trip))
+        .route("/v1/chaos/reset", post(handlers::chaos_reset))
+        .route("/v1/rebuild", post(handlers::trigger_rebuild))
+        .route(
+            "/v1/tenants/{id}",
+            axum::routing::delete(handlers::delete_tenant),
+        )
+        .route("/v1/lifecycle/sweep", post(handlers::sweep_lifecycle))
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(state)

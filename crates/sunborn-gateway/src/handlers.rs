@@ -15,6 +15,7 @@ use sunborn_core::{
     CachePath, DecisionAction, DecisionRecord, RequestEnvelope, ResponseEnvelope, SunbornError,
     TenantId,
 };
+use sunborn_db::DatabaseStore;
 use sunborn_execution::ExecutionCacheStore;
 use sunborn_identity::IdentityEngine;
 use sunborn_invalidation::InvalidationEvent;
@@ -117,6 +118,7 @@ pub async fn execute_request(
                 "Exact cache HIT (C0/C1)"
             );
 
+            let _ = state.db.increment_hit_count(&identity.key).await;
             return Ok(Json(ResponseEnvelope {
                 request_id: req.request_id,
                 tenant_id: req.tenant_id,
@@ -139,7 +141,9 @@ pub async fn execute_request(
     }
 
     // 4. Semantic Cache Candidate Evaluation (C2)
-    if state.config.cache.semantic_cache_enabled {
+    if state.config.cache.semantic_cache_enabled
+        && state.circuit_breaker.status().await != sunborn_cache::CircuitStatus::Open
+    {
         if let Ok(outcome) = state.decision_engine.evaluate(&req).await {
             if outcome.decision.action == DecisionAction::SafeHit {
                 if let Some(content) = outcome.matched_content {
@@ -205,6 +209,27 @@ pub async fn execute_request(
             })
             .await;
     }
+
+    // c) Save to authoritative PostgreSQL system of record
+    let _ = state
+        .db
+        .insert_cache_entry(sunborn_db::models::DurableCacheRecord {
+            key: identity.key.clone(),
+            tenant_id: req.tenant_id.0.clone(),
+            application_id: req.application_id.0.clone(),
+            model: req.model.clone(),
+            policy_version: "v1".to_string(),
+            hash: identity.key.clone(),
+            prompt_canonical: req.prompt.clone(),
+            content: origin_content.clone(),
+            hit_count: 0,
+            created_at: Utc::now(),
+            expires_at: Some(
+                Utc::now() + chrono::Duration::seconds(state.config.cache.default_ttl_secs as i64),
+            ),
+            last_accessed_at: Utc::now(),
+        })
+        .await;
 
     let duration_ms = start.elapsed().as_millis() as u64;
 
@@ -430,6 +455,133 @@ pub async fn shadow_evaluate(
         .await
         .map_err(AppError::from)?;
     Ok(Json(result))
+}
+
+pub async fn delete_tenant(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let tenant = TenantId::new(&tenant_id);
+    let db_deleted = state
+        .db
+        .delete_tenant_data(&tenant_id)
+        .await
+        .map_err(AppError::from)?;
+    let prefix = format!("tenant:{}:", tenant_id);
+    let exact_deleted = state.cache.delete_by_prefix(&prefix).await.unwrap_or(0);
+    let vector_deleted = state
+        .vector_store
+        .delete_by_tenant(&tenant)
+        .await
+        .unwrap_or(0);
+    let execution_deleted = state
+        .execution_store
+        .evict_by_tenant(&tenant)
+        .await
+        .unwrap_or(0);
+
+    tracing::info!(
+        tenant = %tenant_id,
+        db_deleted,
+        exact_deleted,
+        vector_deleted,
+        execution_deleted,
+        "Completed tenant cascade offboarding"
+    );
+
+    Ok(Json(json!({
+        "tenant_id": tenant_id,
+        "status": "erased",
+        "deleted_db_entries": db_deleted,
+        "deleted_exact_cache": exact_deleted,
+        "deleted_vectors": vector_deleted,
+        "deleted_execution_tools": execution_deleted
+    })))
+}
+
+pub async fn trigger_rebuild(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let entries = state
+        .db
+        .scan_cache_entries(100000, 0)
+        .await
+        .map_err(AppError::from)?;
+    let total = entries.len();
+    let mut exact_restored = 0;
+    let mut vector_restored = 0;
+
+    let embedder = DeterministicEmbeddingProvider::new();
+
+    for record in entries {
+        // 1. Repopulate exact cache
+        let ttl_secs = record
+            .expires_at
+            .map(|exp| (exp - Utc::now()).num_seconds().max(1) as u64)
+            .unwrap_or(state.config.cache.default_ttl_secs);
+
+        let entry = CacheEntry::new(&record.key, &record.content, Some(ttl_secs));
+        if state.cache.set(entry).await.is_ok() {
+            exact_restored += 1;
+        }
+
+        // 2. Repopulate vector store
+        if let Ok(vec) = embedder.embed(&record.prompt_canonical).await {
+            let ventry = VectorEntry {
+                id: record.key.clone(),
+                tenant_id: TenantId::new(record.tenant_id),
+                application_id: sunborn_core::model::ApplicationId::new(record.application_id),
+                prompt: record.prompt_canonical,
+                content: record.content,
+                vector: vec,
+                metadata: serde_json::json!({ "model": record.model }),
+                created_at: record.created_at,
+            };
+            if state.vector_store.insert(ventry).await.is_ok() {
+                vector_restored += 1;
+            }
+        }
+    }
+
+    Ok(Json(json!({
+        "status": "completed",
+        "scanned_db_records": total,
+        "rebuilt_exact_cache": exact_restored,
+        "rebuilt_vectors": vector_restored
+    })))
+}
+
+pub async fn sweep_lifecycle(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let swept = state.cache.sweep_expired().await.map_err(AppError::from)?;
+    Ok(Json(json!({
+        "status": "completed",
+        "swept_entries": swept
+    })))
+}
+
+pub async fn chaos_status(State(state): State<AppState>) -> impl IntoResponse {
+    let status = state.circuit_breaker.status().await;
+    Json(json!({
+        "circuit_status": format!("{:?}", status)
+    }))
+}
+
+pub async fn chaos_trip(State(state): State<AppState>) -> impl IntoResponse {
+    state.circuit_breaker.trip().await;
+    Json(json!({
+        "status": "tripped",
+        "circuit_status": "Open"
+    }))
+}
+
+pub async fn chaos_reset(State(state): State<AppState>) -> impl IntoResponse {
+    state.circuit_breaker.reset().await;
+    Json(json!({
+        "status": "reset",
+        "circuit_status": "Closed"
+    }))
 }
 
 pub struct AppError(SunbornError);
