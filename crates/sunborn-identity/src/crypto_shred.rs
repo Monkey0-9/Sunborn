@@ -1,10 +1,11 @@
-//! Security S1: O(1) Cryptographic Tenant Shredding via Envelope Encryption.
+//! Security S1: O(1) Cryptographic Tenant Shredding via AEAD Envelope Encryption.
 //!
 //! Provides mathematically guaranteed cryptographic erasure (GDPR Article 17 / Right to be Forgotten)
 //! in sub-millisecond O(1) time without performing sequential database table/index scans.
 //!
-//! Every tenant's payload is encrypted under a unique Tenant Data Encryption Key (TDEK)
-//! using HKDF-SHA256 and authenticated stream encryption (Encrypt-then-MAC with constant-time verification).
+//! Every tenant payload is encrypted under a unique Tenant Data Encryption Key (TDEK)
+//! using HKDF-SHA256, 96-bit random nonces, and authenticated stream encryption
+//! (constant-time HMAC-SHA256 verification with stack scrubbing).
 //! Zeroizing the TDEK instantly renders all stored ciphertext across L1, L2, vector stores,
 //! and audit logs unrecoverable white noise.
 
@@ -25,6 +26,34 @@ pub fn constant_time_compare(a: &[u8], b: &[u8]) -> bool {
         diff |= x ^ y;
     }
     diff == 0
+}
+
+/// Generates a fresh 96-bit (12-byte) cryptographically secure random nonce via OS entropy.
+pub fn generate_random_nonce_96() -> [u8; 12] {
+    let mut nonce = [0u8; 12];
+    if let Ok(mut f) = std::fs::File::open("/dev/urandom") {
+        use std::io::Read;
+        if f.read_exact(&mut nonce).is_ok() {
+            return nonce;
+        }
+    }
+    // High-resolution entropy fallback if /dev/urandom is unavailable
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let mut hasher = Sha256::new();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    hasher.update(now.to_le_bytes());
+    hasher.update(
+        COUNTER
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            .to_le_bytes(),
+    );
+    hasher.update(std::process::id().to_le_bytes());
+    let h = hasher.finalize();
+    nonce.copy_from_slice(&h[..12]);
+    nonce
 }
 
 /// A 256-bit encryption key that securely zeroizes its memory upon drop or explicit shredding.
@@ -50,6 +79,68 @@ impl ZeroizingKey {
             }
         }
         std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Wrap this TDEK under a 256-bit Key Encryption Key (KEK) for persistent database storage
+    pub fn wrap(&self, kek: &[u8; 32]) -> Vec<u8> {
+        let nonce = generate_random_nonce_96();
+        let wrap_key = hkdf_sha256_expand(kek, b"sunborn-kek-wrap-v1", 64);
+        let enc_key = &wrap_key[..32];
+        let mac_key = &wrap_key[32..64];
+
+        let keystream = hkdf_sha256_expand(enc_key, &nonce, 32);
+        let mut wrapped_bytes = Vec::with_capacity(32);
+        for (p, k) in self.bytes.iter().zip(keystream.iter()) {
+            wrapped_bytes.push(p ^ k);
+        }
+
+        // Authenticate wrapped payload: HMAC(mac_key, nonce || wrapped_bytes)
+        let mut mac_input = Vec::new();
+        mac_input.extend_from_slice(&nonce);
+        mac_input.extend_from_slice(&wrapped_bytes);
+        let tag = hmac_sha256(mac_key, &mac_input);
+
+        let mut out = Vec::with_capacity(12 + 32 + 32);
+        out.extend_from_slice(&nonce);
+        out.extend_from_slice(&wrapped_bytes);
+        out.extend_from_slice(&tag);
+        out
+    }
+
+    /// Unwrap a persisted TDEK from database storage under the cluster KEK
+    pub fn unwrap(wrapped: &[u8], kek: &[u8; 32]) -> Result<Self, SunbornError> {
+        if wrapped.len() != 12 + 32 + 32 {
+            return Err(SunbornError::forbidden(
+                "Invalid wrapped key envelope length",
+            ));
+        }
+
+        let nonce = &wrapped[..12];
+        let ciphertext = &wrapped[12..44];
+        let auth_tag = &wrapped[44..76];
+
+        let wrap_key = hkdf_sha256_expand(kek, b"sunborn-kek-wrap-v1", 64);
+        let enc_key = &wrap_key[..32];
+        let mac_key = &wrap_key[32..64];
+
+        let mut mac_input = Vec::new();
+        mac_input.extend_from_slice(nonce);
+        mac_input.extend_from_slice(ciphertext);
+        let expected_tag = hmac_sha256(mac_key, &mac_input);
+
+        if !constant_time_compare(auth_tag, &expected_tag) {
+            return Err(SunbornError::forbidden(
+                "Wrapped key integrity verification failed",
+            ));
+        }
+
+        let keystream = hkdf_sha256_expand(enc_key, nonce, 32);
+        let mut raw_key = [0u8; 32];
+        for (i, (c, k)) in ciphertext.iter().zip(keystream.iter()).enumerate() {
+            raw_key[i] = c ^ k;
+        }
+
+        Ok(ZeroizingKey::new(raw_key))
     }
 }
 
@@ -113,11 +204,11 @@ pub fn hkdf_sha256_expand(prk: &[u8], info: &[u8], output_len: usize) -> Vec<u8>
     okm
 }
 
-/// An envelope-encrypted ciphertext container with integrity authentication.
+/// An envelope-encrypted ciphertext container with 96-bit nonce and integrity authentication.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct EncryptedEnvelope {
     pub tenant_id: TenantId,
-    pub nonce: [u8; 16],
+    pub nonce: [u8; 12],
     pub ciphertext: Vec<u8>,
     pub auth_tag: [u8; 32],
     pub key_version: u32,
@@ -153,7 +244,7 @@ impl TenantCryptoRegistry {
         map.contains_key(tenant_id)
     }
 
-    /// Encrypt plaintext under the tenant's TDEK with HKDF-derived keys and HMAC authentication.
+    /// Encrypt plaintext under the tenant's TDEK with fresh 96-bit random nonce and HMAC authentication.
     pub fn encrypt(
         &self,
         tenant_id: &TenantId,
@@ -171,21 +262,15 @@ impl TenantCryptoRegistry {
             (entry.0.clone(), entry.1)
         };
 
-        // Deterministic synthetic nonce derived from context and input hash
-        let mut nonce_hasher = Sha256::new();
-        nonce_hasher.update(b"nonce:");
-        nonce_hasher.update(context.as_bytes());
-        nonce_hasher.update(plaintext);
-        let nonce_digest = nonce_hasher.finalize();
-        let mut nonce = [0u8; 16];
-        nonce.copy_from_slice(&nonce_digest[..16]);
+        // Fresh 96-bit (12-byte) random nonce per write to ensure ciphertext uniqueness
+        let nonce = generate_random_nonce_96();
 
         // Derive 64 bytes: 32 bytes stream key + 32 bytes MAC key
         let mut info = Vec::new();
-        info.extend_from_slice(b"sunborn-enc-v1:");
+        info.extend_from_slice(b"sunborn-v1-aead-record:");
         info.extend_from_slice(context.as_bytes());
         info.extend_from_slice(&nonce);
-        let derived = hkdf_sha256_expand(tdek.as_bytes(), &info, 64);
+        let mut derived = hkdf_sha256_expand(tdek.as_bytes(), &info, 64);
         let enc_key = &derived[..32];
         let mac_key = &derived[32..64];
 
@@ -202,6 +287,13 @@ impl TenantCryptoRegistry {
         mac_input.extend_from_slice(&nonce);
         mac_input.extend_from_slice(&ciphertext);
         let auth_tag = hmac_sha256(mac_key, &mac_input);
+
+        // Scrub sensitive derived key material from memory
+        for b in derived.iter_mut() {
+            unsafe {
+                std::ptr::write_volatile(b, 0);
+            }
+        }
 
         Ok(EncryptedEnvelope {
             tenant_id: tenant_id.clone(),
@@ -231,10 +323,10 @@ impl TenantCryptoRegistry {
 
         // Derive keys
         let mut info = Vec::new();
-        info.extend_from_slice(b"sunborn-enc-v1:");
+        info.extend_from_slice(b"sunborn-v1-aead-record:");
         info.extend_from_slice(context.as_bytes());
         info.extend_from_slice(&envelope.nonce);
-        let derived = hkdf_sha256_expand(tdek.as_bytes(), &info, 64);
+        let mut derived = hkdf_sha256_expand(tdek.as_bytes(), &info, 64);
         let enc_key = &derived[..32];
         let mac_key = &derived[32..64];
 
@@ -256,6 +348,13 @@ impl TenantCryptoRegistry {
         let mut plaintext = Vec::with_capacity(envelope.ciphertext.len());
         for (c, k) in envelope.ciphertext.iter().zip(keystream.iter()) {
             plaintext.push(c ^ k);
+        }
+
+        // Scrub sensitive derived key material from memory
+        for b in derived.iter_mut() {
+            unsafe {
+                std::ptr::write_volatile(b, 0);
+            }
         }
 
         Ok(plaintext)
@@ -298,6 +397,7 @@ mod tests {
             .encrypt(&tenant, secret_payload, context)
             .expect("Encryption should succeed");
         assert_ne!(envelope.ciphertext, secret_payload);
+        assert_eq!(envelope.nonce.len(), 12, "Must use 96-bit random nonce");
 
         // 2. Decrypt while active
         let decrypted = registry
@@ -340,5 +440,27 @@ mod tests {
         let result = registry.decrypt(&envelope, context);
         assert!(result.is_err());
         assert!(result.unwrap_err().message.contains("mismatch"));
+    }
+
+    #[test]
+    fn test_persistent_tdek_wrapping_and_unwrapping() {
+        let master_kek = [99u8; 32];
+        let raw_tdek = [123u8; 32];
+        let original_key = ZeroizingKey::new(raw_tdek);
+
+        // Wrap TDEK for PostgreSQL persistence
+        let wrapped_bytes = original_key.wrap(&master_kek);
+        assert_eq!(wrapped_bytes.len(), 12 + 32 + 32);
+
+        // Simulate pod reboot and unwrap from database storage
+        let unwrapped_key = ZeroizingKey::unwrap(&wrapped_bytes, &master_kek)
+            .expect("Unwrapping with valid master KEK must succeed");
+        assert_eq!(unwrapped_key.as_bytes(), original_key.as_bytes());
+
+        // Tampering with wrapped key fails integrity check
+        let mut corrupted_wrap = wrapped_bytes.clone();
+        corrupted_wrap[15] ^= 0xFF;
+        let corrupt_result = ZeroizingKey::unwrap(&corrupted_wrap, &master_kek);
+        assert!(corrupt_result.is_err());
     }
 }

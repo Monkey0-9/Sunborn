@@ -52,28 +52,33 @@ impl MerkleExecutionEngine {
         parent_hashes: &[&str],
     ) -> Result<String, SunbornError> {
         let mut hasher = Sha256::new();
-        hasher.update(tenant_id.0.as_bytes());
-        hasher.update(b":");
-        hasher.update(app_id.0.as_bytes());
-        hasher.update(b":");
-        hasher.update(node.tool_name.as_bytes());
-        hasher.update(b":");
-        hasher.update(node.tool_version.as_bytes());
-        hasher.update(b":");
+        // RFC 6962 Domain separation tag: 0x00 for leaf tool node, 0x01 for interior node with parents
+        hasher.update([if parent_hashes.is_empty() { 0x00 } else { 0x01 }]);
 
         // Canonical JSON argument ordering
         let canonical_args = canonicalize_json(&node.arguments);
         let canonical_str = serde_json::to_string(&canonical_args)
             .map_err(|e| SunbornError::internal(format!("Canonical JSON error: {e}")))?;
-        hasher.update(canonical_str.as_bytes());
-        hasher.update(b":parents:");
 
-        // Sorted parent hashes for deterministic accumulation
+        // 64-bit little-endian length-framed variable fields to prevent boundary collisions
+        for field in [
+            tenant_id.0.as_str(),
+            app_id.0.as_str(),
+            node.tool_name.as_str(),
+            node.tool_version.as_str(),
+            canonical_str.as_str(),
+        ] {
+            hasher.update((field.len() as u64).to_le_bytes());
+            hasher.update(field.as_bytes());
+        }
+
+        // Sorted parent hashes for deterministic accumulation with length framing
         let mut sorted_parents = parent_hashes.to_vec();
-        sorted_parents.sort();
+        sorted_parents.sort_unstable();
+        hasher.update((sorted_parents.len() as u64).to_le_bytes());
         for ph in sorted_parents {
+            hasher.update((ph.len() as u64).to_le_bytes());
             hasher.update(ph.as_bytes());
-            hasher.update(b",");
         }
 
         Ok(hex::encode(hasher.finalize()))
@@ -201,5 +206,42 @@ mod tests {
         assert_eq!(plan.cached_prefix_node_ids, vec!["step1", "step2"]);
         assert_eq!(plan.execution_tail_node_ids, vec!["step3"]);
         assert_eq!(plan.latency_saved_estimate_ms, 300);
+    }
+
+    #[test]
+    fn test_merkle_boundary_collision_resistance() {
+        let tenant = TenantId::new("tenant-a");
+        let app = ApplicationId::new("app-x");
+
+        // Tool A: tool_name = "fetch_v1", tool_version = "2"
+        let node_a = MerkleNode {
+            id: "a".into(),
+            tool_name: "fetch_v1".into(),
+            tool_version: "2".into(),
+            arguments: serde_json::json!({}),
+            purity: ToolPurity::PureDeterministic,
+            parent_ids: vec![],
+        };
+
+        // Tool B: tool_name = "fetch_v", tool_version = "12"
+        let node_b = MerkleNode {
+            id: "b".into(),
+            tool_name: "fetch_v".into(),
+            tool_version: "12".into(),
+            arguments: serde_json::json!({}),
+            purity: ToolPurity::PureDeterministic,
+            parent_ids: vec![],
+        };
+
+        let hash_a =
+            MerkleExecutionEngine::compute_merkle_hash(&tenant, &app, &node_a, &[]).unwrap();
+        let hash_b =
+            MerkleExecutionEngine::compute_merkle_hash(&tenant, &app, &node_b, &[]).unwrap();
+
+        // Length framing guarantees different hashes despite identical concatenation
+        assert_ne!(
+            hash_a, hash_b,
+            "Boundary collision detected! Length framing must prevent this."
+        );
     }
 }

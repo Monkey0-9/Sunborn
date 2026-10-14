@@ -7,6 +7,8 @@ use sunborn_core::Result;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
+pub type HydrationHook = Arc<dyn Fn(&[DurableCacheRecord]) + Send + Sync + 'static>;
+
 pub enum WriteBehindTask {
     InsertCacheEntry(DurableCacheRecord),
     RecordAudit(AuditRecord),
@@ -30,6 +32,16 @@ impl WriteBehindFlusher {
         max_batch_size: usize,
         flush_interval: Duration,
     ) -> Self {
+        Self::new_with_hook(db, buffer_capacity, max_batch_size, flush_interval, None)
+    }
+
+    pub fn new_with_hook<D: DatabaseStore + 'static>(
+        db: Arc<D>,
+        buffer_capacity: usize,
+        max_batch_size: usize,
+        flush_interval: Duration,
+        hydration_hook: Option<HydrationHook>,
+    ) -> Self {
         let (tx, mut rx) = mpsc::channel(buffer_capacity);
         let enqueued_count = Arc::new(AtomicU64::new(0));
         let flushed_count = Arc::new(AtomicU64::new(0));
@@ -49,7 +61,8 @@ impl WriteBehindFlusher {
                             &mut cache_batch,
                             &mut audit_batch,
                             &mut flush_notifiers,
-                            &flushed_ref
+                            &flushed_ref,
+                            &hydration_hook,
                         ).await;
                     }
                     task = rx.recv() => {
@@ -62,7 +75,8 @@ impl WriteBehindFlusher {
                                         &mut cache_batch,
                                         &mut audit_batch,
                                         &mut flush_notifiers,
-                                        &flushed_ref
+                                        &flushed_ref,
+                                        &hydration_hook,
                                     ).await;
                                 }
                             }
@@ -74,7 +88,8 @@ impl WriteBehindFlusher {
                                         &mut cache_batch,
                                         &mut audit_batch,
                                         &mut flush_notifiers,
-                                        &flushed_ref
+                                        &flushed_ref,
+                                        &hydration_hook,
                                     ).await;
                                 }
                             }
@@ -85,7 +100,8 @@ impl WriteBehindFlusher {
                                     &mut cache_batch,
                                     &mut audit_batch,
                                     &mut flush_notifiers,
-                                    &flushed_ref
+                                    &flushed_ref,
+                                    &hydration_hook,
                                 ).await;
                             }
                             None => {
@@ -95,7 +111,8 @@ impl WriteBehindFlusher {
                                     &mut cache_batch,
                                     &mut audit_batch,
                                     &mut flush_notifiers,
-                                    &flushed_ref
+                                    &flushed_ref,
+                                    &hydration_hook,
                                 ).await;
                                 break;
                             }
@@ -119,11 +136,20 @@ impl WriteBehindFlusher {
         audit_batch: &mut Vec<AuditRecord>,
         flush_notifiers: &mut Vec<tokio::sync::oneshot::Sender<()>>,
         flushed_count: &Arc<AtomicU64>,
+        hydration_hook: &Option<HydrationHook>,
     ) {
         if !cache_batch.is_empty() {
             let total = cache_batch.len();
+            let mut committed = Vec::with_capacity(total);
             for entry in cache_batch.drain(..) {
-                let _ = db.insert_cache_entry(entry).await;
+                if db.insert_cache_entry(entry.clone()).await.is_ok() {
+                    committed.push(entry);
+                }
+            }
+            if let Some(ref hook) = hydration_hook {
+                if !committed.is_empty() {
+                    hook(&committed);
+                }
             }
             flushed_count.fetch_add(total as u64, Ordering::Relaxed);
         }
@@ -235,5 +261,51 @@ mod tests {
         assert_eq!(enqueued, 250);
         assert_eq!(flushed, 250);
         assert_eq!(db.count_cache_entries().await.unwrap(), 250);
+    }
+
+    #[tokio::test]
+    async fn test_write_behind_commit_ordered_hydration() {
+        let db = Arc::new(MemoryDatabaseStore::new());
+        let hydrated_count = Arc::new(AtomicU64::new(0));
+        let hydrated_ref = Arc::clone(&hydrated_count);
+
+        let hook: HydrationHook = Arc::new(move |entries| {
+            hydrated_ref.fetch_add(entries.len() as u64, Ordering::Relaxed);
+        });
+
+        let flusher = WriteBehindFlusher::new_with_hook(
+            db.clone(),
+            100,
+            10,
+            Duration::from_millis(5),
+            Some(hook),
+        );
+
+        flusher
+            .enqueue_cache_entry(DurableCacheRecord {
+                key: "k-hydrated".into(),
+                tenant_id: "t-1".into(),
+                application_id: "app-1".into(),
+                model: "gpt-4o".into(),
+                policy_version: "v1".into(),
+                hash: "hash-h".into(),
+                prompt_canonical: "prompt h".into(),
+                content: "content h".into(),
+                hit_count: 0,
+                created_at: Utc::now(),
+                expires_at: None,
+                last_accessed_at: Utc::now(),
+            })
+            .await
+            .unwrap();
+
+        flusher.flush().await;
+
+        assert_eq!(db.count_cache_entries().await.unwrap(), 1);
+        assert_eq!(
+            hydrated_count.load(Ordering::Relaxed),
+            1,
+            "Hydration hook must be triggered after DB commit"
+        );
     }
 }
