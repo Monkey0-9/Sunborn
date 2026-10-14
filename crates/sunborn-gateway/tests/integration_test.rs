@@ -34,7 +34,12 @@ async fn test_readiness_endpoint() {
     let app = create_router(state);
 
     let response = app
-        .oneshot(Request::builder().uri("/ready").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/ready")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
@@ -111,10 +116,7 @@ async fn test_vs001_vs002_vertical_slice_exact_cache() {
         res_env2.decision.action,
         sunborn_core::DecisionAction::SafeHit
     );
-    assert_eq!(
-        res_env2.decision.cache_path,
-        sunborn_core::CachePath::Exact
-    );
+    assert_eq!(res_env2.decision.cache_path, sunborn_core::CachePath::Exact);
     assert_eq!(res_env2.content, res_env1.content);
 
     // 3. Cache Invalidation via DELETE /v1/caches/:key
@@ -161,7 +163,12 @@ async fn test_metrics_endpoint() {
     let app = create_router(state);
 
     let response = app
-        .oneshot(Request::builder().uri("/metrics").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/metrics")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 

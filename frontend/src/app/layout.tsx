@@ -42,6 +42,12 @@ export default function RootLayout({
                 🔍 Request Explorer
               </a>
               <a
+                href="/execution"
+                className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors"
+              >
+                ⚡ Agent Execution DAG
+              </a>
+              <a
                 href="/knowledge"
                 className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors"
               >

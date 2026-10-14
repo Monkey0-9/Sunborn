@@ -63,7 +63,8 @@ impl EmbeddingProvider for DeterministicEmbeddingProvider {
 
             // Project word hash onto vector dimensions
             for i in 0..4 {
-                let idx = ((hash[i * 2] as usize) << 8 | (hash[i * 2 + 1] as usize)) % self.dimension;
+                let idx =
+                    ((hash[i * 2] as usize) << 8 | (hash[i * 2 + 1] as usize)) % self.dimension;
                 let weight = 1.0 / (1.0 + pos as f32 * 0.1);
                 vector[idx] += weight;
             }
@@ -88,8 +89,14 @@ mod tests {
     #[tokio::test]
     async fn test_cosine_similarity_identical() {
         let provider = DeterministicEmbeddingProvider::new();
-        let v1 = provider.embed("What is semantic caching in RAG?").await.unwrap();
-        let v2 = provider.embed("What is semantic caching in RAG?").await.unwrap();
+        let v1 = provider
+            .embed("What is semantic caching in RAG?")
+            .await
+            .unwrap();
+        let v2 = provider
+            .embed("What is semantic caching in RAG?")
+            .await
+            .unwrap();
 
         let sim = cosine_similarity(&v1, &v2);
         assert!((sim - 1.0).abs() < 1e-4);
@@ -98,13 +105,27 @@ mod tests {
     #[tokio::test]
     async fn test_cosine_similarity_similar_vs_dissimilar() {
         let provider = DeterministicEmbeddingProvider::new();
-        let v_base = provider.embed("What is semantic caching in RAG?").await.unwrap();
-        let v_sim = provider.embed("Explain semantic caching for RAG systems").await.unwrap();
-        let v_diff = provider.embed("How to bake a chocolate strawberry cake?").await.unwrap();
+        let v_base = provider
+            .embed("What is semantic caching in RAG?")
+            .await
+            .unwrap();
+        let v_sim = provider
+            .embed("Explain semantic caching for RAG systems")
+            .await
+            .unwrap();
+        let v_diff = provider
+            .embed("How to bake a chocolate strawberry cake?")
+            .await
+            .unwrap();
 
         let sim_close = cosine_similarity(&v_base, &v_sim);
         let sim_far = cosine_similarity(&v_base, &v_diff);
 
-        assert!(sim_close > sim_far, "Similar queries must have higher similarity than unrelated queries: {} vs {}", sim_close, sim_far);
+        assert!(
+            sim_close > sim_far,
+            "Similar queries must have higher similarity than unrelated queries: {} vs {}",
+            sim_close,
+            sim_far
+        );
     }
 }

@@ -40,7 +40,8 @@ impl FinOpsEngine {
         completion_tokens: u32,
     ) -> f64 {
         let input_cost = (prompt_tokens as f64 / 1_000_000.0) * pricing.input_cost_per_million;
-        let output_cost = (completion_tokens as f64 / 1_000_000.0) * pricing.output_cost_per_million;
+        let output_cost =
+            (completion_tokens as f64 / 1_000_000.0) * pricing.output_cost_per_million;
         input_cost + output_cost
     }
 
@@ -62,7 +63,8 @@ impl FinOpsEngine {
         entry_bytes: usize,
         ttl_hours: f64,
     ) -> f64 {
-        let gross_per_hit = Self::calculate_token_cost_avoided(pricing, prompt_tokens, completion_tokens);
+        let gross_per_hit =
+            Self::calculate_token_cost_avoided(pricing, prompt_tokens, completion_tokens);
         let storage_cost = entry_bytes as f64 * Self::RAM_COST_PER_BYTE_HOUR * ttl_hours;
         let total_overhead = storage_cost + Self::LOCAL_EMBED_COST_PER_CALL;
 
@@ -81,7 +83,9 @@ impl FinOpsEngine {
         entry_bytes: usize,
         expected_hits: u32,
     ) -> bool {
-        let gross_total = Self::calculate_token_cost_avoided(pricing, prompt_tokens, completion_tokens) * (expected_hits as f64);
+        let gross_total =
+            Self::calculate_token_cost_avoided(pricing, prompt_tokens, completion_tokens)
+                * (expected_hits as f64);
         let storage_cost = entry_bytes as f64 * Self::RAM_COST_PER_BYTE_HOUR * 24.0; // 24 hour window
         gross_total > (storage_cost + Self::LOCAL_EMBED_COST_PER_CALL)
     }
@@ -105,6 +109,9 @@ mod tests {
         let pricing = ModelPricing::gpt4o();
         let break_even = FinOpsEngine::break_even_hit_rate(&pricing, 1000, 800, 4096, 24.0);
         // Break-even hit rate should be very low (< 0.10) for expensive LLMs
-        assert!(break_even < 0.10, "Break-even hit rate for GPT-4o should be well under 10%");
+        assert!(
+            break_even < 0.10,
+            "Break-even hit rate for GPT-4o should be well under 10%"
+        );
     }
 }

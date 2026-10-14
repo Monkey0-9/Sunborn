@@ -15,6 +15,7 @@ use sunborn_core::{
     CachePath, DecisionAction, DecisionRecord, RequestEnvelope, ResponseEnvelope, SunbornError,
     TenantId,
 };
+use sunborn_execution::ExecutionCacheStore;
 use sunborn_identity::IdentityEngine;
 use sunborn_invalidation::InvalidationEvent;
 use sunborn_semantic::{
@@ -308,13 +309,127 @@ pub async fn delete_cache(
     State(state): State<AppState>,
     Path(key): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let deleted = state
-        .cache
-        .delete(&key)
-        .await
-        .map_err(AppError::from)?;
+    let deleted = state.cache.delete(&key).await.map_err(AppError::from)?;
     let _ = state.vector_store.delete(&key).await;
     Ok(Json(json!({ "key": key, "deleted": deleted })))
+}
+
+#[derive(Deserialize)]
+pub struct ExecutionPlanRequest {
+    pub tenant_id: String,
+    pub application_id: String,
+    pub plan: sunborn_execution::ExecutionPlan,
+}
+
+pub async fn plan_execution(
+    State(state): State<AppState>,
+    Json(payload): Json<ExecutionPlanRequest>,
+) -> Result<Json<sunborn_execution::PlanEvaluation>, AppError> {
+    let tenant = TenantId::new(payload.tenant_id);
+    let app = sunborn_core::model::ApplicationId::new(payload.application_id);
+    let eval = sunborn_execution::ExecutionPlanner::plan_reuse(
+        &tenant,
+        &app,
+        &payload.plan,
+        &*state.execution_store,
+    )
+    .await
+    .map_err(AppError::from)?;
+
+    Ok(Json(eval))
+}
+
+#[derive(Deserialize)]
+pub struct RecordToolResultRequest {
+    pub tenant_id: String,
+    pub application_id: String,
+    pub tool_name: String,
+    pub tool_version: String,
+    pub arguments: serde_json::Value,
+    pub context_hash: Option<String>,
+    pub output: serde_json::Value,
+    pub is_error: bool,
+    pub execution_latency_ms: u64,
+    pub ttl_secs: Option<u64>,
+}
+
+pub async fn record_tool_result(
+    State(state): State<AppState>,
+    Json(payload): Json<RecordToolResultRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let tenant = TenantId::new(payload.tenant_id);
+    let app = sunborn_core::model::ApplicationId::new(payload.application_id);
+    let sig = sunborn_execution::ToolSignatureEngine::compute_signature(
+        &tenant,
+        &app,
+        &payload.tool_name,
+        &payload.tool_version,
+        &payload.arguments,
+        payload.context_hash.as_deref(),
+    )
+    .map_err(AppError::from)?;
+
+    let result = sunborn_execution::ToolResult {
+        tool_name: payload.tool_name,
+        signature: sig.clone(),
+        output: payload.output,
+        is_error: payload.is_error,
+        execution_latency_ms: payload.execution_latency_ms,
+        created_at: Utc::now(),
+    };
+
+    state
+        .execution_store
+        .set(&tenant, &sig, &result, payload.ttl_secs)
+        .await
+        .map_err(AppError::from)?;
+
+    Ok(Json(json!({ "signature": sig, "status": "stored" })))
+}
+
+#[derive(Deserialize)]
+pub struct EvictToolRequest {
+    pub tenant_id: String,
+    pub tool_name: Option<String>,
+    pub signature: Option<String>,
+}
+
+pub async fn evict_execution(
+    State(state): State<AppState>,
+    Json(payload): Json<EvictToolRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let tenant = TenantId::new(payload.tenant_id);
+    if let Some(sig) = payload.signature {
+        let evicted = state
+            .execution_store
+            .evict(&tenant, &sig)
+            .await
+            .map_err(AppError::from)?;
+        return Ok(Json(json!({ "evicted": evicted })));
+    }
+
+    if let Some(tool) = payload.tool_name {
+        let count = state
+            .execution_store
+            .evict_by_tool(&tenant, &tool)
+            .await
+            .map_err(AppError::from)?;
+        return Ok(Json(json!({ "evicted_count": count })));
+    }
+
+    Err(SunbornError::invalid_payload("Must provide either tool_name or signature").into())
+}
+
+pub async fn shadow_evaluate(
+    State(state): State<AppState>,
+    Json(payload): Json<crate::shadow::ShadowEvaluationRequest>,
+) -> Result<Json<crate::shadow::ShadowEvaluationResult>, AppError> {
+    let result = state
+        .shadow_evaluator
+        .evaluate_drift(&payload, &state.cache, &state.vector_store)
+        .await
+        .map_err(AppError::from)?;
+    Ok(Json(result))
 }
 
 pub struct AppError(SunbornError);

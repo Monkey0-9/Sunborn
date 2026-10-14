@@ -1,4 +1,5 @@
 pub mod handlers;
+pub mod shadow;
 pub mod state;
 
 use axum::{
@@ -21,6 +22,10 @@ pub fn create_router(state: AppState) -> Router {
             "/v1/caches/{*key}",
             get(handlers::get_cache).delete(handlers::delete_cache),
         )
+        .route("/v1/execution/plan", post(handlers::plan_execution))
+        .route("/v1/execution/results", post(handlers::record_tool_result))
+        .route("/v1/execution/evict", post(handlers::evict_execution))
+        .route("/v1/shadow/evaluate", post(handlers::shadow_evaluate))
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(state)

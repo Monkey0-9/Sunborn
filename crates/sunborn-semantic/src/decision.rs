@@ -1,8 +1,6 @@
 use crate::embedding::EmbeddingProvider;
 use crate::vector_store::VectorStore;
-use sunborn_core::{
-    CachePath, DecisionAction, DecisionRecord, RequestEnvelope, Result,
-};
+use sunborn_core::{CachePath, DecisionAction, DecisionRecord, RequestEnvelope, Result};
 
 #[derive(Debug, Clone)]
 pub struct DecisionConfig {
@@ -46,8 +44,17 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
     pub fn assess_risk(prompt: &str) -> f32 {
         let lower = prompt.to_lowercase();
         let high_risk_keywords = [
-            "delete", "drop table", "password", "api_key", "secret", "credit card",
-            "ssn", "transfer", "wire money", "authenticate", "execute command",
+            "delete",
+            "drop table",
+            "password",
+            "api_key",
+            "secret",
+            "credit card",
+            "ssn",
+            "transfer",
+            "wire money",
+            "authenticate",
+            "execute command",
         ];
 
         let mut risk: f32 = 0.0;
@@ -86,7 +93,8 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
 
         if let Some(best) = candidates.first() {
             let similarity = best.score;
-            let confidence = Self::compute_confidence(similarity, req.prompt.len(), req.temperature);
+            let confidence =
+                Self::compute_confidence(similarity, req.prompt.len(), req.temperature);
 
             // High risk -> Revalidate
             if risk_score > self.config.max_risk_threshold {
@@ -191,7 +199,12 @@ mod tests {
         assert!(outcome1.matched_content.is_some());
 
         // 2. High-risk mutating prompt -> Revalidate
-        let req_risk = RequestEnvelope::new("t1", "app1", "gpt-4o", "Please delete table and drop database");
+        let req_risk = RequestEnvelope::new(
+            "t1",
+            "app1",
+            "gpt-4o",
+            "Please delete table and drop database",
+        );
         let outcome_risk = engine.evaluate(&req_risk).await.unwrap();
         assert!(outcome_risk.decision.risk_score > 0.3);
     }

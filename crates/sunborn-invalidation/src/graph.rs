@@ -35,7 +35,11 @@ impl DependencyGraph {
     }
 
     /// Record a dependency: cache_key depends on knowledge source_id
-    pub async fn record_dependency(&self, source_id: Uuid, cache_key: impl Into<String>) -> Result<()> {
+    pub async fn record_dependency(
+        &self,
+        source_id: Uuid,
+        cache_key: impl Into<String>,
+    ) -> Result<()> {
         let mut deps = self.dependencies.write().await;
         deps.entry(source_id).or_default().insert(cache_key.into());
         Ok(())

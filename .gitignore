@@ -6,3 +6,4 @@ linear_data.json
 .DS_Store
 node_modules
 .next
+*.tsbuildinfo

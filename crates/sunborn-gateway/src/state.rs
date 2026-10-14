@@ -1,7 +1,9 @@
+use crate::shadow::ShadowEvaluator;
 use std::sync::Arc;
 use sunborn_cache::{ExactCacheStore, MemoryExactCache};
 use sunborn_core::AppConfig;
 use sunborn_db::MemoryDatabaseStore;
+use sunborn_execution::MemoryExecutionCacheStore;
 use sunborn_invalidation::{DependencyGraph, InvalidationEngine};
 use sunborn_semantic::{
     DecisionConfig, DecisionEngine, DeterministicEmbeddingProvider, MemoryVectorStore,
@@ -17,6 +19,8 @@ pub struct AppState {
     pub dependency_graph: Arc<DependencyGraph>,
     pub invalidation_engine: Arc<InvalidationEngine<MemoryExactCache, MemoryVectorStore>>,
     pub db: Arc<MemoryDatabaseStore>,
+    pub execution_store: Arc<MemoryExecutionCacheStore>,
+    pub shadow_evaluator: Arc<ShadowEvaluator>,
 }
 
 impl AppState {
@@ -36,6 +40,8 @@ impl AppState {
             memory_cache.clone(),
             vector_store.clone(),
         ));
+        let execution_store = Arc::new(MemoryExecutionCacheStore::new());
+        let shadow_evaluator = Arc::new(ShadowEvaluator::new());
 
         Self {
             config,
@@ -46,6 +52,8 @@ impl AppState {
             dependency_graph,
             invalidation_engine,
             db,
+            execution_store,
+            shadow_evaluator,
         }
     }
 }

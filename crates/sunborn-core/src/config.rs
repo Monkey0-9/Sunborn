@@ -50,10 +50,10 @@ impl AppConfig {
             .and_then(|p| p.parse().ok())
             .unwrap_or(8080);
         let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
-        let dragonfly_url = std::env::var("DRAGONFLY_URL")
-            .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
-        let qdrant_url = std::env::var("QDRANT_URL")
-            .unwrap_or_else(|_| "http://127.0.0.1:6334".to_string());
+        let dragonfly_url =
+            std::env::var("DRAGONFLY_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+        let qdrant_url =
+            std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://127.0.0.1:6334".to_string());
 
         Self {
             server: ServerConfig { host, port },

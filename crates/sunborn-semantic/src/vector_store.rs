@@ -89,7 +89,11 @@ impl VectorStore for MemoryVectorStore {
             .collect();
 
         // Sort descending by score
-        scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         scored.truncate(top_k);
 
         Ok(scored)
@@ -152,7 +156,10 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(results_a.len(), 1);
-        assert_eq!(results_a[0].entry.content, "Semantic caching reuses LLM responses.");
+        assert_eq!(
+            results_a[0].entry.content,
+            "Semantic caching reuses LLM responses."
+        );
 
         // Query for Tenant B with identical vector -> Strictly Isolated (0 hits)
         let results_b = store
@@ -165,6 +172,10 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(results_b.len(), 0, "Cross-tenant vector search must yield 0 results");
+        assert_eq!(
+            results_b.len(),
+            0,
+            "Cross-tenant vector search must yield 0 results"
+        );
     }
 }

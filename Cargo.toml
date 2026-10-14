@@ -8,6 +8,7 @@ members = [
     "crates/sunborn-semantic",
     "crates/sunborn-invalidation",
     "crates/sunborn-db",
+    "crates/sunborn-execution",
 ]
 
 [workspace.package]

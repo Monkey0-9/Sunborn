@@ -89,7 +89,11 @@ mod tests {
 
         // 1. Populate cache and record dependency
         cache
-            .set(CacheEntry::new(cache_key, "Answer from old policy", Some(3600)))
+            .set(CacheEntry::new(
+                cache_key,
+                "Answer from old policy",
+                Some(3600),
+            ))
             .await
             .unwrap();
         graph.record_dependency(source_id, cache_key).await.unwrap();
@@ -113,6 +117,9 @@ mod tests {
         assert_eq!(evicted, Some(1));
 
         // 4. Verify cache entry is purged
-        assert!(!cache.exists(cache_key).await.unwrap(), "Cache entry must be purged after invalidation");
+        assert!(
+            !cache.exists(cache_key).await.unwrap(),
+            "Cache entry must be purged after invalidation"
+        );
     }
 }
