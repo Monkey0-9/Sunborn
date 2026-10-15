@@ -180,6 +180,7 @@ Sunborn enforces strict fail-closed authorization:
 | Endpoint | Method | Required Scope | Description |
 | :--- | :--- | :--- | :--- |
 | `/health`, `/ready`, `/metrics` | `GET` | Public | Kubernetes liveness, readiness, and Prometheus scrapers |
+| `/v1/auth/login` | `POST` | Public (Rate-Limited) | Exchange client credentials for authenticated session token |
 | `/v1/chat/completions` | `POST` | Authenticated | OpenAI-compatible chat completion proxy |
 | `/v1/requests` | `POST` | Authenticated | Native request envelope execution |
 | `/v1/execution/plan` | `POST` | Authenticated | DAG execution reuse planner |
@@ -208,6 +209,9 @@ Sunborn enforces strict fail-closed authorization:
 | `SUNBORN_ENV` | `development` | Set to `production` to enforce strict environment key loading |
 | `SUNBORN_ADMIN_KEY` | *(None)* | Secure master admin credential provisioned at boot |
 | `SUNBORN_API_KEYS` | *(None)* | Key registry: `key:tenant:app:is_admin` comma-separated or JSON array |
+| `SUNBORN_FEATURE_LOGIN_RATE_LIMIT` | `true` | Feature flag to enable/disable login brute-force rate limiter |
+| `SUNBORN_LOGIN_RATE_LIMIT_CAPACITY` | `5.0` | Burst capacity for login endpoint rate limiter |
+| `SUNBORN_LOGIN_RATE_LIMIT_REFILL_RATE` | `1.0` | Token refill rate (tokens/sec) for login rate limiter |
 | `SUNBORN_CACHE_BACKEND` | `memory` | Cache tier: `memory` (W-TinyLFU) or `dragonfly` |
 | `DRAGONFLY_URL` | `redis://127.0.0.1:6379` | DragonflyDB Redis-compatible connection string |
 | `SUNBORN_VECTOR_BACKEND` | `memory` | Vector tier: `memory` or `qdrant` |

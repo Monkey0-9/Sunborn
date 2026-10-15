@@ -1059,6 +1059,148 @@ pub async fn get_autonomic_status(State(state): State<AppState>) -> impl IntoRes
     }))
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LoginRequest {
+    pub client_id: String,
+    pub client_secret: String,
+    #[serde(default)]
+    pub tenant_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoginResponse {
+    pub access_token: String,
+    pub token_type: String,
+    pub expires_in: u64,
+    pub tenant_id: String,
+    pub application_id: String,
+    pub is_admin: bool,
+}
+
+fn attach_rate_limit_headers(
+    resp: &mut Response,
+    status: &crate::middleware::rate_limit::RateLimitStatus,
+) {
+    let headers = resp.headers_mut();
+    if let Ok(val) = status.limit.to_string().parse() {
+        headers.insert("X-RateLimit-Limit", val);
+    }
+    if let Ok(val) = status.remaining.to_string().parse() {
+        headers.insert("X-RateLimit-Remaining", val);
+    }
+    if let Ok(val) = status.reset_secs.to_string().parse() {
+        headers.insert("X-RateLimit-Reset", val);
+    }
+}
+
+pub async fn login(headers: axum::http::HeaderMap, Json(payload): Json<LoginRequest>) -> Response {
+    let client_key = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+        .or_else(|| {
+            headers
+                .get("x-real-ip")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.trim().to_string())
+        })
+        .unwrap_or_else(|| {
+            if !payload.client_id.trim().is_empty() {
+                format!("client:{}", payload.client_id.trim())
+            } else {
+                "unknown-client".to_string()
+            }
+        });
+
+    let rate_limiter = crate::middleware::rate_limit::get_login_rate_limiter();
+    let status = rate_limiter.check_login_attempt(&client_key).await;
+
+    if !status.allowed {
+        let mut resp = (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({
+                "type": "https://sunborn.ai/errors/rate-limit-exceeded",
+                "title": "Too Many Requests",
+                "status": 429,
+                "detail": format!(
+                    "Rate limit exceeded for authentication attempts from '{}'. Please retry after {} seconds.",
+                    client_key, status.reset_secs
+                )
+            })),
+        )
+            .into_response();
+        attach_rate_limit_headers(&mut resp, &status);
+        if let Ok(val) = status.reset_secs.to_string().parse() {
+            resp.headers_mut().insert("Retry-After", val);
+        }
+        return resp;
+    }
+
+    if payload.client_id.trim().is_empty() || payload.client_secret.trim().is_empty() {
+        let mut resp = (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "type": "https://sunborn.ai/errors/bad-request",
+                "title": "Bad Request",
+                "status": 400,
+                "detail": "client_id and client_secret are required"
+            })),
+        )
+            .into_response();
+        attach_rate_limit_headers(&mut resp, &status);
+        return resp;
+    }
+
+    let registry = crate::middleware::auth::get_global_registry();
+    if let Some(cred) = registry.validate_key(&payload.client_secret) {
+        if let Some(ref req_tenant) = payload.tenant_id {
+            if cred.tenant_id.0 != *req_tenant {
+                let mut resp = (
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({
+                        "type": "https://sunborn.ai/errors/unauthorized",
+                        "title": "Unauthorized",
+                        "status": 401,
+                        "detail": "Tenant ID does not match credentials"
+                    })),
+                )
+                    .into_response();
+                attach_rate_limit_headers(&mut resp, &status);
+                return resp;
+            }
+        }
+
+        let mut resp = (
+            StatusCode::OK,
+            Json(LoginResponse {
+                access_token: payload.client_secret.clone(),
+                token_type: "Bearer".to_string(),
+                expires_in: 86400,
+                tenant_id: cred.tenant_id.0,
+                application_id: cred.application_id.0,
+                is_admin: cred.is_admin,
+            }),
+        )
+            .into_response();
+        attach_rate_limit_headers(&mut resp, &status);
+        return resp;
+    }
+
+    let mut resp = (
+        StatusCode::UNAUTHORIZED,
+        Json(json!({
+            "type": "https://sunborn.ai/errors/unauthorized",
+            "title": "Unauthorized",
+            "status": 401,
+            "detail": "Invalid client_id or client_secret"
+        })),
+    )
+        .into_response();
+    attach_rate_limit_headers(&mut resp, &status);
+    resp
+}
+
 pub struct AppError(SunbornError);
 
 impl From<SunbornError> for AppError {

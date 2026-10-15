@@ -37,18 +37,21 @@ class SunbornClient:
         self.application_id = application_id
         self.timeout = timeout
 
-    def _post(self, path: str, payload: dict) -> dict:
+    def _post(self, path: str, payload: dict, custom_headers: Optional[dict] = None) -> dict:
         url = f"{self.base_url}/{path.lstrip('/')}"
         data = json.dumps(payload).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": self.api_key,
+            "x-tenant-id": self.tenant_id,
+            "x-application-id": self.application_id,
+        }
+        if custom_headers:
+            headers.update(custom_headers)
         req = urllib.request.Request(
             url,
             data=data,
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": self.api_key,
-                "x-tenant-id": self.tenant_id,
-                "x-application-id": self.application_id,
-            },
+            headers=headers,
             method="POST",
         )
         try:
@@ -58,17 +61,68 @@ class SunbornClient:
             error_body = e.read().decode("utf-8")
             raise RuntimeError(f"Sunborn Gateway error [{e.code}]: {error_body}")
 
+    def _get(self, path: str, custom_headers: Optional[dict] = None) -> dict:
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": self.api_key,
+            "x-tenant-id": self.tenant_id,
+            "x-application-id": self.application_id,
+        }
+        if custom_headers:
+            headers.update(custom_headers)
+        req = urllib.request.Request(
+            url,
+            headers=headers,
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode("utf-8")
+            raise RuntimeError(f"Sunborn Gateway error [{e.code}]: {error_body}")
+
+    def login(self, client_id: str, client_secret: str, tenant_id: Optional[str] = None) -> dict:
+        """
+        Authenticates with the Sunborn Gateway login endpoint (/v1/auth/login)
+        and configures the client credentials from the issued token.
+        """
+        payload: Dict[str, Any] = {
+            "client_id": client_id,
+            "client_secret": client_secret,
+        }
+        if tenant_id:
+            payload["tenant_id"] = tenant_id
+
+        res = self._post("auth/login", payload)
+        if "access_token" in res:
+            self.api_key = res["access_token"]
+        if "tenant_id" in res:
+            self.tenant_id = res["tenant_id"]
+        if "application_id" in res:
+            self.application_id = res["application_id"]
+        return res
+
     def chat_completion(
         self,
-        model: str,
-        messages: List[Dict[str, str]],
+        model: str = "gpt-4o",
+        messages: Optional[List[Dict[str, str]]] = None,
+        prompt: Optional[str] = None,
+        system_prompt: Optional[str] = None,
         temperature: Optional[float] = None,
         tools: Optional[List[dict]] = None,
     ) -> dict:
         """Invokes the OpenAI-compatible /chat/completions endpoint."""
+        msgs = list(messages) if messages else []
+        if prompt:
+            if system_prompt:
+                msgs.append({"role": "system", "content": system_prompt})
+            msgs.append({"role": "user", "content": prompt})
+
         payload: Dict[str, Any] = {
             "model": model,
-            "messages": messages,
+            "messages": msgs,
         }
         if temperature is not None:
             payload["temperature"] = temperature
@@ -76,6 +130,10 @@ class SunbornClient:
             payload["tools"] = tools
 
         return self._post("chat/completions", payload)
+
+    def get_finops_report(self) -> dict:
+        """Retrieves the live FinOps cost and token savings report."""
+        return self._get("finops/report")
 
     def plan_execution_dag(self, plan_nodes: List[dict]) -> dict:
         """Submits an Agent Execution DAG to evaluate memoized tool subgraph reuse."""
@@ -188,8 +246,14 @@ def sunborn_tool(
     return decorator
 
 
+# Convenience alias for seamless integration
+SunbornAgentClient = SunbornClient
+
+
 if __name__ == "__main__":
     print("Testing Sunborn Agent SDK imports & client construction...")
     c = SunbornClient()
     print(f"Initialized SunbornClient with base_url={c.base_url}, tenant={c.tenant_id}")
+    c2 = SunbornAgentClient()
+    print(f"Initialized SunbornAgentClient alias successfully.")
     print("Sunborn Agent SDK ready.")

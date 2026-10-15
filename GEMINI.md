@@ -63,3 +63,25 @@ The following destructive actions **REQUIRE EXPLICIT HUMAN APPROVAL** before exe
 ### 2.5 DevSecOps & Code Review
 * Run `/sec-audit` on all git diffs to check against the OWASP Top 10, IDOR, authorization flaws, and secrets.
 * Request peer reviews before merging to protected branches.
+
+---
+
+## 3. Automated Engineering Toolkit & Integrated Ecosystem
+
+When running under Antigravity CLI (`agy`), the agent automatically integrates and activates the following capabilities:
+
+### 3.1 Modern Frontend Engineering & Motion System
+* **Animation & Interactions**: Automatically use `motion` (Framer Motion successor) for layout transitions, micro-interactions, page entrance/exit animations, and interactive components.
+* **Design Systems & UI Intelligence**: Automatically consult `ui-ux-pro-max` (installed via `uipro`) for color palettes, typography pairs, UI reasoning matrices, and responsive guidelines.
+* **Component Patterns**: Automatically draw upon modern components from the `21st.dev` catalog located at `/home/unknownuser/21st/apps/web/components/ui` (`aurora-background`, `shimmer-button`, `hero-section`, `command-menu`, `sidebar`, `text-morph`, `text-shimmer`, `dialog`, etc.).
+* **Design Guidelines**: Apply `frontend-design` and `web-artifacts-builder` skills to ensure intentional, distinctive visual styling.
+
+### 3.2 Binary & Runtime Reverse Engineering (REA)
+* **REA MCP Integration**: The REA MCP server (`rea mcp`) is registered in `~/.gemini/config/mcp_config.json` with 200+ specialized reverse engineering tools.
+* **Skill Activation**: Automatically activate the `reverse-engineer-anything` skill for analyzing native binaries, Electron/JS bundles, APKs, SQLite snapshots, or runtime behaviors.
+
+### 3.3 GPU Orchestration & Distributed AI Training (Higgsfield)
+* **Cluster Management**: Use the installed `higgsfield` CLI tool (`~/.local/bin/higgsfield`) for GPU node provisioning, ZeRO-3 / FSDP experiment packaging, and automated model training pipelines.
+
+### 3.4 Claude Code & Anthropic Skills
+* **Autonomous Workflows**: Automatically leverage skills in `~/.gemini/config/skills` and `~/.agents/skills` including `feature-dev`, `webapp-testing`, `mcp-builder`, `theme-factory`, `code-review-and-quality`, and `test-driven-development`.

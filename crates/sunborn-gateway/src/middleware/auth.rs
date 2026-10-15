@@ -247,8 +247,8 @@ pub fn get_global_registry() -> &'static ApiKeyRegistry {
 
 pub async fn auth_middleware(headers: HeaderMap, mut req: Request, next: Next) -> Response {
     let path = req.uri().path();
-    // Allow public monitoring/probes through without credentials
-    if path == "/health" || path == "/ready" || path == "/metrics" {
+    // Allow public monitoring/probes and authentication endpoints through without credentials
+    if path == "/health" || path == "/ready" || path == "/metrics" || path == "/v1/auth/login" {
         return next.run(req).await;
     }
 

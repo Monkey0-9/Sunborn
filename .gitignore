@@ -8,3 +8,6 @@ node_modules
 *.tsbuildinfo
 __pycache__/
 *.pyc
+.vscode/
+.trunk/
+frontend/.agents/
