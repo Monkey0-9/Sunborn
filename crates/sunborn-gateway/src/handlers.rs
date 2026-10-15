@@ -17,7 +17,6 @@ use sunborn_core::{
     CachePath, DecisionAction, DecisionRecord, RequestEnvelope, ResponseEnvelope, SunbornError,
     TenantId,
 };
-use sunborn_db::DatabaseStore;
 use sunborn_execution::ExecutionCacheStore;
 use sunborn_identity::IdentityEngine;
 use sunborn_invalidation::InvalidationEvent;
@@ -91,38 +90,45 @@ pub async fn metrics() -> impl IntoResponse {
 pub async fn execute_request_inner(
     state: &AppState,
     sec_ctx: &SecurityContext,
-    req: RequestEnvelope,
+    mut req: RequestEnvelope,
 ) -> Result<ResponseEnvelope, AppError> {
     REQUESTS_TOTAL.fetch_add(1, Ordering::Relaxed);
     let start = Instant::now();
 
-    // 1. Enforce zero-trust tenant identity:
-    if sec_ctx.is_authenticated {
-        // Authenticated context: strictly prevent tenant spoofing
-        if req.tenant_id != sec_ctx.tenant_id {
-            return Err(SunbornError::unauthorized(format!(
-                "Tenant spoofing rejected: authenticated context is '{}', but request payload specified '{}'",
-                sec_ctx.tenant_id.0, req.tenant_id.0
-            )).into());
-        }
+    // 1. Enforce zero-trust tenant identity (fail-closed):
+    if !sec_ctx.is_authenticated {
+        return Err(SunbornError::unauthorized(
+            "Authentication required: missing or invalid API key",
+        )
+        .into());
+    }
 
-        // Enforce model authorization permissions
-        if !sec_ctx.allowed_models.is_empty()
-            && !sec_ctx
-                .allowed_models
-                .iter()
-                .any(|m| m == "*" || m == &req.model)
-        {
-            return Err(SunbornError::unauthorized(format!(
-                "Model '{}' is not authorized for tenant '{}'",
-                req.model, sec_ctx.tenant_id.0
-            ))
-            .into());
-        }
-    } else if state.config.auth.enforce_auth {
-        return Err(
-            SunbornError::unauthorized("Missing x-api-key or Authorization Bearer header").into(),
-        );
+    // Authenticated context: strictly prevent tenant spoofing
+    if req.tenant_id.0.is_empty() {
+        req.tenant_id = sec_ctx.tenant_id.clone();
+    } else if req.tenant_id != sec_ctx.tenant_id {
+        return Err(SunbornError::unauthorized(format!(
+            "Tenant spoofing rejected: authenticated context is '{}', but request payload specified '{}'",
+            sec_ctx.tenant_id.0, req.tenant_id.0
+        )).into());
+    }
+
+    if req.application_id.0.is_empty() {
+        req.application_id = sec_ctx.application_id.clone();
+    }
+
+    // Enforce model authorization permissions
+    if !sec_ctx.allowed_models.is_empty()
+        && !sec_ctx
+            .allowed_models
+            .iter()
+            .any(|m| m == "*" || m == &req.model)
+    {
+        return Err(SunbornError::unauthorized(format!(
+            "Model '{}' is not authorized for tenant '{}'",
+            req.model, sec_ctx.tenant_id.0
+        ))
+        .into());
     }
 
     // 2. Validate payload boundaries and constraints
@@ -460,8 +466,13 @@ pub struct InvalidationRequest {
 
 pub async fn trigger_invalidation(
     State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
     Json(payload): Json<InvalidationRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    sec_ctx
+        .require_admin()
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
     let event = InvalidationEvent {
         id: Uuid::new_v4(),
         tenant_id: TenantId::new(payload.tenant_id),
@@ -534,7 +545,7 @@ pub async fn delete_cache(
     Path(key): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     sec_ctx
-        .require_admin(state.config.auth.enforce_auth)
+        .require_admin()
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
 
     let deleted = state.cache.delete(&key).await.map_err(AppError::from)?;
@@ -624,8 +635,13 @@ pub struct EvictToolRequest {
 
 pub async fn evict_execution(
     State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
     Json(payload): Json<EvictToolRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    sec_ctx
+        .require_admin()
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
     let tenant = TenantId::new(payload.tenant_id);
     if let Some(sig) = payload.signature {
         let evicted = state
@@ -666,7 +682,7 @@ pub async fn delete_tenant(
     Path(tenant_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     sec_ctx
-        .require_admin(state.config.auth.enforce_auth)
+        .require_admin()
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
 
     let tenant = TenantId::new(&tenant_id);
@@ -734,7 +750,7 @@ pub async fn trigger_rebuild(
     Extension(sec_ctx): Extension<SecurityContext>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     sec_ctx
-        .require_admin(state.config.auth.enforce_auth)
+        .require_admin()
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
     let entries = state
         .db
@@ -787,7 +803,11 @@ pub async fn trigger_rebuild(
 
 pub async fn sweep_lifecycle(
     State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    sec_ctx
+        .require_admin()
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
     let swept = state.cache.sweep_expired().await.map_err(AppError::from)?;
     Ok(Json(json!({
         "status": "completed",
@@ -807,7 +827,7 @@ pub async fn chaos_trip(
     Extension(sec_ctx): Extension<SecurityContext>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     sec_ctx
-        .require_admin(state.config.auth.enforce_auth)
+        .require_admin()
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
     state.circuit_breaker.trip().await;
     Ok(Json(json!({
@@ -821,7 +841,7 @@ pub async fn chaos_reset(
     Extension(sec_ctx): Extension<SecurityContext>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     sec_ctx
-        .require_admin(state.config.auth.enforce_auth)
+        .require_admin()
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
     state.circuit_breaker.reset().await;
     Ok(Json(json!({
@@ -841,7 +861,7 @@ pub async fn crypto_shred_tenant(
     Json(payload): Json<ShredTenantPayload>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     sec_ctx
-        .require_admin(state.config.auth.enforce_auth)
+        .require_admin()
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
 
     let tenant = TenantId::new(&payload.tenant_id);

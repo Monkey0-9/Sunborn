@@ -52,7 +52,15 @@ async fn test_readiness_endpoint() {
 #[tokio::test]
 async fn test_vs001_vs002_vertical_slice_exact_cache() {
     let state = AppState::new(AppConfig::default());
-    let app = create_router(state);
+    let app = create_router(state.clone());
+
+    state.api_key_registry.register_key(
+        "test-key-tenant-corp-1",
+        sunborn_core::TenantId::new("tenant-corp-1"),
+        sunborn_core::ApplicationId::new("app-rag"),
+        vec!["*".to_string()],
+        true,
+    );
 
     let req_payload1 = RequestEnvelope::new(
         "tenant-corp-1",
@@ -69,6 +77,7 @@ async fn test_vs001_vs002_vertical_slice_exact_cache() {
                 .method("POST")
                 .uri("/v1/requests")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-tenant-corp-1")
                 .body(Body::from(serde_json::to_vec(&req_payload1).unwrap()))
                 .unwrap(),
         )
@@ -102,6 +111,7 @@ async fn test_vs001_vs002_vertical_slice_exact_cache() {
                 .method("POST")
                 .uri("/v1/requests")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-tenant-corp-1")
                 .body(Body::from(serde_json::to_vec(&req_payload2).unwrap()))
                 .unwrap(),
         )
@@ -126,6 +136,7 @@ async fn test_vs001_vs002_vertical_slice_exact_cache() {
             Request::builder()
                 .method("DELETE")
                 .uri(format!("/v1/caches/{}", cache_key))
+                .header("x-api-key", "test-key-tenant-corp-1")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -141,6 +152,7 @@ async fn test_vs001_vs002_vertical_slice_exact_cache() {
                 .method("POST")
                 .uri("/v1/requests")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-tenant-corp-1")
                 .body(Body::from(serde_json::to_vec(&req_payload2).unwrap()))
                 .unwrap(),
         )
@@ -174,15 +186,24 @@ async fn test_metrics_endpoint() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let body = response.into_body().collect().await.unwrap().to_bytes();
-    let text = String::from_utf8(body.to_vec()).unwrap();
-    assert!(text.contains("sunborn_requests_total"));
-    assert!(text.contains("sunborn_cache_hits_total"));
+    let metrics_text = String::from_utf8(body.to_vec()).unwrap();
+    assert!(metrics_text.contains("sunborn_requests_total"));
+    assert!(metrics_text.contains("sunborn_cache_hits_total"));
+    assert!(metrics_text.contains("sunborn_cache_misses_total"));
 }
 
 #[tokio::test]
 async fn test_vs003_vs004_semantic_cache_and_invalidation_slice() {
     let state = AppState::new(AppConfig::default());
-    let app = create_router(state);
+    let app = create_router(state.clone());
+
+    state.api_key_registry.register_key(
+        "test-key-tenant-corp-1",
+        sunborn_core::TenantId::new("tenant-corp-1"),
+        sunborn_core::ApplicationId::new("app-rag"),
+        vec!["*".to_string()],
+        true,
+    );
 
     let source_id = uuid::Uuid::new_v4();
 
@@ -201,6 +222,7 @@ async fn test_vs003_vs004_semantic_cache_and_invalidation_slice() {
                 .method("POST")
                 .uri("/v1/requests")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-tenant-corp-1")
                 .body(Body::from(serde_json::to_vec(&req_payload1).unwrap()))
                 .unwrap(),
         )
@@ -221,6 +243,7 @@ async fn test_vs003_vs004_semantic_cache_and_invalidation_slice() {
                 .method("POST")
                 .uri("/v1/dependencies")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-tenant-corp-1")
                 .body(Body::from(
                     serde_json::json!({
                         "source_id": source_id,
@@ -242,6 +265,7 @@ async fn test_vs003_vs004_semantic_cache_and_invalidation_slice() {
                 .method("POST")
                 .uri("/v1/invalidation")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-tenant-corp-1")
                 .body(Body::from(
                     serde_json::json!({
                         "source_id": source_id,
@@ -266,6 +290,7 @@ async fn test_vs003_vs004_semantic_cache_and_invalidation_slice() {
                 .method("POST")
                 .uri("/v1/requests")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-tenant-corp-1")
                 .body(Body::from(serde_json::to_vec(&req_payload1).unwrap()))
                 .unwrap(),
         )
@@ -286,6 +311,7 @@ async fn test_finops_report_endpoint() {
         .oneshot(
             Request::builder()
                 .uri("/v1/finops/report")
+                .header("x-api-key", "sunborn-admin-key")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -321,6 +347,7 @@ async fn test_radix_routing_and_affinity_endpoints() {
         .oneshot(
             Request::builder()
                 .uri("/v1/routing/radix/inspect")
+                .header("x-api-key", "sunborn-admin-key")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -345,6 +372,7 @@ async fn test_radix_routing_and_affinity_endpoints() {
                 .method("POST")
                 .uri("/v1/routing/radix/route")
                 .header("content-type", "application/json")
+                .header("x-api-key", "sunborn-admin-key")
                 .body(Body::from(route_payload.to_string()))
                 .unwrap(),
         )
@@ -374,6 +402,7 @@ async fn test_cryptographic_shredding_endpoint() {
                 .method("POST")
                 .uri("/v1/governance/shred")
                 .header("content-type", "application/json")
+                .header("x-api-key", "sunborn-admin-key")
                 .body(Body::from(shred_payload.to_string()))
                 .unwrap(),
         )
@@ -408,6 +437,7 @@ async fn test_level7_merkle_attestation_and_proof_verification() {
                 .method("POST")
                 .uri("/v1/governance/attest")
                 .header("content-type", "application/json")
+                .header("x-api-key", "sunborn-admin-key")
                 .body(Body::from(attest_payload.to_string()))
                 .unwrap(),
         )
@@ -432,6 +462,7 @@ async fn test_level7_merkle_attestation_and_proof_verification() {
                 .method("POST")
                 .uri("/v1/governance/verify-proof")
                 .header("content-type", "application/json")
+                .header("x-api-key", "sunborn-admin-key")
                 .body(Body::from(verify_payload.to_string()))
                 .unwrap(),
         )
@@ -460,6 +491,7 @@ async fn test_level7_predictive_speculative_prefetching() {
                 .method("POST")
                 .uri("/v1/speculative/predict")
                 .header("content-type", "application/json")
+                .header("x-api-key", "sunborn-admin-key")
                 .body(Body::from(predict_payload.to_string()))
                 .unwrap(),
         )
@@ -487,6 +519,7 @@ async fn test_level7_cluster_sync_vector_clock_and_autonomic_status() {
         .oneshot(
             Request::builder()
                 .uri("/v1/cluster/sync/status")
+                .header("x-api-key", "sunborn-admin-key")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -504,6 +537,7 @@ async fn test_level7_cluster_sync_vector_clock_and_autonomic_status() {
         .oneshot(
             Request::builder()
                 .uri("/v1/autonomic/incidents")
+                .header("x-api-key", "sunborn-admin-key")
                 .body(Body::empty())
                 .unwrap(),
         )

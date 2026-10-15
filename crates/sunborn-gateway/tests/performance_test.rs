@@ -13,7 +13,15 @@ async fn test_gateway_throughput_and_p99_latency() {
     let mut config = AppConfig::default();
     config.cache.semantic_cache_enabled = false; // Isolate exact cache hot path
     let state = AppState::new(config);
-    let app = create_router(state);
+    let app = create_router(state.clone());
+
+    state.api_key_registry.register_key(
+        "test-key-perf",
+        sunborn_core::TenantId::new("tenant-perf"),
+        sunborn_core::ApplicationId::new("app-bench"),
+        vec!["*".to_string()],
+        false,
+    );
 
     let req_payload = RequestEnvelope::new(
         "tenant-perf",
@@ -31,6 +39,7 @@ async fn test_gateway_throughput_and_p99_latency() {
                 .method("POST")
                 .uri("/v1/requests")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-perf")
                 .body(Body::from(req_bytes.clone()))
                 .unwrap(),
         )
@@ -56,6 +65,7 @@ async fn test_gateway_throughput_and_p99_latency() {
                     .method("POST")
                     .uri("/v1/requests")
                     .header("content-type", "application/json")
+                    .header("x-api-key", "test-key-perf")
                     .body(Body::from(req_bytes.clone()))
                     .unwrap(),
             )
@@ -93,7 +103,7 @@ async fn test_gateway_throughput_and_p99_latency() {
         p99_us as f64 / 1000.0,
     );
 
-    // Verify p99 latency SLO < 2ms (2000 µs)
+    // Verify p99 latency SLO < 5ms (5000 µs)
     assert!(
         p99_us < 5000,
         "P99 latency must be under 5ms (actual: {} µs)",

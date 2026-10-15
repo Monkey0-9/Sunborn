@@ -7,7 +7,6 @@ use serde_json::Value;
 use sunborn_cache::ExactCacheStore;
 use sunborn_core::{AppConfig, RequestEnvelope, ResponseEnvelope, TenantId};
 use sunborn_db::models::TenantRecord;
-use sunborn_db::DatabaseStore;
 use sunborn_gateway::{create_router, AppState};
 use sunborn_invalidation::EpochLeaseManager;
 use sunborn_semantic::VectorStore;
@@ -24,6 +23,15 @@ async fn test_deterministic_simulation_non_accelerator_authority_under_chaos() {
     let app = create_router(state.clone());
 
     let tenant_id = "tenant-dst-cluster-42";
+
+    state.api_key_registry.register_key(
+        "test-key-sim",
+        TenantId::new(tenant_id),
+        sunborn_core::ApplicationId::new("app-simulation"),
+        vec!["*".to_string()],
+        true,
+    );
+
     state
         .db
         .insert_tenant(TenantRecord {
@@ -49,6 +57,7 @@ async fn test_deterministic_simulation_non_accelerator_authority_under_chaos() {
                 .method("POST")
                 .uri("/v1/requests")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-sim")
                 .body(Body::from(serde_json::to_vec(&req_1).unwrap()))
                 .unwrap(),
         )
@@ -68,6 +77,7 @@ async fn test_deterministic_simulation_non_accelerator_authority_under_chaos() {
                 .method("POST")
                 .uri("/v1/requests")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-sim")
                 .body(Body::from(serde_json::to_vec(&req_1).unwrap()))
                 .unwrap(),
         )
@@ -100,6 +110,7 @@ async fn test_deterministic_simulation_non_accelerator_authority_under_chaos() {
                 .method("POST")
                 .uri("/v1/invalidation")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-sim")
                 .body(Body::from(serde_json::to_vec(&inv_payload).unwrap()))
                 .unwrap(),
         )
@@ -124,6 +135,7 @@ async fn test_deterministic_simulation_non_accelerator_authority_under_chaos() {
                 .method("POST")
                 .uri("/v1/chaos/trip")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-sim")
                 .body(Body::from("{}"))
                 .unwrap(),
         )
@@ -139,6 +151,7 @@ async fn test_deterministic_simulation_non_accelerator_authority_under_chaos() {
                 .method("POST")
                 .uri("/v1/requests")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-sim")
                 .body(Body::from(serde_json::to_vec(&req_1).unwrap()))
                 .unwrap(),
         )
@@ -155,6 +168,7 @@ async fn test_deterministic_simulation_non_accelerator_authority_under_chaos() {
                 .method("POST")
                 .uri("/v1/chaos/reset")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-sim")
                 .body(Body::from("{}"))
                 .unwrap(),
         )
@@ -175,6 +189,7 @@ async fn test_deterministic_simulation_non_accelerator_authority_under_chaos() {
             Request::builder()
                 .method("GET")
                 .uri("/v1/caches/some_nonexistent_key")
+                .header("x-api-key", "test-key-sim")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -191,6 +206,7 @@ async fn test_deterministic_simulation_non_accelerator_authority_under_chaos() {
             Request::builder()
                 .method("POST")
                 .uri("/v1/rebuild")
+                .header("x-api-key", "test-key-sim")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -215,6 +231,7 @@ async fn test_deterministic_simulation_non_accelerator_authority_under_chaos() {
                 .method("POST")
                 .uri("/v1/requests")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-sim")
                 .body(Body::from(serde_json::to_vec(&req_1).unwrap()))
                 .unwrap(),
         )

@@ -8,7 +8,6 @@ use sunborn_cache::CacheEntry;
 use sunborn_core::model::{ApplicationId, TenantId};
 use sunborn_core::AppConfig;
 use sunborn_db::models::{DurableCacheRecord, TenantRecord};
-use sunborn_db::DatabaseStore;
 use sunborn_execution::{ExecutionCacheStore, ToolResult};
 use sunborn_gateway::{create_router, AppState};
 use sunborn_semantic::{VectorEntry, VectorStore};
@@ -123,6 +122,7 @@ async fn test_tenant_cascade_offboarding_zero_lingering_data() {
             Request::builder()
                 .method("DELETE")
                 .uri(format!("/v1/tenants/{}", target_tenant))
+                .header("x-api-key", "sunborn-admin-key")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -181,6 +181,7 @@ async fn test_lifecycle_sweep_expired_entries() {
             Request::builder()
                 .method("POST")
                 .uri("/v1/lifecycle/sweep")
+                .header("x-api-key", "sunborn-admin-key")
                 .body(Body::empty())
                 .unwrap(),
         )

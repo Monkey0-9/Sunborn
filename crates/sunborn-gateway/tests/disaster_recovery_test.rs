@@ -7,7 +7,6 @@ use serde_json::Value;
 use sunborn_cache::ExactCacheStore;
 use sunborn_core::{AppConfig, RequestEnvelope, ResponseEnvelope};
 use sunborn_db::models::TenantRecord;
-use sunborn_db::DatabaseStore;
 use sunborn_gateway::{create_router, AppState};
 use sunborn_semantic::VectorStore;
 use tower::ServiceExt;
@@ -17,6 +16,15 @@ async fn test_disaster_recovery_replay_and_index_reconstruction() {
     let config = AppConfig::default();
     let state = AppState::new(config);
     let app = create_router(state.clone());
+
+    // 0. Register key for test tenant
+    state.api_key_registry.register_key(
+        "test-key-dr",
+        sunborn_core::TenantId::new("tenant-dr"),
+        sunborn_core::ApplicationId::new("app-rebuild"),
+        vec!["*".to_string()],
+        true,
+    );
 
     // 1. Onboard tenant
     state
@@ -46,6 +54,7 @@ async fn test_disaster_recovery_replay_and_index_reconstruction() {
                 .method("POST")
                 .uri("/v1/requests")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-dr")
                 .body(Body::from(serde_json::to_vec(&req_payload).unwrap()))
                 .unwrap(),
         )
@@ -79,6 +88,7 @@ async fn test_disaster_recovery_replay_and_index_reconstruction() {
             Request::builder()
                 .method("GET")
                 .uri("/v1/caches/some_nonexistent_key")
+                .header("x-api-key", "test-key-dr")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -93,6 +103,7 @@ async fn test_disaster_recovery_replay_and_index_reconstruction() {
             Request::builder()
                 .method("POST")
                 .uri("/v1/rebuild")
+                .header("x-api-key", "test-key-dr")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -115,6 +126,7 @@ async fn test_disaster_recovery_replay_and_index_reconstruction() {
                 .method("POST")
                 .uri("/v1/requests")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-dr")
                 .body(Body::from(serde_json::to_vec(&req_payload).unwrap()))
                 .unwrap(),
         )
@@ -129,4 +141,5 @@ async fn test_disaster_recovery_replay_and_index_reconstruction() {
         "Post-rebuild request must hit reconstructed cache"
     );
     assert_eq!(resp.decision.action, sunborn_core::DecisionAction::SafeHit);
+    assert_eq!(resp.decision.cache_path, sunborn_core::CachePath::Exact);
 }

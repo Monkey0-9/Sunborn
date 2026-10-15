@@ -1,0 +1,21 @@
+{
+  "evaluation": "IEEE/ACM Artifact Reproduction",
+  "status": "PASSED",
+  "git_commit": "6d75eee717bc9f5645bc1ec364d536a478b4e409",
+  "git_branch": "main",
+  "timestamp_utc": "2026-10-15T12:18:21.558977+00:00",
+  "environment": {
+    "os": "Linux",
+    "release": "6.12.0-211.64.1.el10_2.x86_64",
+    "arch": "x86_64",
+    "python": "3.12.15"
+  },
+  "empirical_metrics": {
+    "sunborn_b3_false_hits": 0,
+    "sunborn_b3_false_hit_rate_pct": 0.0,
+    "sunborn_b3_precision_pct": 100.0,
+    "sunborn_b3_cost_savings_pct": 10.0,
+    "naive_b2_false_hits": 6,
+    "naive_b2_false_hit_rate_pct": 30.0
+  }
+}

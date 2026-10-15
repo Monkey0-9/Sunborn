@@ -14,6 +14,14 @@ async fn test_chaos_circuit_breaker_resilience_and_origin_fallback() {
     let state = AppState::new(config);
     let app = create_router(state.clone());
 
+    state.api_key_registry.register_key(
+        "test-key-resilience",
+        sunborn_core::TenantId::new("tenant-resilience"),
+        sunborn_core::ApplicationId::new("app-chaos"),
+        vec!["*".to_string()],
+        true,
+    );
+
     let req_payload = RequestEnvelope::new(
         "tenant-resilience",
         "app-chaos",
@@ -29,6 +37,7 @@ async fn test_chaos_circuit_breaker_resilience_and_origin_fallback() {
                 .method("POST")
                 .uri("/v1/requests")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-resilience")
                 .body(Body::from(serde_json::to_vec(&req_payload).unwrap()))
                 .unwrap(),
         )
@@ -48,6 +57,7 @@ async fn test_chaos_circuit_breaker_resilience_and_origin_fallback() {
                 .method("POST")
                 .uri("/v1/requests")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-resilience")
                 .body(Body::from(serde_json::to_vec(&req_payload).unwrap()))
                 .unwrap(),
         )
@@ -70,6 +80,7 @@ async fn test_chaos_circuit_breaker_resilience_and_origin_fallback() {
             Request::builder()
                 .method("GET")
                 .uri("/v1/chaos/status")
+                .header("x-api-key", "test-key-resilience")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -90,6 +101,7 @@ async fn test_chaos_circuit_breaker_resilience_and_origin_fallback() {
                 .method("POST")
                 .uri("/v1/requests")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-resilience")
                 .body(Body::from(serde_json::to_vec(&req_payload).unwrap()))
                 .unwrap(),
         )
@@ -118,6 +130,7 @@ async fn test_chaos_circuit_breaker_resilience_and_origin_fallback() {
                 .method("POST")
                 .uri("/v1/requests")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-resilience")
                 .body(Body::from(serde_json::to_vec(&req_payload).unwrap()))
                 .unwrap(),
         )

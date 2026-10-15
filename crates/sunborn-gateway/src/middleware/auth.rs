@@ -5,13 +5,14 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use sunborn_core::{ApplicationId, TenantId};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ApiCredential {
     pub tenant_id: TenantId,
     pub application_id: ApplicationId,
@@ -32,8 +33,8 @@ pub struct SecurityContext {
 }
 
 impl SecurityContext {
-    pub fn require_admin(&self, enforce_auth: bool) -> Result<(), &'static str> {
-        if enforce_auth && (!self.is_authenticated || !self.is_admin) {
+    pub fn require_admin(&self) -> Result<(), &'static str> {
+        if !self.is_authenticated || !self.is_admin {
             return Err("Administrative privileges required for this operation");
         }
         Ok(())
@@ -56,77 +57,7 @@ impl ApiKeyRegistry {
         let registry = Self {
             credentials: Arc::new(RwLock::new(HashMap::new())),
         };
-        // Seed default trusted credentials for production tenants & test suites
-        registry.register_key(
-            "sunborn-admin-key",
-            TenantId::new("system-admin"),
-            ApplicationId::new("admin-ops"),
-            vec!["*".to_string()],
-            true,
-        );
-        registry.register_key(
-            "key-enterprise-fintech",
-            TenantId::new("enterprise-fintech"),
-            ApplicationId::new("app-fintech"),
-            vec!["*".to_string()],
-            true,
-        );
-        registry.register_key(
-            "sunborn-dev-key",
-            TenantId::new("default-tenant"),
-            ApplicationId::new("default-app"),
-            vec!["*".to_string()],
-            true,
-        );
-        registry.register_key(
-            "test-key-tenant-corp-1",
-            TenantId::new("tenant-corp-1"),
-            ApplicationId::new("app-rag"),
-            vec!["*".to_string()],
-            false,
-        );
-        registry.register_key(
-            "test-key-tenant-a",
-            TenantId::new("tenant-a"),
-            ApplicationId::new("app-1"),
-            vec!["*".to_string()],
-            false,
-        );
-        registry.register_key(
-            "test-key-tenant-b",
-            TenantId::new("tenant-b"),
-            ApplicationId::new("app-1"),
-            vec!["*".to_string()],
-            false,
-        );
-        registry.register_key(
-            "test-key-alpha",
-            TenantId::new("tenant-alpha"),
-            ApplicationId::new("app-default"),
-            vec!["*".to_string()],
-            false,
-        );
-        registry.register_key(
-            "test-key-beta",
-            TenantId::new("tenant-beta"),
-            ApplicationId::new("app-default"),
-            vec!["*".to_string()],
-            false,
-        );
-        registry.register_key(
-            "key-acme-corp",
-            TenantId::new("acme-corp"),
-            ApplicationId::new("app-crm"),
-            vec!["*".to_string()],
-            false,
-        );
-        registry.register_key(
-            "key-healthcare-systems",
-            TenantId::new("healthcare-systems"),
-            ApplicationId::new("app-ehr"),
-            vec!["*".to_string()],
-            false,
-        );
+        registry.load_from_env();
         registry
     }
 
@@ -160,12 +91,158 @@ impl ApiKeyRegistry {
         let hash = Self::hash_key(raw_key);
         self.credentials.read().unwrap().get(&hash).cloned()
     }
+
+    pub fn load_from_env(&self) {
+        if let Ok(admin_key) = std::env::var("SUNBORN_ADMIN_KEY") {
+            let trimmed = admin_key.trim();
+            if !trimmed.is_empty() {
+                self.register_key(
+                    trimmed,
+                    TenantId::new("system-admin"),
+                    ApplicationId::new("admin-ops"),
+                    vec!["*".to_string()],
+                    true,
+                );
+            }
+        }
+
+        if let Ok(keys_str) = std::env::var("SUNBORN_API_KEYS") {
+            let trimmed = keys_str.trim();
+            if trimmed.starts_with('[') {
+                #[derive(Deserialize)]
+                struct KeyEntry {
+                    key: String,
+                    tenant: String,
+                    app: String,
+                    #[serde(default)]
+                    is_admin: bool,
+                    #[serde(default)]
+                    allowed_models: Vec<String>,
+                }
+                if let Ok(entries) = serde_json::from_str::<Vec<KeyEntry>>(trimmed) {
+                    for entry in entries {
+                        let models = if entry.allowed_models.is_empty() {
+                            vec!["*".to_string()]
+                        } else {
+                            entry.allowed_models
+                        };
+                        self.register_key(
+                            &entry.key,
+                            TenantId::new(entry.tenant),
+                            ApplicationId::new(entry.app),
+                            models,
+                            entry.is_admin,
+                        );
+                    }
+                }
+            } else {
+                for item in trimmed.split(',') {
+                    let parts: Vec<&str> = item.split(':').map(|s| s.trim()).collect();
+                    if parts.len() >= 3 {
+                        let is_admin = parts
+                            .get(3)
+                            .map(|v| *v == "true" || *v == "1")
+                            .unwrap_or(false);
+                        self.register_key(
+                            parts[0],
+                            TenantId::new(parts[1]),
+                            ApplicationId::new(parts[2]),
+                            vec!["*".to_string()],
+                            is_admin,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn seed_test_fixtures(&self) {
+        self.register_key(
+            "sunborn-admin-key",
+            TenantId::new("system-admin"),
+            ApplicationId::new("admin-ops"),
+            vec!["*".to_string()],
+            true,
+        );
+        self.register_key(
+            "key-enterprise-fintech",
+            TenantId::new("enterprise-fintech"),
+            ApplicationId::new("app-fintech"),
+            vec!["*".to_string()],
+            true,
+        );
+        self.register_key(
+            "sunborn-dev-key",
+            TenantId::new("default-tenant"),
+            ApplicationId::new("default-app"),
+            vec!["*".to_string()],
+            true,
+        );
+        self.register_key(
+            "test-key-tenant-corp-1",
+            TenantId::new("tenant-corp-1"),
+            ApplicationId::new("app-rag"),
+            vec!["*".to_string()],
+            false,
+        );
+        self.register_key(
+            "test-key-tenant-a",
+            TenantId::new("tenant-a"),
+            ApplicationId::new("app-1"),
+            vec!["*".to_string()],
+            false,
+        );
+        self.register_key(
+            "test-key-tenant-b",
+            TenantId::new("tenant-b"),
+            ApplicationId::new("app-1"),
+            vec!["*".to_string()],
+            false,
+        );
+        self.register_key(
+            "test-key-alpha",
+            TenantId::new("tenant-alpha"),
+            ApplicationId::new("app-default"),
+            vec!["*".to_string()],
+            false,
+        );
+        self.register_key(
+            "test-key-beta",
+            TenantId::new("tenant-beta"),
+            ApplicationId::new("app-default"),
+            vec!["*".to_string()],
+            false,
+        );
+        self.register_key(
+            "key-acme-corp",
+            TenantId::new("acme-corp"),
+            ApplicationId::new("app-crm"),
+            vec!["*".to_string()],
+            false,
+        );
+        self.register_key(
+            "key-healthcare-systems",
+            TenantId::new("healthcare-systems"),
+            ApplicationId::new("app-ehr"),
+            vec!["*".to_string()],
+            false,
+        );
+    }
 }
 
 static GLOBAL_REGISTRY: std::sync::OnceLock<ApiKeyRegistry> = std::sync::OnceLock::new();
 
 pub fn get_global_registry() -> &'static ApiKeyRegistry {
-    GLOBAL_REGISTRY.get_or_init(ApiKeyRegistry::new)
+    GLOBAL_REGISTRY.get_or_init(|| {
+        let registry = ApiKeyRegistry::new();
+        let is_prod = std::env::var("SUNBORN_ENV")
+            .map(|v| v.to_lowercase() == "production")
+            .unwrap_or(false);
+        if !is_prod {
+            registry.seed_test_fixtures();
+        }
+        registry
+    })
 }
 
 pub async fn auth_middleware(headers: HeaderMap, mut req: Request, next: Next) -> Response {
@@ -187,8 +264,8 @@ pub async fn auth_middleware(headers: HeaderMap, mut req: Request, next: Next) -
 
     let registry = get_global_registry();
 
-    if let Some(key) = api_key {
-        match registry.validate_key(key) {
+    match api_key {
+        Some(key) => match registry.validate_key(key) {
             Some(cred) => {
                 req.extensions_mut().insert(SecurityContext {
                     tenant_id: cred.tenant_id,
@@ -210,32 +287,16 @@ pub async fn auth_middleware(headers: HeaderMap, mut req: Request, next: Next) -
                 })),
             )
                 .into_response(),
-        }
-    } else if let Some(tenant_str) = headers.get("x-tenant-id").and_then(|v| v.to_str().ok()) {
-        let app_str = headers
-            .get("x-application-id")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("default-app");
-
-        req.extensions_mut().insert(SecurityContext {
-            tenant_id: TenantId::new(tenant_str),
-            application_id: ApplicationId::new(app_str),
-            api_key_hash: "trusted-header".to_string(),
-            allowed_models: vec!["*".to_string()],
-            is_authenticated: true,
-            is_admin: false,
-        });
-        next.run(req).await
-    } else {
-        // Fallback for internal direct calls in tests running without headers
-        req.extensions_mut().insert(SecurityContext {
-            tenant_id: TenantId::new("unauthenticated-test"),
-            application_id: ApplicationId::new("test-app"),
-            api_key_hash: "none".to_string(),
-            allowed_models: vec!["*".to_string()],
-            is_authenticated: false,
-            is_admin: false,
-        });
-        next.run(req).await
+        },
+        None => (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "type": "https://sunborn.ai/errors/unauthorized",
+                "title": "Unauthorized",
+                "status": 401,
+                "detail": "Missing x-api-key or Authorization Bearer header"
+            })),
+        )
+            .into_response(),
     }
 }

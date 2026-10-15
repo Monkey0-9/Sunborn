@@ -10,10 +10,18 @@ use tower::ServiceExt;
 #[tokio::test]
 async fn test_execution_dag_reuse_and_invalidation() {
     let state = AppState::new(AppConfig::default());
-    let app = create_router(state);
+    let app = create_router(state.clone());
 
     let tenant = "tenant-agent-1";
     let application = "agent-finops";
+
+    state.api_key_registry.register_key(
+        "test-key-agent",
+        sunborn_core::TenantId::new(tenant),
+        sunborn_core::ApplicationId::new(application),
+        vec!["*".to_string()],
+        true,
+    );
 
     // 1. Record a cached tool result for "fetch_stock_price"
     let tool_args = serde_json::json!({ "ticker": "MSFT", "currency": "USD" });
@@ -37,6 +45,7 @@ async fn test_execution_dag_reuse_and_invalidation() {
                 .method("POST")
                 .uri("/v1/execution/results")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-agent")
                 .body(Body::from(serde_json::to_vec(&record_payload).unwrap()))
                 .unwrap(),
         )
@@ -93,6 +102,7 @@ async fn test_execution_dag_reuse_and_invalidation() {
                 .method("POST")
                 .uri("/v1/execution/plan")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-agent")
                 .body(Body::from(serde_json::to_vec(&plan_payload).unwrap()))
                 .unwrap(),
         )
@@ -122,6 +132,7 @@ async fn test_execution_dag_reuse_and_invalidation() {
                 .method("POST")
                 .uri("/v1/execution/evict")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-agent")
                 .body(Body::from(serde_json::to_vec(&evict_payload).unwrap()))
                 .unwrap(),
         )
@@ -141,6 +152,7 @@ async fn test_execution_dag_reuse_and_invalidation() {
                 .method("POST")
                 .uri("/v1/execution/plan")
                 .header("content-type", "application/json")
+                .header("x-api-key", "test-key-agent")
                 .body(Body::from(serde_json::to_vec(&plan_payload).unwrap()))
                 .unwrap(),
         )

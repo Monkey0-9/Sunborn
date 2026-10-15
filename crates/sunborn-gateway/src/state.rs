@@ -28,7 +28,8 @@ pub struct AppState {
     pub decision_engine: Arc<DecisionEngine<DeterministicEmbeddingProvider, MemoryVectorStore>>,
     pub dependency_graph: Arc<DependencyGraph>,
     pub invalidation_engine: Arc<InvalidationEngine<MemoryExactCache, MemoryVectorStore>>,
-    pub db: Arc<MemoryDatabaseStore>,
+    pub db: Arc<dyn sunborn_db::DatabaseStore>,
+    pub memory_db: Arc<MemoryDatabaseStore>,
     pub postgres_db: Arc<sunborn_db::PostgresDatabaseStore>,
     pub execution_store: Arc<MemoryExecutionCacheStore>,
     pub shadow_evaluator: Arc<ShadowEvaluator>,
@@ -105,11 +106,31 @@ impl AppState {
         }
 
         let origin_provider: Arc<dyn LlmOriginProvider> = Arc::new(MockOriginProvider::new());
-        let api_key_registry = Arc::new(ApiKeyRegistry::new());
+        let api_key_registry = Arc::new(crate::middleware::auth::get_global_registry().clone());
+
+        let is_dragonfly = config.cache.backend == "dragonfly"
+            || std::env::var("SUNBORN_CACHE_BACKEND")
+                .map(|v| v.to_lowercase() == "dragonfly")
+                .unwrap_or(false);
+        let selected_cache: Arc<dyn ExactCacheStore> = if is_dragonfly {
+            dragonfly_cache.clone()
+        } else {
+            circuit_breaker.clone()
+        };
+
+        let is_postgres = config.cache.database_backend == "postgres"
+            || std::env::var("SUNBORN_DB_BACKEND")
+                .map(|v| v.to_lowercase() == "postgres")
+                .unwrap_or(false);
+        let selected_db: Arc<dyn sunborn_db::DatabaseStore> = if is_postgres {
+            postgres_db.clone()
+        } else {
+            db.clone()
+        };
 
         Self {
             config,
-            cache: circuit_breaker.clone(),
+            cache: selected_cache,
             circuit_breaker,
             memory_cache,
             dragonfly_cache,
@@ -118,7 +139,8 @@ impl AppState {
             decision_engine,
             dependency_graph,
             invalidation_engine,
-            db,
+            db: selected_db,
+            memory_db: db,
             postgres_db,
             execution_store,
             shadow_evaluator,

@@ -16,8 +16,21 @@ use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
 pub fn create_router(state: AppState) -> Router {
+    let allowed_origins: Vec<header::HeaderValue> =
+        if let Ok(origins) = std::env::var("SUNBORN_CORS_ALLOWED_ORIGINS") {
+            origins
+                .split(',')
+                .filter_map(|s| s.trim().parse::<header::HeaderValue>().ok())
+                .collect()
+        } else {
+            vec![
+                header::HeaderValue::from_static("http://localhost:3000"),
+                header::HeaderValue::from_static("http://127.0.0.1:3000"),
+            ]
+        };
+
     let cors = CorsLayer::new()
-        .allow_origin(tower_http::cors::Any)
+        .allow_origin(allowed_origins)
         .allow_methods([
             Method::GET,
             Method::POST,

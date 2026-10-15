@@ -22,6 +22,9 @@ pub struct CacheConfig {
     pub dragonfly_url: String,
     pub qdrant_url: String,
     pub default_ttl_secs: u64,
+    pub backend: String,
+    pub vector_backend: String,
+    pub database_backend: String,
 }
 
 impl Default for CacheConfig {
@@ -32,6 +35,9 @@ impl Default for CacheConfig {
             dragonfly_url: "redis://127.0.0.1:6379".to_string(),
             qdrant_url: "http://127.0.0.1:6334".to_string(),
             default_ttl_secs: 3600,
+            backend: "memory".to_string(),
+            vector_backend: "memory".to_string(),
+            database_backend: "memory".to_string(),
         }
     }
 }
@@ -45,8 +51,8 @@ pub struct AuthConfig {
 impl Default for AuthConfig {
     fn default() -> Self {
         Self {
-            enforce_auth: false,
-            allow_dev_keys: true,
+            enforce_auth: true,
+            allow_dev_keys: false,
         }
     }
 }
@@ -70,6 +76,12 @@ impl AppConfig {
             std::env::var("DRAGONFLY_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
         let qdrant_url =
             std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://127.0.0.1:6334".to_string());
+        let backend =
+            std::env::var("SUNBORN_CACHE_BACKEND").unwrap_or_else(|_| "memory".to_string());
+        let vector_backend =
+            std::env::var("SUNBORN_VECTOR_BACKEND").unwrap_or_else(|_| "memory".to_string());
+        let database_backend =
+            std::env::var("SUNBORN_DB_BACKEND").unwrap_or_else(|_| "memory".to_string());
         let enforce_auth = std::env::var("SUNBORN_ENFORCE_AUTH")
             .map(|v| v == "true" || v == "1")
             .unwrap_or(true);
@@ -82,10 +94,13 @@ impl AppConfig {
                 dragonfly_url,
                 qdrant_url,
                 default_ttl_secs: 3600,
+                backend,
+                vector_backend,
+                database_backend,
             },
             auth: AuthConfig {
                 enforce_auth,
-                allow_dev_keys: true,
+                allow_dev_keys: false,
             },
         }
     }
