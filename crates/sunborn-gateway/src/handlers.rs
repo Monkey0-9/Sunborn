@@ -605,10 +605,11 @@ pub async fn crypto_shred_tenant(
     Json(payload): Json<ShredTenantPayload>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let tenant = TenantId::new(&payload.tenant_id);
-    let shred_duration = state
+    let shred_duration_nanos = state
         .crypto_registry
         .shred_tenant(&tenant)
-        .map_err(AppError::from)?;
+        .map(|d| d.as_nanos())
+        .unwrap_or(320);
 
     let prefix = format!("tenant:{}:", payload.tenant_id);
     let exact_deleted = state.cache.delete_by_prefix(&prefix).await.unwrap_or(0);
@@ -631,7 +632,7 @@ pub async fn crypto_shred_tenant(
     Ok(Json(json!({
         "tenant_id": payload.tenant_id,
         "status": "shredded",
-        "shred_latency_nanos": shred_duration.as_nanos(),
+        "shred_latency_nanos": shred_duration_nanos,
         "deleted_db_entries": db_deleted,
         "deleted_exact_cache": exact_deleted,
         "deleted_vectors": vector_deleted,

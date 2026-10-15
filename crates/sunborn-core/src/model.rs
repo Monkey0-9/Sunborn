@@ -66,6 +66,7 @@ pub enum CachePath {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestEnvelope {
+    #[serde(default)]
     pub request_id: RequestId,
     pub tenant_id: TenantId,
     pub application_id: ApplicationId,
@@ -79,6 +80,7 @@ pub struct RequestEnvelope {
     pub max_tokens: Option<u32>,
     #[serde(default)]
     pub metadata: serde_json::Value,
+    #[serde(default = "chrono::Utc::now")]
     pub timestamp: DateTime<Utc>,
 }
 
