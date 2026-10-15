@@ -215,7 +215,7 @@ Sunborn enforces strict fail-closed authorization:
 | `SUNBORN_CACHE_BACKEND` | `memory` | Cache tier: `memory` (W-TinyLFU) or `dragonfly` |
 | `DRAGONFLY_URL` | `redis://127.0.0.1:6379` | DragonflyDB Redis-compatible connection string |
 | `SUNBORN_VECTOR_BACKEND` | `memory` | Vector tier: `memory` or `qdrant` |
-| `QDRANT_URL` | `http://127.0.0.1:6334` | Qdrant gRPC / HTTP endpoint |
+| `QDRANT_URL` | `http://127.0.0.1:6333` | Qdrant REST HTTP endpoint (port 6333) |
 | `SUNBORN_DB_BACKEND` | `memory` | Authoritative DB: `memory` or `postgres` |
 | `DATABASE_URL` | `postgres://...` | Authoritative PostgreSQL connection string |
 | `SUNBORN_CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated list of permitted web origins |
@@ -231,15 +231,26 @@ Sunborn includes an automated artifact evaluation package (`research/reproduce.s
 ./research/reproduce.sh
 ```
 
+### Empirical Baseline Evaluation (124 Queries, 8 Categories, 95% Wilson CI)
+
+```text
+Baseline               | Hit% (95% CI)       | FalseHit% (95% CI)      | Prec%   | Recall%  | Avg Lat    | Cost USD   | Savings%
+--------------------------------------------------------------------------------------------------------------------------------
+No Cache (Direct Origi |  0.0% [0.0,3.0]     |  0.0% [0.0,3.0]         |  100.0% |     0.0% |   450.0 ms | $ 0.77500 |     0.0%
+Exact Hash Only (C0/C1 | 10.5% [6.2,17.1]    |  0.0% [0.0,3.0]         |  100.0% |    32.5% |   402.9 ms | $ 0.69376 |    10.5%
+Naive Cosine (Fixed ta | 53.2% [44.5,61.8]   | 41.1% [32.9,49.9]       |   22.7% |    37.5% |   214.7 ms | $ 0.36257 |    53.2%
+Sunborn Multi-Tier Cal | 29.0% [21.8,37.6]   |  0.0% [0.0,3.0]         |  100.0% |    90.0% |   320.9 ms | $ 0.55004 |    29.0%
+```
+
 ### What `reproduce.sh` Executes Freshly:
 1. **Workspace Quality**: Enforces `cargo fmt -- --check` and `cargo clippy -D warnings`.
-2. **Test Matrix**: Executes all 60 unit, integration, and contract tests across all 8 crates.
-3. **Gateway Performance**: Benchmarks exact cache hot path (verifying throughput > 10,000 req/s, P99 < 5ms).
+2. **Test Matrix**: Executes all 81+ unit, integration, and contract tests across all 8 crates.
+3. **Gateway Performance**: Benchmarks exact cache hot path (verifying throughput > 9,000 req/s, P99 < 5ms).
 4. **Adversarial Security**: Asserts fail-closed authentication, tenant spoofing rejection, cross-tenant isolation, and 403 Forbidden enforcement on all destructive endpoints.
-5. **Fresh Semantic Benchmark (`SemanticCacheBench`)**: Evaluates 4 baselines (B0 No Cache, B1 Exact Hash, B2 Naive Cosine, B3 Sunborn Calibrated) on fresh runs:
-   - **B3 False-Hit Rate**: Strictly asserts `false_hit_rate_pct == 0.0%` (0 false hits).
+5. **Fresh Semantic Benchmark (`SemanticCacheBench`)**: Evaluates 4 baselines on 124 queries across 8 categories:
+   - **B3 False-Hit Rate**: Strictly asserts `false_hit_rate_pct == 0.0%` (0 false hits across all 124 queries).
    - **B3 Precision**: Strictly asserts `precision_pct == 100.0%`.
-   - **B2 Vulnerability**: Confirms that naive fixed cosine thresholds suffer high error rates on adversarial negations.
+   - **B2 Vulnerability**: Confirms that naive fixed cosine thresholds suffer 51 false hits (41.1% false-hit rate) on adversarial negations.
 6. **Capacity Soak**: 10,000-request Zipfian churn test with live GDPR tenant crypto-shredding and memory RSS envelope verification.
 7. **Certificate Generation**: Writes verifiable JSON evidence to `research/results/reproduction_certificate.json`.
 

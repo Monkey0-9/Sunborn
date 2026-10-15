@@ -72,3 +72,23 @@ jobs:
       - name: Build Frontend Application
         working-directory: frontend
         run: npm run build
+
+  research-reproducibility:
+    name: IEEE/ACM Scientific Reproducibility Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Execute Full Reproducibility Verification Suite
+        run: bash research/reproduce.sh
+
