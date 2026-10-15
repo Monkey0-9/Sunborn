@@ -33,8 +33,8 @@
 | **FR-023** | In-Flight Singleflight SSE Stream Multiplexing | `crates/sunborn-gateway/src/origin/singleflight.rs` | `origin::singleflight::tests::*` | **Verified** |
 | **FR-024** | Monotonic Epoch Fencing Leases | `crates/sunborn-invalidation/src/epoch.rs` | `epoch::tests::test_epoch_fence_prevents_stale_cache_writeback` | **Verified** |
 | **FR-025** | Merkle-DAG Execution Splicing & Tool Purity | `crates/sunborn-execution/src/merkle.rs` | `merkle::tests::test_merkle_dag_subgraph_splicing` | **Verified** |
-| **FR-026** | Prefix KV-Cache Affinity Radix Router | `crates/sunborn-gateway/src/routing/radix.rs` | `routing::radix::tests::*` | **Verified** |
-| **FR-027** | O(1) Cryptographic Tenant Shredding | `crates/sunborn-identity/src/crypto_shred.rs` | `crypto_shred::tests::*` | **Verified** |
+| **FR-026** | Prefix KV-Cache Affinity Radix Router | `crates/sunborn-gateway/src/routing/radix.rs`<br>`crates/sunborn-gateway/src/handlers.rs` | `routing::radix::tests::*`<br>`integration_test::test_radix_routing_and_affinity_endpoints` | **Verified** |
+| **FR-027** | O(1) Cryptographic Tenant Shredding | `crates/sunborn-identity/src/crypto_shred.rs`<br>`crates/sunborn-gateway/src/handlers.rs` | `crypto_shred::tests::*`<br>`integration_test::test_cryptographic_shredding_endpoint`<br>`governance_test::test_tenant_cascade_offboarding_zero_lingering_data` | **Verified** |
 | **FR-028** | Deterministic Simulation Testing (DST) | `crates/sunborn-gateway/tests/simulation_test.rs` | `simulation_test::test_deterministic_simulation_non_accelerator_authority_under_chaos` | **Verified** |
 | **FR-029** | Online CRC & Structural Guardrails Pre-Filter | `crates/sunborn-semantic/src/guardrails.rs` | `guardrails::tests::*` | **Verified** |
 

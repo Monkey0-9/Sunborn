@@ -36,6 +36,10 @@ pub fn create_router(state: AppState) -> Router {
             "/v1/tenants/{id}",
             axum::routing::delete(handlers::delete_tenant),
         )
+        .route("/v1/governance/shred", post(handlers::crypto_shred_tenant))
+        .route("/v1/finops/report", get(handlers::get_finops_report))
+        .route("/v1/routing/radix/inspect", get(handlers::radix_inspect))
+        .route("/v1/routing/radix/route", post(handlers::radix_route))
         .route("/v1/lifecycle/sweep", post(handlers::sweep_lifecycle))
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())

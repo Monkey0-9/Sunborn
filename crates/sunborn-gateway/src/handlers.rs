@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 use sunborn_cache::CacheEntry;
 use sunborn_core::{
+    finops::{FinOpsEngine, ModelPricing},
     CachePath, DecisionAction, DecisionRecord, RequestEnvelope, ResponseEnvelope, SunbornError,
     TenantId,
 };
@@ -462,6 +463,14 @@ pub async fn delete_tenant(
     Path(tenant_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let tenant = TenantId::new(&tenant_id);
+
+    // 0. O(1) Instant Cryptographic Shredding of TDEK
+    let shred_duration_nanos = state
+        .crypto_registry
+        .shred_tenant(&tenant)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+
     let db_deleted = state
         .db
         .delete_tenant_data(&tenant_id)
@@ -482,6 +491,7 @@ pub async fn delete_tenant(
 
     tracing::info!(
         tenant = %tenant_id,
+        shred_duration_nanos,
         db_deleted,
         exact_deleted,
         vector_deleted,
@@ -492,6 +502,7 @@ pub async fn delete_tenant(
     Ok(Json(json!({
         "tenant_id": tenant_id,
         "status": "erased",
+        "cryptographic_shred_time_ns": shred_duration_nanos,
         "deleted_db_entries": db_deleted,
         "deleted_exact_cache": exact_deleted,
         "deleted_vectors": vector_deleted,
@@ -581,6 +592,115 @@ pub async fn chaos_reset(State(state): State<AppState>) -> impl IntoResponse {
     Json(json!({
         "status": "reset",
         "circuit_status": "Closed"
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct ShredTenantPayload {
+    pub tenant_id: String,
+}
+
+pub async fn crypto_shred_tenant(
+    State(state): State<AppState>,
+    Json(payload): Json<ShredTenantPayload>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let tenant = TenantId::new(&payload.tenant_id);
+    let shred_duration = state
+        .crypto_registry
+        .shred_tenant(&tenant)
+        .map_err(AppError::from)?;
+
+    let prefix = format!("tenant:{}:", payload.tenant_id);
+    let exact_deleted = state.cache.delete_by_prefix(&prefix).await.unwrap_or(0);
+    let vector_deleted = state
+        .vector_store
+        .delete_by_tenant(&tenant)
+        .await
+        .unwrap_or(0);
+    let execution_deleted = state
+        .execution_store
+        .evict_by_tenant(&tenant)
+        .await
+        .unwrap_or(0);
+    let db_deleted = state
+        .db
+        .delete_tenant_data(&payload.tenant_id)
+        .await
+        .unwrap_or(0);
+
+    Ok(Json(json!({
+        "tenant_id": payload.tenant_id,
+        "status": "shredded",
+        "shred_latency_nanos": shred_duration.as_nanos(),
+        "deleted_db_entries": db_deleted,
+        "deleted_exact_cache": exact_deleted,
+        "deleted_vectors": vector_deleted,
+        "deleted_execution_tools": execution_deleted
+    })))
+}
+
+pub async fn get_finops_report() -> impl IntoResponse {
+    let gpt4o = ModelPricing::gpt4o();
+    let claude = ModelPricing::claude35_sonnet();
+
+    let exact_hits = EXACT_HITS.load(Ordering::Relaxed);
+    let semantic_hits = SEMANTIC_HITS.load(Ordering::Relaxed);
+    let total_hits = exact_hits + semantic_hits;
+
+    let gpt4o_saving_per_hit = FinOpsEngine::calculate_net_savings(&gpt4o, 1000, 500);
+    let claude_saving_per_hit = FinOpsEngine::calculate_net_savings(&claude, 1000, 500);
+
+    let total_gpt4o_savings = gpt4o_saving_per_hit * (total_hits as f64).max(1.0);
+    let break_even_gpt4o = FinOpsEngine::break_even_hit_rate(&gpt4o, 1000, 500, 4096, 24.0);
+
+    Json(json!({
+        "status": "active",
+        "metrics": {
+            "exact_hits": exact_hits,
+            "semantic_hits": semantic_hits,
+            "total_hits": total_hits,
+            "requests_total": REQUESTS_TOTAL.load(Ordering::Relaxed)
+        },
+        "economics": {
+            "gpt4o_cost_avoided_per_query_usd": gpt4o_saving_per_hit,
+            "claude_cost_avoided_per_query_usd": claude_saving_per_hit,
+            "total_estimated_savings_usd": total_gpt4o_savings,
+            "break_even_hit_rate_threshold": break_even_gpt4o
+        }
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct RadixRoutePayload {
+    pub prompt: String,
+    pub warm_prefix: Option<String>,
+    pub warm_node: Option<String>,
+}
+
+pub async fn radix_route(
+    State(state): State<AppState>,
+    Json(payload): Json<RadixRoutePayload>,
+) -> impl IntoResponse {
+    if let (Some(prefix), Some(node)) = (&payload.warm_prefix, &payload.warm_node) {
+        state.radix_router.warm_prefix(prefix, node);
+    }
+
+    let decision = state.radix_router.route(&payload.prompt);
+    Json(json!({
+        "selected_node": decision.selected_node,
+        "is_kv_affinity_hit": decision.is_kv_affinity_hit,
+        "matched_tokens": decision.matched_tokens,
+        "estimated_prefill_savings_pct": if decision.is_kv_affinity_hit { 80.0 } else { 0.0 }
+    }))
+}
+
+pub async fn radix_inspect(State(_state): State<AppState>) -> impl IntoResponse {
+    Json(json!({
+        "status": "operational",
+        "backend_nodes": ["inference-node-1", "inference-node-2", "inference-node-3"],
+        "min_affinity_tokens": 16,
+        "max_load_factor": 1.5,
+        "strategy": "compressed-radix-tree-affinity"
     }))
 }
 

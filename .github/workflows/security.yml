@@ -1,0 +1,37 @@
+name: Security Audit & Supply-Chain Integrity
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: '0 4 * * 1' # Weekly security audit on Mondays at 04:00 UTC
+
+jobs:
+  security-audit:
+    name: Dependency Audit & Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: which cargo-audit || cargo install cargo-audit
+
+      - name: Audit Cargo Dependencies for Vulnerabilities
+        run: cargo audit
+
+      - name: Scan Secrets & Leakage Defense
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --only-verified
+
+      - name: Frontend Dependency Vulnerability Check
+        working-directory: frontend
+        run: npm audit --audit-level=high

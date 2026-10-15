@@ -1,9 +1,11 @@
+use crate::routing::radix::KvCacheRouter;
 use crate::shadow::ShadowEvaluator;
 use std::sync::Arc;
 use sunborn_cache::{CircuitBreakerCache, ExactCacheStore, MemoryExactCache};
 use sunborn_core::AppConfig;
 use sunborn_db::MemoryDatabaseStore;
 use sunborn_execution::MemoryExecutionCacheStore;
+use sunborn_identity::crypto_shred::TenantCryptoRegistry;
 use sunborn_invalidation::{DependencyGraph, InvalidationEngine};
 use sunborn_semantic::{
     DecisionConfig, DecisionEngine, DeterministicEmbeddingProvider, MemoryVectorStore,
@@ -22,6 +24,8 @@ pub struct AppState {
     pub db: Arc<MemoryDatabaseStore>,
     pub execution_store: Arc<MemoryExecutionCacheStore>,
     pub shadow_evaluator: Arc<ShadowEvaluator>,
+    pub radix_router: Arc<KvCacheRouter>,
+    pub crypto_registry: Arc<TenantCryptoRegistry>,
 }
 
 impl AppState {
@@ -48,6 +52,26 @@ impl AppState {
         ));
         let execution_store = Arc::new(MemoryExecutionCacheStore::new());
         let shadow_evaluator = Arc::new(ShadowEvaluator::new());
+        let radix_router = Arc::new(KvCacheRouter::new(
+            vec![
+                "inference-node-1".to_string(),
+                "inference-node-2".to_string(),
+                "inference-node-3".to_string(),
+            ],
+            8,
+            1.5,
+        ));
+        let crypto_registry = Arc::new(TenantCryptoRegistry::new());
+        crypto_registry.provision_tenant(sunborn_core::TenantId::new("tenant-alpha"), [0x42; 32]);
+        crypto_registry.provision_tenant(
+            sunborn_core::TenantId::new("enterprise-fintech"),
+            [0x43; 32],
+        );
+        crypto_registry.provision_tenant(sunborn_core::TenantId::new("acme-corp"), [0x44; 32]);
+        crypto_registry.provision_tenant(
+            sunborn_core::TenantId::new("healthcare-systems"),
+            [0x45; 32],
+        );
 
         Self {
             config,
@@ -61,6 +85,8 @@ impl AppState {
             db,
             execution_store,
             shadow_evaluator,
+            radix_router,
+            crypto_registry,
         }
     }
 }

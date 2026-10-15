@@ -276,3 +276,114 @@ async fn test_vs003_vs004_semantic_cache_and_invalidation_slice() {
     let res_env2: ResponseEnvelope = serde_json::from_slice(&body2).unwrap();
     assert!(!res_env2.cached);
 }
+
+#[tokio::test]
+async fn test_finops_report_endpoint() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/v1/finops/report")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["status"], "active");
+    assert!(
+        json["economics"]["gpt4o_cost_avoided_per_query_usd"]
+            .as_f64()
+            .unwrap()
+            > 0.0
+    );
+    assert!(
+        json["economics"]["break_even_hit_rate_threshold"]
+            .as_f64()
+            .unwrap()
+            < 0.20
+    );
+}
+
+#[tokio::test]
+async fn test_radix_routing_and_affinity_endpoints() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state);
+
+    // 1. Inspect radix router status
+    let insp_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/v1/routing/radix/inspect")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(insp_resp.status(), StatusCode::OK);
+    let insp_body = insp_resp.into_body().collect().await.unwrap().to_bytes();
+    let insp_json: Value = serde_json::from_slice(&insp_body).unwrap();
+    assert_eq!(insp_json["status"], "operational");
+
+    // 2. Route prompt with prefix warming
+    let route_payload = serde_json::json!({
+        "prompt": "You are a senior financial analyst analyzing Q4 EBITDA. Please provide summary.",
+        "warm_prefix": "You are a senior financial analyst analyzing",
+        "warm_node": "inference-node-2"
+    });
+
+    let route_resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/routing/radix/route")
+                .header("content-type", "application/json")
+                .body(Body::from(route_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(route_resp.status(), StatusCode::OK);
+    let route_body = route_resp.into_body().collect().await.unwrap().to_bytes();
+    let route_json: Value = serde_json::from_slice(&route_body).unwrap();
+    assert_eq!(route_json["selected_node"], "inference-node-2");
+    assert_eq!(route_json["is_kv_affinity_hit"], true);
+    assert!(route_json["matched_tokens"].as_u64().unwrap() >= 8);
+}
+
+#[tokio::test]
+async fn test_cryptographic_shredding_endpoint() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state);
+
+    let shred_payload = serde_json::json!({
+        "tenant_id": "tenant-alpha"
+    });
+
+    let shred_resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/governance/shred")
+                .header("content-type", "application/json")
+                .body(Body::from(shred_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(shred_resp.status(), StatusCode::OK);
+    let shred_body = shred_resp.into_body().collect().await.unwrap().to_bytes();
+    let shred_json: Value = serde_json::from_slice(&shred_body).unwrap();
+    assert_eq!(shred_json["status"], "shredded");
+    assert_eq!(shred_json["tenant_id"], "tenant-alpha");
+    assert!(shred_json["shred_latency_nanos"].as_u64().is_some());
+}
