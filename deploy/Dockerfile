@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy full workspace context
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
+COPY apps ./apps
 
 # Build release binary for sunborn-gateway
 RUN cargo build --release -p sunborn-gateway

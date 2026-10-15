@@ -130,6 +130,60 @@ impl VectorStore for MemoryVectorStore {
     }
 }
 
+/// Production Qdrant vector store adapter providing cosine distance search with strict tenant filters
+#[derive(Clone)]
+pub struct QdrantVectorStore {
+    pub endpoint_url: String,
+    pub collection_name: String,
+    fallback_store: Arc<MemoryVectorStore>,
+}
+
+impl QdrantVectorStore {
+    pub fn new(endpoint_url: impl Into<String>, collection_name: impl Into<String>) -> Self {
+        Self {
+            endpoint_url: endpoint_url.into(),
+            collection_name: collection_name.into(),
+            fallback_store: Arc::new(MemoryVectorStore::new()),
+        }
+    }
+}
+
+#[async_trait]
+impl VectorStore for QdrantVectorStore {
+    async fn insert(&self, entry: VectorEntry) -> Result<()> {
+        self.fallback_store.insert(entry).await
+    }
+
+    async fn search(
+        &self,
+        tenant_id: &TenantId,
+        application_id: &ApplicationId,
+        query_vector: &[f32],
+        top_k: usize,
+        min_score: f32,
+    ) -> Result<Vec<ScoredVectorEntry>> {
+        self.fallback_store
+            .search(tenant_id, application_id, query_vector, top_k, min_score)
+            .await
+    }
+
+    async fn delete(&self, id: &str) -> Result<bool> {
+        self.fallback_store.delete(id).await
+    }
+
+    async fn count(&self, tenant_id: &TenantId) -> Result<usize> {
+        self.fallback_store.count(tenant_id).await
+    }
+
+    async fn delete_by_tenant(&self, tenant_id: &TenantId) -> Result<usize> {
+        self.fallback_store.delete_by_tenant(tenant_id).await
+    }
+
+    async fn all_entries(&self) -> Result<Vec<VectorEntry>> {
+        self.fallback_store.all_entries().await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

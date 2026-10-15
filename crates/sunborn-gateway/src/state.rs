@@ -1,4 +1,6 @@
 use crate::autonomic::AutonomicSelfHealingController;
+use crate::middleware::auth::ApiKeyRegistry;
+use crate::origin::provider::{LlmOriginProvider, MockOriginProvider};
 use crate::routing::predictive::PredictivePrefetchEngine;
 use crate::routing::radix::KvCacheRouter;
 use crate::shadow::ShadowEvaluator;
@@ -20,11 +22,14 @@ pub struct AppState {
     pub cache: Arc<dyn ExactCacheStore>,
     pub circuit_breaker: Arc<CircuitBreakerCache<MemoryExactCache>>,
     pub memory_cache: Arc<MemoryExactCache>,
+    pub dragonfly_cache: Arc<sunborn_cache::DragonflyCacheStore>,
     pub vector_store: Arc<MemoryVectorStore>,
+    pub qdrant_store: Arc<sunborn_semantic::QdrantVectorStore>,
     pub decision_engine: Arc<DecisionEngine<DeterministicEmbeddingProvider, MemoryVectorStore>>,
     pub dependency_graph: Arc<DependencyGraph>,
     pub invalidation_engine: Arc<InvalidationEngine<MemoryExactCache, MemoryVectorStore>>,
     pub db: Arc<MemoryDatabaseStore>,
+    pub postgres_db: Arc<sunborn_db::PostgresDatabaseStore>,
     pub execution_store: Arc<MemoryExecutionCacheStore>,
     pub shadow_evaluator: Arc<ShadowEvaluator>,
     pub radix_router: Arc<KvCacheRouter>,
@@ -32,18 +37,30 @@ pub struct AppState {
     pub predictive_engine: Arc<PredictivePrefetchEngine>,
     pub autonomic_controller: Arc<AutonomicSelfHealingController>,
     pub vector_clock: Arc<RwLock<VectorClock>>,
+    pub origin_provider: Arc<dyn LlmOriginProvider>,
+    pub api_key_registry: Arc<ApiKeyRegistry>,
 }
 
 impl AppState {
     pub fn new(config: AppConfig) -> Self {
         let memory_cache = Arc::new(MemoryExactCache::new());
+        let dragonfly_cache = Arc::new(sunborn_cache::DragonflyCacheStore::new(
+            &config.cache.dragonfly_url,
+        ));
         let circuit_breaker = Arc::new(CircuitBreakerCache::new(
             (*memory_cache).clone(),
             3,
             std::time::Duration::from_secs(5),
         ));
         let vector_store = Arc::new(MemoryVectorStore::new());
+        let qdrant_store = Arc::new(sunborn_semantic::QdrantVectorStore::new(
+            &config.cache.qdrant_url,
+            "sunborn_vectors",
+        ));
         let db = Arc::new(MemoryDatabaseStore::new());
+        let postgres_db = Arc::new(sunborn_db::PostgresDatabaseStore::new(
+            "postgres://postgres:postgres@localhost:5432/sunborn",
+        ));
         let embedder = DeterministicEmbeddingProvider::new();
         let decision_engine = Arc::new(DecisionEngine::new(
             embedder,
@@ -87,16 +104,22 @@ impl AppState {
             vc.increment("gateway-primary-node-1");
         }
 
+        let origin_provider: Arc<dyn LlmOriginProvider> = Arc::new(MockOriginProvider::new());
+        let api_key_registry = Arc::new(ApiKeyRegistry::new());
+
         Self {
             config,
             cache: circuit_breaker.clone(),
             circuit_breaker,
             memory_cache,
+            dragonfly_cache,
             vector_store,
+            qdrant_store,
             decision_engine,
             dependency_graph,
             invalidation_engine,
             db,
+            postgres_db,
             execution_store,
             shadow_evaluator,
             radix_router,
@@ -104,6 +127,8 @@ impl AppState {
             predictive_engine,
             autonomic_controller,
             vector_clock,
+            origin_provider,
+            api_key_registry,
         }
     }
 }

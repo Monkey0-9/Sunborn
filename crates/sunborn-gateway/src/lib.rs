@@ -1,5 +1,6 @@
 pub mod autonomic;
 pub mod handlers;
+pub mod middleware;
 pub mod origin;
 pub mod routing;
 pub mod shadow;
@@ -62,6 +63,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/v1/routing/radix/inspect", get(handlers::radix_inspect))
         .route("/v1/routing/radix/route", post(handlers::radix_route))
         .route("/v1/lifecycle/sweep", post(handlers::sweep_lifecycle))
+        .layer(axum::middleware::from_fn(middleware::auth::auth_middleware))
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(state)

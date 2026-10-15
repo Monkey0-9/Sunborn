@@ -1,9 +1,10 @@
 /target
 **/*.rs.bk
-Cargo.lock
 .env
 linear_data.json
 .DS_Store
 node_modules
 .next
 *.tsbuildinfo
+__pycache__/
+*.pyc

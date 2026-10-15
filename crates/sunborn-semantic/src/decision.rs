@@ -40,12 +40,14 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
         }
     }
 
-    /// Evaluates semantic risk for prompt (e.g. presence of mutating commands, PII, financial terms)
+    /// Evaluates semantic risk for prompt (e.g. presence of mutating commands, PII, financial terms, or security overrides)
     pub fn assess_risk(prompt: &str) -> f32 {
         let lower = prompt.to_lowercase();
         let high_risk_keywords = [
             "delete",
             "drop table",
+            "drop database",
+            "truncate",
             "password",
             "api_key",
             "secret",
@@ -55,6 +57,14 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
             "wire money",
             "authenticate",
             "execute command",
+            "bypass",
+            "disable",
+            "override",
+            "exploit",
+            "hack",
+            "leak",
+            "unauthorized",
+            "sql injection",
         ];
 
         let mut risk: f32 = 0.0;

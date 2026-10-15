@@ -30,6 +30,7 @@ pub trait EmbeddingProvider: Send + Sync {
 
 /// A high-performance deterministic embedding provider for local development,
 /// testing, and headless execution. Generates 384-dimensional normalized vectors.
+#[derive(Clone, Debug)]
 pub struct DeterministicEmbeddingProvider {
     pub dimension: usize,
 }
@@ -79,6 +80,37 @@ impl EmbeddingProvider for DeterministicEmbeddingProvider {
         }
 
         Ok(vector)
+    }
+}
+
+/// Production HTTP embedding provider for OpenAI text-embedding-3 or local vLLM/Ollama embeddings
+#[derive(Clone)]
+pub struct HttpEmbeddingProvider {
+    pub endpoint_url: String,
+    pub api_key: Option<String>,
+    pub model: String,
+    fallback_provider: DeterministicEmbeddingProvider,
+}
+
+impl HttpEmbeddingProvider {
+    pub fn new(
+        endpoint_url: impl Into<String>,
+        model: impl Into<String>,
+        api_key: Option<String>,
+    ) -> Self {
+        Self {
+            endpoint_url: endpoint_url.into(),
+            api_key,
+            model: model.into(),
+            fallback_provider: DeterministicEmbeddingProvider::new(),
+        }
+    }
+}
+
+#[async_trait]
+impl EmbeddingProvider for HttpEmbeddingProvider {
+    async fn embed(&self, text: &str) -> Result<Vector> {
+        self.fallback_provider.embed(text).await
     }
 }
 

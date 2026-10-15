@@ -64,6 +64,15 @@ pub enum CachePath {
     Miss,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolDefinition {
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub parameters: serde_json::Value,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestEnvelope {
     #[serde(default)]
@@ -77,7 +86,21 @@ pub struct RequestEnvelope {
     #[serde(default)]
     pub temperature: Option<f32>,
     #[serde(default)]
+    pub top_p: Option<f32>,
+    #[serde(default)]
     pub max_tokens: Option<u32>,
+    #[serde(default)]
+    pub stop_sequences: Vec<String>,
+    #[serde(default)]
+    pub tools: Vec<ToolDefinition>,
+    #[serde(default)]
+    pub tool_choice: Option<String>,
+    #[serde(default)]
+    pub response_format: Option<String>,
+    #[serde(default)]
+    pub knowledge_epoch: Option<u64>,
+    #[serde(default)]
+    pub retrieval_context_hashes: Vec<String>,
     #[serde(default)]
     pub metadata: serde_json::Value,
     #[serde(default = "chrono::Utc::now")]
@@ -99,7 +122,14 @@ impl RequestEnvelope {
             prompt: prompt.into(),
             system_prompt: None,
             temperature: None,
+            top_p: None,
             max_tokens: None,
+            stop_sequences: Vec::new(),
+            tools: Vec::new(),
+            tool_choice: None,
+            response_format: None,
+            knowledge_epoch: None,
+            retrieval_context_hashes: Vec::new(),
             metadata: serde_json::json!({}),
             timestamp: Utc::now(),
         }

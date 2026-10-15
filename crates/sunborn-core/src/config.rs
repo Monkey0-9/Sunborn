@@ -36,10 +36,26 @@ impl Default for CacheConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthConfig {
+    pub enforce_auth: bool,
+    pub allow_dev_keys: bool,
+}
+
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self {
+            enforce_auth: false,
+            allow_dev_keys: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
     pub server: ServerConfig,
     pub cache: CacheConfig,
+    pub auth: AuthConfig,
 }
 
 impl AppConfig {
@@ -54,6 +70,9 @@ impl AppConfig {
             std::env::var("DRAGONFLY_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
         let qdrant_url =
             std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://127.0.0.1:6334".to_string());
+        let enforce_auth = std::env::var("SUNBORN_ENFORCE_AUTH")
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or(true);
 
         Self {
             server: ServerConfig { host, port },
@@ -63,6 +82,10 @@ impl AppConfig {
                 dragonfly_url,
                 qdrant_url,
                 default_ttl_secs: 3600,
+            },
+            auth: AuthConfig {
+                enforce_auth,
+                allow_dev_keys: true,
             },
         }
     }

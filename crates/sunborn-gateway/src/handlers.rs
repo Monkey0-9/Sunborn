@@ -1,9 +1,10 @@
+use crate::middleware::auth::SecurityContext;
 use crate::state::AppState;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
+    Extension, Json,
 };
 use chrono::Utc;
 use serde::Deserialize;
@@ -89,12 +90,42 @@ pub async fn metrics() -> impl IntoResponse {
 
 pub async fn execute_request(
     State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
     Json(req): Json<RequestEnvelope>,
 ) -> Result<Json<ResponseEnvelope>, AppError> {
     REQUESTS_TOTAL.fetch_add(1, Ordering::Relaxed);
     let start = Instant::now();
 
-    // 1. Validate payload
+    // 1. Enforce zero-trust tenant identity:
+    if sec_ctx.is_authenticated {
+        // Authenticated context: strictly prevent tenant spoofing
+        if req.tenant_id != sec_ctx.tenant_id {
+            return Err(SunbornError::unauthorized(format!(
+                "Tenant spoofing rejected: authenticated context is '{}', but request payload specified '{}'",
+                sec_ctx.tenant_id.0, req.tenant_id.0
+            )).into());
+        }
+
+        // Enforce model authorization permissions
+        if !sec_ctx.allowed_models.is_empty()
+            && !sec_ctx
+                .allowed_models
+                .iter()
+                .any(|m| m == "*" || m == &req.model)
+        {
+            return Err(SunbornError::unauthorized(format!(
+                "Model '{}' is not authorized for tenant '{}'",
+                req.model, sec_ctx.tenant_id.0
+            ))
+            .into());
+        }
+    } else if state.config.auth.enforce_auth {
+        return Err(
+            SunbornError::unauthorized("Missing x-api-key or Authorization Bearer header").into(),
+        );
+    }
+
+    // 2. Validate payload
     if req.prompt.trim().is_empty() {
         return Err(SunbornError::invalid_payload("Prompt must not be empty").into());
     }
@@ -179,10 +210,8 @@ pub async fn execute_request(
         "Cache MISS -> Forwarding to origin provider"
     );
 
-    let origin_content = format!(
-        "[Origin Response from {} for tenant {}]: {}",
-        req.model, req.tenant_id.0, req.prompt
-    );
+    let origin_result = state.origin_provider.execute(&req).await?;
+    let origin_content = origin_result.content;
 
     // 6. Cache Admission Engine:
     // a) Save in exact cache
@@ -805,6 +834,16 @@ impl IntoResponse for AppError {
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
-        (status, Json(json!({ "error": self.0 }))).into_response()
+        (
+            status,
+            Json(json!({
+                "type": format!("https://sunborn.ai/errors/{:?}", self.0.code).to_lowercase(),
+                "title": format!("{:?}", self.0.code),
+                "status": status.as_u16(),
+                "detail": self.0.message.clone(),
+                "error": self.0,
+            })),
+        )
+            .into_response()
     }
 }

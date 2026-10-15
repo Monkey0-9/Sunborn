@@ -267,3 +267,120 @@ async fn test_shadow_evaluation_drift_detection_endpoint() {
         "Stale drifted entry must be evicted immediately"
     );
 }
+
+#[tokio::test]
+async fn test_invalid_api_key_rejected() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state);
+
+    let req_payload = RequestEnvelope::new("tenant-alpha", "app-1", "gpt-4o", "Hello world!");
+
+    let res = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", "completely-bogus-unregistered-key")
+                .body(Body::from(serde_json::to_vec(&req_payload).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["title"], "Unauthorized");
+    assert!(json["detail"]
+        .as_str()
+        .unwrap()
+        .contains("Invalid or unregistered"));
+}
+
+#[tokio::test]
+async fn test_tenant_spoofing_rejected_with_authenticated_key() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state);
+
+    // Authenticate as tenant-alpha using registered key "test-key-alpha",
+    // but try to claim tenant-beta in the request payload!
+    let spoof_payload = RequestEnvelope::new("tenant-beta", "app-1", "gpt-4o", "Confidential data");
+
+    let res = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", "test-key-alpha")
+                .body(Body::from(serde_json::to_vec(&spoof_payload).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Must be rejected!
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert!(
+        json["detail"]
+            .as_str()
+            .unwrap()
+            .contains("Tenant spoofing rejected"),
+        "Must explicitly reject tenant mismatch"
+    );
+}
+
+#[tokio::test]
+async fn test_valid_authenticated_tenant_request_succeeds() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state);
+
+    let valid_payload =
+        RequestEnvelope::new("tenant-alpha", "app-default", "gpt-4o", "Authorized prompt");
+
+    let res = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", "test-key-alpha")
+                .body(Body::from(serde_json::to_vec(&valid_payload).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    let env: ResponseEnvelope = serde_json::from_slice(&body).unwrap();
+    assert_eq!(env.tenant_id.0, "tenant-alpha");
+}
+
+#[tokio::test]
+async fn test_unauthenticated_request_rejected_when_auth_enforced() {
+    let mut config = AppConfig::default();
+    config.auth.enforce_auth = true; // Strict production zero-trust mode
+    let state = AppState::new(config);
+    let app = create_router(state);
+
+    let req_payload =
+        RequestEnvelope::new("tenant-alpha", "app-1", "gpt-4o", "Unauthenticated prompt");
+
+    let res = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(&req_payload).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+}

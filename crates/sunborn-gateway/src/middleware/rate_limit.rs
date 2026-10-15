@@ -55,11 +55,7 @@ impl RateLimiter {
     }
 }
 
-pub async fn rate_limit_middleware(
-    headers: HeaderMap,
-    req: Request,
-    next: Next,
-) -> Response {
+pub async fn rate_limit_middleware(headers: HeaderMap, req: Request, next: Next) -> Response {
     let tenant = headers
         .get("x-tenant-id")
         .and_then(|v| v.to_str().ok())
