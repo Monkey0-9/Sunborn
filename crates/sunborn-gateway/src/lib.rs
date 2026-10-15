@@ -1,3 +1,4 @@
+pub mod autonomic;
 pub mod handlers;
 pub mod origin;
 pub mod routing;
@@ -37,6 +38,26 @@ pub fn create_router(state: AppState) -> Router {
             axum::routing::delete(handlers::delete_tenant),
         )
         .route("/v1/governance/shred", post(handlers::crypto_shred_tenant))
+        .route(
+            "/v1/governance/attest",
+            post(handlers::generate_merkle_attestation),
+        )
+        .route(
+            "/v1/governance/verify-proof",
+            post(handlers::verify_merkle_attestation),
+        )
+        .route(
+            "/v1/speculative/predict",
+            post(handlers::predict_speculative),
+        )
+        .route(
+            "/v1/cluster/sync/status",
+            get(handlers::get_cluster_sync_status),
+        )
+        .route(
+            "/v1/autonomic/incidents",
+            get(handlers::get_autonomic_status),
+        )
         .route("/v1/finops/report", get(handlers::get_finops_report))
         .route("/v1/routing/radix/inspect", get(handlers::radix_inspect))
         .route("/v1/routing/radix/route", post(handlers::radix_route))

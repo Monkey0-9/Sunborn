@@ -40,6 +40,47 @@ pub struct SplicedExecutionPlan {
     pub latency_saved_estimate_ms: u64,
 }
 
+/// Step in a Merkle inclusion proof path
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MerkleProofStep {
+    pub sibling_hash: String,
+    pub is_right: bool,
+}
+
+/// Cryptographic Merkle Inclusion Proof for zero-knowledge auditability (Level 7)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MerkleInclusionProof {
+    pub leaf_hash: String,
+    pub root_hash: String,
+    pub path: Vec<MerkleProofStep>,
+}
+
+impl MerkleInclusionProof {
+    pub fn verify(&self) -> bool {
+        let Ok(mut current) = hex::decode(&self.leaf_hash) else {
+            return false;
+        };
+
+        for step in &self.path {
+            let Ok(sibling) = hex::decode(&step.sibling_hash) else {
+                return false;
+            };
+            let mut hasher = Sha256::new();
+            hasher.update([0x01]); // RFC 6962 interior node tag
+            if step.is_right {
+                hasher.update(&current);
+                hasher.update(&sibling);
+            } else {
+                hasher.update(&sibling);
+                hasher.update(&current);
+            }
+            current = hasher.finalize().to_vec();
+        }
+
+        hex::encode(current) == self.root_hash
+    }
+}
+
 pub struct MerkleExecutionEngine;
 
 impl MerkleExecutionEngine {
@@ -145,6 +186,87 @@ impl MerkleExecutionEngine {
             latency_saved_estimate_ms: latency_saved_ms,
         })
     }
+
+    /// Construct binary Merkle Tree and return (RootHash, Proofs for each leaf) for Level 7 Attestation
+    pub fn build_merkle_tree(leaf_hashes: &[String]) -> (String, Vec<MerkleInclusionProof>) {
+        if leaf_hashes.is_empty() {
+            let empty_root = hex::encode(Sha256::digest(b""));
+            return (empty_root, Vec::new());
+        }
+
+        let n = leaf_hashes.len();
+        if n == 1 {
+            let root = leaf_hashes[0].clone();
+            let proof = MerkleInclusionProof {
+                leaf_hash: root.clone(),
+                root_hash: root.clone(),
+                path: vec![],
+            };
+            return (root, vec![proof]);
+        }
+
+        // Build levels of the Merkle Tree
+        let mut levels: Vec<Vec<String>> = Vec::new();
+        levels.push(leaf_hashes.to_vec());
+
+        while levels.last().unwrap().len() > 1 {
+            let current_level = levels.last().unwrap();
+            let mut next_level = Vec::new();
+            let mut i = 0;
+            while i < current_level.len() {
+                let left = &current_level[i];
+                let right = if i + 1 < current_level.len() {
+                    &current_level[i + 1]
+                } else {
+                    left
+                };
+
+                let mut hasher = Sha256::new();
+                hasher.update([0x01]);
+                hasher.update(hex::decode(left).unwrap_or_default());
+                hasher.update(hex::decode(right).unwrap_or_default());
+                next_level.push(hex::encode(hasher.finalize()));
+                i += 2;
+            }
+            levels.push(next_level);
+        }
+
+        let root_hash = levels.last().unwrap()[0].clone();
+
+        // Construct inclusion proof for each leaf
+        let mut proofs = Vec::with_capacity(n);
+        for (leaf_idx, leaf_hash) in leaf_hashes.iter().enumerate() {
+            let mut path = Vec::new();
+            let mut idx = leaf_idx;
+
+            for level in levels.iter().take(levels.len() - 1) {
+                let is_right = idx % 2 == 0;
+                let sibling_idx = if is_right {
+                    if idx + 1 < level.len() {
+                        idx + 1
+                    } else {
+                        idx
+                    }
+                } else {
+                    idx - 1
+                };
+
+                path.push(MerkleProofStep {
+                    sibling_hash: level[sibling_idx].clone(),
+                    is_right,
+                });
+                idx /= 2;
+            }
+
+            proofs.push(MerkleInclusionProof {
+                leaf_hash: leaf_hash.clone(),
+                root_hash: root_hash.clone(),
+                path,
+            });
+        }
+
+        (root_hash, proofs)
+    }
 }
 
 #[cfg(test)]
@@ -242,6 +364,34 @@ mod tests {
         assert_ne!(
             hash_a, hash_b,
             "Boundary collision detected! Length framing must prevent this."
+        );
+    }
+
+    #[test]
+    fn test_merkle_tree_inclusion_proof_verification() {
+        let leaf1 = hex::encode(Sha256::digest(b"leaf1-tool-execution-hash"));
+        let leaf2 = hex::encode(Sha256::digest(b"leaf2-tool-execution-hash"));
+        let leaf3 = hex::encode(Sha256::digest(b"leaf3-tool-execution-hash"));
+        let leaf4 = hex::encode(Sha256::digest(b"leaf4-tool-execution-hash"));
+
+        let leaves = vec![leaf1.clone(), leaf2.clone(), leaf3.clone(), leaf4.clone()];
+        let (root, proofs) = MerkleExecutionEngine::build_merkle_tree(&leaves);
+
+        assert_eq!(proofs.len(), 4);
+        for proof in &proofs {
+            assert_eq!(proof.root_hash, root);
+            assert!(
+                proof.verify(),
+                "Merkle proof must mathematically verify against root"
+            );
+        }
+
+        // Test tampering detection
+        let mut tampered_proof = proofs[0].clone();
+        tampered_proof.leaf_hash = hex::encode(Sha256::digest(b"tampered-leaf"));
+        assert!(
+            !tampered_proof.verify(),
+            "Tampered leaf must fail verification"
         );
     }
 }

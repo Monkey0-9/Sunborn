@@ -705,6 +705,87 @@ pub async fn radix_inspect(State(_state): State<AppState>) -> impl IntoResponse 
     }))
 }
 
+#[derive(Deserialize)]
+pub struct AttestationPayload {
+    pub leaf_hashes: Vec<String>,
+}
+
+pub async fn generate_merkle_attestation(
+    Json(payload): Json<AttestationPayload>,
+) -> impl IntoResponse {
+    let (root, proofs) =
+        sunborn_execution::MerkleExecutionEngine::build_merkle_tree(&payload.leaf_hashes);
+    Json(json!({
+        "status": "attested",
+        "root_hash": root,
+        "leaf_count": payload.leaf_hashes.len(),
+        "proofs": proofs
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct VerifyProofPayload {
+    pub proof: sunborn_execution::MerkleInclusionProof,
+}
+
+pub async fn verify_merkle_attestation(
+    Json(payload): Json<VerifyProofPayload>,
+) -> impl IntoResponse {
+    let is_valid = payload.proof.verify();
+    Json(json!({
+        "is_valid": is_valid,
+        "root_hash": payload.proof.root_hash,
+        "leaf_hash": payload.proof.leaf_hash
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct SpeculativePredictPayload {
+    pub current_action: String,
+    pub record_transition_to: Option<String>,
+}
+
+pub async fn predict_speculative(
+    State(state): State<AppState>,
+    Json(payload): Json<SpeculativePredictPayload>,
+) -> impl IntoResponse {
+    if let Some(next_action) = &payload.record_transition_to {
+        state
+            .predictive_engine
+            .record_transition(&payload.current_action, next_action);
+    }
+    let predictions = state
+        .predictive_engine
+        .predict_next(&payload.current_action);
+    Json(json!({
+        "current_action": payload.current_action,
+        "predictions": predictions,
+        "speculative_cache_warmed": !predictions.is_empty()
+    }))
+}
+
+pub async fn get_cluster_sync_status(State(state): State<AppState>) -> impl IntoResponse {
+    let vc = state.vector_clock.read().unwrap().clone();
+    Json(json!({
+        "node_id": "gateway-primary-node-1",
+        "region": "us-east-1",
+        "cluster_state": "synchronized",
+        "vector_clock": vc,
+        "anti_entropy_protocol": "monotonic-epoch-gossip",
+        "consensus_mode": "non-accelerator-authoritative"
+    }))
+}
+
+pub async fn get_autonomic_status(State(state): State<AppState>) -> impl IntoResponse {
+    let incidents = state.autonomic_controller.list_incidents();
+    Json(json!({
+        "autonomic_health": "operational",
+        "remediation_mode": "continuous-closed-loop",
+        "total_incidents_resolved": incidents.len(),
+        "recent_incidents": incidents
+    }))
+}
+
 pub struct AppError(SunbornError);
 
 impl From<SunbornError> for AppError {

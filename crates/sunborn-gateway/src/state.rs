@@ -1,7 +1,10 @@
+use crate::autonomic::AutonomicSelfHealingController;
+use crate::routing::predictive::PredictivePrefetchEngine;
 use crate::routing::radix::KvCacheRouter;
 use crate::shadow::ShadowEvaluator;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use sunborn_cache::{CircuitBreakerCache, ExactCacheStore, MemoryExactCache};
+use sunborn_core::cluster::VectorClock;
 use sunborn_core::AppConfig;
 use sunborn_db::MemoryDatabaseStore;
 use sunborn_execution::MemoryExecutionCacheStore;
@@ -26,6 +29,9 @@ pub struct AppState {
     pub shadow_evaluator: Arc<ShadowEvaluator>,
     pub radix_router: Arc<KvCacheRouter>,
     pub crypto_registry: Arc<TenantCryptoRegistry>,
+    pub predictive_engine: Arc<PredictivePrefetchEngine>,
+    pub autonomic_controller: Arc<AutonomicSelfHealingController>,
+    pub vector_clock: Arc<RwLock<VectorClock>>,
 }
 
 impl AppState {
@@ -73,6 +79,14 @@ impl AppState {
             [0x45; 32],
         );
 
+        let predictive_engine = Arc::new(PredictivePrefetchEngine::default());
+        let autonomic_controller = Arc::new(AutonomicSelfHealingController::new());
+        let vector_clock = Arc::new(RwLock::new(VectorClock::new()));
+        {
+            let mut vc = vector_clock.write().unwrap();
+            vc.increment("gateway-primary-node-1");
+        }
+
         Self {
             config,
             cache: circuit_breaker.clone(),
@@ -87,6 +101,9 @@ impl AppState {
             shadow_evaluator,
             radix_router,
             crypto_registry,
+            predictive_engine,
+            autonomic_controller,
+            vector_clock,
         }
     }
 }

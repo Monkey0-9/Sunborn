@@ -4,7 +4,10 @@ pub mod planner;
 pub mod signature;
 pub mod store;
 
-pub use merkle::{MerkleExecutionEngine, MerkleNode, SplicedExecutionPlan, ToolPurity};
+pub use merkle::{
+    MerkleExecutionEngine, MerkleInclusionProof, MerkleNode, MerkleProofStep, SplicedExecutionPlan,
+    ToolPurity,
+};
 pub use model::{
     ExecutionNode, ExecutionPlan, NodeExecutionStatus, PlanEvaluation, ToolCall, ToolDefinition,
     ToolResult,

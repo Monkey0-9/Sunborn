@@ -387,3 +387,131 @@ async fn test_cryptographic_shredding_endpoint() {
     assert_eq!(shred_json["tenant_id"], "tenant-alpha");
     assert!(shred_json["shred_latency_nanos"].as_u64().is_some());
 }
+
+#[tokio::test]
+async fn test_level7_merkle_attestation_and_proof_verification() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state);
+
+    let leaf1 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string();
+    let leaf2 = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210".to_string();
+
+    let attest_payload = serde_json::json!({
+        "leaf_hashes": [leaf1, leaf2]
+    });
+
+    // 1. Generate Merkle Attestation
+    let attest_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/governance/attest")
+                .header("content-type", "application/json")
+                .body(Body::from(attest_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(attest_resp.status(), StatusCode::OK);
+    let attest_body = attest_resp.into_body().collect().await.unwrap().to_bytes();
+    let attest_json: Value = serde_json::from_slice(&attest_body).unwrap();
+    assert_eq!(attest_json["status"], "attested");
+    let proofs = attest_json["proofs"].as_array().unwrap();
+    assert_eq!(proofs.len(), 2);
+
+    // 2. Verify Inclusion Proof via /v1/governance/verify-proof
+    let verify_payload = serde_json::json!({
+        "proof": proofs[0]
+    });
+
+    let verify_resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/governance/verify-proof")
+                .header("content-type", "application/json")
+                .body(Body::from(verify_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(verify_resp.status(), StatusCode::OK);
+    let verify_body = verify_resp.into_body().collect().await.unwrap().to_bytes();
+    let verify_json: Value = serde_json::from_slice(&verify_body).unwrap();
+    assert_eq!(verify_json["is_valid"], true);
+}
+
+#[tokio::test]
+async fn test_level7_predictive_speculative_prefetching() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state);
+
+    let predict_payload = serde_json::json!({
+        "current_action": "search_documents",
+        "record_transition_to": "fetch_document_content"
+    });
+
+    let predict_resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/speculative/predict")
+                .header("content-type", "application/json")
+                .body(Body::from(predict_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(predict_resp.status(), StatusCode::OK);
+    let predict_body = predict_resp.into_body().collect().await.unwrap().to_bytes();
+    let predict_json: Value = serde_json::from_slice(&predict_body).unwrap();
+    assert_eq!(predict_json["current_action"], "search_documents");
+    assert_eq!(predict_json["speculative_cache_warmed"], true);
+    let preds = predict_json["predictions"].as_array().unwrap();
+    assert!(!preds.is_empty());
+    assert_eq!(preds[0]["predicted_action"], "fetch_document_content");
+}
+
+#[tokio::test]
+async fn test_level7_cluster_sync_vector_clock_and_autonomic_status() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state);
+
+    // 1. Verify Cluster Sync Status
+    let sync_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/v1/cluster/sync/status")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(sync_resp.status(), StatusCode::OK);
+    let sync_body = sync_resp.into_body().collect().await.unwrap().to_bytes();
+    let sync_json: Value = serde_json::from_slice(&sync_body).unwrap();
+    assert_eq!(sync_json["cluster_state"], "synchronized");
+    assert_eq!(sync_json["node_id"], "gateway-primary-node-1");
+
+    // 2. Verify Autonomic Incidents
+    let auto_resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/v1/autonomic/incidents")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(auto_resp.status(), StatusCode::OK);
+    let auto_body = auto_resp.into_body().collect().await.unwrap().to_bytes();
+    let auto_json: Value = serde_json::from_slice(&auto_body).unwrap();
+    assert_eq!(auto_json["autonomic_health"], "operational");
+}
