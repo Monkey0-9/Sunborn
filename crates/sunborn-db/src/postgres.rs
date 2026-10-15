@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 use std::sync::Arc;
 use std::time::Duration;
-use sunborn_core::Result;
+use sunborn_core::{Result, SunbornError};
 use tokio::sync::RwLock;
 
 /// Production PostgreSQL database store adapter implementing DatabaseStore
@@ -19,13 +19,15 @@ pub struct PostgresDatabaseStore {
 impl PostgresDatabaseStore {
     pub fn new(connection_url: impl Into<String>) -> Self {
         let url_str = connection_url.into();
-        let strict = std::env::var("SUNBORN_DB_STRICT_DURABILITY")
-            .map(|v| v == "true" || v == "1")
-            .unwrap_or_else(|_| {
-                std::env::var("SUNBORN_ENV")
-                    .map(|v| v.to_lowercase() == "production")
-                    .unwrap_or(false)
-            });
+        let strict =
+            match sunborn_core::config::parse_bool_env("SUNBORN_DB_STRICT_DURABILITY", false) {
+                Ok(v) => {
+                    v || std::env::var("SUNBORN_ENV")
+                        .map(|e| e.to_lowercase() == "production")
+                        .unwrap_or(false)
+                }
+                Err(_) => true, // Invalid boolean value fails closed to strict durability
+            };
 
         Self {
             connection_url: url_str,
@@ -42,6 +44,24 @@ impl PostgresDatabaseStore {
             pool: Arc::new(RwLock::new(None)),
             fallback_store: Arc::new(MemoryDatabaseStore::new()),
             strict_durability: true,
+        }
+    }
+
+    /// Actively validates PostgreSQL connection pool and executes a health query (SELECT 1).
+    pub async fn verify_connection(&self) -> Result<()> {
+        if let Some(pool) = self.get_pool().await {
+            match sqlx::query("SELECT 1").execute(&pool).await {
+                Ok(_) => Ok(()),
+                Err(err) => Err(SunbornError::database(format!(
+                    "PostgreSQL query check failed at {}: {err}",
+                    self.connection_url
+                ))),
+            }
+        } else {
+            Err(SunbornError::database(format!(
+                "Unable to establish connection pool to PostgreSQL at {}",
+                self.connection_url
+            )))
         }
     }
 

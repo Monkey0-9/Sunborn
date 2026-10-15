@@ -16,6 +16,7 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let state = AppState::new(config);
+    state.verify_production_readiness().await?;
     let app = create_router(state);
 
     let listener = TcpListener::bind(addr).await?;

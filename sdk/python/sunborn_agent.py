@@ -26,13 +26,18 @@ class SunbornClient:
     def __init__(
         self,
         base_url: str = "http://localhost:8080/v1",
-        api_key: str = "sunborn-dev-key",
+        api_key: Optional[str] = None,
         tenant_id: str = "default-tenant",
         application_id: str = "default-app",
         timeout: float = 30.0,
     ):
         self.base_url = base_url.rstrip("/")
-        self.api_key = api_key
+        resolved_key = api_key or os.environ.get("SUNBORN_API_KEY")
+        if not resolved_key:
+            raise ValueError(
+                "SunbornClient requires an API key. Pass `api_key` explicitly or set the `SUNBORN_API_KEY` environment variable."
+            )
+        self.api_key = resolved_key
         self.tenant_id = tenant_id
         self.application_id = application_id
         self.timeout = timeout
@@ -167,9 +172,14 @@ class SunbornClient:
 
 
 def get_default_client() -> SunbornClient:
+    api_key = os.environ.get("SUNBORN_API_KEY")
+    if not api_key:
+        raise ValueError(
+            "SunbornClient requires an API key. Set the `SUNBORN_API_KEY` environment variable or supply an explicit client."
+        )
     return SunbornClient(
         base_url=os.environ.get("SUNBORN_BASE_URL", "http://localhost:8080/v1"),
-        api_key=os.environ.get("SUNBORN_API_KEY", "sunborn-dev-key"),
+        api_key=api_key,
         tenant_id=os.environ.get("SUNBORN_TENANT_ID", "default-tenant"),
         application_id=os.environ.get("SUNBORN_APP_ID", "default-app"),
     )
@@ -264,8 +274,8 @@ SunbornAgentClient = SunbornClient
 
 if __name__ == "__main__":
     print("Testing Sunborn Agent SDK imports & client construction...")
-    c = SunbornClient()
+    c = SunbornClient(api_key="test-key-enterprise")
     print(f"Initialized SunbornClient with base_url={c.base_url}, tenant={c.tenant_id}")
-    c2 = SunbornAgentClient()
-    print(f"Initialized SunbornAgentClient alias successfully.")
+    c2 = SunbornAgentClient(api_key="test-key-enterprise")
+    print("Initialized SunbornAgentClient alias successfully.")
     print("Sunborn Agent SDK ready.")

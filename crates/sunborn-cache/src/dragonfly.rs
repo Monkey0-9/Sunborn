@@ -3,7 +3,7 @@ use crate::store::{CacheEntry, ExactCacheStore};
 use async_trait::async_trait;
 use redis::AsyncCommands;
 use std::sync::Arc;
-use sunborn_core::Result;
+use sunborn_core::{Result, SunbornError};
 use tokio::sync::RwLock;
 
 /// Production DragonflyDB / Redis exact cache adapter implementing ExactCacheStore
@@ -20,13 +20,14 @@ impl DragonflyCacheStore {
     pub fn new(connection_url: impl Into<String>) -> Self {
         let url_str = connection_url.into();
         let client = redis::Client::open(url_str.as_str()).ok();
-        let strict = std::env::var("SUNBORN_CACHE_STRICT")
-            .map(|v| v == "true" || v == "1")
-            .unwrap_or_else(|_| {
-                std::env::var("SUNBORN_CACHE_BACKEND")
-                    .map(|v| v.to_lowercase() == "dragonfly")
+        let strict = match sunborn_core::config::parse_bool_env("SUNBORN_CACHE_STRICT", false) {
+            Ok(v) => {
+                v || std::env::var("SUNBORN_CACHE_BACKEND")
+                    .map(|b| b.to_lowercase() == "dragonfly")
                     .unwrap_or(false)
-            });
+            }
+            Err(_) => true, // Invalid config triggers fail-closed strict mode
+        };
 
         Self {
             connection_url: url_str,
@@ -46,6 +47,36 @@ impl DragonflyCacheStore {
             connection_manager: Arc::new(RwLock::new(None)),
             fallback_cache: Arc::new(MemoryExactCache::new()),
             strict_mode: true,
+        }
+    }
+
+    /// Actively validates DragonflyDB connection health via Redis PING command.
+    pub async fn verify_connection(&self) -> Result<()> {
+        let ping_fut = async {
+            if let Some(mut conn) = self.get_connection().await {
+                let res: redis::RedisResult<String> =
+                    redis::cmd("PING").query_async(&mut conn).await;
+                match res {
+                    Ok(_) => Ok(()),
+                    Err(err) => Err(SunbornError::cache_unavailable(format!(
+                        "DragonflyDB ping health check failed at {}: {err}",
+                        self.connection_url
+                    ))),
+                }
+            } else {
+                Err(SunbornError::cache_unavailable(format!(
+                    "Unable to establish connection to DragonflyDB at {}",
+                    self.connection_url
+                )))
+            }
+        };
+
+        match tokio::time::timeout(std::time::Duration::from_millis(1500), ping_fut).await {
+            Ok(res) => res,
+            Err(_) => Err(SunbornError::cache_unavailable(format!(
+                "DragonflyDB connection timed out at {}",
+                self.connection_url
+            ))),
         }
     }
 

@@ -27,10 +27,27 @@ export class SunbornApiError extends Error {
   }
 }
 
+/**
+ * Resolves the client API key from parameters, browser localStorage, or environment.
+ * Rejects default fallbacks to enforce server-side authentication.
+ */
+export function getActiveApiKey(explicitKey?: string): string {
+  if (explicitKey && explicitKey.trim().length > 0) {
+    return explicitKey.trim();
+  }
+  if (typeof window !== "undefined") {
+    const stored = window.localStorage.getItem("sunborn_api_key");
+    if (stored && stored.trim().length > 0) {
+      return stored.trim();
+    }
+  }
+  return process.env.NEXT_PUBLIC_SUNBORN_API_KEY || "";
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
-  apiKey = "sunborn-admin-key"
+  apiKey?: string
 ): Promise<T> {
   const url = `${API_BASE_URL.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
   const headers = new Headers(options.headers || {});
@@ -38,8 +55,9 @@ async function request<T>(
   if (!headers.has("Content-Type") && options.body) {
     headers.set("Content-Type", "application/json");
   }
-  if (!headers.has("x-api-key") && apiKey) {
-    headers.set("x-api-key", apiKey);
+  const resolvedKey = getActiveApiKey(apiKey);
+  if (!headers.has("x-api-key") && resolvedKey) {
+    headers.set("x-api-key", resolvedKey);
   }
 
   try {
@@ -79,11 +97,15 @@ async function request<T>(
 
 export const sunbornApi = {
   // Chat completions
-  chatCompletions: (body: any, apiKey = "key-enterprise-fintech") =>
-    request<any>("v1/chat/completions", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }, apiKey),
+  chatCompletions: (body: any, apiKey?: string) =>
+    request<any>(
+      "v1/chat/completions",
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+      apiKey
+    ),
 
   // Governance: Cryptographic shredding
   shredTenant: (tenantId: string) =>

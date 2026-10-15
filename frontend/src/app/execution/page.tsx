@@ -18,6 +18,7 @@ import {
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
+import { API_BASE_URL, getActiveApiKey } from "@/lib/api";
 
 export default function ExecutionDAGPage() {
   const [merkleRoot, setMerkleRoot] = useState<string>(
@@ -87,13 +88,18 @@ export default function ExecutionDAGPage() {
 
   const handleVerifyProof = async () => {
     setIsVerifying(true);
+    const apiKey = getActiveApiKey();
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (apiKey) {
+      headers["x-api-key"] = apiKey;
+    }
+
     try {
-      const res = await fetch("http://127.0.0.1:8080/v1/governance/verify-proof", {
+      const res = await fetch(`${API_BASE_URL.replace(/\/+$/, "")}/v1/governance/verify-proof`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": "key-enterprise-fintech",
-        },
+        headers,
         body: JSON.stringify({
           merkle_root: merkleRoot,
           leaf_hash: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
@@ -105,12 +111,12 @@ export default function ExecutionDAGPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setProofVerified(data.valid ?? true);
+        setProofVerified(data.valid === true);
       } else {
-        setProofVerified(true); // Fallback simulation
+        setProofVerified(false);
       }
     } catch {
-      setProofVerified(true);
+      setProofVerified(false);
     } finally {
       setIsVerifying(false);
     }

@@ -164,4 +164,105 @@ impl AppState {
             api_key_registry,
         }
     }
+
+    /// Verifies production infrastructure readiness and fail-closed durability contracts.
+    /// In production (`SUNBORN_ENV=production`), active network connectivity to PostgreSQL,
+    /// DragonflyDB, and Qdrant must succeed before the gateway can start serving traffic.
+    pub async fn verify_production_readiness(&self) -> Result<(), sunborn_core::SunbornError> {
+        let is_prod = std::env::var("SUNBORN_ENV")
+            .map(|v| v.to_lowercase() == "production")
+            .unwrap_or(false);
+
+        let cache_backend = std::env::var("SUNBORN_CACHE_BACKEND")
+            .unwrap_or_else(|_| self.config.cache.backend.clone());
+        let db_backend = std::env::var("SUNBORN_DB_BACKEND")
+            .unwrap_or_else(|_| self.config.cache.database_backend.clone());
+        let vector_backend = std::env::var("SUNBORN_VECTOR_BACKEND")
+            .unwrap_or_else(|_| self.config.cache.vector_backend.clone());
+
+        // Validate Dragonfly cache connectivity if configured or in strict mode
+        if cache_backend.eq_ignore_ascii_case("dragonfly") {
+            tracing::info!(
+                endpoint = %self.dragonfly_cache.connection_url,
+                "Validating DragonflyDB cache connectivity for production readiness..."
+            );
+            self.dragonfly_cache.verify_connection().await?;
+            tracing::info!("DragonflyDB production readiness verified successfully.");
+        }
+
+        // Validate PostgreSQL database connectivity if configured or in strict mode
+        if db_backend.eq_ignore_ascii_case("postgres") {
+            tracing::info!(
+                endpoint = %self.postgres_db.connection_url,
+                "Validating PostgreSQL database connectivity for production readiness..."
+            );
+            self.postgres_db.verify_connection().await?;
+            tracing::info!("PostgreSQL production readiness verified successfully.");
+        }
+
+        // Validate Qdrant vector store connectivity if configured or in strict mode
+        if vector_backend.eq_ignore_ascii_case("qdrant") {
+            tracing::info!(
+                endpoint = %self.qdrant_store.endpoint_url,
+                "Validating Qdrant vector store connectivity for production readiness..."
+            );
+            self.qdrant_store.verify_connection().await?;
+            tracing::info!("Qdrant production readiness verified successfully.");
+        }
+
+        // Production environment strictness: disallow ephemeral in-memory stores in production
+        if is_prod {
+            if cache_backend.eq_ignore_ascii_case("memory") {
+                return Err(sunborn_core::SunbornError::configuration_error(
+                    "Production environment SUNBORN_ENV=production forbids ephemeral in-memory cache backend. Set SUNBORN_CACHE_BACKEND=dragonfly.",
+                ));
+            }
+            if db_backend.eq_ignore_ascii_case("memory") {
+                return Err(sunborn_core::SunbornError::configuration_error(
+                    "Production environment SUNBORN_ENV=production forbids ephemeral in-memory database backend. Set SUNBORN_DB_BACKEND=postgres.",
+                ));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_verify_production_readiness_rejects_memory_in_production() {
+        let mut config = AppConfig::default();
+        config.cache.backend = "memory".to_string();
+        config.cache.database_backend = "memory".to_string();
+
+        let state = AppState::new(config);
+        std::env::set_var("SUNBORN_ENV", "production");
+        let res = state.verify_production_readiness().await;
+        std::env::remove_var("SUNBORN_ENV");
+
+        assert!(res.is_err());
+        assert_eq!(
+            res.unwrap_err().code,
+            sunborn_core::ErrorCode::ConfigurationError
+        );
+    }
+
+    #[tokio::test]
+    async fn test_verify_production_readiness_fails_on_unreachable_dragonfly() {
+        let mut config = AppConfig::default();
+        config.cache.backend = "dragonfly".to_string();
+        config.cache.dragonfly_url = "redis://127.0.0.1:59999".to_string(); // unreachable port
+
+        let state = AppState::new(config);
+        let res = state.verify_production_readiness().await;
+
+        assert!(res.is_err());
+        assert_eq!(
+            res.unwrap_err().code,
+            sunborn_core::ErrorCode::CacheUnavailable
+        );
+    }
 }

@@ -62,6 +62,10 @@ impl SunbornError {
         Self::new(ErrorCode::InternalError, msg)
     }
 
+    pub fn configuration_error(msg: impl Into<String>) -> Self {
+        Self::new(ErrorCode::ConfigurationError, msg)
+    }
+
     pub fn tenant_not_found(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::TenantNotFound, msg)
     }

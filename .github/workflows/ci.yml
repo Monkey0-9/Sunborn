@@ -57,13 +57,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('frontend/package.json') }}
+          key: ${{ runner.os }}-node-${{ hashFiles('frontend/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
 
-      - name: Install dependencies
+      - name: Install dependencies (Strict Lockfile)
         working-directory: frontend
-        run: npm install --no-audit
+        run: npm ci --audit=false
 
       - name: Type Check Frontend
         working-directory: frontend

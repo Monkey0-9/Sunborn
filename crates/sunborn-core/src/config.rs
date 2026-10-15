@@ -64,32 +64,69 @@ pub struct AppConfig {
     pub auth: AuthConfig,
 }
 
+/// Parses a boolean environment variable strictly.
+/// Valid truthy values: "true", "1", "yes", "on".
+/// Valid falsy values: "false", "0", "no", "off".
+/// Any invalid string produces a fatal `SunbornError::configuration_error`.
+pub fn parse_bool_env(key: &str, default: bool) -> crate::error::Result<bool> {
+    match std::env::var(key) {
+        Ok(val) => {
+            let normalized = val.trim().to_lowercase();
+            match normalized.as_str() {
+                "true" | "1" | "yes" | "on" => Ok(true),
+                "false" | "0" | "no" | "off" => Ok(false),
+                _ => Err(crate::error::SunbornError::configuration_error(format!(
+                    "Invalid boolean value for environment variable {key}: '{val}'. Expected 'true', 'false', '1', or '0'."
+                ))),
+            }
+        }
+        Err(std::env::VarError::NotPresent) => Ok(default),
+        Err(err) => Err(crate::error::SunbornError::configuration_error(format!(
+            "Failed to read environment variable {key}: {err}"
+        ))),
+    }
+}
+
 impl AppConfig {
-    pub fn load_from_env() -> Self {
+    pub fn try_load_from_env() -> crate::error::Result<Self> {
         let _ = dotenvy::dotenv();
-        let port = std::env::var("PORT")
-            .or_else(|_| std::env::var("SUNBORN_SERVER__PORT"))
-            .ok()
-            .and_then(|p| p.parse().ok())
-            .unwrap_or(8080);
+        let port = if let Ok(val) = std::env::var("PORT") {
+            val.trim().parse::<u16>().map_err(|e| {
+                crate::error::SunbornError::configuration_error(format!(
+                    "Invalid PORT value '{val}': {e}"
+                ))
+            })?
+        } else if let Ok(val) = std::env::var("SUNBORN_SERVER__PORT") {
+            val.trim().parse::<u16>().map_err(|e| {
+                crate::error::SunbornError::configuration_error(format!(
+                    "Invalid SUNBORN_SERVER__PORT value '{val}': {e}"
+                ))
+            })?
+        } else {
+            8080
+        };
+
         let host = std::env::var("HOST")
             .or_else(|_| std::env::var("SUNBORN_SERVER__HOST"))
             .unwrap_or_else(|_| "0.0.0.0".to_string());
         let dragonfly_url =
             std::env::var("DRAGONFLY_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
         let qdrant_url =
-            std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://127.0.0.1:6334".to_string());
+            std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://127.0.0.1:6333".to_string());
         let backend =
             std::env::var("SUNBORN_CACHE_BACKEND").unwrap_or_else(|_| "memory".to_string());
         let vector_backend =
             std::env::var("SUNBORN_VECTOR_BACKEND").unwrap_or_else(|_| "memory".to_string());
         let database_backend =
             std::env::var("SUNBORN_DB_BACKEND").unwrap_or_else(|_| "memory".to_string());
-        let enforce_auth = std::env::var("SUNBORN_ENFORCE_AUTH")
-            .map(|v| v == "true" || v == "1")
-            .unwrap_or(true);
 
-        Self {
+        let enforce_auth = if std::env::var("SUNBORN_AUTH_ENFORCE").is_ok() {
+            parse_bool_env("SUNBORN_AUTH_ENFORCE", true)?
+        } else {
+            parse_bool_env("SUNBORN_ENFORCE_AUTH", true)?
+        };
+
+        Ok(Self {
             server: ServerConfig { host, port },
             cache: CacheConfig {
                 exact_cache_enabled: true,
@@ -105,6 +142,46 @@ impl AppConfig {
                 enforce_auth,
                 allow_dev_keys: false,
             },
-        }
+        })
+    }
+
+    pub fn load_from_env() -> Self {
+        Self::try_load_from_env().unwrap_or_else(|err| {
+            panic!("FATAL: Sunborn Gateway configuration load failed: {err}");
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_bool_env_valid() {
+        std::env::set_var("TEST_SUNBORN_BOOL_TRUE", "true");
+        assert!(parse_bool_env("TEST_SUNBORN_BOOL_TRUE", false).unwrap());
+
+        std::env::set_var("TEST_SUNBORN_BOOL_ONE", "1");
+        assert!(parse_bool_env("TEST_SUNBORN_BOOL_ONE", false).unwrap());
+
+        std::env::set_var("TEST_SUNBORN_BOOL_FALSE", "false");
+        assert!(!parse_bool_env("TEST_SUNBORN_BOOL_FALSE", true).unwrap());
+
+        std::env::set_var("TEST_SUNBORN_BOOL_ZERO", "0");
+        assert!(!parse_bool_env("TEST_SUNBORN_BOOL_ZERO", true).unwrap());
+
+        assert!(parse_bool_env("TEST_SUNBORN_BOOL_NON_EXISTENT", true).unwrap());
+        assert!(!parse_bool_env("TEST_SUNBORN_BOOL_NON_EXISTENT", false).unwrap());
+    }
+
+    #[test]
+    fn test_parse_bool_env_invalid_fails() {
+        std::env::set_var("TEST_SUNBORN_BOOL_INVALID", "invalid_string_val");
+        let res = parse_bool_env("TEST_SUNBORN_BOOL_INVALID", true);
+        assert!(res.is_err());
+        assert_eq!(
+            res.unwrap_err().code,
+            crate::error::ErrorCode::ConfigurationError
+        );
     }
 }

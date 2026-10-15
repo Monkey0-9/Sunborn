@@ -139,9 +139,16 @@ impl LoginRateLimiter {
     /// Feature Flag: Check if login rate limiting is enabled.
     /// Supports dynamic kill-switch `SUNBORN_FEATURE_LOGIN_RATE_LIMIT=false` for instant rollback.
     pub fn is_feature_enabled() -> bool {
-        std::env::var("SUNBORN_FEATURE_LOGIN_RATE_LIMIT")
-            .map(|v| v.to_lowercase() != "false" && v != "0")
-            .unwrap_or(true)
+        match sunborn_core::config::parse_bool_env("SUNBORN_FEATURE_LOGIN_RATE_LIMIT", true) {
+            Ok(enabled) => enabled,
+            Err(err) => {
+                tracing::error!(
+                    error = %err,
+                    "Invalid SUNBORN_FEATURE_LOGIN_RATE_LIMIT value; failing closed with rate limiting ENABLED"
+                );
+                true
+            }
+        }
     }
 
     pub async fn check_login_attempt(&self, client_key: &str) -> RateLimitStatus {

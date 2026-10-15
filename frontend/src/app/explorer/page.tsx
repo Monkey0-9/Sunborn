@@ -47,36 +47,21 @@ export default function ExplorerPage() {
     netSavings: number;
     content: string;
     cached: boolean;
-  }>({
-    cacheKey: "sunborn:tenant-enterprise-fintech:app-risk-evaluator:gpt-4o:ep_418:8f2a1b94c03d7e56",
-    tier: "Tier 1: Exact Match (DragonflyDB / W-TinyLFU)",
-    action: "SafeHit",
-    confidence: 1.0,
-    risk: 0.0,
-    latencyUs: 114,
-    avoidedTokens: 1840,
-    netSavings: 0.0552,
-    content:
-      "Sunborn enforces Non-Accelerator Authority: PostgreSQL and origin providers are the authoritative durable source of truth. Ephemeral caches (DragonflyDB, Qdrant) are strictly derived accelerators. In the event of catastrophic accelerator outage, the entire system reconstructs deterministically via POST /v1/rebuild.",
-    cached: true,
-  });
+  } | null>(null);
 
   const handleExecute = async () => {
     setIsExecuting(true);
     setExecutionError(null);
     const start = performance.now();
     try {
-      const data = await sunbornApi.chatCompletions(
-        {
-          model,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: prompt },
-          ],
-          temperature,
-        },
-        "key-enterprise-fintech"
-      );
+      const data = await sunbornApi.chatCompletions({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: prompt },
+        ],
+        temperature,
+      });
 
       const elapsedMs = performance.now() - start;
       const isHit = data.sunborn_cached === true;
@@ -262,95 +247,107 @@ export default function ExplorerPage() {
               <div>{executionError}</div>
             </div>
           )}
-          <Card glow={responseTrace.cached ? "emerald" : "violet"}>
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <div>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Cpu className="w-4 h-4 text-emerald-400" />
-                  <span>Execution Decision Trace</span>
-                </CardTitle>
-                <CardDescription>
-                  Arbiter resolution across Exact, Semantic, Execution DAG, and Origin tiers.
-                </CardDescription>
-              </div>
-              <Badge variant={responseTrace.cached ? "success" : "warning"} dot>
-                {responseTrace.cached ? "CACHE HIT" : "ORIGIN MISS"}
-              </Badge>
-            </CardHeader>
+          {responseTrace ? (
+            <Card glow={responseTrace.cached ? "emerald" : "violet"}>
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Cpu className="w-4 h-4 text-emerald-400" />
+                    <span>Execution Decision Trace</span>
+                  </CardTitle>
+                  <CardDescription>
+                    Arbiter resolution across Exact, Semantic, Execution DAG, and Origin tiers.
+                  </CardDescription>
+                </div>
+                <Badge variant={responseTrace.cached ? "success" : "warning"} dot>
+                  {responseTrace.cached ? "CACHE HIT" : "ORIGIN MISS"}
+                </Badge>
+              </CardHeader>
 
-            <CardContent className="space-y-6">
-              {/* Decision Metrics Strip */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10">
-                  <span className="text-[10px] font-mono text-slate-500">EXECUTION TIER</span>
-                  <div className="text-xs font-mono font-bold text-cyan-300 mt-1 truncate">
-                    {responseTrace.tier.split("(")[0]}
+              <CardContent className="space-y-6">
+                {/* Decision Metrics Strip */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10">
+                    <span className="text-[10px] font-mono text-slate-500">EXECUTION TIER</span>
+                    <div className="text-xs font-mono font-bold text-cyan-300 mt-1 truncate">
+                      {responseTrace.tier.split("(")[0]}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10">
+                    <span className="text-[10px] font-mono text-slate-500">LATENCY</span>
+                    <div className="text-xs font-mono font-bold text-white mt-1">
+                      {responseTrace.latencyUs < 1000
+                        ? `${responseTrace.latencyUs} µs`
+                        : `${(responseTrace.latencyUs / 1000).toFixed(1)} ms`}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10">
+                    <span className="text-[10px] font-mono text-slate-500">TOKENS SAVED</span>
+                    <div className="text-xs font-mono font-bold text-emerald-400 mt-1">
+                      {responseTrace.avoidedTokens}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10">
+                    <span className="text-[10px] font-mono text-slate-500">AVOIDED SPEND</span>
+                    <div className="text-xs font-mono font-bold text-emerald-400 mt-1">
+                      {formatCurrency(responseTrace.netSavings)}
+                    </div>
                   </div>
                 </div>
 
-                <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10">
-                  <span className="text-[10px] font-mono text-slate-500">LATENCY</span>
-                  <div className="text-xs font-mono font-bold text-white mt-1">
-                    {responseTrace.latencyUs < 1000
-                      ? `${responseTrace.latencyUs} µs`
-                      : `${(responseTrace.latencyUs / 1000).toFixed(1)} ms`}
+                {/* Canonical Cache Key Inspection */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="text-slate-400">DETERMINISTIC 10-D IDENTITY HASH (BLAKE3)</span>
+                    <span className="text-cyan-400">COLLISION PROBABILITY: &lt; 10⁻⁵⁰</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-900 border border-white/10 font-mono text-xs text-cyan-300 break-all select-all">
+                    {responseTrace.cacheKey}
                   </div>
                 </div>
 
-                <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10">
-                  <span className="text-[10px] font-mono text-slate-500">TOKENS SAVED</span>
-                  <div className="text-xs font-mono font-bold text-emerald-400 mt-1">
-                    {responseTrace.avoidedTokens}
+                {/* Resolved Model Response */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="text-slate-400">RESOLVED COMPLETION PAYLOAD</span>
+                    <span className="text-emerald-400">CONFORMAL RISK: 0.000 (SAFE)</span>
+                  </div>
+                  <div className="p-4 rounded-xl bg-slate-900/90 border border-white/10 text-xs font-sans text-slate-200 leading-relaxed max-h-48 overflow-y-auto">
+                    {responseTrace.content}
                   </div>
                 </div>
 
-                <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10">
-                  <span className="text-[10px] font-mono text-slate-500">AVOIDED SPEND</span>
-                  <div className="text-xs font-mono font-bold text-emerald-400 mt-1">
-                    {formatCurrency(responseTrace.netSavings)}
+                {/* Multi-Tier Invariant Checks */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs font-mono">
+                  <div className="flex items-center gap-2 text-slate-300 p-2.5 rounded-lg bg-slate-900/60 border border-white/5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Negation Guard: Clear</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-300 p-2.5 rounded-lg bg-slate-900/60 border border-white/5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Numeric Shift: Clear</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-300 p-2.5 rounded-lg bg-slate-900/60 border border-white/5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Epoch Invariant: Fresh</span>
                   </div>
                 </div>
-              </div>
-
-              {/* Canonical Cache Key Inspection */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs font-mono">
-                  <span className="text-slate-400">DETERMINISTIC 10-D IDENTITY HASH (BLAKE3)</span>
-                  <span className="text-cyan-400">COLLISION PROBABILITY: &lt; 10⁻⁵⁰</span>
-                </div>
-                <div className="p-3 rounded-xl bg-slate-900 border border-white/10 font-mono text-xs text-cyan-300 break-all select-all">
-                  {responseTrace.cacheKey}
-                </div>
-              </div>
-
-              {/* Resolved Model Response */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs font-mono">
-                  <span className="text-slate-400">RESOLVED COMPLETION PAYLOAD</span>
-                  <span className="text-emerald-400">CONFORMAL RISK: 0.000 (SAFE)</span>
-                </div>
-                <div className="p-4 rounded-xl bg-slate-900/90 border border-white/10 text-xs font-sans text-slate-200 leading-relaxed max-h-48 overflow-y-auto">
-                  {responseTrace.content}
-                </div>
-              </div>
-
-              {/* Multi-Tier Invariant Checks */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs font-mono">
-                <div className="flex items-center gap-2 text-slate-300 p-2.5 rounded-lg bg-slate-900/60 border border-white/5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Negation Guard: Clear</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-300 p-2.5 rounded-lg bg-slate-900/60 border border-white/5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Numeric Shift: Clear</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-300 p-2.5 rounded-lg bg-slate-900/60 border border-white/5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Epoch Invariant: Fresh</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center p-12 text-center text-slate-400">
+                <Cpu className="w-10 h-10 text-slate-600 mb-3" />
+                <h3 className="text-sm font-semibold text-slate-200">No Query Executed</h3>
+                <p className="text-xs text-slate-500 max-w-sm mt-1 leading-relaxed">
+                  Configure prompt and model parameters on the left and click &quot;Execute Cache Query&quot; to evaluate cache tiers and view real-time latency and token traces.
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

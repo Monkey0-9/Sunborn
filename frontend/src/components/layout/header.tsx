@@ -18,10 +18,11 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { API_BASE_URL } from "@/lib/api";
 
 export function Header() {
   const pathname = usePathname();
-  const [gatewayStatus, setGatewayStatus] = useState<"live" | "offline">("live");
+  const [gatewayStatus, setGatewayStatus] = useState<"live" | "offline">("offline");
   const [epoch, setEpoch] = useState<number>(418);
   const [activeTenant, setActiveTenant] = useState<string>("tenant-enterprise-fintech");
 
@@ -29,7 +30,7 @@ export function Header() {
     // Check local gateway status
     const checkGateway = async () => {
       try {
-        const res = await fetch("http://localhost:8080/health", {
+        const res = await fetch(`${API_BASE_URL.replace(/\/+$/, "")}/health`, {
           cache: "no-store",
           signal: AbortSignal.timeout(1500),
         });
@@ -39,8 +40,7 @@ export function Header() {
           setGatewayStatus("offline");
         }
       } catch {
-        // Fallback for standalone demo mode
-        setGatewayStatus("live");
+        setGatewayStatus("offline");
       }
     };
     checkGateway();

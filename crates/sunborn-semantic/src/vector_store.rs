@@ -147,13 +147,14 @@ impl QdrantVectorStore {
             .connect_timeout(std::time::Duration::from_secs(2))
             .build()
             .unwrap_or_default();
-        let strict = std::env::var("SUNBORN_VECTOR_STRICT")
-            .map(|v| v == "true" || v == "1")
-            .unwrap_or_else(|_| {
-                std::env::var("SUNBORN_VECTOR_BACKEND")
-                    .map(|v| v.to_lowercase() == "qdrant")
+        let strict = match sunborn_core::config::parse_bool_env("SUNBORN_VECTOR_STRICT", false) {
+            Ok(v) => {
+                v || std::env::var("SUNBORN_VECTOR_BACKEND")
+                    .map(|b| b.to_lowercase() == "qdrant")
                     .unwrap_or(false)
-            });
+            }
+            Err(_) => true, // Invalid config fails closed to strict mode
+        };
 
         Self {
             endpoint_url: endpoint_url.into(),
@@ -177,6 +178,24 @@ impl QdrantVectorStore {
             client,
             fallback_store: Arc::new(MemoryVectorStore::new()),
             strict_mode: true,
+        }
+    }
+
+    /// Actively validates Qdrant vector database health via HTTP endpoint reachability.
+    pub async fn verify_connection(&self) -> Result<()> {
+        let base = self.endpoint_url.trim_end_matches('/');
+        let coll_url = format!("{base}/collections");
+        match self.client.get(&coll_url).send().await {
+            Ok(resp) if resp.status().is_success() => Ok(()),
+            Ok(resp) => Err(sunborn_core::SunbornError::vector_store(format!(
+                "Qdrant returned non-success HTTP status {} for endpoint {}",
+                resp.status(),
+                coll_url
+            ))),
+            Err(err) => Err(sunborn_core::SunbornError::vector_store(format!(
+                "Unable to reach Qdrant vector store at {}: {err}",
+                self.endpoint_url
+            ))),
         }
     }
 
