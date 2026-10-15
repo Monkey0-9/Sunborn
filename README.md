@@ -39,27 +39,39 @@ Sunborn decouples AI application latency, token expenditure, and origin failure 
 
 ---
 
-## 📁 Repository Structure
+## 🚀 Quickstart
 
+### Prerequisites
+- **Rust**: 1.80+ (`rustc`, `cargo`)
+- **Python**: 3.10+ (for benchmarks, reproduction, and agent SDK)
+- **Node.js**: 20+ (for Next.js frontend)
+
+### 1. Build and Test the Workspace
+```bash
+# Run complete test matrix across all crates
+cargo test --workspace --all-targets
+
+# Verify code formatting and lint standards
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
 ```
-.
-├── apps/
-│   ├── sunborn-gateway/     # High-throughput Axum HTTP/REST Gateway
-│   └── sunborn-rebuild/     # CLI offline index reconstructor & hydration tool
-├── crates/                  # Modular Rust Workspace (8 Crates)
-│   ├── sunborn-core/        # Domain primitives, finops, cluster vector clocks, config
-│   ├── sunborn-identity/    # Canonical request engine, 10-D identity, AES-256-GCM AEAD shredding
-│   ├── sunborn-cache/       # Tiered exact cache, W-TinyLFU, Dragonfly adapter, circuit breaker
-│   ├── sunborn-semantic/    # Micro-batched embedder, Qdrant adapter, conformal risk engine
-│   ├── sunborn-execution/   # Agent execution DAG planner, Merkle proofs, tool memoization
-│   ├── sunborn-invalidation/# Dependency DAG graph, monotonic epoch lease manager, outbox
-│   └── sunborn-db/          # PostgreSQL store, write-behind group committer, migrations
-├── frontend/                # Next.js 15 + TypeScript Control Plane & Telemetry Dashboard
-├── sdk/python/              # Native Python SDK with OpenAI-compatible agent integration
-├── benchmarks/              # SemanticCacheBench & Zipfian Capacity Soak suites
-├── research/                # IEEE/ACM artifact evaluation & reproducibility package
-├── deploy/                  # Docker Compose, Dragonfly, Qdrant & Kubernetes manifests
-└── docs/                    # Architecture Decision Records (ADRs) & Integration Guides
+
+### 2. Run the Gateway Locally
+```bash
+# Launch the Sunborn gateway on port 8080
+cargo run -p sunborn-gateway
+```
+
+### 3. Verify Health & Service Readiness
+```bash
+# Health probe
+curl -s http://localhost:8080/health | jq
+
+# Readiness probe
+curl -s http://localhost:8080/ready | jq
+
+# Metrics scraper
+curl -s http://localhost:8080/metrics
 ```
 
 ---
@@ -90,8 +102,23 @@ response = client.chat.completions.create(
 
 print(response.choices[0].message.content)
 
-# Inspect Sunborn Cache Telemetry
 # On repeat queries: response received in < 1ms with sunborn_cached == True
+```
+
+### cURL OpenAI Example
+
+```bash
+curl -X POST http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: key-enterprise-fintech" \
+  -d '{
+    "model": "gpt-4o",
+    "messages": [
+      {"role": "system", "content": "You are a quantitative assistant."},
+      {"role": "user", "content": "Explain Black-Scholes in 1 sentence."}
+    ],
+    "temperature": 0.0
+  }' | jq
 ```
 
 ### Native Python SDK (`sdk/python/sunborn_agent.py`)
@@ -117,6 +144,31 @@ print(f"Cached : {resp['sunborn_cached']} (Tier: {resp['sunborn_tier']})")
 # 2. Inspect Live FinOps Cost Savings
 report = client.get_finops_report()
 print(f"Total Avoided Spend: ${report['economics']['total_estimated_savings_usd']}")
+```
+
+---
+
+## 📁 Repository Structure
+
+```
+.
+├── apps/
+│   ├── sunborn-gateway/     # High-throughput Axum HTTP/REST Gateway
+│   └── sunborn-rebuild/     # CLI offline index reconstructor & hydration tool
+├── crates/                  # Modular Rust Workspace (8 Crates)
+│   ├── sunborn-core/        # Domain primitives, finops, cluster vector clocks, config
+│   ├── sunborn-identity/    # Canonical request engine, 10-D identity, AES-256-GCM AEAD shredding
+│   ├── sunborn-cache/       # Tiered exact cache, W-TinyLFU, Dragonfly adapter, circuit breaker
+│   ├── sunborn-semantic/    # Micro-batched embedder, Qdrant adapter, conformal risk engine
+│   ├── sunborn-execution/   # Agent execution DAG planner, Merkle proofs, tool memoization
+│   ├── sunborn-invalidation/# Dependency DAG graph, monotonic epoch lease manager, outbox
+│   └── sunborn-db/          # PostgreSQL store, write-behind group committer, migrations
+├── frontend/                # Next.js 15 + TypeScript Control Plane & Telemetry Dashboard
+├── sdk/python/              # Native Python SDK with OpenAI-compatible agent integration
+├── benchmarks/              # SemanticCacheBench & Zipfian Capacity Soak suites
+├── research/                # IEEE/ACM artifact evaluation & reproducibility package
+├── deploy/                  # Docker Compose, Dragonfly, Qdrant & Kubernetes manifests
+└── docs/                    # Architecture Decision Records (ADRs) & Integration Guides
 ```
 
 ---
