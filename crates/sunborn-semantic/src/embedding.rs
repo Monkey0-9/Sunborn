@@ -89,6 +89,7 @@ pub struct HttpEmbeddingProvider {
     pub endpoint_url: String,
     pub api_key: Option<String>,
     pub model: String,
+    client: reqwest::Client,
     fallback_provider: DeterministicEmbeddingProvider,
 }
 
@@ -98,10 +99,17 @@ impl HttpEmbeddingProvider {
         model: impl Into<String>,
         api_key: Option<String>,
     ) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .connect_timeout(std::time::Duration::from_secs(3))
+            .build()
+            .unwrap_or_default();
+
         Self {
             endpoint_url: endpoint_url.into(),
             api_key,
             model: model.into(),
+            client,
             fallback_provider: DeterministicEmbeddingProvider::new(),
         }
     }
@@ -110,6 +118,42 @@ impl HttpEmbeddingProvider {
 #[async_trait]
 impl EmbeddingProvider for HttpEmbeddingProvider {
     async fn embed(&self, text: &str) -> Result<Vector> {
+        let mut url = self.endpoint_url.trim_end_matches('/').to_string();
+        if !url.ends_with("/embeddings") {
+            url.push_str("/embeddings");
+        }
+
+        let payload = serde_json::json!({
+            "input": text,
+            "model": self.model,
+        });
+
+        let mut req = self.client.post(&url).json(&payload);
+        if let Some(key) = &self.api_key {
+            if !key.is_empty() {
+                req = req.bearer_auth(key);
+            }
+        }
+
+        if let Ok(resp) = req.send().await {
+            if resp.status().is_success() {
+                if let Ok(data) = resp.json::<serde_json::Value>().await {
+                    if let Some(embedding) =
+                        data.pointer("/data/0/embedding").and_then(|v| v.as_array())
+                    {
+                        let vec: Vec<f32> = embedding
+                            .iter()
+                            .filter_map(|val| val.as_f64().map(|f| f as f32))
+                            .collect();
+                        if !vec.is_empty() {
+                            return Ok(vec);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Resilient fallback for offline unit tests & benchmark runs
         self.fallback_provider.embed(text).await
     }
 }

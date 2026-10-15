@@ -105,7 +105,18 @@ impl AppState {
             vc.increment("gateway-primary-node-1");
         }
 
-        let origin_provider: Arc<dyn LlmOriginProvider> = Arc::new(MockOriginProvider::new());
+        let origin_provider: Arc<dyn LlmOriginProvider> = if let Ok(url) =
+            std::env::var("SUNBORN_LLM_ORIGIN_URL").or_else(|_| std::env::var("OPENAI_API_BASE"))
+        {
+            let api_key = std::env::var("SUNBORN_LLM_ORIGIN_API_KEY")
+                .or_else(|_| std::env::var("OPENAI_API_KEY"))
+                .ok();
+            Arc::new(crate::origin::provider::HttpLlmOriginProvider::new(
+                url, api_key,
+            ))
+        } else {
+            Arc::new(MockOriginProvider::new())
+        };
         let api_key_registry = Arc::new(crate::middleware::auth::get_global_registry().clone());
 
         let is_dragonfly = config.cache.backend == "dragonfly"

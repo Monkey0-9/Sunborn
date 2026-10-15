@@ -106,6 +106,37 @@ impl IdentityEngine {
             hasher.update(b"|ctx=none");
         }
 
+        // State-Complete Dimension 10: Multi-Turn Conversation Messages History
+        if !req.messages.is_empty() {
+            let mut msgs_hasher = Sha256::new();
+            for msg in &req.messages {
+                msgs_hasher.update(msg.role.as_bytes());
+                msgs_hasher.update(b":");
+                if let Some(content) = &msg.content {
+                    msgs_hasher.update(canonicalize_text(content).as_bytes());
+                }
+                if let Some(name) = &msg.name {
+                    msgs_hasher.update(b"|name=");
+                    msgs_hasher.update(name.as_bytes());
+                }
+                if let Some(tc) = &msg.tool_calls {
+                    if let Ok(tc_json) = serde_json::to_string(tc) {
+                        msgs_hasher.update(b"|tc=");
+                        msgs_hasher.update(tc_json.as_bytes());
+                    }
+                }
+                if let Some(tcid) = &msg.tool_call_id {
+                    msgs_hasher.update(b"|tcid=");
+                    msgs_hasher.update(tcid.as_bytes());
+                }
+                msgs_hasher.update(b"\n");
+            }
+            let msgs_digest = hex::encode(msgs_hasher.finalize());
+            hasher.update(format!("|msgs={}", msgs_digest).as_bytes());
+        } else {
+            hasher.update(b"|msgs=none");
+        }
+
         let hash_bytes = hasher.finalize();
         let hash = hex::encode(hash_bytes);
         let key = format!(
@@ -198,6 +229,35 @@ mod tests {
         assert_ne!(
             id1.hash, id2.hash,
             "None vs explicit Some(0.0) temperature must not collide"
+        );
+    }
+
+    #[test]
+    fn test_state_complete_multi_turn_history_isolation() {
+        use sunborn_core::model::ChatMessage;
+
+        let mut req_turn1 = RequestEnvelope::new("tenant-a", "app-1", "gpt-4o", "Yes");
+        req_turn1.messages = vec![
+            ChatMessage::new("system", "You are a helpful assistant"),
+            ChatMessage::new("user", "Are you ready?"),
+            ChatMessage::new("assistant", "Yes, how can I help?"),
+            ChatMessage::new("user", "Yes"),
+        ];
+
+        let mut req_turn2 = RequestEnvelope::new("tenant-a", "app-1", "gpt-4o", "Yes");
+        req_turn2.messages = vec![
+            ChatMessage::new("system", "You are a helpful assistant"),
+            ChatMessage::new("user", "Do you want to delete the database?"),
+            ChatMessage::new("assistant", "This action is destructive. Are you sure?"),
+            ChatMessage::new("user", "Yes"),
+        ];
+
+        let id1 = IdentityEngine::compute_identity(&req_turn1);
+        let id2 = IdentityEngine::compute_identity(&req_turn2);
+
+        assert_ne!(
+            id1.hash, id2.hash,
+            "Identical last user prompt with different prior conversation turns must not collide in cache"
         );
     }
 }

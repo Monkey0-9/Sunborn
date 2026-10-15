@@ -69,4 +69,8 @@ impl SunbornError {
     pub fn rate_limit(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::RateLimitExceeded, msg)
     }
+
+    pub fn origin(msg: impl Into<String>) -> Self {
+        Self::new(ErrorCode::OriginError, msg)
+    }
 }

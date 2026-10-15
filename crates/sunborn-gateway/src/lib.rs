@@ -96,6 +96,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/v1/routing/radix/inspect", get(handlers::radix_inspect))
         .route("/v1/routing/radix/route", post(handlers::radix_route))
         .route("/v1/lifecycle/sweep", post(handlers::sweep_lifecycle))
+        .route("/v1/security/evaluate", post(handlers::security_evaluate))
+        .route("/v1/security/audit", get(handlers::security_audit))
         .layer(axum::middleware::from_fn(middleware::auth::auth_middleware))
         .layer(TraceLayer::new_for_http())
         .layer(cors)

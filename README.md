@@ -2,7 +2,7 @@
 
 > **High-Performance Multi-Tenant Semantic Caching and Execution-Reuse Platform for AI Agents & LLM Applications.**
 
-Sunborn decouples AI application latency, token expenditure, and origin failure risks through multi-tier deterministic and semantic execution reuse while mathematically enforcing zero false-hit data drift and strict zero-trust tenant isolation.
+Sunborn decouples AI application latency, token expenditure, and origin failure risks through multi-tier deterministic and semantic execution reuse while enforcing rigorous conformal risk control ($1-\alpha$ statistical coverage bounds) against data drift and strict zero-trust tenant isolation.
 
 ---
 
@@ -34,7 +34,7 @@ Sunborn decouples AI application latency, token expenditure, and origin failure 
 1. **Non-Accelerator Authority**: In-memory and vector acceleration tiers (DragonflyDB, Qdrant) are accelerators, never correctness authorities. PostgreSQL and origin providers are authoritative; all caches are deterministically rebuildable via `POST /v1/rebuild`.
 2. **Zero-Trust Identity & Fail-Closed Boundaries**: Every protected route strictly mandates cryptographic API key validation. Tenant identity is resolved from server-side credentials—caller-supplied headers (`x-tenant-id`) alone cannot establish identity.
 3. **State-Complete Equivalence**: Identity hashing incorporates tenant, application, model, policy version, canonicalized system and user prompts, sorted tool schemas, tool choices, response formats, temperatures, top-p, and retrieval hashes.
-4. **Conformal Risk-Calibrated Semantic Reuse**: Mathematically verified 0.0% false-hit rate on adversarial semantic traps (negations, mutating clauses, numeric shifts) via structural guardrails and conformal risk controllers.
+4. **Conformal Risk-Calibrated Semantic Reuse**: Calibrated statistical risk guarantees ($\mathbb{P}(\text{Error}) \le \alpha$, with user-configurable error rate $\alpha$, e.g., $\alpha=0.01$ yielding $99\%$ confidence) coupled with deterministic structural guardrails (detecting negation inversions, numeric shifts, and mutating clauses). On the evaluated benchmark suite `SemanticCacheBench`, Sunborn empirical false-hit rate was 0.0% with safe abstention whenever semantic evidence was insufficient.
 5. **O(1) Cryptographic Erasure (GDPR Article 17)**: Instant tenant offboarding via atomic zeroization of the 256-bit Tenant Data Encryption Key (TDEK), instantly rendering all cached ciphertext unrecoverable in sub-millisecond time.
 
 ---

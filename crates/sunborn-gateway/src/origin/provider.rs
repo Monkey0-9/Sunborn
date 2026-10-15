@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::time::Instant;
-use sunborn_core::{RequestEnvelope, Result};
+use std::time::{Duration, Instant};
+use sunborn_core::{RequestEnvelope, Result, SunbornError};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OriginExecutionResult {
@@ -10,6 +10,10 @@ pub struct OriginExecutionResult {
     pub completion_tokens: u32,
     pub model: String,
     pub latency_ms: u64,
+    #[serde(default)]
+    pub finish_reason: Option<String>,
+    #[serde(default)]
+    pub tool_calls: Option<Vec<sunborn_core::model::ToolCall>>,
 }
 
 #[async_trait]
@@ -22,14 +26,40 @@ pub struct HttpLlmOriginProvider {
     pub endpoint_url: String,
     pub api_key: Option<String>,
     pub timeout_secs: u64,
+    pub max_retries: u32,
+    client: reqwest::Client,
 }
 
 impl HttpLlmOriginProvider {
     pub fn new(endpoint_url: impl Into<String>, api_key: Option<String>) -> Self {
+        let timeout_secs = 30;
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(timeout_secs))
+            .connect_timeout(Duration::from_secs(5))
+            .pool_max_idle_per_host(20)
+            .build()
+            .unwrap_or_default();
+
+        Self {
+            endpoint_url: endpoint_url.into(),
+            api_key,
+            timeout_secs,
+            max_retries: 2,
+            client,
+        }
+    }
+
+    pub fn with_client(
+        endpoint_url: impl Into<String>,
+        api_key: Option<String>,
+        client: reqwest::Client,
+    ) -> Self {
         Self {
             endpoint_url: endpoint_url.into(),
             api_key,
             timeout_secs: 30,
+            max_retries: 2,
+            client,
         }
     }
 }
@@ -38,21 +68,182 @@ impl HttpLlmOriginProvider {
 impl LlmOriginProvider for HttpLlmOriginProvider {
     async fn execute(&self, req: &RequestEnvelope) -> Result<OriginExecutionResult> {
         let start = Instant::now();
-        let prompt_tokens = (req.prompt.len() / 4).max(1) as u32;
-        let generated_text = format!(
-            "[Verified Origin Execution: Model {} | Tenant {}]: {}",
-            req.model, req.tenant_id.0, req.prompt
-        );
-        let completion_tokens = (generated_text.len() / 4).max(1) as u32;
-        let latency_ms = start.elapsed().as_millis() as u64;
 
-        Ok(OriginExecutionResult {
-            content: generated_text,
-            prompt_tokens,
-            completion_tokens,
-            model: req.model.clone(),
-            latency_ms,
-        })
+        // 1. Determine upstream URL (support /chat/completions suffix normalization)
+        let mut target_url = self.endpoint_url.trim_end_matches('/').to_string();
+        if !target_url.ends_with("/chat/completions") {
+            target_url.push_str("/chat/completions");
+        }
+
+        // 2. Build OpenAI-compatible request payload
+        let messages: Vec<serde_json::Value> = if !req.messages.is_empty() {
+            req.messages
+                .iter()
+                .map(|m| {
+                    let mut obj = serde_json::json!({
+                        "role": m.role,
+                        "content": m.content.clone().unwrap_or_default(),
+                    });
+                    if let Some(name) = &m.name {
+                        obj["name"] = serde_json::Value::String(name.clone());
+                    }
+                    if let Some(tool_calls) = &m.tool_calls {
+                        obj["tool_calls"] =
+                            serde_json::to_value(tool_calls).unwrap_or(serde_json::Value::Null);
+                    }
+                    if let Some(tool_call_id) = &m.tool_call_id {
+                        obj["tool_call_id"] = serde_json::Value::String(tool_call_id.clone());
+                    }
+                    obj
+                })
+                .collect()
+        } else {
+            let mut msgs = Vec::new();
+            if let Some(sys) = &req.system_prompt {
+                msgs.push(serde_json::json!({ "role": "system", "content": sys }));
+            }
+            msgs.push(serde_json::json!({ "role": "user", "content": req.prompt }));
+            msgs
+        };
+
+        let mut payload = serde_json::json!({
+            "model": req.model,
+            "messages": messages,
+        });
+
+        if let Some(temp) = req.temperature {
+            payload["temperature"] = serde_json::json!(temp);
+        }
+        if let Some(top_p) = req.top_p {
+            payload["top_p"] = serde_json::json!(top_p);
+        }
+        if let Some(max_tokens) = req.max_tokens {
+            payload["max_tokens"] = serde_json::json!(max_tokens);
+        }
+        if !req.stop_sequences.is_empty() {
+            payload["stop"] = serde_json::json!(req.stop_sequences);
+        }
+        if !req.tools.is_empty() {
+            let tools_json: Vec<serde_json::Value> = req
+                .tools
+                .iter()
+                .map(|t| {
+                    serde_json::json!({
+                        "type": "function",
+                        "function": {
+                            "name": t.name,
+                            "description": t.description,
+                            "parameters": t.parameters
+                        }
+                    })
+                })
+                .collect();
+            payload["tools"] = serde_json::json!(tools_json);
+        }
+        if let Some(tc) = &req.tool_choice {
+            payload["tool_choice"] = serde_json::json!(tc);
+        }
+        if let Some(rf) = &req.response_format {
+            if let Ok(rf_val) = serde_json::from_str::<serde_json::Value>(rf) {
+                payload["response_format"] = rf_val;
+            } else {
+                payload["response_format"] = serde_json::json!({ "type": rf });
+            }
+        }
+
+        // 3. Dispatch HTTP request with retries and exponential backoff
+        let mut last_error = None;
+        let mut attempts = 0;
+
+        while attempts <= self.max_retries {
+            attempts += 1;
+
+            let mut request_builder = self.client.post(&target_url).json(&payload);
+            if let Some(key) = &self.api_key {
+                if !key.is_empty() {
+                    request_builder = request_builder.bearer_auth(key);
+                }
+            }
+
+            match request_builder.send().await {
+                Ok(resp) => {
+                    let status = resp.status();
+                    if status.is_success() {
+                        let resp_body: serde_json::Value = resp.json().await.map_err(|e| {
+                            SunbornError::origin(format!(
+                                "Failed to parse JSON from LLM origin: {}",
+                                e
+                            ))
+                        })?;
+
+                        let content = resp_body
+                            .pointer("/choices/0/message/content")
+                            .and_then(|c| c.as_str())
+                            .unwrap_or("")
+                            .to_string();
+
+                        let finish_reason = resp_body
+                            .pointer("/choices/0/finish_reason")
+                            .and_then(|f| f.as_str())
+                            .map(|s| s.to_string());
+
+                        let tool_calls: Option<Vec<sunborn_core::model::ToolCall>> = resp_body
+                            .pointer("/choices/0/message/tool_calls")
+                            .and_then(|tc| serde_json::from_value(tc.clone()).ok());
+
+                        let prompt_tokens = resp_body
+                            .pointer("/usage/prompt_tokens")
+                            .and_then(|pt| pt.as_u64())
+                            .unwrap_or_else(|| (req.prompt.len() / 4).max(1) as u64)
+                            as u32;
+
+                        let completion_tokens = resp_body
+                            .pointer("/usage/completion_tokens")
+                            .and_then(|ct| ct.as_u64())
+                            .unwrap_or_else(|| (content.len() / 4).max(1) as u64)
+                            as u32;
+
+                        let latency_ms = start.elapsed().as_millis() as u64;
+
+                        return Ok(OriginExecutionResult {
+                            content,
+                            prompt_tokens,
+                            completion_tokens,
+                            model: req.model.clone(),
+                            latency_ms,
+                            finish_reason,
+                            tool_calls,
+                        });
+                    } else if status.as_u16() == 429 || status.is_server_error() {
+                        let err_text = resp.text().await.unwrap_or_default();
+                        last_error = Some(format!("Origin HTTP status {}: {}", status, err_text));
+                        if attempts <= self.max_retries {
+                            let backoff_ms = 50 * (1 << (attempts - 1));
+                            tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+                            continue;
+                        }
+                    } else {
+                        let err_text = resp.text().await.unwrap_or_default();
+                        return Err(SunbornError::origin(format!(
+                            "LLM Origin returned client error {}: {}",
+                            status, err_text
+                        )));
+                    }
+                }
+                Err(err) => {
+                    last_error = Some(format!("HTTP connection failed to {}: {}", target_url, err));
+                    if attempts <= self.max_retries {
+                        let backoff_ms = 50 * (1 << (attempts - 1));
+                        tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+                        continue;
+                    }
+                }
+            }
+        }
+
+        Err(SunbornError::origin(last_error.unwrap_or_else(|| {
+            "Origin execution failed after maximum retries".to_string()
+        })))
     }
 }
 
@@ -87,6 +278,8 @@ impl LlmOriginProvider for MockOriginProvider {
             completion_tokens,
             model: req.model.clone(),
             latency_ms: 10,
+            finish_reason: Some("stop".to_string()),
+            tool_calls: None,
         })
     }
 }

@@ -19,6 +19,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { formatCurrency } from "@/lib/utils";
+import { sunbornApi } from "@/lib/api";
 
 export default function ExplorerPage() {
   const [tenantId, setTenantId] = useState("tenant-enterprise-fintech");
@@ -33,6 +34,7 @@ export default function ExplorerPage() {
   );
   const [includeTools, setIncludeTools] = useState(true);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [executionError, setExecutionError] = useState<string | null>(null);
 
   const [responseTrace, setResponseTrace] = useState<{
     cacheKey: string;
@@ -61,48 +63,50 @@ export default function ExplorerPage() {
 
   const handleExecute = async () => {
     setIsExecuting(true);
+    setExecutionError(null);
+    const start = performance.now();
     try {
-      const res = await fetch("http://127.0.0.1:8080/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": "key-enterprise-fintech",
-        },
-        body: JSON.stringify({
+      const data = await sunbornApi.chatCompletions(
+        {
           model,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: prompt },
           ],
           temperature,
-        }),
-      });
+        },
+        "key-enterprise-fintech"
+      );
 
-      if (res.ok) {
-        const data = await res.json();
-        const isHit = data.sunborn_cached ?? true;
-        setResponseTrace({
-          cacheKey: `sunborn:${tenantId}:${appId}:${model}:ep_418:${Math.random().toString(16).substring(2, 10)}`,
-          tier: isHit ? "Tier 1: Exact Match (W-TinyLFU)" : "Tier 4: Origin Generation",
-          action: isHit ? "SafeHit" : "OriginExecute",
-          confidence: isHit ? 1.0 : 0.0,
-          risk: 0.0,
-          latencyUs: isHit ? 118 : 420000,
-          avoidedTokens: isHit ? 1840 : 0,
-          netSavings: isHit ? 0.0552 : 0.0,
-          content: data.choices?.[0]?.message?.content || "Model executed successfully.",
-          cached: isHit,
-        });
-      }
-    } catch {
-      // Deterministic simulation fallback for offline display
-      setResponseTrace((prev) => ({
-        ...prev,
-        cached: true,
-        latencyUs: 108,
-        action: "SafeHit",
-        tier: "Tier 1: Exact Match (W-TinyLFU)",
-      }));
+      const elapsedMs = performance.now() - start;
+      const isHit = data.sunborn_cached === true;
+      const tierName = data.sunborn_tier
+        ? `Tier: ${data.sunborn_tier}`
+        : isHit
+        ? "Tier 1: Exact Match (DragonflyDB / W-TinyLFU)"
+        : "Tier 4: Origin LLM Generation";
+
+      const promptTokens = data.usage?.prompt_tokens ?? Math.ceil(prompt.length / 4);
+      const completionTokens =
+        data.usage?.completion_tokens ??
+        Math.ceil((data.choices?.[0]?.message?.content?.length || 0) / 4);
+      const avoidedTokens = isHit ? promptTokens + completionTokens : 0;
+      const netSavings = isHit ? (avoidedTokens / 1000) * 0.03 : 0.0;
+
+      setResponseTrace({
+        cacheKey: `sunborn:${tenantId}:${appId}:${model}:${data.id || "ep_418"}`,
+        tier: tierName,
+        action: isHit ? "SafeHit" : "OriginExecute",
+        confidence: isHit ? 1.0 : 0.0,
+        risk: 0.0,
+        latencyUs: Math.round(elapsedMs * 1000),
+        avoidedTokens,
+        netSavings,
+        content: data.choices?.[0]?.message?.content || "Model executed successfully.",
+        cached: isHit,
+      });
+    } catch (err: any) {
+      setExecutionError(err.message || "Failed to execute request against Sunborn Gateway.");
     } finally {
       setIsExecuting(false);
     }
@@ -249,6 +253,15 @@ export default function ExplorerPage() {
 
         {/* Right Workbench: Real-Time Telemetry & Decision Trace */}
         <div className="lg:col-span-7 space-y-6">
+          {executionError && (
+            <div className="p-4 rounded-xl bg-rose-950/70 border border-rose-500/40 text-rose-200 text-xs font-mono space-y-2">
+              <div className="flex items-center gap-2 font-bold text-rose-400">
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                GATEWAY EXECUTION FAILED
+              </div>
+              <div>{executionError}</div>
+            </div>
+          )}
           <Card glow={responseTrace.cached ? "emerald" : "violet"}>
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <div>

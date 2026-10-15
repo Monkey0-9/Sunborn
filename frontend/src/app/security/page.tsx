@@ -17,6 +17,7 @@ import {
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
+import { sunbornApi } from "@/lib/api";
 
 export default function SecurityPage() {
   const [testPrompt, setTestPrompt] = useState(
@@ -35,63 +36,57 @@ export default function SecurityPage() {
     conformalScore: 0.998,
   });
 
-  const auditEvents = [
+  const [auditEvents, setAuditEvents] = useState<
+    Array<{
+      id: string;
+      event: string;
+      origin: string;
+      detail: string;
+      status: string;
+      time: string;
+    }>
+  >([
     {
       id: "sec_981",
-      event: "TENANT_HEADER_SPOOF_REJECTED",
-      origin: "192.168.1.104",
-      detail: "x-tenant-id mismatch with authenticated cryptographic API key hash",
-      status: "403_FORBIDDEN",
-      time: "2m ago",
+      event: "ZERO_TRUST_VERIFICATION",
+      origin: "Gateway Ingress",
+      detail: "Authenticated tenant tenant-enterprise-fintech via SHA-256 key hash",
+      status: "200_OK",
+      time: "Live",
     },
-    {
-      id: "sec_980",
-      event: "PROMPT_INJECTION_DEFENSE_TRIGGERED",
-      origin: "10.0.4.12",
-      detail: "Adversarial jailbreak token pattern detected in RequestEnvelope",
-      status: "BLOCKED",
-      time: "8m ago",
-    },
-    {
-      id: "sec_979",
-      event: "LOGIN_RATE_LIMIT_EXCEEDED",
-      origin: "172.16.8.99",
-      detail: "Brute force burst threshold exceeded; token bucket exhausted",
-      status: "429_TOO_MANY_REQUESTS",
-      time: "15m ago",
-    },
-    {
-      id: "sec_978",
-      event: "MAC_VERIFICATION_FAILED",
-      origin: "Internal Gateway",
-      detail: "Tampered ciphertext payload detected; AEAD authentication tag rejected",
-      status: "DATA_DROPPED",
-      time: "42m ago",
-    },
-  ];
+  ]);
 
-  const handleTestPrompt = () => {
+  React.useEffect(() => {
+    sunbornApi
+      .getSecurityAudit()
+      .then((data) => {
+        if (data.events && data.events.length > 0) {
+          setAuditEvents(data.events);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleTestPrompt = async () => {
     setIsTesting(true);
-    setTimeout(() => {
-      const lower = testPrompt.toLowerCase();
-      const isMalicious =
-        lower.includes("ignore") ||
-        lower.includes("reveal") ||
-        lower.includes("credential") ||
-        lower.includes("password") ||
-        lower.includes("drop table") ||
-        lower.includes("system prompt");
-
+    try {
+      const res = await sunbornApi.evaluateSecurity(testPrompt);
       setFirewallResult({
-        threatDetected: isMalicious,
-        ruleMatched: isMalicious
-          ? "OWASP-LLM-01: System Prompt Extraction & Jailbreak"
-          : "CLEAN_PASS: Verification Assured",
-        action: isMalicious ? "DROPPED_BEFORE_CACHE_EVALUATION" : "FORWARDED_TO_EXACT_TIER",
-        conformalScore: isMalicious ? 0.998 : 0.001,
+        threatDetected: res.threatDetected,
+        ruleMatched: res.ruleMatched,
+        action: res.action,
+        conformalScore: res.conformalScore,
       });
+    } catch (err: any) {
+      setFirewallResult({
+        threatDetected: true,
+        ruleMatched: `GATEWAY_DISCONNECTED: ${err.message}`,
+        action: "FAIL_CLOSED_BLOCKED",
+        conformalScore: 1.0,
+      });
+    } finally {
       setIsTesting(false);
-    }, 200);
+    }
   };
 
   return (

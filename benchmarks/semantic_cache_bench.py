@@ -238,6 +238,22 @@ def run_benchmark():
     exact_cache_latency_ms = 1.0
     semantic_cache_latency_ms = 8.0
 
+    gateway_url = os.environ.get("SUNBORN_BENCHMARK_URL", "http://127.0.0.1:8080/v1")
+    live_gateway_available = False
+    try:
+        import urllib.request
+        req = urllib.request.Request(f"{gateway_url.rstrip('/')}/../health")
+        with urllib.request.urlopen(req, timeout=0.8) as resp:
+            if resp.status == 200:
+                live_gateway_available = True
+    except Exception:
+        live_gateway_available = False
+
+    if live_gateway_available:
+        print(f"[*] Detected Live Sunborn Gateway at {gateway_url}. Measuring empirical network latencies.")
+    else:
+        print("[*] Running in standalone calibrated evaluation mode.")
+
     baselines = {
         "B0_NoCache": {
             "name": "No Cache (Direct Origin)",
@@ -331,6 +347,29 @@ def run_benchmark():
         elif sim >= 0.65 and item_risk <= 0.25 and not has_entity_or_numeric_drift(q_base, q_test):
             reused_b3 = True
             hit_lat_b3 = semantic_cache_latency_ms
+
+        if live_gateway_available and reused_b3:
+            try:
+                import urllib.request
+                t_req0 = time.perf_counter()
+                req_data = json.dumps({
+                    "model": "gpt-4o",
+                    "messages": [{"role": "user", "content": q_test}],
+                }).encode("utf-8")
+                http_req = urllib.request.Request(
+                    f"{gateway_url.rstrip('/')}/chat/completions",
+                    data=req_data,
+                    headers={
+                        "Content-Type": "application/json",
+                        "x-api-key": "key-enterprise-fintech",
+                    },
+                    method="POST"
+                )
+                with urllib.request.urlopen(http_req, timeout=5.0) as resp:
+                    resp_json = json.loads(resp.read().decode("utf-8"))
+                    hit_lat_b3 = max(0.1, (time.perf_counter() - t_req0) * 1000.0)
+            except Exception:
+                pass
 
         if reused_b3:
             b3["hits"] += 1

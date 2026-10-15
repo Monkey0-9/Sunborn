@@ -73,6 +73,44 @@ pub struct ToolDefinition {
     pub parameters: serde_json::Value,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolCallFunction {
+    pub name: String,
+    pub arguments: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolCall {
+    pub id: String,
+    pub r#type: String,
+    pub function: ToolCallFunction,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatMessage {
+    pub role: String,
+    #[serde(default)]
+    pub content: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub tool_calls: Option<Vec<ToolCall>>,
+    #[serde(default)]
+    pub tool_call_id: Option<String>,
+}
+
+impl ChatMessage {
+    pub fn new(role: impl Into<String>, content: impl Into<String>) -> Self {
+        Self {
+            role: role.into(),
+            content: Some(content.into()),
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestEnvelope {
     #[serde(default)]
@@ -81,6 +119,8 @@ pub struct RequestEnvelope {
     pub application_id: ApplicationId,
     pub model: String,
     pub prompt: String,
+    #[serde(default)]
+    pub messages: Vec<ChatMessage>,
     #[serde(default)]
     pub system_prompt: Option<String>,
     #[serde(default)]
@@ -120,6 +160,7 @@ impl RequestEnvelope {
             application_id: ApplicationId::new(application_id),
             model: model.into(),
             prompt: prompt.into(),
+            messages: Vec::new(),
             system_prompt: None,
             temperature: None,
             top_p: None,

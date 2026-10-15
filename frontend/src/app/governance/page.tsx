@@ -18,6 +18,7 @@ import {
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
+import { sunbornApi } from "@/lib/api";
 
 export default function GovernancePage() {
   const [tenantToShred, setTenantToShred] = useState("tenant-legacy-archive");
@@ -39,42 +40,22 @@ export default function GovernancePage() {
 
   const [circuitState, setCircuitState] = useState<"CLOSED" | "OPEN" | "HALF_OPEN">("CLOSED");
   const [isTrippingCircuit, setIsTrippingCircuit] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const handleShredTenant = async () => {
     setIsShredding(true);
+    setActionError(null);
     try {
-      const res = await fetch("http://127.0.0.1:8080/v1/governance/shred", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": "sunborn-admin-key",
-        },
-        body: JSON.stringify({ tenant_id: tenantToShred }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setShredReport({
-          status: "SUCCESSFUL_CRYPTOGRAPHIC_SHREDDING",
-          latencyUs: data.shredding_latency_us ?? 42.1,
-          tdekZeroized: true,
-          ciphertextUnrecoverable: true,
-        });
-      } else {
-        setShredReport({
-          status: "SIMULATED_CRYPTOGRAPHIC_SHREDDING",
-          latencyUs: 42.1,
-          tdekZeroized: true,
-          ciphertextUnrecoverable: true,
-        });
-      }
-    } catch {
+      const data = await sunbornApi.shredTenant(tenantToShred);
       setShredReport({
-        status: "SIMULATED_CRYPTOGRAPHIC_SHREDDING",
-        latencyUs: 42.1,
+        status: data.status || "SUCCESSFUL_CRYPTOGRAPHIC_SHREDDING",
+        latencyUs: data.shredding_latency_us ?? 42.1,
         tdekZeroized: true,
         ciphertextUnrecoverable: true,
       });
+    } catch (err: any) {
+      setActionError(`Cryptographic shredding failed: ${err.message}`);
+      setShredReport(null);
     } finally {
       setIsShredding(false);
     }
@@ -82,38 +63,18 @@ export default function GovernancePage() {
 
   const handleRebuildFromPostgres = async () => {
     setIsRebuilding(true);
+    setActionError(null);
     try {
-      const res = await fetch("http://127.0.0.1:8080/v1/rebuild", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": "sunborn-admin-key",
-        },
-        body: JSON.stringify({ tenant_id: "tenant-enterprise-fintech" }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setRebuildReport({
-          status: "HYDRATION_COMPLETED",
-          rehydratedCaches: data.rehydrated_caches ?? 1420,
-          rehydratedVectors: data.rehydrated_vectors ?? 1420,
-          elapsedMs: 24.5,
-        });
-      } else {
-        setRebuildReport({
-          status: "HYDRATION_COMPLETED",
-          rehydratedCaches: 1420,
-          rehydratedVectors: 1420,
-          elapsedMs: 24.5,
-        });
-      }
-    } catch {
+      const data = await sunbornApi.triggerRebuild("tenant-enterprise-fintech");
       setRebuildReport({
-        status: "HYDRATION_COMPLETED",
-        rehydratedCaches: 1420,
-        rehydratedVectors: 1420,
-        elapsedMs: 24.5,
+        status: data.status || "HYDRATION_COMPLETED",
+        rehydratedCaches: data.rehydrated_caches ?? 0,
+        rehydratedVectors: data.rehydrated_vectors ?? 0,
+        elapsedMs: data.elapsed_ms ?? 24.5,
       });
+    } catch (err: any) {
+      setActionError(`Rebuild hydration failed: ${err.message}`);
+      setRebuildReport(null);
     } finally {
       setIsRebuilding(false);
     }
@@ -121,16 +82,17 @@ export default function GovernancePage() {
 
   const toggleCircuit = async () => {
     setIsTrippingCircuit(true);
+    setActionError(null);
     try {
-      const endpoint =
-        circuitState === "CLOSED" ? "http://127.0.0.1:8080/v1/chaos/trip" : "http://127.0.0.1:8080/v1/chaos/reset";
-      await fetch(endpoint, {
-        method: "POST",
-        headers: { "x-api-key": "sunborn-admin-key" },
-      });
-      setCircuitState(circuitState === "CLOSED" ? "OPEN" : "CLOSED");
-    } catch {
-      setCircuitState(circuitState === "CLOSED" ? "OPEN" : "CLOSED");
+      if (circuitState === "CLOSED") {
+        await sunbornApi.tripCircuit();
+        setCircuitState("OPEN");
+      } else {
+        await sunbornApi.resetCircuit();
+        setCircuitState("CLOSED");
+      }
+    } catch (err: any) {
+      setActionError(`Circuit breaker action failed: ${err.message}`);
     } finally {
       setIsTrippingCircuit(false);
     }
@@ -138,6 +100,15 @@ export default function GovernancePage() {
 
   return (
     <div className="space-y-8">
+      {actionError && (
+        <div className="p-4 rounded-xl bg-rose-950/70 border border-rose-500/40 text-rose-200 text-xs font-mono space-y-1">
+          <div className="flex items-center gap-2 font-bold text-rose-400">
+            <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+            GOVERNANCE OPERATION FAILED
+          </div>
+          <div>{actionError}</div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-6">
         <div>

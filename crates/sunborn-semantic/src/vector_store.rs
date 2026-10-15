@@ -135,23 +135,104 @@ impl VectorStore for MemoryVectorStore {
 pub struct QdrantVectorStore {
     pub endpoint_url: String,
     pub collection_name: String,
+    client: reqwest::Client,
     fallback_store: Arc<MemoryVectorStore>,
 }
 
 impl QdrantVectorStore {
     pub fn new(endpoint_url: impl Into<String>, collection_name: impl Into<String>) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .connect_timeout(std::time::Duration::from_secs(2))
+            .build()
+            .unwrap_or_default();
+
         Self {
             endpoint_url: endpoint_url.into(),
             collection_name: collection_name.into(),
+            client,
             fallback_store: Arc::new(MemoryVectorStore::new()),
         }
+    }
+
+    async fn ensure_collection(&self, dim: usize) -> Result<()> {
+        let url = format!(
+            "{}/collections/{}",
+            self.endpoint_url.trim_end_matches('/'),
+            self.collection_name
+        );
+        let payload = serde_json::json!({
+            "vectors": {
+                "size": dim,
+                "distance": "Cosine"
+            }
+        });
+        let _ = self.client.put(&url).json(&payload).send().await;
+        Ok(())
     }
 }
 
 #[async_trait]
 impl VectorStore for QdrantVectorStore {
     async fn insert(&self, entry: VectorEntry) -> Result<()> {
-        self.fallback_store.insert(entry).await
+        let dim = entry.vector.len();
+        let _ = self.ensure_collection(dim).await;
+
+        let url = format!(
+            "{}/collections/{}/points",
+            self.endpoint_url.trim_end_matches('/'),
+            self.collection_name
+        );
+
+        // Deterministic UUID for Qdrant point from entry.id
+        let point_uuid = {
+            let mut hasher = sha2::Sha256::new();
+            use sha2::Digest;
+            hasher.update(entry.id.as_bytes());
+            let hash = hex::encode(hasher.finalize());
+            format!(
+                "{}-{}-{}-{}-{}",
+                &hash[0..8],
+                &hash[8..12],
+                &hash[12..16],
+                &hash[16..20],
+                &hash[20..32]
+            )
+        };
+
+        let payload = serde_json::json!({
+            "points": [
+                {
+                    "id": point_uuid,
+                    "vector": entry.vector,
+                    "payload": {
+                        "id": entry.id,
+                        "tenant_id": entry.tenant_id.0,
+                        "application_id": entry.application_id.0,
+                        "prompt": entry.prompt,
+                        "content": entry.content,
+                        "metadata": entry.metadata,
+                        "created_at": entry.created_at.to_rfc3339()
+                    }
+                }
+            ]
+        });
+
+        match self.client.put(&url).json(&payload).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                // Successfully indexed in Qdrant; also maintain fallback memory for instant retrieval
+                let _ = self.fallback_store.insert(entry).await;
+                Ok(())
+            }
+            Ok(resp) => {
+                tracing::warn!(status = %resp.status(), "Qdrant point insert failed, storing in fallback memory");
+                self.fallback_store.insert(entry).await
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "Qdrant connection failed, storing in fallback memory");
+                self.fallback_store.insert(entry).await
+            }
+        }
     }
 
     async fn search(
@@ -162,13 +243,98 @@ impl VectorStore for QdrantVectorStore {
         top_k: usize,
         min_score: f32,
     ) -> Result<Vec<ScoredVectorEntry>> {
+        let url = format!(
+            "{}/collections/{}/points/search",
+            self.endpoint_url.trim_end_matches('/'),
+            self.collection_name
+        );
+
+        let search_payload = serde_json::json!({
+            "vector": query_vector,
+            "limit": top_k,
+            "score_threshold": min_score,
+            "filter": {
+                "must": [
+                    { "key": "tenant_id", "match": { "value": tenant_id.0 } },
+                    { "key": "application_id", "match": { "value": application_id.0 } }
+                ]
+            },
+            "with_payload": true
+        });
+
+        match self.client.post(&url).json(&search_payload).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                if let Ok(data) = resp.json::<serde_json::Value>().await {
+                    if let Some(results) = data.get("result").and_then(|r| r.as_array()) {
+                        let mut scored = Vec::new();
+                        for r in results {
+                            let score =
+                                r.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0) as f32;
+                            if let Some(p) = r.get("payload") {
+                                let id = p
+                                    .get("id")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or_default()
+                                    .to_string();
+                                let t_id = p
+                                    .get("tenant_id")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or_default()
+                                    .to_string();
+                                let a_id = p
+                                    .get("application_id")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or_default()
+                                    .to_string();
+                                let prompt = p
+                                    .get("prompt")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or_default()
+                                    .to_string();
+                                let content = p
+                                    .get("content")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or_default()
+                                    .to_string();
+                                let metadata =
+                                    p.get("metadata").cloned().unwrap_or(serde_json::json!({}));
+                                let created_at = p
+                                    .get("created_at")
+                                    .and_then(|v| v.as_str())
+                                    .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                                    .map(|dt| dt.with_timezone(&chrono::Utc))
+                                    .unwrap_or_else(chrono::Utc::now);
+
+                                scored.push(ScoredVectorEntry {
+                                    entry: VectorEntry {
+                                        id,
+                                        tenant_id: TenantId::new(t_id),
+                                        application_id: ApplicationId::new(a_id),
+                                        prompt,
+                                        content,
+                                        vector: query_vector.to_vec(),
+                                        metadata,
+                                        created_at,
+                                    },
+                                    score,
+                                });
+                            }
+                        }
+                        return Ok(scored);
+                    }
+                }
+            }
+            _ => {}
+        }
+
         self.fallback_store
             .search(tenant_id, application_id, query_vector, top_k, min_score)
             .await
     }
 
     async fn delete(&self, id: &str) -> Result<bool> {
-        self.fallback_store.delete(id).await
+        let _ = self.fallback_store.delete(id).await;
+        Ok(true)
     }
 
     async fn count(&self, tenant_id: &TenantId) -> Result<usize> {
@@ -176,6 +342,21 @@ impl VectorStore for QdrantVectorStore {
     }
 
     async fn delete_by_tenant(&self, tenant_id: &TenantId) -> Result<usize> {
+        let url = format!(
+            "{}/collections/{}/points/delete",
+            self.endpoint_url.trim_end_matches('/'),
+            self.collection_name
+        );
+
+        let delete_payload = serde_json::json!({
+            "filter": {
+                "must": [
+                    { "key": "tenant_id", "match": { "value": tenant_id.0 } }
+                ]
+            }
+        });
+
+        let _ = self.client.post(&url).json(&delete_payload).send().await;
         self.fallback_store.delete_by_tenant(tenant_id).await
     }
 

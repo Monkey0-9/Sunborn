@@ -175,15 +175,21 @@ def get_default_client() -> SunbornClient:
     )
 
 
+class FallbackPolicy:
+    FAIL_CLOSED = "FAIL_CLOSED"
+    PERMISSIVE = "PERMISSIVE"
+
+
 def sunborn_tool(
     name: Optional[str] = None,
     version: str = "1.0",
     deterministic: bool = True,
+    policy: str = FallbackPolicy.FAIL_CLOSED,
     client: Optional[SunbornClient] = None,
 ):
     """
     Decorator for AI agent tools to automatically memoize deterministic calls
-    via the Sunborn Execution Engine.
+    via the Sunborn Execution Engine with strict fallback governance.
     """
     def decorator(fn: Callable):
         tool_name = name or fn.__name__
@@ -218,9 +224,12 @@ def sunborn_tool(
                     status = eval_result["node_statuses"].get(node_id, {})
                     if status.get("status") == "Cached":
                         return status["details"]["output"]
-            except Exception:
-                # If gateway is unreachable during offline testing, fall back to executing function
-                pass
+            except Exception as e:
+                if policy == FallbackPolicy.FAIL_CLOSED:
+                    raise RuntimeError(
+                        f"Sunborn Policy FAIL_CLOSED: Execution plan query failed for '{tool_name}': {e}"
+                    )
+                # In PERMISSIVE mode, proceed to execute natively
 
             # 2. Execute underlying function
             t0 = time.time()
@@ -236,8 +245,11 @@ def sunborn_tool(
                     output=result,
                     execution_latency_ms=latency_ms,
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                if policy == FallbackPolicy.FAIL_CLOSED:
+                    raise RuntimeError(
+                        f"Sunborn Policy FAIL_CLOSED: Recording tool result failed for '{tool_name}': {e}"
+                    )
 
             return result
 

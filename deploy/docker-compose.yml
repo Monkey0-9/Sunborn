@@ -1,4 +1,30 @@
 services:
+  gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: sunborn-gateway
+    restart: unless-stopped
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      SUNBORN_DB_BACKEND: "postgres"
+      POSTGRES_URL: "postgres://sunborn:sunborn_dev_password@postgres:5432/sunborn"
+      SUNBORN_CACHE_BACKEND: "dragonfly"
+      DRAGONFLY_URL: "redis://dragonfly:6379"
+      SUNBORN_VECTOR_BACKEND: "qdrant"
+      QDRANT_URL: "http://qdrant:6333"
+      SUNBORN_ENV: "production"
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
   postgres:
     image: postgres:16-alpine
     container_name: sunborn-postgres
@@ -8,7 +34,7 @@ services:
       POSTGRES_USER: sunborn
       POSTGRES_PASSWORD: sunborn_dev_password
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -18,13 +44,13 @@ services:
       retries: 5
 
   dragonfly:
-    image: docker.dragonflydb.io/dragonflydb/dragonfly:latest
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.20.0
     container_name: sunborn-dragonfly
     restart: unless-stopped
     ulimits:
       memlock: -1
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -32,12 +58,12 @@ services:
       retries: 5
 
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.10.0
     container_name: sunborn-qdrant
     restart: unless-stopped
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
@@ -47,7 +73,7 @@ services:
       retries: 5
 
   redpanda:
-    image: docker.redpanda.com/redpandadata/redpanda:latest
+    image: docker.redpanda.com/redpandadata/redpanda:v24.1.2
     container_name: sunborn-redpanda
     restart: unless-stopped
     command:
@@ -60,11 +86,11 @@ services:
       - --kafka-addr PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092
       - --advertise-kafka-addr PLAINTEXT://redpanda:9092,OUTSIDE://localhost:19092
     ports:
-      - "19092:19092"
-      - "9644:9644"
+      - "127.0.0.1:19092:19092"
+      - "127.0.0.1:9644:9644"
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2024-06-13T22-53-53Z
     container_name: sunborn-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -72,8 +98,8 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadminpassword
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
 
