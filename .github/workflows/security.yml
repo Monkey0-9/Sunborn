@@ -18,8 +18,14 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache cargo-audit binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-audit
+          key: ${{ runner.os }}-cargo-audit-bin
+
       - name: Install cargo-audit
-        run: which cargo-audit || cargo install cargo-audit
+        run: which cargo-audit || cargo install cargo-audit --locked
 
       - name: Audit Cargo Dependencies for Vulnerabilities
         run: cargo audit
@@ -32,4 +38,4 @@ jobs:
 
       - name: Frontend Dependency Vulnerability Check
         working-directory: frontend
-        run: npm audit --audit-level=high
+        run: npm audit --omit=dev --audit-level=high

@@ -1,0 +1,10 @@
+# Cargo Audit Configuration
+# Sunborn Security & Supply-Chain Integrity Policy
+
+[advisories]
+ignore = [
+    # RUSTSEC-2023-0071: Timing sidechannel in rsa (Marvin attack).
+    # Transitive optional dependency in unused sqlx-mysql package; Sunborn exclusively targets PostgreSQL.
+    # No upstream fix is available from rsa maintainers (unfixable upstream).
+    "RUSTSEC-2023-0071",
+]
