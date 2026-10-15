@@ -13,15 +13,35 @@ pub struct PostgresDatabaseStore {
     pub connection_url: String,
     pool: Arc<RwLock<Option<PgPool>>>,
     fallback_store: Arc<MemoryDatabaseStore>,
+    pub strict_durability: bool,
 }
 
 impl PostgresDatabaseStore {
     pub fn new(connection_url: impl Into<String>) -> Self {
         let url_str = connection_url.into();
+        let strict = std::env::var("SUNBORN_DB_STRICT_DURABILITY")
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or_else(|_| {
+                std::env::var("SUNBORN_ENV")
+                    .map(|v| v.to_lowercase() == "production")
+                    .unwrap_or(false)
+            });
+
         Self {
             connection_url: url_str,
             pool: Arc::new(RwLock::new(None)),
             fallback_store: Arc::new(MemoryDatabaseStore::new()),
+            strict_durability: strict,
+        }
+    }
+
+    pub fn new_strict(connection_url: impl Into<String>) -> Self {
+        let url_str = connection_url.into();
+        Self {
+            connection_url: url_str,
+            pool: Arc::new(RwLock::new(None)),
+            fallback_store: Arc::new(MemoryDatabaseStore::new()),
+            strict_durability: true,
         }
     }
 
@@ -39,7 +59,12 @@ impl PostgresDatabaseStore {
             .connect(&self.connection_url)
             .await
         {
-            let _ = self.migrate(&pool).await;
+            if let Err(err) = self.migrate(&pool).await {
+                tracing::error!(error = %err, "PostgreSQL schema auto-migration failed");
+                if self.strict_durability {
+                    return None;
+                }
+            }
             let mut guard = self.pool.write().await;
             *guard = Some(pool.clone());
             return Some(pool);
@@ -120,10 +145,27 @@ impl DatabaseStore for PostgresDatabaseStore {
             .execute(&pool)
             .await;
 
-            if let Err(err) = res {
-                tracing::warn!(error = %err, "PostgreSQL insert_tenant failed, writing to fallback");
+            match res {
+                Ok(_) => {
+                    let _ = self.fallback_store.insert_tenant(tenant).await;
+                    return Ok(());
+                }
+                Err(err) => {
+                    tracing::error!(error = %err, "PostgreSQL insert_tenant failed");
+                    if self.strict_durability {
+                        return Err(sunborn_core::SunbornError::database(format!(
+                            "PostgreSQL insert_tenant failed: {}",
+                            err
+                        )));
+                    }
+                }
             }
+        } else if self.strict_durability {
+            return Err(sunborn_core::SunbornError::database(
+                "PostgreSQL connection pool unavailable; fail-closed durability enforced",
+            ));
         }
+
         self.fallback_store.insert_tenant(tenant).await
     }
 
@@ -172,10 +214,27 @@ impl DatabaseStore for PostgresDatabaseStore {
             .execute(&pool)
             .await;
 
-            if let Err(err) = res {
-                tracing::warn!(error = %err, "PostgreSQL insert_cache_entry failed, writing to fallback");
+            match res {
+                Ok(_) => {
+                    let _ = self.fallback_store.insert_cache_entry(entry).await;
+                    return Ok(());
+                }
+                Err(err) => {
+                    tracing::error!(error = %err, "PostgreSQL insert_cache_entry failed");
+                    if self.strict_durability {
+                        return Err(sunborn_core::SunbornError::database(format!(
+                            "PostgreSQL insert_cache_entry failed: {}",
+                            err
+                        )));
+                    }
+                }
             }
+        } else if self.strict_durability {
+            return Err(sunborn_core::SunbornError::database(
+                "PostgreSQL connection pool unavailable; fail-closed durability enforced",
+            ));
         }
+
         self.fallback_store.insert_cache_entry(entry).await
     }
 
@@ -223,7 +282,7 @@ impl DatabaseStore for PostgresDatabaseStore {
 
     async fn insert_outbox_event(&self, event: OutboxRecord) -> Result<()> {
         if let Some(pool) = self.get_pool().await {
-            let _ = sqlx::query(
+            let res = sqlx::query(
                 "INSERT INTO outbox_events (tenant_id, entity_type, entity_id, action, payload, status, created_at)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)"
             )
@@ -236,7 +295,28 @@ impl DatabaseStore for PostgresDatabaseStore {
             .bind(event.created_at)
             .execute(&pool)
             .await;
+
+            match res {
+                Ok(_) => {
+                    let _ = self.fallback_store.insert_outbox_event(event).await;
+                    return Ok(());
+                }
+                Err(err) => {
+                    tracing::error!(error = %err, "PostgreSQL insert_outbox_event failed");
+                    if self.strict_durability {
+                        return Err(sunborn_core::SunbornError::database(format!(
+                            "PostgreSQL insert_outbox_event failed: {}",
+                            err
+                        )));
+                    }
+                }
+            }
+        } else if self.strict_durability {
+            return Err(sunborn_core::SunbornError::database(
+                "PostgreSQL connection pool unavailable; fail-closed durability enforced",
+            ));
         }
+
         self.fallback_store.insert_outbox_event(event).await
     }
 
@@ -283,7 +363,7 @@ impl DatabaseStore for PostgresDatabaseStore {
 
     async fn record_audit_event(&self, audit: AuditRecord) -> Result<()> {
         if let Some(pool) = self.get_pool().await {
-            let _ = sqlx::query(
+            let res = sqlx::query(
                 "INSERT INTO audit_events (request_id, tenant_id, action, details, created_at)
                  VALUES ($1, $2, $3, $4, $5)",
             )
@@ -294,7 +374,28 @@ impl DatabaseStore for PostgresDatabaseStore {
             .bind(audit.created_at)
             .execute(&pool)
             .await;
+
+            match res {
+                Ok(_) => {
+                    let _ = self.fallback_store.record_audit_event(audit).await;
+                    return Ok(());
+                }
+                Err(err) => {
+                    tracing::error!(error = %err, "PostgreSQL record_audit_event failed");
+                    if self.strict_durability {
+                        return Err(sunborn_core::SunbornError::database(format!(
+                            "PostgreSQL record_audit_event failed: {}",
+                            err
+                        )));
+                    }
+                }
+            }
+        } else if self.strict_durability {
+            return Err(sunborn_core::SunbornError::database(
+                "PostgreSQL connection pool unavailable; fail-closed durability enforced",
+            ));
         }
+
         self.fallback_store.record_audit_event(audit).await
     }
 
@@ -357,17 +458,32 @@ impl DatabaseStore for PostgresDatabaseStore {
     async fn delete_tenant_data(&self, tenant_id: &str) -> Result<usize> {
         let mut pg_deleted = 0;
         if let Some(pool) = self.get_pool().await {
-            if let Ok(res) = sqlx::query("DELETE FROM durable_cache_entries WHERE tenant_id = $1")
+            match sqlx::query("DELETE FROM durable_cache_entries WHERE tenant_id = $1")
                 .bind(tenant_id)
                 .execute(&pool)
                 .await
             {
-                pg_deleted = res.rows_affected() as usize;
+                Ok(res) => {
+                    pg_deleted = res.rows_affected() as usize;
+                }
+                Err(err) => {
+                    tracing::error!(error = %err, "PostgreSQL delete_tenant_data failed");
+                    if self.strict_durability {
+                        return Err(sunborn_core::SunbornError::database(format!(
+                            "PostgreSQL delete_tenant_data failed: {}",
+                            err
+                        )));
+                    }
+                }
             }
             let _ = sqlx::query("DELETE FROM tenants WHERE id = $1")
                 .bind(tenant_id)
                 .execute(&pool)
                 .await;
+        } else if self.strict_durability {
+            return Err(sunborn_core::SunbornError::database(
+                "PostgreSQL connection pool unavailable; fail-closed durability enforced",
+            ));
         }
         let mem_deleted = self.fallback_store.delete_tenant_data(tenant_id).await?;
         Ok(pg_deleted.max(mem_deleted))

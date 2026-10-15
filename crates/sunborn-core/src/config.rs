@@ -33,7 +33,7 @@ impl Default for CacheConfig {
             exact_cache_enabled: true,
             semantic_cache_enabled: true,
             dragonfly_url: "redis://127.0.0.1:6379".to_string(),
-            qdrant_url: "http://127.0.0.1:6334".to_string(),
+            qdrant_url: "http://127.0.0.1:6333".to_string(),
             default_ttl_secs: 3600,
             backend: "memory".to_string(),
             vector_backend: "memory".to_string(),

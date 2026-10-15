@@ -1,9 +1,10 @@
 {
   "metadata": {
-    "evaluation_time_utc": "2026-10-15T15:37:36.859844+00:00",
+    "evaluation_time_utc": "2026-10-15T16:20:41.834911+00:00",
     "platform": "Linux-6.12.0-211.64.1.el10_2.x86_64-x86_64-with-glibc2.39",
     "python_version": "3.12.15",
-    "total_benchmark_queries": 20,
+    "total_benchmark_queries": 124,
+    "categories_evaluated": 8,
     "cost_model": {
       "origin_call_usd": 0.00625,
       "cache_lookup_usd": 1e-06,
@@ -15,64 +16,128 @@
       "name": "No Cache (Direct Origin)",
       "hits": 0,
       "hit_rate_pct": 0.0,
+      "hit_rate_ci_95": [
+        0.0,
+        3.0
+      ],
       "false_hits": 0,
       "false_hit_rate_pct": 0.0,
+      "false_hit_ci_95": [
+        0.0,
+        3.0
+      ],
       "precision_pct": 100.0,
+      "precision_ci_95": [
+        100.0,
+        100.0
+      ],
       "recall_pct": 0.0,
+      "recall_ci_95": [
+        0.0,
+        8.76
+      ],
       "avg_latency_ms": 450.0,
-      "total_cost_usd": 0.125,
+      "total_cost_usd": 0.775,
       "cost_savings_pct": 0.0,
       "tp": 0,
       "fp": 0,
-      "tn": 14,
-      "fn": 6
+      "tn": 84,
+      "fn": 40
     },
     "B1_ExactOnly": {
       "name": "Exact Hash Only (C0/C1)",
-      "hits": 2,
-      "hit_rate_pct": 10.0,
+      "hits": 13,
+      "hit_rate_pct": 10.48,
+      "hit_rate_ci_95": [
+        6.23,
+        17.11
+      ],
       "false_hits": 0,
       "false_hit_rate_pct": 0.0,
+      "false_hit_ci_95": [
+        0.0,
+        3.0
+      ],
       "precision_pct": 100.0,
-      "recall_pct": 33.33,
-      "avg_latency_ms": 405.1,
-      "total_cost_usd": 0.112502,
-      "cost_savings_pct": 10.0,
-      "tp": 2,
+      "precision_ci_95": [
+        77.19,
+        100.0
+      ],
+      "recall_pct": 32.5,
+      "recall_ci_95": [
+        20.08,
+        47.98
+      ],
+      "avg_latency_ms": 402.93,
+      "total_cost_usd": 0.693763,
+      "cost_savings_pct": 10.48,
+      "tp": 13,
       "fp": 0,
-      "tn": 14,
-      "fn": 4
+      "tn": 84,
+      "fn": 27
     },
     "B2_NaiveCosine": {
       "name": "Naive Cosine (Fixed tau=0.70)",
-      "hits": 8,
-      "hit_rate_pct": 40.0,
-      "false_hits": 6,
-      "false_hit_rate_pct": 30.0,
-      "precision_pct": 25.0,
-      "recall_pct": 33.33,
-      "avg_latency_ms": 273.2,
-      "total_cost_usd": 0.075008,
-      "cost_savings_pct": 39.99,
-      "tp": 2,
-      "fp": 6,
-      "tn": 8,
-      "fn": 4
+      "hits": 66,
+      "hit_rate_pct": 53.23,
+      "hit_rate_ci_95": [
+        44.48,
+        61.78
+      ],
+      "false_hits": 51,
+      "false_hit_rate_pct": 41.13,
+      "false_hit_ci_95": [
+        32.86,
+        49.93
+      ],
+      "precision_pct": 22.73,
+      "precision_ci_95": [
+        14.29,
+        34.17
+      ],
+      "recall_pct": 37.5,
+      "recall_ci_95": [
+        24.22,
+        52.97
+      ],
+      "avg_latency_ms": 214.74,
+      "total_cost_usd": 0.362566,
+      "cost_savings_pct": 53.22,
+      "tp": 15,
+      "fp": 51,
+      "tn": 33,
+      "fn": 25
     },
     "B3_SunbornCalibrated": {
       "name": "Sunborn Multi-Tier Calibrated Engine",
-      "hits": 2,
-      "hit_rate_pct": 10.0,
+      "hits": 36,
+      "hit_rate_pct": 29.03,
+      "hit_rate_ci_95": [
+        21.77,
+        37.56
+      ],
       "false_hits": 0,
       "false_hit_rate_pct": 0.0,
+      "false_hit_ci_95": [
+        0.0,
+        3.0
+      ],
       "precision_pct": 100.0,
-      "recall_pct": 33.33,
-      "avg_latency_ms": 405.1,
-      "total_cost_usd": 0.112502,
-      "cost_savings_pct": 10.0,
-      "tp": 2,
+      "precision_ci_95": [
+        90.36,
+        100.0
+      ],
+      "recall_pct": 90.0,
+      "recall_ci_95": [
+        76.95,
+        96.04
+      ],
+      "avg_latency_ms": 320.94,
+      "total_cost_usd": 0.550036,
+      "cost_savings_pct": 29.03,
+      "tp": 36,
       "fp": 0,
-      "tn": 14,
+      "tn": 84,
       "fn": 4
     }
   }

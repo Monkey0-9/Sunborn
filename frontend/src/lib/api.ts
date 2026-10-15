@@ -107,6 +107,21 @@ export const sunbornApi = {
       body: JSON.stringify({ tenant_id: tenantId }),
     }),
 
+  // Invalidation: Transactional outbox invalidation cascade
+  triggerInvalidation: (sourceId: string, tenantId = "tenant-enterprise-fintech", versionTag = "v2.5.0") =>
+    request<{
+      status: string;
+      source_id: string;
+      evicted_cache_count?: number;
+    }>("v1/invalidation", {
+      method: "POST",
+      body: JSON.stringify({
+        source_id: sourceId,
+        tenant_id: tenantId,
+        version_tag: versionTag,
+      }),
+    }),
+
   // Chaos & Circuit Breaker
   tripCircuit: () =>
     request<any>("v1/chaos/trip", { method: "POST" }),

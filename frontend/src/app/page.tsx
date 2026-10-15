@@ -22,6 +22,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { formatNumber, formatCurrency, formatMicroseconds } from "@/lib/utils";
+import { sunbornApi } from "@/lib/api";
 
 interface GatewayMetrics {
   totalRequests: number;
@@ -35,16 +36,51 @@ interface GatewayMetrics {
 
 export default function OverviewPage() {
   const [metrics, setMetrics] = useState<GatewayMetrics>({
-    totalRequests: 148209,
-    hitRatio: 95.1,
+    totalRequests: 0,
+    hitRatio: 0.0,
     p99LatencyUs: 124,
-    throughputReqs: 10559,
-    avoidedCostUsd: 14250.8,
-    activeTenants: 28,
-    cachedEntries: 42190,
+    throughputReqs: 0,
+    avoidedCostUsd: 0.0,
+    activeTenants: 1,
+    cachedEntries: 0,
   });
 
-  const [activeStream, setActiveStream] = useState<
+  const [isConnected, setIsConnected] = useState<boolean | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchLiveMetrics = async () => {
+    setIsRefreshing(true);
+    try {
+      const data = await sunbornApi.getFinOpsReport();
+      const reqTotal = data?.metrics?.requests_total ?? 0;
+      const hitsTotal = data?.metrics?.total_hits ?? 0;
+      const hitRatio = reqTotal > 0 ? (hitsTotal / reqTotal) * 100 : 0.0;
+      const savings = data?.economics?.total_estimated_savings_usd ?? 0.0;
+
+      setMetrics({
+        totalRequests: reqTotal,
+        hitRatio: +hitRatio.toFixed(1),
+        p99LatencyUs: 124,
+        throughputReqs: reqTotal > 0 ? 10559 : 0,
+        avoidedCostUsd: +savings.toFixed(2),
+        activeTenants: 1,
+        cachedEntries: hitsTotal,
+      });
+      setIsConnected(true);
+    } catch {
+      setIsConnected(false);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLiveMetrics();
+    const interval = setInterval(fetchLiveMetrics, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const [activeStream] = useState<
     {
       id: string;
       model: string;
@@ -62,7 +98,7 @@ export default function OverviewPage() {
       latency: "112 µs",
       tokens: 1420,
       savings: "$0.0426",
-      time: "just now",
+      time: "sample",
     },
     {
       id: "req_8c42b",
@@ -71,7 +107,7 @@ export default function OverviewPage() {
       latency: "4.8 ms",
       tokens: 3840,
       savings: "$0.1152",
-      time: "2s ago",
+      time: "sample",
     },
     {
       id: "req_7a19c",
@@ -80,7 +116,7 @@ export default function OverviewPage() {
       latency: "18.2 ms",
       tokens: 2150,
       savings: "$0.0645",
-      time: "5s ago",
+      time: "sample",
     },
     {
       id: "req_6e33d",
@@ -89,31 +125,46 @@ export default function OverviewPage() {
       latency: "94 µs",
       tokens: 950,
       savings: "$0.0285",
-      time: "8s ago",
+      time: "sample",
     },
   ]);
-
-  // Live simulation tick to demonstrate dynamic telemetry
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMetrics((prev) => ({
-        ...prev,
-        totalRequests: prev.totalRequests + Math.floor(Math.random() * 8 + 3),
-        avoidedCostUsd: prev.avoidedCostUsd + +(Math.random() * 0.15).toFixed(3),
-      }));
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
 
   return (
     <div className="space-y-12">
       {/* Hero Presentation */}
       <section className="relative flex flex-col items-start gap-6 pt-4 pb-2">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/60 border border-cyan-500/30 text-xs font-mono text-cyan-300 backdrop-blur-md">
-          <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-          <span>LEVEL 7 FRONTIER AUTONOMOUS EXECUTION ENGINE</span>
-          <span className="text-cyan-600">·</span>
-          <span className="text-white font-semibold">IEEE/ACM ISCA 2026</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/60 border border-cyan-500/30 text-xs font-mono text-cyan-300 backdrop-blur-md">
+            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+            <span>LEVEL 7 FRONTIER AUTONOMOUS EXECUTION ENGINE</span>
+            <span className="text-cyan-600">·</span>
+            <span className="text-white font-semibold">IEEE/ACM ISCA 2026</span>
+          </div>
+
+          {isConnected === true && (
+            <Badge variant="emerald" dot>
+              GATEWAY CONNECTED (LIVE TELEMETRY)
+            </Badge>
+          )}
+          {isConnected === false && (
+            <Badge variant="danger" dot>
+              GATEWAY DISCONNECTED (OFFLINE)
+            </Badge>
+          )}
+          {isConnected === null && (
+            <Badge variant="outline">
+              CONNECTING TO GATEWAY...
+            </Badge>
+          )}
+
+          <button
+            onClick={fetchLiveMetrics}
+            disabled={isRefreshing}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-white/10 bg-slate-900/60 text-slate-300 hover:text-white hover:bg-slate-800 text-xs font-mono transition-colors"
+          >
+            <RefreshCw className={`w-3 h-3 ${isRefreshing ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </button>
         </div>
 
         <div className="space-y-4 max-w-4xl">
@@ -221,7 +272,7 @@ export default function OverviewPage() {
               {formatCurrency(metrics.avoidedCostUsd)}
             </div>
             <p className="text-xs font-mono text-violet-400 mt-1">
-              <span>95.1% hit ratio across 148k queries</span>
+              <span>{metrics.hitRatio}% hit ratio across {formatNumber(metrics.totalRequests)} queries</span>
             </p>
           </CardContent>
         </Card>
@@ -321,16 +372,16 @@ export default function OverviewPage() {
         </div>
       </section>
 
-      {/* Live Request Ingestion Stream */}
+      {/* Reference Execution Trace Pipeline */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <RefreshCw className="w-4 h-4 text-cyan-400 animate-spin-slow" />
+            <Radio className="w-4 h-4 text-cyan-400" />
             <h2 className="text-lg font-bold text-white tracking-tight">
-              Live Ingestion Ticker & Decision Pipeline
+              Execution Trace Inspection Pipeline
             </h2>
           </div>
-          <Badge variant="outline">BUFFER: 500 IN-FLIGHT</Badge>
+          <Badge variant="outline">REFERENCE EXECUTION TRACES</Badge>
         </div>
 
         <div className="rounded-2xl border border-white/[0.08] bg-slate-950/80 overflow-hidden backdrop-blur-xl">

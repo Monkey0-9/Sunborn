@@ -73,4 +73,20 @@ impl SunbornError {
     pub fn origin(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::OriginError, msg)
     }
+
+    pub fn cache(msg: impl Into<String>) -> Self {
+        Self::new(ErrorCode::CacheUnavailable, msg)
+    }
+
+    pub fn cache_unavailable(msg: impl Into<String>) -> Self {
+        Self::new(ErrorCode::CacheUnavailable, msg)
+    }
+
+    pub fn database(msg: impl Into<String>) -> Self {
+        Self::new(ErrorCode::InternalError, msg)
+    }
+
+    pub fn vector_store(msg: impl Into<String>) -> Self {
+        Self::new(ErrorCode::InternalError, msg)
+    }
 }

@@ -17,11 +17,12 @@ import {
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
+import { sunbornApi } from "@/lib/api";
 
 export default function KnowledgePage() {
   const [sources, setSources] = useState([
     {
-      id: "src_9a1f-4b2e",
+      id: "9a1f4b2e-0000-0000-0000-000000000001",
       name: "OpenAPI Spec v2.4 (Core Payment Gateway)",
       version: "v2.4.1",
       epoch: 418,
@@ -30,7 +31,7 @@ export default function KnowledgePage() {
       status: "Synchronized",
     },
     {
-      id: "src_8c3d-1a7c",
+      id: "8c3d1a7c-0000-0000-0000-000000000002",
       name: "Enterprise Compliance & AML Manual",
       version: "v1.9.0",
       epoch: 418,
@@ -39,7 +40,7 @@ export default function KnowledgePage() {
       status: "Synchronized",
     },
     {
-      id: "src_2f0e-5d8b",
+      id: "2f0e5d8b-0000-0000-0000-000000000003",
       name: "Treasury Rates & Liquidity Rules",
       version: "v3.0.0",
       epoch: 418,
@@ -49,60 +50,37 @@ export default function KnowledgePage() {
     },
   ]);
 
-  const [selectedSourceId, setSelectedSourceId] = useState("src_9a1f-4b2e");
+  const [selectedSourceId, setSelectedSourceId] = useState("9a1f4b2e-0000-0000-0000-000000000001");
   const [newVersion, setNewVersion] = useState("v2.5.0");
   const [isInvalidating, setIsInvalidating] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [invalidationReport, setInvalidationReport] = useState<{
     evictedCaches: number;
     evictedVectors: number;
     newEpoch: number;
     latencyMs: number;
-  } | null>({
-    evictedCaches: 1420,
-    evictedVectors: 1420,
-    newEpoch: 419,
-    latencyMs: 14.2,
-  });
+  } | null>(null);
 
   const handleTriggerInvalidation = async () => {
     setIsInvalidating(true);
+    setActionError(null);
+    const start = performance.now();
     try {
-      const res = await fetch("http://127.0.0.1:8080/v1/invalidation", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": "sunborn-admin-key",
-        },
-        body: JSON.stringify({
-          source_id: selectedSourceId,
-          tenant_id: "tenant-enterprise-fintech",
-          version_tag: newVersion,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setInvalidationReport({
-          evictedCaches: data.evicted_cache_count ?? 1420,
-          evictedVectors: data.evicted_vector_count ?? 1420,
-          newEpoch: data.new_epoch ?? 419,
-          latencyMs: 12.8,
-        });
-      } else {
-        setInvalidationReport({
-          evictedCaches: 1420,
-          evictedVectors: 1420,
-          newEpoch: 419,
-          latencyMs: 12.8,
-        });
-      }
-    } catch {
+      const data = await sunbornApi.triggerInvalidation(
+        selectedSourceId,
+        "tenant-enterprise-fintech",
+        newVersion
+      );
+      const elapsedMs = performance.now() - start;
       setInvalidationReport({
-        evictedCaches: 1420,
-        evictedVectors: 1420,
+        evictedCaches: data.evicted_cache_count ?? 0,
+        evictedVectors: data.evicted_cache_count ?? 0,
         newEpoch: 419,
-        latencyMs: 12.8,
+        latencyMs: +(elapsedMs.toFixed(1)),
       });
+    } catch (err: any) {
+      setActionError(`Cascade invalidation failed: ${err.message}`);
+      setInvalidationReport(null);
     } finally {
       setIsInvalidating(false);
     }
@@ -110,6 +88,16 @@ export default function KnowledgePage() {
 
   return (
     <div className="space-y-8">
+      {actionError && (
+        <div className="p-4 rounded-xl bg-rose-950/70 border border-rose-500/40 text-rose-200 text-xs font-mono space-y-1">
+          <div className="flex items-center gap-2 font-bold text-rose-400">
+            <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+            INVALIDATION OPERATION FAILED
+          </div>
+          <div>{actionError}</div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-6">
         <div>

@@ -137,10 +137,34 @@ pub struct QdrantVectorStore {
     pub collection_name: String,
     client: reqwest::Client,
     fallback_store: Arc<MemoryVectorStore>,
+    pub strict_mode: bool,
 }
 
 impl QdrantVectorStore {
     pub fn new(endpoint_url: impl Into<String>, collection_name: impl Into<String>) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .connect_timeout(std::time::Duration::from_secs(2))
+            .build()
+            .unwrap_or_default();
+        let strict = std::env::var("SUNBORN_VECTOR_STRICT")
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or_else(|_| {
+                std::env::var("SUNBORN_VECTOR_BACKEND")
+                    .map(|v| v.to_lowercase() == "qdrant")
+                    .unwrap_or(false)
+            });
+
+        Self {
+            endpoint_url: endpoint_url.into(),
+            collection_name: collection_name.into(),
+            client,
+            fallback_store: Arc::new(MemoryVectorStore::new()),
+            strict_mode: strict,
+        }
+    }
+
+    pub fn new_strict(endpoint_url: impl Into<String>, collection_name: impl Into<String>) -> Self {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(5))
             .connect_timeout(std::time::Duration::from_secs(2))
@@ -152,6 +176,7 @@ impl QdrantVectorStore {
             collection_name: collection_name.into(),
             client,
             fallback_store: Arc::new(MemoryVectorStore::new()),
+            strict_mode: true,
         }
     }
 
@@ -167,8 +192,31 @@ impl QdrantVectorStore {
                 "distance": "Cosine"
             }
         });
-        let _ = self.client.put(&url).json(&payload).send().await;
-        Ok(())
+        match self.client.put(&url).json(&payload).send().await {
+            Ok(resp) => {
+                let status = resp.status();
+                if status.is_success() || status.as_u16() == 409 {
+                    Ok(())
+                } else if self.strict_mode {
+                    Err(sunborn_core::SunbornError::vector_store(format!(
+                        "Qdrant collection creation failed: status {}",
+                        status
+                    )))
+                } else {
+                    Ok(())
+                }
+            }
+            Err(err) => {
+                if self.strict_mode {
+                    Err(sunborn_core::SunbornError::vector_store(format!(
+                        "Qdrant connection failed during collection creation: {}",
+                        err
+                    )))
+                } else {
+                    Ok(())
+                }
+            }
+        }
     }
 }
 
@@ -225,11 +273,23 @@ impl VectorStore for QdrantVectorStore {
                 Ok(())
             }
             Ok(resp) => {
-                tracing::warn!(status = %resp.status(), "Qdrant point insert failed, storing in fallback memory");
+                tracing::warn!(status = %resp.status(), "Qdrant point insert failed");
+                if self.strict_mode {
+                    return Err(sunborn_core::SunbornError::vector_store(format!(
+                        "Qdrant point insert failed with status {}",
+                        resp.status()
+                    )));
+                }
                 self.fallback_store.insert(entry).await
             }
             Err(err) => {
-                tracing::warn!(error = %err, "Qdrant connection failed, storing in fallback memory");
+                tracing::warn!(error = %err, "Qdrant connection failed");
+                if self.strict_mode {
+                    return Err(sunborn_core::SunbornError::vector_store(format!(
+                        "Qdrant connection failed: {}",
+                        err
+                    )));
+                }
                 self.fallback_store.insert(entry).await
             }
         }
@@ -324,7 +384,24 @@ impl VectorStore for QdrantVectorStore {
                     }
                 }
             }
-            _ => {}
+            Ok(resp) => {
+                tracing::warn!(status = %resp.status(), "Qdrant search returned non-2xx status");
+                if self.strict_mode {
+                    return Err(sunborn_core::SunbornError::vector_store(format!(
+                        "Qdrant search failed: status {}",
+                        resp.status()
+                    )));
+                }
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "Qdrant search connection failed");
+                if self.strict_mode {
+                    return Err(sunborn_core::SunbornError::vector_store(format!(
+                        "Qdrant search connection failed: {}",
+                        err
+                    )));
+                }
+            }
         }
 
         self.fallback_store
@@ -356,7 +433,22 @@ impl VectorStore for QdrantVectorStore {
             }
         });
 
-        let _ = self.client.post(&url).json(&delete_payload).send().await;
+        match self.client.post(&url).json(&delete_payload).send().await {
+            Ok(resp) if !resp.status().is_success() && self.strict_mode => {
+                return Err(sunborn_core::SunbornError::vector_store(format!(
+                    "Qdrant delete_by_tenant failed: status {}",
+                    resp.status()
+                )));
+            }
+            Err(err) if self.strict_mode => {
+                return Err(sunborn_core::SunbornError::vector_store(format!(
+                    "Qdrant delete_by_tenant connection failed: {}",
+                    err
+                )));
+            }
+            _ => {}
+        }
+
         self.fallback_store.delete_by_tenant(tenant_id).await
     }
 
