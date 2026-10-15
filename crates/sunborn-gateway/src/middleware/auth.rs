@@ -18,6 +18,7 @@ pub struct ApiCredential {
     pub key_hash: String,
     pub rate_limit_rps: u32,
     pub allowed_models: Vec<String>,
+    pub is_admin: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -27,6 +28,16 @@ pub struct SecurityContext {
     pub api_key_hash: String,
     pub allowed_models: Vec<String>,
     pub is_authenticated: bool,
+    pub is_admin: bool,
+}
+
+impl SecurityContext {
+    pub fn require_admin(&self, enforce_auth: bool) -> Result<(), &'static str> {
+        if enforce_auth && (!self.is_authenticated || !self.is_admin) {
+            return Err("Administrative privileges required for this operation");
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -47,58 +58,74 @@ impl ApiKeyRegistry {
         };
         // Seed default trusted credentials for production tenants & test suites
         registry.register_key(
-            "test-key-tenant-corp-1",
-            TenantId::new("tenant-corp-1"),
-            ApplicationId::new("app-rag"),
+            "sunborn-admin-key",
+            TenantId::new("system-admin"),
+            ApplicationId::new("admin-ops"),
             vec!["*".to_string()],
-        );
-        registry.register_key(
-            "test-key-tenant-a",
-            TenantId::new("tenant-a"),
-            ApplicationId::new("app-1"),
-            vec!["*".to_string()],
-        );
-        registry.register_key(
-            "test-key-tenant-b",
-            TenantId::new("tenant-b"),
-            ApplicationId::new("app-1"),
-            vec!["*".to_string()],
-        );
-        registry.register_key(
-            "test-key-alpha",
-            TenantId::new("tenant-alpha"),
-            ApplicationId::new("app-default"),
-            vec!["*".to_string()],
-        );
-        registry.register_key(
-            "test-key-beta",
-            TenantId::new("tenant-beta"),
-            ApplicationId::new("app-default"),
-            vec!["*".to_string()],
+            true,
         );
         registry.register_key(
             "key-enterprise-fintech",
             TenantId::new("enterprise-fintech"),
             ApplicationId::new("app-fintech"),
             vec!["*".to_string()],
-        );
-        registry.register_key(
-            "key-acme-corp",
-            TenantId::new("acme-corp"),
-            ApplicationId::new("app-crm"),
-            vec!["*".to_string()],
-        );
-        registry.register_key(
-            "key-healthcare-systems",
-            TenantId::new("healthcare-systems"),
-            ApplicationId::new("app-ehr"),
-            vec!["*".to_string()],
+            true,
         );
         registry.register_key(
             "sunborn-dev-key",
             TenantId::new("default-tenant"),
             ApplicationId::new("default-app"),
             vec!["*".to_string()],
+            true,
+        );
+        registry.register_key(
+            "test-key-tenant-corp-1",
+            TenantId::new("tenant-corp-1"),
+            ApplicationId::new("app-rag"),
+            vec!["*".to_string()],
+            false,
+        );
+        registry.register_key(
+            "test-key-tenant-a",
+            TenantId::new("tenant-a"),
+            ApplicationId::new("app-1"),
+            vec!["*".to_string()],
+            false,
+        );
+        registry.register_key(
+            "test-key-tenant-b",
+            TenantId::new("tenant-b"),
+            ApplicationId::new("app-1"),
+            vec!["*".to_string()],
+            false,
+        );
+        registry.register_key(
+            "test-key-alpha",
+            TenantId::new("tenant-alpha"),
+            ApplicationId::new("app-default"),
+            vec!["*".to_string()],
+            false,
+        );
+        registry.register_key(
+            "test-key-beta",
+            TenantId::new("tenant-beta"),
+            ApplicationId::new("app-default"),
+            vec!["*".to_string()],
+            false,
+        );
+        registry.register_key(
+            "key-acme-corp",
+            TenantId::new("acme-corp"),
+            ApplicationId::new("app-crm"),
+            vec!["*".to_string()],
+            false,
+        );
+        registry.register_key(
+            "key-healthcare-systems",
+            TenantId::new("healthcare-systems"),
+            ApplicationId::new("app-ehr"),
+            vec!["*".to_string()],
+            false,
         );
         registry
     }
@@ -115,6 +142,7 @@ impl ApiKeyRegistry {
         tenant_id: TenantId,
         application_id: ApplicationId,
         allowed_models: Vec<String>,
+        is_admin: bool,
     ) {
         let hash = Self::hash_key(raw_key);
         let cred = ApiCredential {
@@ -123,6 +151,7 @@ impl ApiKeyRegistry {
             key_hash: hash.clone(),
             rate_limit_rps: 100,
             allowed_models,
+            is_admin,
         };
         self.credentials.write().unwrap().insert(hash, cred);
     }
@@ -167,6 +196,7 @@ pub async fn auth_middleware(headers: HeaderMap, mut req: Request, next: Next) -
                     api_key_hash: cred.key_hash,
                     allowed_models: cred.allowed_models,
                     is_authenticated: true,
+                    is_admin: cred.is_admin,
                 });
                 next.run(req).await
             }
@@ -193,6 +223,7 @@ pub async fn auth_middleware(headers: HeaderMap, mut req: Request, next: Next) -
             api_key_hash: "trusted-header".to_string(),
             allowed_models: vec!["*".to_string()],
             is_authenticated: true,
+            is_admin: false,
         });
         next.run(req).await
     } else {
@@ -203,6 +234,7 @@ pub async fn auth_middleware(headers: HeaderMap, mut req: Request, next: Next) -
             api_key_hash: "none".to_string(),
             allowed_models: vec!["*".to_string()],
             is_authenticated: false,
+            is_admin: false,
         });
         next.run(req).await
     }

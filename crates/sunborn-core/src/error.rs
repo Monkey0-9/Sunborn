@@ -54,6 +54,10 @@ impl SunbornError {
         Self::new(ErrorCode::InvalidPayload, msg)
     }
 
+    pub fn bad_request(msg: impl Into<String>) -> Self {
+        Self::new(ErrorCode::InvalidPayload, msg)
+    }
+
     pub fn internal(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::InternalError, msg)
     }

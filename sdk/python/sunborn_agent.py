@@ -1,0 +1,195 @@
+#!/usr/bin/env python3
+"""
+Sunborn AI Agent Integration Client & Tool Execution Reuse SDK
+
+Provides:
+1. Universal drop-in OpenAI client configuration:
+   client = SunbornClient(base_url="http://localhost:8080/v1", api_key="key-enterprise-fintech")
+2. Deterministic Tool Memoization decorator for multi-step agent workflows:
+   @sunborn_tool(name="fetch_user_balance", deterministic=True)
+   def fetch_user_balance(user_id: str) -> dict: ...
+3. Agent DAG execution plan submission and cache query via /v1/execution/plan
+"""
+
+import os
+import json
+import time
+import functools
+import hashlib
+import urllib.request
+import urllib.error
+from typing import Any, Callable, Dict, List, Optional
+
+class SunbornClient:
+    """Lightweight Python client to interact with Sunborn Semantic AI Gateway."""
+
+    def __init__(
+        self,
+        base_url: str = "http://localhost:8080/v1",
+        api_key: str = "sunborn-dev-key",
+        tenant_id: str = "default-tenant",
+        application_id: str = "default-app",
+        timeout: float = 30.0,
+    ):
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.tenant_id = tenant_id
+        self.application_id = application_id
+        self.timeout = timeout
+
+    def _post(self, path: str, payload: dict) -> dict:
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": self.api_key,
+                "x-tenant-id": self.tenant_id,
+                "x-application-id": self.application_id,
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode("utf-8")
+            raise RuntimeError(f"Sunborn Gateway error [{e.code}]: {error_body}")
+
+    def chat_completion(
+        self,
+        model: str,
+        messages: List[Dict[str, str]],
+        temperature: Optional[float] = None,
+        tools: Optional[List[dict]] = None,
+    ) -> dict:
+        """Invokes the OpenAI-compatible /chat/completions endpoint."""
+        payload: Dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+        }
+        if temperature is not None:
+            payload["temperature"] = temperature
+        if tools is not None:
+            payload["tools"] = tools
+
+        return self._post("chat/completions", payload)
+
+    def plan_execution_dag(self, plan_nodes: List[dict]) -> dict:
+        """Submits an Agent Execution DAG to evaluate memoized tool subgraph reuse."""
+        payload = {
+            "tenant_id": self.tenant_id,
+            "application_id": self.application_id,
+            "plan": {"nodes": plan_nodes},
+        }
+        return self._post("execution/plan", payload)
+
+    def record_tool_result(
+        self,
+        tool_name: str,
+        tool_version: str,
+        arguments: dict,
+        output: Any,
+        execution_latency_ms: int = 0,
+    ) -> dict:
+        """Stores a deterministic tool execution result in the Sunborn Execution Cache."""
+        payload = {
+            "tenant_id": self.tenant_id,
+            "application_id": self.application_id,
+            "tool_name": tool_name,
+            "tool_version": tool_version,
+            "arguments": arguments,
+            "output": output,
+            "is_error": False,
+            "execution_latency_ms": execution_latency_ms,
+        }
+        return self._post("execution/results", payload)
+
+
+def get_default_client() -> SunbornClient:
+    return SunbornClient(
+        base_url=os.environ.get("SUNBORN_BASE_URL", "http://localhost:8080/v1"),
+        api_key=os.environ.get("SUNBORN_API_KEY", "sunborn-dev-key"),
+        tenant_id=os.environ.get("SUNBORN_TENANT_ID", "default-tenant"),
+        application_id=os.environ.get("SUNBORN_APP_ID", "default-app"),
+    )
+
+
+def sunborn_tool(
+    name: Optional[str] = None,
+    version: str = "1.0",
+    deterministic: bool = True,
+    client: Optional[SunbornClient] = None,
+):
+    """
+    Decorator for AI agent tools to automatically memoize deterministic calls
+    via the Sunborn Execution Engine.
+    """
+    def decorator(fn: Callable):
+        tool_name = name or fn.__name__
+
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            if not deterministic:
+                return fn(*args, **kwargs)
+
+            sunborn = client or get_default_client()
+            arguments = {"args": list(args), "kwargs": kwargs}
+
+            # 1. Query Gateway plan to check if memoized tool call exists
+            node_id = f"node-{tool_name}-{hashlib.sha256(json.dumps(arguments, sort_keys=True).encode()).hexdigest()[:8]}"
+            plan_nodes = [
+                {
+                    "id": node_id,
+                    "name": tool_name,
+                    "dependencies": [],
+                    "is_deterministic": True,
+                    "tool_call": {
+                        "tool_name": tool_name,
+                        "tool_version": version,
+                        "arguments": arguments,
+                    },
+                }
+            ]
+
+            try:
+                eval_result = sunborn.plan_execution_dag(plan_nodes)
+                if eval_result.get("cached_nodes", 0) > 0:
+                    status = eval_result["node_statuses"].get(node_id, {})
+                    if status.get("status") == "Cached":
+                        return status["details"]["output"]
+            except Exception:
+                # If gateway is unreachable during offline testing, fall back to executing function
+                pass
+
+            # 2. Execute underlying function
+            t0 = time.time()
+            result = fn(*args, **kwargs)
+            latency_ms = int((time.time() - t0) * 1000)
+
+            # 3. Store result back into Sunborn Execution Cache
+            try:
+                sunborn.record_tool_result(
+                    tool_name=tool_name,
+                    tool_version=version,
+                    arguments=arguments,
+                    output=result,
+                    execution_latency_ms=latency_ms,
+                )
+            except Exception:
+                pass
+
+            return result
+
+        return wrapper
+
+    return decorator
+
+
+if __name__ == "__main__":
+    print("Testing Sunborn Agent SDK imports & client construction...")
+    c = SunbornClient()
+    print(f"Initialized SunbornClient with base_url={c.base_url}, tenant={c.tenant_id}")
+    print("Sunborn Agent SDK ready.")

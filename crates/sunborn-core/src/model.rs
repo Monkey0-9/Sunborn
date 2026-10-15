@@ -134,6 +134,43 @@ impl RequestEnvelope {
             timestamp: Utc::now(),
         }
     }
+
+    /// Validates request envelope boundaries and constraints
+    pub fn validate(&self) -> Result<(), crate::SunbornError> {
+        if self.prompt.trim().is_empty() {
+            return Err(crate::SunbornError::bad_request("Prompt cannot be empty"));
+        }
+        if self.prompt.len() > 1_048_576 {
+            return Err(crate::SunbornError::bad_request(
+                "Prompt size exceeds maximum limit of 1MB",
+            ));
+        }
+        if let Some(t) = self.temperature {
+            if !(0.0..=2.0).contains(&t) {
+                return Err(crate::SunbornError::bad_request(
+                    "Temperature must be between 0.0 and 2.0",
+                ));
+            }
+        }
+        if let Some(p) = self.top_p {
+            if !(0.0..=1.0).contains(&p) {
+                return Err(crate::SunbornError::bad_request(
+                    "Top-p must be between 0.0 and 1.0",
+                ));
+            }
+        }
+        if self.tenant_id.0.trim().is_empty() {
+            return Err(crate::SunbornError::bad_request(
+                "Tenant ID cannot be empty",
+            ));
+        }
+        if self.application_id.0.trim().is_empty() {
+            return Err(crate::SunbornError::bad_request(
+                "Application ID cannot be empty",
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

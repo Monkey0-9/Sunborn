@@ -7,6 +7,7 @@ pub mod shadow;
 pub mod state;
 
 use axum::{
+    http::{header, HeaderName, Method},
     routing::{get, post},
     Router,
 };
@@ -15,11 +16,29 @@ use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
 pub fn create_router(state: AppState) -> Router {
+    let cors = CorsLayer::new()
+        .allow_origin(tower_http::cors::Any)
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([
+            header::CONTENT_TYPE,
+            header::AUTHORIZATION,
+            HeaderName::from_static("x-api-key"),
+            HeaderName::from_static("x-tenant-id"),
+            HeaderName::from_static("x-application-id"),
+        ]);
+
     Router::new()
         .route("/health", get(handlers::health))
         .route("/ready", get(handlers::ready))
         .route("/metrics", get(handlers::metrics))
         .route("/v1/requests", post(handlers::execute_request))
+        .route("/v1/chat/completions", post(handlers::chat_completions))
         .route("/v1/invalidation", post(handlers::trigger_invalidation))
         .route("/v1/dependencies", post(handlers::record_dependency))
         .route(
@@ -65,6 +84,6 @@ pub fn create_router(state: AppState) -> Router {
         .route("/v1/lifecycle/sweep", post(handlers::sweep_lifecycle))
         .layer(axum::middleware::from_fn(middleware::auth::auth_middleware))
         .layer(TraceLayer::new_for_http())
-        .layer(CorsLayer::permissive())
+        .layer(cors)
         .with_state(state)
 }

@@ -7,7 +7,7 @@ use axum::{
     Extension, Json,
 };
 use chrono::Utc;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
@@ -88,11 +88,11 @@ pub async fn metrics() -> impl IntoResponse {
     )
 }
 
-pub async fn execute_request(
-    State(state): State<AppState>,
-    Extension(sec_ctx): Extension<SecurityContext>,
-    Json(req): Json<RequestEnvelope>,
-) -> Result<Json<ResponseEnvelope>, AppError> {
+pub async fn execute_request_inner(
+    state: &AppState,
+    sec_ctx: &SecurityContext,
+    req: RequestEnvelope,
+) -> Result<ResponseEnvelope, AppError> {
     REQUESTS_TOTAL.fetch_add(1, Ordering::Relaxed);
     let start = Instant::now();
 
@@ -125,12 +125,10 @@ pub async fn execute_request(
         );
     }
 
-    // 2. Validate payload
-    if req.prompt.trim().is_empty() {
-        return Err(SunbornError::invalid_payload("Prompt must not be empty").into());
-    }
+    // 2. Validate payload boundaries and constraints
+    req.validate().map_err(AppError::from)?;
 
-    // 2. Compute deterministic Cache Identity (C1)
+    // 3. Compute deterministic Cache Identity (C1)
     let identity = IdentityEngine::compute_identity(&req);
     tracing::info!(
         request_id = %req.request_id.0,
@@ -139,7 +137,7 @@ pub async fn execute_request(
         "Evaluating multi-tier cache pipeline"
     );
 
-    // 3. Exact Cache Lookup (C0 / C1)
+    // 4. Exact Cache Lookup (C0 / C1)
     if state.config.cache.exact_cache_enabled {
         if let Ok(Some(cached_entry)) = state.cache.get(&identity.key).await {
             EXACT_HITS.fetch_add(1, Ordering::Relaxed);
@@ -151,7 +149,7 @@ pub async fn execute_request(
             );
 
             let _ = state.db.increment_hit_count(&identity.key).await;
-            return Ok(Json(ResponseEnvelope {
+            return Ok(ResponseEnvelope {
                 request_id: req.request_id,
                 tenant_id: req.tenant_id,
                 application_id: req.application_id,
@@ -168,11 +166,11 @@ pub async fn execute_request(
                 cache_key: Some(identity.key),
                 created_at: Utc::now(),
                 duration_ms,
-            }));
+            });
         }
     }
 
-    // 4. Semantic Cache Candidate Evaluation (C2)
+    // 5. Semantic Cache Candidate Evaluation (C2)
     if state.config.cache.semantic_cache_enabled
         && state.circuit_breaker.status().await != sunborn_cache::CircuitStatus::Open
     {
@@ -187,7 +185,7 @@ pub async fn execute_request(
                         "Semantic cache HIT (C2)"
                     );
 
-                    return Ok(Json(ResponseEnvelope {
+                    return Ok(ResponseEnvelope {
                         request_id: req.request_id,
                         tenant_id: req.tenant_id,
                         application_id: req.application_id,
@@ -197,13 +195,13 @@ pub async fn execute_request(
                         cache_key: outcome.matched_id,
                         created_at: Utc::now(),
                         duration_ms,
-                    }));
+                    });
                 }
             }
         }
     }
 
-    // 5. Cache MISS -> Origin Execution
+    // 6. Cache MISS -> Origin Execution
     CACHE_MISSES.fetch_add(1, Ordering::Relaxed);
     tracing::info!(
         request_id = %req.request_id.0,
@@ -213,7 +211,7 @@ pub async fn execute_request(
     let origin_result = state.origin_provider.execute(&req).await?;
     let origin_content = origin_result.content;
 
-    // 6. Cache Admission Engine:
+    // 7. Cache Admission Engine:
     // a) Save in exact cache
     let entry = CacheEntry::new(
         &identity.key,
@@ -263,7 +261,7 @@ pub async fn execute_request(
 
     let duration_ms = start.elapsed().as_millis() as u64;
 
-    Ok(Json(ResponseEnvelope {
+    Ok(ResponseEnvelope {
         request_id: req.request_id,
         tenant_id: req.tenant_id,
         application_id: req.application_id,
@@ -280,6 +278,176 @@ pub async fn execute_request(
         cache_key: Some(identity.key),
         created_at: Utc::now(),
         duration_ms,
+    })
+}
+
+pub async fn execute_request(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    Json(req): Json<RequestEnvelope>,
+) -> Result<Json<ResponseEnvelope>, AppError> {
+    let resp = execute_request_inner(&state, &sec_ctx, req).await?;
+    Ok(Json(resp))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatCompletionRequest {
+    pub model: String,
+    pub messages: Vec<ChatMessage>,
+    #[serde(default)]
+    pub temperature: Option<f32>,
+    #[serde(default)]
+    pub top_p: Option<f32>,
+    #[serde(default)]
+    pub max_tokens: Option<u32>,
+    #[serde(default)]
+    pub tools: Option<Vec<serde_json::Value>>,
+    #[serde(default)]
+    pub tool_choice: Option<serde_json::Value>,
+    #[serde(default)]
+    pub response_format: Option<serde_json::Value>,
+    #[serde(default)]
+    pub stop: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatChoice {
+    pub index: usize,
+    pub message: ChatMessage,
+    pub finish_reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatUsage {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub total_tokens: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatCompletionResponse {
+    pub id: String,
+    pub object: String,
+    pub created: i64,
+    pub model: String,
+    pub choices: Vec<ChatChoice>,
+    pub usage: ChatUsage,
+    pub sunborn_cached: bool,
+    pub sunborn_tier: String,
+}
+
+pub async fn chat_completions(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    Json(chat_req): Json<ChatCompletionRequest>,
+) -> Result<Json<ChatCompletionResponse>, AppError> {
+    if chat_req.messages.is_empty() {
+        return Err(SunbornError::bad_request("Messages array cannot be empty").into());
+    }
+
+    let system_prompt = chat_req
+        .messages
+        .iter()
+        .find(|m| m.role == "system")
+        .map(|m| m.content.clone());
+
+    let prompt = chat_req
+        .messages
+        .iter()
+        .rfind(|m| m.role == "user")
+        .map(|m| m.content.clone())
+        .unwrap_or_else(|| {
+            chat_req
+                .messages
+                .iter()
+                .map(|m| format!("{}: {}", m.role, m.content))
+                .collect::<Vec<_>>()
+                .join("\n")
+        });
+
+    let mut req = RequestEnvelope::new(
+        sec_ctx.tenant_id.0.clone(),
+        sec_ctx.application_id.0.clone(),
+        chat_req.model.clone(),
+        prompt,
+    );
+    req.system_prompt = system_prompt;
+    req.temperature = chat_req.temperature;
+    req.top_p = chat_req.top_p;
+    req.max_tokens = chat_req.max_tokens;
+    if let Some(stop) = chat_req.stop {
+        req.stop_sequences = stop;
+    }
+    if let Some(tools) = chat_req.tools {
+        for t in tools {
+            if let Some(name) = t
+                .get("function")
+                .and_then(|f| f.get("name"))
+                .and_then(|n| n.as_str())
+            {
+                let desc = t
+                    .get("function")
+                    .and_then(|f| f.get("description"))
+                    .and_then(|d| d.as_str())
+                    .map(|s| s.to_string());
+                let params = t
+                    .get("function")
+                    .and_then(|f| f.get("parameters"))
+                    .cloned()
+                    .unwrap_or(serde_json::json!({}));
+                req.tools.push(sunborn_core::model::ToolDefinition {
+                    name: name.to_string(),
+                    description: desc,
+                    parameters: params,
+                });
+            }
+        }
+    }
+    if let Some(rf) = chat_req.response_format {
+        req.response_format = Some(rf.to_string());
+    }
+
+    let resp_envelope = execute_request_inner(&state, &sec_ctx, req).await?;
+
+    let prompt_tokens = (resp_envelope.content.len() / 4).max(1) as u32;
+    let completion_tokens = (resp_envelope.content.len() / 4).max(1) as u32;
+
+    let tier_str = if resp_envelope.cached {
+        match resp_envelope.decision.cache_path {
+            CachePath::Exact => "c1_exact".to_string(),
+            CachePath::Semantic => "c2_semantic".to_string(),
+            _ => "cached".to_string(),
+        }
+    } else {
+        "origin".to_string()
+    };
+
+    Ok(Json(ChatCompletionResponse {
+        id: format!("chatcmpl-sunborn-{}", resp_envelope.request_id.0),
+        object: "chat.completion".to_string(),
+        created: Utc::now().timestamp(),
+        model: chat_req.model,
+        choices: vec![ChatChoice {
+            index: 0,
+            message: ChatMessage {
+                role: "assistant".to_string(),
+                content: resp_envelope.content,
+            },
+            finish_reason: "stop".to_string(),
+        }],
+        usage: ChatUsage {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens: prompt_tokens + completion_tokens,
+        },
+        sunborn_cached: resp_envelope.cached,
+        sunborn_tier: tier_str,
     }))
 }
 
@@ -362,8 +530,13 @@ pub async fn get_cache(
 
 pub async fn delete_cache(
     State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
     Path(key): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    sec_ctx
+        .require_admin(state.config.auth.enforce_auth)
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
     let deleted = state.cache.delete(&key).await.map_err(AppError::from)?;
     let _ = state.vector_store.delete(&key).await;
     Ok(Json(json!({ "key": key, "deleted": deleted })))
@@ -489,8 +662,13 @@ pub async fn shadow_evaluate(
 
 pub async fn delete_tenant(
     State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
     Path(tenant_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    sec_ctx
+        .require_admin(state.config.auth.enforce_auth)
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
     let tenant = TenantId::new(&tenant_id);
 
     // 0. O(1) Instant Cryptographic Shredding of TDEK
@@ -505,8 +683,20 @@ pub async fn delete_tenant(
         .delete_tenant_data(&tenant_id)
         .await
         .map_err(AppError::from)?;
-    let prefix = format!("tenant:{}:", tenant_id);
-    let exact_deleted = state.cache.delete_by_prefix(&prefix).await.unwrap_or(0);
+    let prefix_sunborn = format!("sunborn:{}:", tenant_id);
+    let exact_deleted_sunborn = state
+        .cache
+        .delete_by_prefix(&prefix_sunborn)
+        .await
+        .unwrap_or(0);
+    let prefix_legacy = format!("tenant:{}:", tenant_id);
+    let exact_deleted_legacy = state
+        .cache
+        .delete_by_prefix(&prefix_legacy)
+        .await
+        .unwrap_or(0);
+    let exact_deleted = exact_deleted_sunborn + exact_deleted_legacy;
+
     let vector_deleted = state
         .vector_store
         .delete_by_tenant(&tenant)
@@ -541,7 +731,11 @@ pub async fn delete_tenant(
 
 pub async fn trigger_rebuild(
     State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    sec_ctx
+        .require_admin(state.config.auth.enforce_auth)
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
     let entries = state
         .db
         .scan_cache_entries(100000, 0)
@@ -608,20 +802,32 @@ pub async fn chaos_status(State(state): State<AppState>) -> impl IntoResponse {
     }))
 }
 
-pub async fn chaos_trip(State(state): State<AppState>) -> impl IntoResponse {
+pub async fn chaos_trip(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    sec_ctx
+        .require_admin(state.config.auth.enforce_auth)
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
     state.circuit_breaker.trip().await;
-    Json(json!({
+    Ok(Json(json!({
         "status": "tripped",
         "circuit_status": "Open"
-    }))
+    })))
 }
 
-pub async fn chaos_reset(State(state): State<AppState>) -> impl IntoResponse {
+pub async fn chaos_reset(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    sec_ctx
+        .require_admin(state.config.auth.enforce_auth)
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
     state.circuit_breaker.reset().await;
-    Json(json!({
+    Ok(Json(json!({
         "status": "reset",
         "circuit_status": "Closed"
-    }))
+    })))
 }
 
 #[derive(Deserialize)]
@@ -631,17 +837,34 @@ pub struct ShredTenantPayload {
 
 pub async fn crypto_shred_tenant(
     State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
     Json(payload): Json<ShredTenantPayload>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let tenant = TenantId::new(&payload.tenant_id);
-    let shred_duration_nanos = state
-        .crypto_registry
-        .shred_tenant(&tenant)
-        .map(|d| d.as_nanos())
-        .unwrap_or(320);
+    sec_ctx
+        .require_admin(state.config.auth.enforce_auth)
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
 
-    let prefix = format!("tenant:{}:", payload.tenant_id);
-    let exact_deleted = state.cache.delete_by_prefix(&prefix).await.unwrap_or(0);
+    let tenant = TenantId::new(&payload.tenant_id);
+    let shred_duration = state.crypto_registry.shred_tenant(&tenant).map_err(|e| {
+        AppError::from(SunbornError::internal(format!(
+            "Crypto shredding failed: {e}"
+        )))
+    })?;
+
+    let prefix_sunborn = format!("sunborn:{}:", payload.tenant_id);
+    let exact_deleted_sunborn = state
+        .cache
+        .delete_by_prefix(&prefix_sunborn)
+        .await
+        .unwrap_or(0);
+    let prefix_legacy = format!("tenant:{}:", payload.tenant_id);
+    let exact_deleted_legacy = state
+        .cache
+        .delete_by_prefix(&prefix_legacy)
+        .await
+        .unwrap_or(0);
+    let exact_deleted = exact_deleted_sunborn + exact_deleted_legacy;
+
     let vector_deleted = state
         .vector_store
         .delete_by_tenant(&tenant)
@@ -661,7 +884,7 @@ pub async fn crypto_shred_tenant(
     Ok(Json(json!({
         "tenant_id": payload.tenant_id,
         "status": "shredded",
-        "shred_latency_nanos": shred_duration_nanos,
+        "shred_latency_nanos": shred_duration.as_nanos(),
         "deleted_db_entries": db_deleted,
         "deleted_exact_cache": exact_deleted,
         "deleted_vectors": vector_deleted,
@@ -680,7 +903,8 @@ pub async fn get_finops_report() -> impl IntoResponse {
     let gpt4o_saving_per_hit = FinOpsEngine::calculate_net_savings(&gpt4o, 1000, 500);
     let claude_saving_per_hit = FinOpsEngine::calculate_net_savings(&claude, 1000, 500);
 
-    let total_gpt4o_savings = gpt4o_saving_per_hit * (total_hits as f64).max(1.0);
+    // Honest empirical calculation: when total_hits is 0, total savings is $0.00
+    let total_gpt4o_savings = gpt4o_saving_per_hit * (total_hits as f64);
     let break_even_gpt4o = FinOpsEngine::break_even_hit_rate(&gpt4o, 1000, 500, 4096, 24.0);
 
     Json(json!({

@@ -11,3 +11,5 @@ serde_json.workspace = true
 sha2.workspace = true
 hex.workspace = true
 tracing.workspace = true
+aes-gcm = "0.10"
+zeroize = "1.9.1"
