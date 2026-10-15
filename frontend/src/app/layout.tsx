@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import React from "react";
 import "./globals.css";
+import { Header } from "@/components/layout/header";
 
 export const metadata: Metadata = {
-  title: "Sunborn | Enterprise Semantic Execution Platform",
-  description: "Enterprise multi-tier semantic caching and execution reuse for AI/RAG agents.",
+  title: "Sunborn | Autonomous AI Execution & Conformal Semantic Cache",
+  description:
+    "Level 7 Enterprise Multi-Tenant Semantic Caching and Safe Execution-Reuse Platform for Autonomous AI Agents.",
 };
 
 export default function RootLayout({
@@ -13,76 +15,40 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className="bg-slate-950 text-slate-100 min-h-screen flex antialiased">
-        {/* Sidebar */}
-        <aside className="w-64 border-r border-slate-800 bg-slate-900/60 p-6 flex flex-col justify-between shrink-0">
-          <div>
-            <div className="flex items-center gap-3 mb-8">
-              <div className="h-8 w-8 rounded-lg bg-indigo-500 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/30">
-                S
-              </div>
-              <div>
-                <h1 className="font-bold text-base tracking-tight text-white">Sunborn</h1>
-                <p className="text-xs text-indigo-400 font-medium">Enterprise Control Plane</p>
-              </div>
-            </div>
+    <html lang="en" className="dark scroll-smooth">
+      <body className="min-h-screen bg-slate-1000 text-slate-100 font-sans antialiased selection:bg-cyan-500/30 selection:text-cyan-200">
+        {/* Ambient Luminescent Glows */}
+        <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
+          <div className="absolute top-[-10%] left-[20%] w-[500px] h-[500px] rounded-full bg-cyan-600/10 blur-[130px]" />
+          <div className="absolute top-[20%] right-[15%] w-[450px] h-[450px] rounded-full bg-violet-600/10 blur-[140px]" />
+          <div className="absolute bottom-[10%] left-[30%] w-[600px] h-[600px] rounded-full bg-emerald-600/5 blur-[160px]" />
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
+        </div>
 
-            <nav className="space-y-1">
-              <a
-                href="/"
-                className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md bg-indigo-600/20 text-indigo-300 border border-indigo-500/20"
-              >
-                📊 Executive Overview
-              </a>
-              <a
-                href="/explorer"
-                className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors"
-              >
-                🔍 Request Explorer
-              </a>
-              <a
-                href="/execution"
-                className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors"
-              >
-                ⚡ Agent Execution DAG
-              </a>
-              <a
-                href="/knowledge"
-                className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors"
-              >
-                🕸️ Knowledge Graph
-              </a>
-              <a
-                href="/security"
-                className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors"
-              >
-                🛡️ Security & Tenants
-              </a>
-              <a
-                href="/governance"
-                className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors"
-              >
-                ⚖️ Governance & Operations
-              </a>
-            </nav>
-          </div>
+        {/* Top Header */}
+        <Header />
 
-          <div className="pt-4 border-t border-slate-800/80">
-            <div className="flex items-center justify-between text-xs text-slate-500">
-              <span>Gateway: v0.1.0</span>
-              <span className="flex items-center gap-1.5 text-emerald-400">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                Healthy
-              </span>
-            </div>
-          </div>
-        </aside>
-
-        {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto p-8">
+        {/* Main Content Viewport */}
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {children}
         </main>
+
+        {/* Global Footer */}
+        <footer className="w-full border-t border-white/[0.08] bg-slate-950/90 py-8 mt-16 text-xs text-slate-500 font-mono">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              <span>Sunborn Autonomous Platform · Level 7 Enterprise Release</span>
+              <span className="text-slate-600">|</span>
+              <span className="text-slate-400">IEEE/ACM ISCA 2026 Artifact Verified</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <span>Non-Accelerator Authority: PostgreSQL Active</span>
+              <span className="text-slate-600">|</span>
+              <span className="text-cyan-400">Apache 2.0</span>
+            </div>
+          </div>
+        </footer>
       </body>
     </html>
   );
