@@ -1,0 +1,28 @@
+# Git & IDE metadata
+.git/
+.gitignore
+.vscode/
+.trunk/
+
+# Rust build artifacts
+target/
+**/*.rs.bk
+
+# Frontend dependencies and builds
+frontend/node_modules/
+frontend/.next/
+frontend/*.tsbuildinfo
+
+# Python bytecode & temporary files
+__pycache__/
+*.pyc
+*.pyo
+
+# Local environments and sensitive files
+.env
+.env.*
+deploy/.env
+deploy/.env.*
+
+# Large auxiliary files
+linear_data.json
