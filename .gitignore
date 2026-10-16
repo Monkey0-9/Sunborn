@@ -1,6 +1,11 @@
 /target
 **/*.rs.bk
 .env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
 linear_data.json
 .DS_Store
 node_modules

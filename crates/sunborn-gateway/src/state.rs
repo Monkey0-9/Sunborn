@@ -262,6 +262,9 @@ impl AppState {
             if lower_kek.contains("changeme")
                 || lower_kek.contains("placeholder")
                 || lower_kek.contains("dev-master-kek")
+                || lower_kek.contains("dev_insecure")
+                || lower_kek.contains("dev-insecure")
+                || lower_kek.contains("0123456789abcdef")
                 || lower_kek.chars().all(|c| c == '0')
                 || master_kek.len() < 32
             {
@@ -280,6 +283,8 @@ impl AppState {
                 || lower_admin == "admin"
                 || lower_admin.contains("changeme")
                 || lower_admin.contains("placeholder")
+                || lower_admin.contains("dev_insecure")
+                || lower_admin.contains("dev-insecure")
                 || admin_key.len() < 16
             {
                 return Err(sunborn_core::SunbornError::configuration_error(
