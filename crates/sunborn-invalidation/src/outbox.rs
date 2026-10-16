@@ -17,7 +17,7 @@ pub struct InvalidationEvent {
     pub timestamp: DateTime<Utc>,
 }
 
-pub struct InvalidationEngine<C: ExactCacheStore, V: VectorStore> {
+pub struct InvalidationEngine<C: ExactCacheStore + ?Sized, V: VectorStore + ?Sized> {
     graph: Arc<DependencyGraph>,
     cache: Arc<C>,
     vector_store: Arc<V>,
@@ -25,7 +25,7 @@ pub struct InvalidationEngine<C: ExactCacheStore, V: VectorStore> {
     rx: Arc<Mutex<mpsc::Receiver<InvalidationEvent>>>,
 }
 
-impl<C: ExactCacheStore, V: VectorStore> InvalidationEngine<C, V> {
+impl<C: ExactCacheStore + ?Sized, V: VectorStore + ?Sized> InvalidationEngine<C, V> {
     pub fn new(graph: Arc<DependencyGraph>, cache: Arc<C>, vector_store: Arc<V>) -> Self {
         let (tx, rx) = mpsc::channel(1024);
         Self {

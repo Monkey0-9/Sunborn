@@ -25,6 +25,8 @@ pub struct CacheConfig {
     pub backend: String,
     pub vector_backend: String,
     pub database_backend: String,
+    pub postgres_url: String,
+    pub master_kek: Option<String>,
 }
 
 impl Default for CacheConfig {
@@ -38,6 +40,8 @@ impl Default for CacheConfig {
             backend: "memory".to_string(),
             vector_backend: "memory".to_string(),
             database_backend: "memory".to_string(),
+            postgres_url: "postgres://postgres:postgres@localhost:5432/sunborn".to_string(),
+            master_kek: None,
         }
     }
 }
@@ -119,6 +123,10 @@ impl AppConfig {
             std::env::var("SUNBORN_VECTOR_BACKEND").unwrap_or_else(|_| "memory".to_string());
         let database_backend =
             std::env::var("SUNBORN_DB_BACKEND").unwrap_or_else(|_| "memory".to_string());
+        let postgres_url = std::env::var("POSTGRES_URL")
+            .or_else(|_| std::env::var("DATABASE_URL"))
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/sunborn".to_string());
+        let master_kek = std::env::var("SUNBORN_MASTER_KEK").ok();
 
         let enforce_auth = if std::env::var("SUNBORN_AUTH_ENFORCE").is_ok() {
             parse_bool_env("SUNBORN_AUTH_ENFORCE", true)?
@@ -137,6 +145,8 @@ impl AppConfig {
                 backend,
                 vector_backend,
                 database_backend,
+                postgres_url,
+                master_kek,
             },
             auth: AuthConfig {
                 enforce_auth,

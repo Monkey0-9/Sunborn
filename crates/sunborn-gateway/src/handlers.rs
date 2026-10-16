@@ -20,9 +20,7 @@ use sunborn_core::{
 use sunborn_execution::ExecutionCacheStore;
 use sunborn_identity::IdentityEngine;
 use sunborn_invalidation::InvalidationEvent;
-use sunborn_semantic::{
-    DeterministicEmbeddingProvider, EmbeddingProvider, VectorEntry, VectorStore,
-};
+use sunborn_semantic::{EmbeddingProvider, VectorEntry, VectorStore};
 use uuid::Uuid;
 
 static REQUESTS_TOTAL: AtomicU64 = AtomicU64::new(0);
@@ -40,24 +38,50 @@ pub async fn health() -> impl IntoResponse {
 }
 
 pub async fn ready(State(state): State<AppState>) -> impl IntoResponse {
-    match state.cache.exists("__readiness_probe__").await {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(json!({
-                "status": "ready",
-                "cache": "connected",
-                "semantic_engine": "ready",
-                "invalidation_bus": "ready"
-            })),
-        ),
-        Err(err) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({
-                "status": "unavailable",
-                "error": err.to_string()
-            })),
-        ),
-    }
+    let cache_res = state.cache.exists("__readiness_probe__").await;
+    let db_res = state.db.get_tenant("__readiness_probe__").await;
+    let vector_res = state
+        .vector_store
+        .count(&TenantId::new("__readiness_probe__"))
+        .await;
+
+    let cache_ok = cache_res.is_ok();
+    let db_ok = db_res.is_ok();
+    let vector_ok = vector_res.is_ok();
+
+    let all_ok = cache_ok && db_ok && vector_ok;
+
+    let status_code = if all_ok {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+
+    let report = json!({
+        "status": if all_ok { "ready" } else { "degraded" },
+        "components": {
+            "cache": {
+                "status": if cache_ok { "connected" } else { "unavailable" },
+                "error": cache_res.err().map(|e| e.to_string())
+            },
+            "database": {
+                "status": if db_ok { "connected" } else { "unavailable" },
+                "error": db_res.err().map(|e| e.to_string())
+            },
+            "vector_store": {
+                "status": if vector_ok { "connected" } else { "unavailable" },
+                "error": vector_res.err().map(|e| e.to_string())
+            },
+            "semantic_engine": {
+                "status": if vector_ok { "ready" } else { "degraded" }
+            },
+            "invalidation_bus": {
+                "status": if cache_ok && vector_ok { "ready" } else { "degraded" }
+            }
+        }
+    });
+
+    (status_code, Json(report))
 }
 
 pub async fn metrics() -> impl IntoResponse {
@@ -227,8 +251,7 @@ pub async fn execute_request_inner(
     let _ = state.cache.set(entry).await;
 
     // b) Admit into semantic vector store
-    let embedder = DeterministicEmbeddingProvider::new();
-    if let Ok(vector) = embedder.embed(&req.prompt).await {
+    if let Ok(vector) = state.selected_embedder.embed(&req.prompt).await {
         let _ = state
             .vector_store
             .insert(VectorEntry {
@@ -767,8 +790,6 @@ pub async fn trigger_rebuild(
     let mut exact_restored = 0;
     let mut vector_restored = 0;
 
-    let embedder = DeterministicEmbeddingProvider::new();
-
     for record in entries {
         // 1. Repopulate exact cache
         let ttl_secs = record
@@ -782,7 +803,11 @@ pub async fn trigger_rebuild(
         }
 
         // 2. Repopulate vector store
-        if let Ok(vec) = embedder.embed(&record.prompt_canonical).await {
+        if let Ok(vec) = state
+            .selected_embedder
+            .embed(&record.prompt_canonical)
+            .await
+        {
             let ventry = VectorEntry {
                 id: record.key.clone(),
                 tenant_id: TenantId::new(record.tenant_id),
@@ -1315,4 +1340,178 @@ pub async fn security_audit(
         "tenant_id": sec_ctx.tenant_id.0,
         "events": audit_events
     }))
+}
+
+// -----------------------------------------------------------------------------
+// Learning Controller Endpoints (Safe Adaptive Reuse Layers 1-5)
+// -----------------------------------------------------------------------------
+
+pub async fn record_learning_feedback(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    Json(event): Json<crate::learning::VerifiedFeedbackEvent>,
+) -> Result<impl IntoResponse, AppError> {
+    if event.tenant_id != sec_ctx.tenant_id && !sec_ctx.is_admin {
+        return Err(SunbornError::unauthorized(
+            "Cross-tenant feedback injection forbidden: tenant_id mismatch",
+        )
+        .into());
+    }
+
+    state
+        .learning_store
+        .record_event(event)
+        .map_err(AppError::from)?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({
+            "status": "FEEDBACK_RECORDED",
+            "timestamp": Utc::now()
+        })),
+    ))
+}
+
+pub async fn get_learning_policies(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+) -> impl IntoResponse {
+    let active = state.learning_controller.get_active_policy();
+    let canary = state.learning_controller.get_canary_status();
+    let tenant_events_count = state.learning_store.tenant_event_count(&sec_ctx.tenant_id);
+    let total_events = state.learning_store.total_events();
+    let audit_trail = state.learning_controller.get_audit_trail();
+
+    Json(json!({
+        "tenant_id": sec_ctx.tenant_id.0,
+        "active_policy": active,
+        "canary_policy": canary.as_ref().map(|(p, pct)| json!({ "policy": p, "percentage": pct })),
+        "tenant_feedback_events": tenant_events_count,
+        "total_feedback_events": total_events,
+        "audit_trail": audit_trail
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct CalibrateRequest {
+    pub version: u32,
+}
+
+pub async fn calibrate_learning_policy(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    Json(payload): Json<CalibrateRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let events = state.learning_store.get_tenant_events(&sec_ctx.tenant_id);
+    let candidate = crate::learning::OfflineCalibrator::calibrate_policy(&events, payload.version)
+        .map_err(AppError::from)?;
+
+    Ok(Json(json!({
+        "status": "POLICY_CALIBRATED",
+        "candidate_policy": candidate
+    })))
+}
+
+#[derive(Deserialize)]
+pub struct EvaluatePolicyRequest {
+    pub candidate_policy: crate::learning::CandidatePolicy,
+}
+
+pub async fn evaluate_learning_policy(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    Json(payload): Json<EvaluatePolicyRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let events = state.learning_store.get_tenant_events(&sec_ctx.tenant_id);
+    let active_weights = state.learning_controller.get_active_weights();
+    let metrics = crate::learning::CounterfactualShadowEvaluator::evaluate_counterfactual(
+        &events,
+        &active_weights,
+        &payload.candidate_policy,
+    );
+
+    Ok(Json(json!({
+        "status": "COUNTERFACTUAL_EVALUATION_COMPLETED",
+        "metrics": metrics
+    })))
+}
+
+#[derive(Deserialize)]
+pub struct StartCanaryRequest {
+    pub candidate_policy: crate::learning::CandidatePolicy,
+    pub canary_percentage: u8,
+}
+
+pub async fn start_learning_canary(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    Json(payload): Json<StartCanaryRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    sec_ctx
+        .require_admin()
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
+    state
+        .learning_controller
+        .start_canary(
+            payload.candidate_policy,
+            payload.canary_percentage,
+            &sec_ctx.tenant_id.0,
+        )
+        .map_err(AppError::from)?;
+
+    Ok(Json(json!({
+        "status": "CANARY_ROLLOUT_INITIATED",
+        "canary_percentage": payload.canary_percentage,
+        "timestamp": Utc::now()
+    })))
+}
+
+pub async fn promote_learning_policy(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+) -> Result<impl IntoResponse, AppError> {
+    sec_ctx
+        .require_admin()
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
+    let promoted = state
+        .learning_controller
+        .complete_promotion(&sec_ctx.tenant_id.0)
+        .map_err(AppError::from)?;
+
+    Ok(Json(json!({
+        "status": "POLICY_FULLY_PROMOTED",
+        "promoted_policy": promoted,
+        "timestamp": Utc::now()
+    })))
+}
+
+#[derive(Deserialize)]
+pub struct RollbackRequest {
+    pub reason: String,
+}
+
+pub async fn rollback_learning_policy(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    Json(payload): Json<RollbackRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    sec_ctx
+        .require_admin()
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
+    state
+        .learning_controller
+        .trigger_rollback(
+            crate::learning::RollbackTrigger::ManualIntervention,
+            &payload.reason,
+        )
+        .map_err(AppError::from)?;
+
+    Ok(Json(json!({
+        "status": "POLICY_ROLLED_BACK",
+        "reason": payload.reason,
+        "timestamp": Utc::now()
+    })))
 }

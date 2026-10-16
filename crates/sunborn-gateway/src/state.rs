@@ -23,11 +23,18 @@ pub struct AppState {
     pub circuit_breaker: Arc<CircuitBreakerCache<MemoryExactCache>>,
     pub memory_cache: Arc<MemoryExactCache>,
     pub dragonfly_cache: Arc<sunborn_cache::DragonflyCacheStore>,
-    pub vector_store: Arc<MemoryVectorStore>,
+    pub vector_store: Arc<dyn sunborn_semantic::VectorStore>,
+    pub memory_vector_store: Arc<MemoryVectorStore>,
     pub qdrant_store: Arc<sunborn_semantic::QdrantVectorStore>,
-    pub decision_engine: Arc<DecisionEngine<DeterministicEmbeddingProvider, MemoryVectorStore>>,
+    pub decision_engine: Arc<
+        DecisionEngine<
+            Arc<dyn sunborn_semantic::EmbeddingProvider>,
+            Arc<dyn sunborn_semantic::VectorStore>,
+        >,
+    >,
     pub dependency_graph: Arc<DependencyGraph>,
-    pub invalidation_engine: Arc<InvalidationEngine<MemoryExactCache, MemoryVectorStore>>,
+    pub invalidation_engine:
+        Arc<InvalidationEngine<dyn ExactCacheStore, dyn sunborn_semantic::VectorStore>>,
     pub db: Arc<dyn sunborn_db::DatabaseStore>,
     pub memory_db: Arc<MemoryDatabaseStore>,
     pub postgres_db: Arc<sunborn_db::PostgresDatabaseStore>,
@@ -40,6 +47,9 @@ pub struct AppState {
     pub vector_clock: Arc<RwLock<VectorClock>>,
     pub origin_provider: Arc<dyn LlmOriginProvider>,
     pub api_key_registry: Arc<ApiKeyRegistry>,
+    pub selected_embedder: Arc<dyn sunborn_semantic::EmbeddingProvider>,
+    pub learning_store: Arc<crate::learning::TenantLearningStore>,
+    pub learning_controller: Arc<crate::learning::PolicyPromotionController>,
 }
 
 impl AppState {
@@ -53,29 +63,75 @@ impl AppState {
             3,
             std::time::Duration::from_secs(5),
         ));
-        let vector_store = Arc::new(MemoryVectorStore::new());
+        let memory_vector_store = Arc::new(MemoryVectorStore::new());
         let qdrant_store = Arc::new(sunborn_semantic::QdrantVectorStore::new(
             &config.cache.qdrant_url,
             "sunborn_vectors",
         ));
+
+        let is_qdrant = config.cache.vector_backend == "qdrant"
+            || std::env::var("SUNBORN_VECTOR_BACKEND")
+                .map(|v| v.to_lowercase() == "qdrant")
+                .unwrap_or(false);
+        let selected_vector: Arc<dyn sunborn_semantic::VectorStore> = if is_qdrant {
+            qdrant_store.clone()
+        } else {
+            memory_vector_store.clone()
+        };
+
         let db = Arc::new(MemoryDatabaseStore::new());
-        let postgres_db = Arc::new(sunborn_db::PostgresDatabaseStore::new(
-            "postgres://postgres:postgres@localhost:5432/sunborn",
-        ));
-        let embedder = DeterministicEmbeddingProvider::new();
+        let postgres_url = std::env::var("POSTGRES_URL")
+            .or_else(|_| std::env::var("DATABASE_URL"))
+            .unwrap_or_else(|_| config.cache.postgres_url.clone());
+        let postgres_db = Arc::new(sunborn_db::PostgresDatabaseStore::new(&postgres_url));
+
+        let selected_embedder: Arc<dyn sunborn_semantic::EmbeddingProvider> =
+            if let Ok(url) = std::env::var("SUNBORN_EMBEDDING_URL") {
+                let api_key = std::env::var("SUNBORN_EMBEDDING_API_KEY")
+                    .or_else(|_| std::env::var("OPENAI_API_KEY"))
+                    .ok();
+                let model = std::env::var("SUNBORN_EMBEDDING_MODEL")
+                    .unwrap_or_else(|_| "text-embedding-3-small".to_string());
+                Arc::new(sunborn_semantic::HttpEmbeddingProvider::new(
+                    url, model, api_key,
+                ))
+            } else {
+                Arc::new(DeterministicEmbeddingProvider::new())
+            };
+
+        let is_dragonfly = config.cache.backend == "dragonfly"
+            || std::env::var("SUNBORN_CACHE_BACKEND")
+                .map(|v| v.to_lowercase() == "dragonfly")
+                .unwrap_or(false);
+        let selected_cache: Arc<dyn ExactCacheStore> = if is_dragonfly {
+            dragonfly_cache.clone()
+        } else {
+            circuit_breaker.clone()
+        };
+
+        let is_postgres = config.cache.database_backend == "postgres"
+            || std::env::var("SUNBORN_DB_BACKEND")
+                .map(|v| v.to_lowercase() == "postgres")
+                .unwrap_or(false);
+        let selected_db: Arc<dyn sunborn_db::DatabaseStore> = if is_postgres {
+            postgres_db.clone()
+        } else {
+            db.clone()
+        };
+
         let decision_engine = Arc::new(DecisionEngine::new(
-            embedder,
-            (*vector_store).clone(),
+            selected_embedder.clone(),
+            selected_vector.clone(),
             DecisionConfig::default(),
         ));
         let dependency_graph = Arc::new(DependencyGraph::new());
         let invalidation_engine = Arc::new(InvalidationEngine::new(
             dependency_graph.clone(),
-            memory_cache.clone(),
-            vector_store.clone(),
+            selected_cache.clone(),
+            selected_vector.clone(),
         ));
         let execution_store = Arc::new(MemoryExecutionCacheStore::new());
-        let shadow_evaluator = Arc::new(ShadowEvaluator::new());
+        let shadow_evaluator = Arc::new(ShadowEvaluator::with_embedder(selected_embedder.clone()));
         let radix_router = Arc::new(KvCacheRouter::new(
             vec![
                 "inference-node-1".to_string(),
@@ -86,16 +142,13 @@ impl AppState {
             1.5,
         ));
         let crypto_registry = Arc::new(TenantCryptoRegistry::new());
-        crypto_registry.provision_tenant(sunborn_core::TenantId::new("tenant-alpha"), [0x42; 32]);
-        crypto_registry.provision_tenant(
-            sunborn_core::TenantId::new("enterprise-fintech"),
-            [0x43; 32],
-        );
-        crypto_registry.provision_tenant(sunborn_core::TenantId::new("acme-corp"), [0x44; 32]);
-        crypto_registry.provision_tenant(
-            sunborn_core::TenantId::new("healthcare-systems"),
-            [0x45; 32],
-        );
+        let _ =
+            crypto_registry.provision_tenant_secure(sunborn_core::TenantId::new("tenant-alpha"));
+        let _ = crypto_registry
+            .provision_tenant_secure(sunborn_core::TenantId::new("enterprise-fintech"));
+        let _ = crypto_registry.provision_tenant_secure(sunborn_core::TenantId::new("acme-corp"));
+        let _ = crypto_registry
+            .provision_tenant_secure(sunborn_core::TenantId::new("healthcare-systems"));
 
         let predictive_engine = Arc::new(PredictivePrefetchEngine::default());
         let autonomic_controller = Arc::new(AutonomicSelfHealingController::new());
@@ -118,26 +171,8 @@ impl AppState {
             Arc::new(MockOriginProvider::new())
         };
         let api_key_registry = Arc::new(crate::middleware::auth::get_global_registry().clone());
-
-        let is_dragonfly = config.cache.backend == "dragonfly"
-            || std::env::var("SUNBORN_CACHE_BACKEND")
-                .map(|v| v.to_lowercase() == "dragonfly")
-                .unwrap_or(false);
-        let selected_cache: Arc<dyn ExactCacheStore> = if is_dragonfly {
-            dragonfly_cache.clone()
-        } else {
-            circuit_breaker.clone()
-        };
-
-        let is_postgres = config.cache.database_backend == "postgres"
-            || std::env::var("SUNBORN_DB_BACKEND")
-                .map(|v| v.to_lowercase() == "postgres")
-                .unwrap_or(false);
-        let selected_db: Arc<dyn sunborn_db::DatabaseStore> = if is_postgres {
-            postgres_db.clone()
-        } else {
-            db.clone()
-        };
+        let learning_store = Arc::new(crate::learning::TenantLearningStore::default());
+        let learning_controller = Arc::new(crate::learning::PolicyPromotionController::default());
 
         Self {
             config,
@@ -145,7 +180,8 @@ impl AppState {
             circuit_breaker,
             memory_cache,
             dragonfly_cache,
-            vector_store,
+            vector_store: selected_vector,
+            memory_vector_store,
             qdrant_store,
             decision_engine,
             dependency_graph,
@@ -162,6 +198,9 @@ impl AppState {
             vector_clock,
             origin_provider,
             api_key_registry,
+            selected_embedder,
+            learning_store,
+            learning_controller,
         }
     }
 
@@ -220,6 +259,11 @@ impl AppState {
             if db_backend.eq_ignore_ascii_case("memory") {
                 return Err(sunborn_core::SunbornError::configuration_error(
                     "Production environment SUNBORN_ENV=production forbids ephemeral in-memory database backend. Set SUNBORN_DB_BACKEND=postgres.",
+                ));
+            }
+            if vector_backend.eq_ignore_ascii_case("memory") {
+                return Err(sunborn_core::SunbornError::configuration_error(
+                    "Production environment SUNBORN_ENV=production forbids ephemeral in-memory vector backend. Set SUNBORN_VECTOR_BACKEND=qdrant.",
                 ));
             }
         }

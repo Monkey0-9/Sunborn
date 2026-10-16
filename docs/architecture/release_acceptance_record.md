@@ -39,9 +39,10 @@
 | **26** | Governance & GDPR | Cascade tenant erasure API & lifecycle sweeper | `tests/governance_test.rs` | **APPROVED** |
 | **27** | Production Readiness | Operations runbooks & acceptance records | `docs/runbooks/operations.md` | **APPROVED** |
 | **28** | Research Publication | IEEE/ACM manuscript & reproduction harness | `research/paper/sunborn_ieee.tex` | **APPROVED** |
+| **29** | Level 5/6 Hardening & Adaptive Learning | Dynamic backend traits, PostgreSQL durability, BFF secret isolation, 5-layer adaptive controller | `crates/sunborn-gateway/src/learning/`, `tests/learning_controller_test.rs`, `frontend/src/app/api/proxy/` | **APPROVED** |
 
 ---
 
 ## 2. Release Certification
-All 28 phase gates and core architectural invariants have been formally verified through reproducible unit, integration, security, and performance test suites.
-The Sunborn Platform is certified for production deployment.
+All 29 phase gates and core architectural invariants have been formally verified through reproducible unit, integration, security, performance, and self-learning test suites.
+The Sunborn Platform is certified for production deployment with full Level 5/6 compliance.

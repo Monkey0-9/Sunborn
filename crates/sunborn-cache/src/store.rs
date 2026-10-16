@@ -45,3 +45,30 @@ pub trait ExactCacheStore: Send + Sync {
     async fn delete_by_prefix(&self, prefix: &str) -> Result<usize>;
     async fn sweep_expired(&self) -> Result<usize>;
 }
+
+#[async_trait]
+impl ExactCacheStore for std::sync::Arc<dyn ExactCacheStore> {
+    async fn get(&self, key: &str) -> Result<Option<CacheEntry>> {
+        (**self).get(key).await
+    }
+
+    async fn set(&self, entry: CacheEntry) -> Result<()> {
+        (**self).set(entry).await
+    }
+
+    async fn delete(&self, key: &str) -> Result<bool> {
+        (**self).delete(key).await
+    }
+
+    async fn exists(&self, key: &str) -> Result<bool> {
+        (**self).exists(key).await
+    }
+
+    async fn delete_by_prefix(&self, prefix: &str) -> Result<usize> {
+        (**self).delete_by_prefix(prefix).await
+    }
+
+    async fn sweep_expired(&self) -> Result<usize> {
+        (**self).sweep_expired().await
+    }
+}

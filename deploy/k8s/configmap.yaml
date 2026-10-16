@@ -7,8 +7,14 @@ metadata:
     app.kubernetes.io/name: sunborn-gateway
     app.kubernetes.io/part-of: sunborn
 data:
+  SUNBORN_ENV: "production"
   SUNBORN_SERVER__HOST: "0.0.0.0"
   SUNBORN_SERVER__PORT: "8080"
+  SUNBORN_DB_BACKEND: "postgres"
+  SUNBORN_CACHE_BACKEND: "dragonfly"
+  DRAGONFLY_URL: "redis://sunborn-dragonfly.sunborn-system.svc.cluster.local:6379"
+  SUNBORN_VECTOR_BACKEND: "qdrant"
+  QDRANT_URL: "http://sunborn-qdrant.sunborn-system.svc.cluster.local:6333"
   SUNBORN_CACHE__EXACT_CACHE_ENABLED: "true"
   SUNBORN_CACHE__SEMANTIC_CACHE_ENABLED: "true"
   SUNBORN_CACHE__DEFAULT_TTL_SECS: "86400"

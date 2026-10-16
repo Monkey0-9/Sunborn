@@ -28,6 +28,13 @@ pub trait EmbeddingProvider: Send + Sync {
     async fn embed(&self, text: &str) -> Result<Vector>;
 }
 
+#[async_trait]
+impl EmbeddingProvider for std::sync::Arc<dyn EmbeddingProvider> {
+    async fn embed(&self, text: &str) -> Result<Vector> {
+        (**self).embed(text).await
+    }
+}
+
 /// A high-performance deterministic embedding provider for local development,
 /// testing, and headless execution. Generates 384-dimensional normalized vectors.
 #[derive(Clone, Debug)]
@@ -151,6 +158,16 @@ impl EmbeddingProvider for HttpEmbeddingProvider {
                     }
                 }
             }
+        }
+
+        let is_prod = std::env::var("SUNBORN_ENV")
+            .map(|v| v.to_lowercase() == "production")
+            .unwrap_or(false);
+        if is_prod {
+            return Err(sunborn_core::SunbornError::embedding(format!(
+                "Upstream HTTP embedding provider at {} failed to generate valid vector; fail-closed abstention enforced in production",
+                self.endpoint_url
+            )));
         }
 
         // Resilient fallback for offline unit tests & benchmark runs

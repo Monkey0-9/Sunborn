@@ -41,6 +41,42 @@ pub trait VectorStore: Send + Sync {
     async fn all_entries(&self) -> Result<Vec<VectorEntry>>;
 }
 
+#[async_trait]
+impl VectorStore for Arc<dyn VectorStore> {
+    async fn insert(&self, entry: VectorEntry) -> Result<()> {
+        (**self).insert(entry).await
+    }
+
+    async fn search(
+        &self,
+        tenant_id: &TenantId,
+        application_id: &ApplicationId,
+        query_vector: &[f32],
+        top_k: usize,
+        min_score: f32,
+    ) -> Result<Vec<ScoredVectorEntry>> {
+        (**self)
+            .search(tenant_id, application_id, query_vector, top_k, min_score)
+            .await
+    }
+
+    async fn delete(&self, id: &str) -> Result<bool> {
+        (**self).delete(id).await
+    }
+
+    async fn count(&self, tenant_id: &TenantId) -> Result<usize> {
+        (**self).count(tenant_id).await
+    }
+
+    async fn delete_by_tenant(&self, tenant_id: &TenantId) -> Result<usize> {
+        (**self).delete_by_tenant(tenant_id).await
+    }
+
+    async fn all_entries(&self) -> Result<Vec<VectorEntry>> {
+        (**self).all_entries().await
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct MemoryVectorStore {
     entries: Arc<RwLock<Vec<VectorEntry>>>,

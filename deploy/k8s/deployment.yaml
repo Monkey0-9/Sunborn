@@ -43,6 +43,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: sunborn-gateway-config
+            - secretRef:
+                name: sunborn-gateway-secrets
           resources:
             requests:
               cpu: "250m"

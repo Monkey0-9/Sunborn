@@ -161,6 +161,16 @@ impl TenantCryptoRegistry {
         map.insert(tenant_id, (ZeroizingKey::new(raw_key), 1));
     }
 
+    /// Provision a tenant with a cryptographically secure random 256-bit TDEK derived from OS entropy.
+    pub fn provision_tenant_secure(&self, tenant_id: TenantId) -> Result<[u8; 32], SunbornError> {
+        let mut key_bytes = [0u8; 32];
+        OsRng.try_fill_bytes(&mut key_bytes).map_err(|e| {
+            SunbornError::internal(format!("Cryptographic OS entropy failure: {e}"))
+        })?;
+        self.provision_tenant(tenant_id, key_bytes);
+        Ok(key_bytes)
+    }
+
     /// Check if a tenant's key is actively present (not shredded).
     pub fn is_active(&self, tenant_id: &TenantId) -> bool {
         let map = self.keys.read().unwrap();

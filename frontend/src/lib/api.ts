@@ -1,11 +1,15 @@
 /**
  * Sunborn Unified Typed API Client
- * Enforces server-side authentication, structured error propagation,
- * and zero simulated fallbacks.
+ * Enforces server-side BFF authentication, structured error propagation,
+ * and zero browser secret exposure.
  */
 
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8080";
+  typeof window !== "undefined"
+    ? "/api/proxy"
+    : process.env.SUNBORN_GATEWAY_URL ||
+      process.env.API_URL ||
+      "http://127.0.0.1:8080";
 
 export interface ApiErrorResponse {
   type?: string;
@@ -28,20 +32,15 @@ export class SunbornApiError extends Error {
 }
 
 /**
- * Resolves the client API key from parameters, browser localStorage, or environment.
- * Rejects default fallbacks to enforce server-side authentication.
+ * Resolves an explicit client session key if provided.
+ * Does NOT read from NEXT_PUBLIC variables or localStorage admin fallbacks,
+ * delegating credential management to the secure server-side BFF.
  */
-export function getActiveApiKey(explicitKey?: string): string {
+export function getActiveApiKey(explicitKey?: string): string | undefined {
   if (explicitKey && explicitKey.trim().length > 0) {
     return explicitKey.trim();
   }
-  if (typeof window !== "undefined") {
-    const stored = window.localStorage.getItem("sunborn_api_key");
-    if (stored && stored.trim().length > 0) {
-      return stored.trim();
-    }
-  }
-  return process.env.NEXT_PUBLIC_SUNBORN_API_KEY || "";
+  return undefined;
 }
 
 async function request<T>(
@@ -49,7 +48,9 @@ async function request<T>(
   options: RequestInit = {},
   apiKey?: string
 ): Promise<T> {
-  const url = `${API_BASE_URL.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
+  const cleanBase = API_BASE_URL.replace(/\/+$/, "");
+  const cleanPath = path.replace(/^\/+/, "");
+  const url = `${cleanBase}/${cleanPath}`;
   const headers = new Headers(options.headers || {});
 
   if (!headers.has("Content-Type") && options.body) {
@@ -151,6 +152,55 @@ export const sunbornApi = {
     request<any>("v1/chaos/reset", { method: "POST" }),
   getChaosStatus: () =>
     request<any>("v1/chaos/status", { method: "GET" }),
+
+  // Multi-Region Cluster Status
+  getClusterStatus: () =>
+    request<{
+      node_id: string;
+      region: string;
+      cluster_state: string;
+      vector_clock: Record<string, number>;
+      anti_entropy_protocol: string;
+      consensus_mode: string;
+    }>("v1/cluster/status", { method: "GET" }),
+
+  // Learning Controller
+  getLearningPolicies: () =>
+    request<{
+      tenant_id: string;
+      active_policy: any;
+      canary_policy: any;
+      tenant_feedback_events: number;
+      total_feedback_events: number;
+      audit_trail: any[];
+    }>("v1/learning/policies", { method: "GET" }),
+
+  submitLearningFeedback: (event: any) =>
+    request<{ status: string; timestamp: string }>("v1/learning/feedback", {
+      method: "POST",
+      body: JSON.stringify(event),
+    }),
+
+  startCanaryRollout: (candidatePolicy: any, canaryPercentage: number) =>
+    request<{ status: string; canary_percentage: number; timestamp: string }>(
+      "v1/learning/canary",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          candidate_policy: candidatePolicy,
+          canary_percentage: canaryPercentage,
+        }),
+      }
+    ),
+
+  rollbackLearningPolicy: (reason: string) =>
+    request<{ status: string; reason: string; timestamp: string }>(
+      "v1/learning/rollback",
+      {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      }
+    ),
 
   // Security
   evaluateSecurity: (prompt: string, model?: string) =>

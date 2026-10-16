@@ -238,7 +238,13 @@ pub fn get_global_registry() -> &'static ApiKeyRegistry {
         let is_prod = std::env::var("SUNBORN_ENV")
             .map(|v| v.to_lowercase() == "production")
             .unwrap_or(false);
-        if !is_prod {
+        let allow_fixtures = std::env::var("SUNBORN_ALLOW_TEST_FIXTURES")
+            .map(|v| v.to_lowercase() == "true" || v == "1")
+            .unwrap_or(false);
+
+        // Fail-closed security rule: Never seed test credentials in production.
+        // In release builds, require explicit SUNBORN_ALLOW_TEST_FIXTURES=true.
+        if !is_prod && (allow_fixtures || cfg!(test) || cfg!(debug_assertions)) {
             registry.seed_test_fixtures();
         }
         registry

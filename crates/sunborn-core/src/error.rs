@@ -93,4 +93,12 @@ impl SunbornError {
     pub fn vector_store(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::InternalError, msg)
     }
+
+    pub fn embedding(msg: impl Into<String>) -> Self {
+        Self::new(ErrorCode::OriginError, msg)
+    }
+
+    pub fn validation_error(msg: impl Into<String>) -> Self {
+        Self::new(ErrorCode::InvalidPayload, msg)
+    }
 }

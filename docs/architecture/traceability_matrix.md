@@ -37,6 +37,12 @@
 | **FR-027** | O(1) Cryptographic Tenant Shredding | `crates/sunborn-identity/src/crypto_shred.rs`<br>`crates/sunborn-gateway/src/handlers.rs` | `crypto_shred::tests::*`<br>`integration_test::test_cryptographic_shredding_endpoint`<br>`governance_test::test_tenant_cascade_offboarding_zero_lingering_data` | **Verified** |
 | **FR-028** | Deterministic Simulation Testing (DST) | `crates/sunborn-gateway/tests/simulation_test.rs` | `simulation_test::test_deterministic_simulation_non_accelerator_authority_under_chaos` | **Verified** |
 | **FR-029** | Online CRC & Structural Guardrails Pre-Filter | `crates/sunborn-semantic/src/guardrails.rs` | `guardrails::tests::*` | **Verified** |
+| **FR-030** | Dynamic Trait-Based Backend Injection & Fail-Closed Boot | `crates/sunborn-gateway/src/state.rs`<br>`crates/sunborn-core/src/config.rs` | `state::tests::test_verify_production_readiness_*` | **Verified** |
+| **FR-031** | Authoritative Database Durability & Segregated Null Handling | `crates/sunborn-db/src/postgres.rs` | `integration_test::*`<br>`disaster_recovery_test::*` | **Verified** |
+| **FR-032** | Verified Feedback Ingestion with RFC 2104 HMAC-SHA256 (Layer 1) | `crates/sunborn-gateway/src/learning/feedback.rs` | `learning_controller_test::test_layer1_feedback_hmac_signature_verification` | **Verified** |
+| **FR-033** | Tenant-Isolated Learning Store & GDPR Article 17 Purge (Layer 2) | `crates/sunborn-gateway/src/learning/store.rs` | `learning_controller_test::test_layer2_tenant_safe_store_and_gdpr_purge` | **Verified** |
+| **FR-034** | Offline Held-Out Calibration & Counterfactual Shadowing (Layers 3 & 4) | `crates/sunborn-gateway/src/learning/calibration.rs`<br>`crates/sunborn-gateway/src/learning/shadow.rs` | `learning_controller_test::test_layer3_offline_calibration_on_held_out_splits`<br>`learning_controller_test::test_layer4_counterfactual_shadow_evaluator` | **Verified** |
+| **FR-035** | Canary Promotion, Automated Rollback & BFF Secret Isolation (Layer 5) | `crates/sunborn-gateway/src/learning/controller.rs`<br>`frontend/src/app/api/proxy/[...path]/route.ts` | `learning_controller_test::test_layer5_canary_rollout_and_automated_rollback`<br>`frontend npm run build` (BFF proxy route) | **Verified** |
 
 ---
 

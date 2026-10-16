@@ -15,6 +15,7 @@ import {
   Globe,
   Radio,
   Lock,
+  GitBranch,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -23,11 +24,11 @@ import { API_BASE_URL } from "@/lib/api";
 export function Header() {
   const pathname = usePathname();
   const [gatewayStatus, setGatewayStatus] = useState<"live" | "offline">("offline");
-  const [epoch, setEpoch] = useState<number>(418);
+  const [epoch, setEpoch] = useState<number>(1);
   const [activeTenant, setActiveTenant] = useState<string>("tenant-enterprise-fintech");
 
   useEffect(() => {
-    // Check local gateway status
+    // Check local gateway status & live vector clock
     const checkGateway = async () => {
       try {
         const res = await fetch(`${API_BASE_URL.replace(/\/+$/, "")}/health`, {
@@ -36,6 +37,18 @@ export function Header() {
         });
         if (res.ok) {
           setGatewayStatus("live");
+          try {
+            const clusterRes = await fetch(`${API_BASE_URL.replace(/\/+$/, "")}/v1/cluster/status`, {
+              cache: "no-store",
+            });
+            if (clusterRes.ok) {
+              const clusterData = await clusterRes.json();
+              const epochs = Object.values(clusterData.vector_clock || {}) as number[];
+              if (epochs.length > 0) {
+                setEpoch(epochs[0]);
+              }
+            }
+          } catch {}
         } else {
           setGatewayStatus("offline");
         }
@@ -54,6 +67,7 @@ export function Header() {
     { name: "Semantic Studio", href: "/knowledge", icon: Layers },
     { name: "Execution DAG", href: "/execution", icon: Cpu },
     { name: "FinOps ROI", href: "/finops", icon: BarChart3 },
+    { name: "Learning Control", href: "/learning", icon: GitBranch },
     { name: "Governance", href: "/governance", icon: Flame },
     { name: "Security", href: "/security", icon: Lock },
   ];

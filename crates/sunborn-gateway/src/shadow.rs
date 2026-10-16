@@ -32,14 +32,18 @@ pub struct ShadowEvaluationResult {
 }
 
 pub struct ShadowEvaluator {
-    embedder: DeterministicEmbeddingProvider,
+    embedder: Arc<dyn EmbeddingProvider>,
 }
 
 impl ShadowEvaluator {
     pub fn new() -> Self {
         Self {
-            embedder: DeterministicEmbeddingProvider::new(),
+            embedder: Arc::new(DeterministicEmbeddingProvider::new()),
         }
+    }
+
+    pub fn with_embedder(embedder: Arc<dyn EmbeddingProvider>) -> Self {
+        Self { embedder }
     }
 
     /// Evaluates semantic divergence between cached content and origin execution.

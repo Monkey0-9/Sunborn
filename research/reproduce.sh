@@ -43,10 +43,23 @@ cargo test --test performance_test -- --nocapture | tee "${PERF_LOG}"
 echo "------------------------------------------------------------------------"
 echo "Empirical Performance on Current Host Environment:"
 grep -E "Throughput|Latency P50|Latency P95|Latency P99" "${PERF_LOG}" || true
-rm -f "${PERF_LOG}"
 echo "------------------------------------------------------------------------"
-echo "Note: Paper Table I reports multi-node cluster baselines under sustained 10GbE network load."
-echo "==> Local gateway latency SLO (< 5ms P99) verified."
+
+# Strict numerical assertion on gateway latency SLO (< 5.0ms P99)
+GATEWAY_P99_US=$(grep -oE "Latency P99:\s+[0-9]+" "${PERF_LOG}" | awk '{print $3}' || echo "0")
+rm -f "${PERF_LOG}"
+
+if [[ -z "${GATEWAY_P99_US}" || "${GATEWAY_P99_US}" -eq 0 ]]; then
+    echo "ERROR: Failed to extract P99 latency from performance test output" >&2
+    exit 1
+fi
+
+if [[ "${GATEWAY_P99_US}" -ge 5000 ]]; then
+    echo "ERROR: Gateway latency SLO breached! P99 is ${GATEWAY_P99_US} µs (must be < 5000 µs / 5.0 ms)" >&2
+    exit 1
+fi
+
+echo "==> Local gateway latency SLO verified: P99 is ${GATEWAY_P99_US} µs (< 5000 µs / 5.0 ms)."
 
 echo ""
 echo "[4/5] Executing Security, Chaos & Governance Compliance Tests..."
@@ -55,7 +68,8 @@ cargo test --test chaos_test -- --nocapture
 cargo test --test governance_test -- --nocapture
 cargo test --test disaster_recovery_test -- --nocapture
 cargo test --test simulation_test -- --nocapture
-echo "==> Zero cross-tenant leakage, tenant spoofing prevention, circuit-breaker fallback, and DST Non-Accelerator Authority verified."
+cargo test --test learning_controller_test -- --nocapture
+echo "==> Zero cross-tenant leakage, tenant spoofing prevention, circuit-breaker fallback, DST Non-Accelerator Authority, and 5-layer learning controller verified."
 
 echo ""
 echo "[5/5] Executing Semantic Cache Benchmark & Empirical Artifact Verification..."

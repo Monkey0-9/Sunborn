@@ -1,5 +1,6 @@
 pub mod autonomic;
 pub mod handlers;
+pub mod learning;
 pub mod middleware;
 pub mod origin;
 pub mod routing;
@@ -98,6 +99,31 @@ pub fn create_router(state: AppState) -> Router {
         .route("/v1/lifecycle/sweep", post(handlers::sweep_lifecycle))
         .route("/v1/security/evaluate", post(handlers::security_evaluate))
         .route("/v1/security/audit", get(handlers::security_audit))
+        .route(
+            "/v1/learning/feedback",
+            post(handlers::record_learning_feedback),
+        )
+        .route(
+            "/v1/learning/policies",
+            get(handlers::get_learning_policies),
+        )
+        .route(
+            "/v1/learning/evaluate",
+            post(handlers::evaluate_learning_policy),
+        )
+        .route(
+            "/v1/learning/calibrate",
+            post(handlers::calibrate_learning_policy),
+        )
+        .route("/v1/learning/canary", post(handlers::start_learning_canary))
+        .route(
+            "/v1/learning/promote",
+            post(handlers::promote_learning_policy),
+        )
+        .route(
+            "/v1/learning/rollback",
+            post(handlers::rollback_learning_policy),
+        )
         .layer(axum::middleware::from_fn(middleware::auth::auth_middleware))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
