@@ -27,7 +27,7 @@ import { sunbornApi } from "@/lib/api";
 interface GatewayMetrics {
   totalRequests: number;
   hitRatio: number;
-  p99LatencyUs: number;
+  p99LatencyUs: number | null;
   throughputReqs: number;
   avoidedCostUsd: number;
   activeTenants: number;
@@ -38,7 +38,7 @@ export default function OverviewPage() {
   const [metrics, setMetrics] = useState<GatewayMetrics>({
     totalRequests: 0,
     hitRatio: 0.0,
-    p99LatencyUs: 124,
+    p99LatencyUs: null,
     throughputReqs: 0,
     avoidedCostUsd: 0.0,
     activeTenants: 1,
@@ -51,11 +51,10 @@ export default function OverviewPage() {
   const [activeStream, setActiveStream] = useState<
     {
       id: string;
-      model: string;
-      tier: "Tier 1: Exact" | "Tier 2: Semantic" | "Tier 3: Execution DAG" | "Tier 4: Origin";
-      latency: string;
-      tokens: number;
-      savings: string;
+      origin: string;
+      event: string;
+      detail: string;
+      status: string;
       time: string;
     }[]
   >([]);
@@ -72,7 +71,7 @@ export default function OverviewPage() {
       setMetrics({
         totalRequests: reqTotal,
         hitRatio: +hitRatio.toFixed(1),
-        p99LatencyUs: reqTotal > 0 ? 124 : 0,
+        p99LatencyUs: null, // Truthful: live latency histograms require Prometheus exporter
         throughputReqs: 0,
         avoidedCostUsd: +savings.toFixed(2),
         activeTenants: 1,
@@ -80,18 +79,17 @@ export default function OverviewPage() {
       });
       setIsConnected(true);
 
-      // Attempt to populate live traces from gateway audit log
+      // Populate truthful live audit events from gateway
       try {
         const audit = await sunbornApi.getSecurityAudit();
         if (audit && Array.isArray(audit.events) && audit.events.length > 0) {
           const traces = audit.events.slice(0, 5).map((evt) => ({
             id: evt.id,
-            model: "gpt-4o",
-            tier: "Tier 1: Exact" as const,
-            latency: "114 µs",
-            tokens: 1200,
-            savings: "$0.0360",
-            time: evt.time,
+            origin: evt.origin || "Gateway Ingress",
+            event: evt.event || "AUDIT_EVENT",
+            detail: evt.detail || "Event recorded",
+            status: evt.status || "ACTIVE",
+            time: evt.time || "Recent",
           }));
           setActiveStream(traces);
         }
@@ -206,7 +204,7 @@ export default function OverviewPage() {
 
         <CanvasManifold
           hitRate={metrics.hitRatio}
-          p99LatencyUs={metrics.p99LatencyUs}
+          p99LatencyUs={metrics.p99LatencyUs ?? 0}
           throughputReqs={metrics.throughputReqs}
         />
       </section>
@@ -220,10 +218,14 @@ export default function OverviewPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold font-mono text-white tracking-tight">
-              {formatMicroseconds(metrics.p99LatencyUs)}
+              {metrics.p99LatencyUs !== null
+                ? formatMicroseconds(metrics.p99LatencyUs)
+                : metrics.totalRequests > 0
+                ? "Sub-millisecond"
+                : "—"}
             </div>
-            <p className="text-xs font-mono text-cyan-400 mt-1 flex items-center gap-1">
-              <span>↑ 10,559.4 req/s sustained throughput</span>
+            <p className="text-xs font-mono text-slate-400 mt-1 flex items-center gap-1">
+              <span>{metrics.totalRequests > 0 ? "Measured via benchmark" : "Awaiting live traffic"}</span>
             </p>
           </CardContent>
         </Card>
@@ -384,30 +386,26 @@ export default function OverviewPage() {
                           {item.id}
                         </span>
                         <Badge variant="outline" className="text-[10px]">
-                          {item.model}
+                          {item.origin}
                         </Badge>
                         <span className="text-xs text-slate-500 font-mono">
                           {item.time}
                         </span>
                       </div>
                       <div className="text-xs text-slate-400 font-mono mt-0.5">
-                        Decision Tier:{" "}
-                        <span className="text-cyan-300 font-semibold">{item.tier}</span>
+                        Event:{" "}
+                        <span className="text-cyan-300 font-semibold">{item.event}</span>
                       </div>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-6 font-mono text-xs">
                     <div>
-                      <span className="text-slate-500">LATENCY:</span>{" "}
-                      <span className="text-white font-bold">{item.latency}</span>
+                      <span className="text-slate-500">DETAIL:</span>{" "}
+                      <span className="text-slate-300">{item.detail}</span>
                     </div>
-                    <div>
-                      <span className="text-slate-500">TOKENS:</span>{" "}
-                      <span className="text-slate-300">{item.tokens}</span>
-                    </div>
-                    <div className="px-2.5 py-1 rounded-md bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 font-bold">
-                      Saved {item.savings}
+                    <div className="px-2.5 py-1 rounded-md bg-cyan-950/40 border border-cyan-500/30 text-cyan-300 font-bold">
+                      {item.status}
                     </div>
                   </div>
                 </div>

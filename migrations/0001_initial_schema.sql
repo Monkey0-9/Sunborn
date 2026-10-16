@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS applications (
 );
 
 -- 2. Durable Cache Metadata
-CREATE TABLE IF NOT EXISTS cache_entries (
+CREATE TABLE IF NOT EXISTS durable_cache_entries (
     key VARCHAR(255) PRIMARY KEY,
     tenant_id VARCHAR(64) NOT NULL,
     application_id VARCHAR(64) NOT NULL,
@@ -39,8 +39,8 @@ CREATE TABLE IF NOT EXISTS cache_entries (
     last_accessed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_cache_tenant_app ON cache_entries(tenant_id, application_id);
-CREATE INDEX IF NOT EXISTS idx_cache_expires_at ON cache_entries(expires_at);
+CREATE INDEX IF NOT EXISTS idx_durable_cache_tenant_app ON durable_cache_entries(tenant_id, application_id);
+CREATE INDEX IF NOT EXISTS idx_durable_cache_expires_at ON durable_cache_entries(expires_at);
 
 -- 3. Knowledge Sources & Document Version Graph
 CREATE TABLE IF NOT EXISTS knowledge_sources (
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS document_versions (
 
 CREATE TABLE IF NOT EXISTS dependency_edges (
     source_id UUID NOT NULL REFERENCES knowledge_sources(id) ON DELETE CASCADE,
-    cache_key VARCHAR(255) NOT NULL REFERENCES cache_entries(key) ON DELETE CASCADE,
+    cache_key VARCHAR(255) NOT NULL REFERENCES durable_cache_entries(key) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (source_id, cache_key)
 );

@@ -700,8 +700,43 @@ async fn test_learning_http_api_endpoints_full_lifecycle() {
 
     assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
 
+    // 2b. Invalid HMAC signature rejection check:
+    let bad_sig_payload = json!({
+        "event_id": "ev-bad-sig-1",
+        "tenant_id": "tenant-system",
+        "application_id": "app-admin",
+        "cache_key": "cache:bad:1",
+        "decision_type": "exact_hit",
+        "prompt_hash": "hash_bad",
+        "similarity_score": 0.98,
+        "conformal_risk_score": 0.01,
+        "latency_ms": 1.5,
+        "tokens_saved": 40,
+        "cost_saved_usd": 0.001,
+        "verified_outcome": "VerifiedCorrect",
+        "verification_source": "origin_execution",
+        "hmac_signature": "invalid_forged_hmac_signature",
+        "timestamp": Utc::now()
+    });
+
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/learning/feedback")
+                .header("Authorization", admin_auth)
+                .header("Content-Type", "application/json")
+                .body(Body::from(bad_sig_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
     // 3. Record 12 verified feedback events for admin_tenant to enable calibration
-    let secret = b"hmac-key-for-test-http";
+    let secret = &state.learning_hmac_secret;
     for i in 0..12 {
         let event_id = format!("ev-api-{}", i);
         let cache_key = format!("cache:test:{}", i);

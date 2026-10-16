@@ -9,14 +9,14 @@ services:
       HOST: "0.0.0.0"
       PORT: "8080"
       SUNBORN_DB_BACKEND: "postgres"
-      POSTGRES_URL: "postgres://sunborn:sunborn_dev_password@postgres:5432/sunborn"
+      POSTGRES_URL: "postgres://sunborn:${POSTGRES_PASSWORD:-sunborn_local_dev_password}@postgres:5432/sunborn"
       SUNBORN_CACHE_BACKEND: "dragonfly"
       DRAGONFLY_URL: "redis://dragonfly:6379"
       SUNBORN_VECTOR_BACKEND: "qdrant"
       QDRANT_URL: "http://qdrant:6333"
-      SUNBORN_ENV: "production"
-      SUNBORN_MASTER_KEK: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-      SUNBORN_ADMIN_KEY: "sunborn_admin_production_key_secret_vault"
+      SUNBORN_ENV: "development"
+      SUNBORN_MASTER_KEK: "${SUNBORN_MASTER_KEK:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}"
+      SUNBORN_ADMIN_KEY: "${SUNBORN_ADMIN_KEY:-sunborn-local-admin-dev-key}"
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
@@ -34,7 +34,7 @@ services:
     environment:
       POSTGRES_DB: sunborn
       POSTGRES_USER: sunborn
-      POSTGRES_PASSWORD: sunborn_dev_password
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-sunborn_local_dev_password}"
     ports:
       - "127.0.0.1:5432:5432"
     volumes:

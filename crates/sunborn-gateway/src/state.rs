@@ -4,6 +4,7 @@ use crate::origin::provider::{LlmOriginProvider, MockOriginProvider};
 use crate::routing::predictive::PredictivePrefetchEngine;
 use crate::routing::radix::KvCacheRouter;
 use crate::shadow::ShadowEvaluator;
+use sha2::{Digest, Sha256};
 use std::sync::{Arc, RwLock};
 use sunborn_cache::{CircuitBreakerCache, ExactCacheStore, MemoryExactCache};
 use sunborn_core::cluster::VectorClock;
@@ -50,6 +51,7 @@ pub struct AppState {
     pub selected_embedder: Arc<dyn sunborn_semantic::EmbeddingProvider>,
     pub learning_store: Arc<crate::learning::TenantLearningStore>,
     pub learning_controller: Arc<crate::learning::PolicyPromotionController>,
+    pub learning_hmac_secret: Vec<u8>,
 }
 
 impl AppState {
@@ -174,6 +176,18 @@ impl AppState {
         let learning_store = Arc::new(crate::learning::TenantLearningStore::default());
         let learning_controller = Arc::new(crate::learning::PolicyPromotionController::default());
 
+        let learning_hmac_secret: Vec<u8> =
+            if let Ok(secret) = std::env::var("SUNBORN_LEARNING_HMAC_SECRET") {
+                secret.into_bytes()
+            } else if let Ok(master_kek) = std::env::var("SUNBORN_MASTER_KEK") {
+                let mut hasher = Sha256::new();
+                hasher.update(b"sunborn-learning-hmac-v1:");
+                hasher.update(master_kek.as_bytes());
+                hasher.finalize().to_vec()
+            } else {
+                b"sunborn-insecure-dev-hmac-secret-change-in-production".to_vec()
+            };
+
         Self {
             config,
             cache: selected_cache,
@@ -201,6 +215,7 @@ impl AppState {
             selected_embedder,
             learning_store,
             learning_controller,
+            learning_hmac_secret,
         }
     }
 
@@ -219,37 +234,7 @@ impl AppState {
         let vector_backend = std::env::var("SUNBORN_VECTOR_BACKEND")
             .unwrap_or_else(|_| self.config.cache.vector_backend.clone());
 
-        // Validate Dragonfly cache connectivity if configured or in strict mode
-        if cache_backend.eq_ignore_ascii_case("dragonfly") {
-            tracing::info!(
-                endpoint = %self.dragonfly_cache.connection_url,
-                "Validating DragonflyDB cache connectivity for production readiness..."
-            );
-            self.dragonfly_cache.verify_connection().await?;
-            tracing::info!("DragonflyDB production readiness verified successfully.");
-        }
-
-        // Validate PostgreSQL database connectivity if configured or in strict mode
-        if db_backend.eq_ignore_ascii_case("postgres") {
-            tracing::info!(
-                endpoint = %self.postgres_db.connection_url,
-                "Validating PostgreSQL database connectivity for production readiness..."
-            );
-            self.postgres_db.verify_connection().await?;
-            tracing::info!("PostgreSQL production readiness verified successfully.");
-        }
-
-        // Validate Qdrant vector store connectivity if configured or in strict mode
-        if vector_backend.eq_ignore_ascii_case("qdrant") {
-            tracing::info!(
-                endpoint = %self.qdrant_store.endpoint_url,
-                "Validating Qdrant vector store connectivity for production readiness..."
-            );
-            self.qdrant_store.verify_connection().await?;
-            tracing::info!("Qdrant production readiness verified successfully.");
-        }
-
-        // Production environment strictness: disallow ephemeral in-memory stores in production
+        // 1. Production environment strictness: disallow ephemeral in-memory stores, insecure secrets, and mock providers
         if is_prod {
             if cache_backend.eq_ignore_ascii_case("memory") {
                 return Err(sunborn_core::SunbornError::configuration_error(
@@ -266,6 +251,90 @@ impl AppState {
                     "Production environment SUNBORN_ENV=production forbids ephemeral in-memory vector backend. Set SUNBORN_VECTOR_BACKEND=qdrant.",
                 ));
             }
+
+            // P0-2: Fail-closed secret hygiene validation
+            let master_kek = std::env::var("SUNBORN_MASTER_KEK").map_err(|_| {
+                sunborn_core::SunbornError::configuration_error(
+                    "Production requires SUNBORN_MASTER_KEK environment variable to be configured",
+                )
+            })?;
+            let lower_kek = master_kek.to_lowercase();
+            if lower_kek.contains("changeme")
+                || lower_kek.contains("placeholder")
+                || lower_kek.contains("dev-master-kek")
+                || lower_kek.chars().all(|c| c == '0')
+                || master_kek.len() < 32
+            {
+                return Err(sunborn_core::SunbornError::configuration_error(
+                    "Production SUNBORN_MASTER_KEK is using a weak or default/placeholder key. A high-entropy 256-bit key is required.",
+                ));
+            }
+
+            let admin_key = std::env::var("SUNBORN_ADMIN_KEY").map_err(|_| {
+                sunborn_core::SunbornError::configuration_error(
+                    "Production requires SUNBORN_ADMIN_KEY environment variable to be configured",
+                )
+            })?;
+            let lower_admin = admin_key.to_lowercase();
+            if lower_admin == "dev-admin-key"
+                || lower_admin == "admin"
+                || lower_admin.contains("changeme")
+                || lower_admin.contains("placeholder")
+                || admin_key.len() < 16
+            {
+                return Err(sunborn_core::SunbornError::configuration_error(
+                    "Production SUNBORN_ADMIN_KEY is using a default or insecure value. Provide a secure, high-entropy key.",
+                ));
+            }
+
+            // P0-3: Genuine LLM Origin validation
+            if self.origin_provider.is_mock() {
+                return Err(sunborn_core::SunbornError::configuration_error(
+                    "Production environment SUNBORN_ENV=production forbids MockOriginProvider. Configure SUNBORN_LLM_ORIGIN_URL or OPENAI_API_BASE.",
+                ));
+            }
+
+            // P0-3: Genuine Embedding Provider validation
+            if self.selected_embedder.is_deterministic() {
+                return Err(sunborn_core::SunbornError::configuration_error(
+                    "Production environment SUNBORN_ENV=production forbids DeterministicEmbeddingProvider. Configure SUNBORN_EMBEDDING_URL.",
+                ));
+            }
+        }
+
+        // 2. Validate Dragonfly cache connectivity if configured or in strict mode
+        if cache_backend.eq_ignore_ascii_case("dragonfly") {
+            tracing::info!(
+                endpoint = %self.dragonfly_cache.connection_url,
+                "Validating DragonflyDB cache connectivity for production readiness..."
+            );
+            self.dragonfly_cache.verify_connection().await?;
+            tracing::info!("DragonflyDB production readiness verified successfully.");
+        }
+
+        // 3. Validate PostgreSQL database connectivity if configured or in strict mode
+        if db_backend.eq_ignore_ascii_case("postgres") {
+            tracing::info!(
+                endpoint = %self.postgres_db.connection_url,
+                "Validating PostgreSQL database connectivity for production readiness..."
+            );
+            self.postgres_db.verify_connection().await?;
+            tracing::info!("PostgreSQL production readiness verified successfully.");
+        }
+
+        // 4. Validate Qdrant vector store connectivity if configured or in strict mode
+        if vector_backend.eq_ignore_ascii_case("qdrant") {
+            tracing::info!(
+                endpoint = %self.qdrant_store.endpoint_url,
+                "Validating Qdrant vector store connectivity for production readiness..."
+            );
+            self.qdrant_store.verify_connection().await?;
+            tracing::info!("Qdrant production readiness verified successfully.");
+        }
+
+        if is_prod {
+            self.origin_provider.health_check().await?;
+            self.selected_embedder.health_check().await?;
         }
 
         Ok(())
@@ -276,8 +345,11 @@ impl AppState {
 mod tests {
     use super::*;
 
+    static TEST_MUTEX: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
     #[tokio::test]
     async fn test_verify_production_readiness_rejects_memory_in_production() {
+        let _lock = TEST_MUTEX.lock().await;
         let mut config = AppConfig::default();
         config.cache.backend = "memory".to_string();
         config.cache.database_backend = "memory".to_string();
@@ -296,6 +368,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_verify_production_readiness_fails_on_unreachable_dragonfly() {
+        let _lock = TEST_MUTEX.lock().await;
+        std::env::remove_var("SUNBORN_ENV");
         let mut config = AppConfig::default();
         config.cache.backend = "dragonfly".to_string();
         config.cache.dragonfly_url = "redis://127.0.0.1:59999".to_string(); // unreachable port
@@ -307,6 +381,66 @@ mod tests {
         assert_eq!(
             res.unwrap_err().code,
             sunborn_core::ErrorCode::CacheUnavailable
+        );
+    }
+
+    #[tokio::test]
+    async fn test_verify_production_readiness_rejects_placeholder_secrets() {
+        let _lock = TEST_MUTEX.lock().await;
+        let mut config = AppConfig::default();
+        config.cache.backend = "dragonfly".to_string();
+        config.cache.database_backend = "postgres".to_string();
+        config.cache.vector_backend = "qdrant".to_string();
+
+        let state = AppState::new(config);
+
+        std::env::set_var("SUNBORN_ENV", "production");
+        std::env::set_var(
+            "SUNBORN_MASTER_KEK",
+            "changeme_in_production_placeholder_key_too_short",
+        );
+        std::env::set_var("SUNBORN_ADMIN_KEY", "dev-admin-key");
+
+        let res = state.verify_production_readiness().await;
+
+        std::env::remove_var("SUNBORN_ENV");
+        std::env::remove_var("SUNBORN_MASTER_KEK");
+        std::env::remove_var("SUNBORN_ADMIN_KEY");
+
+        assert!(res.is_err());
+        assert_eq!(
+            res.unwrap_err().code,
+            sunborn_core::ErrorCode::ConfigurationError
+        );
+    }
+
+    #[tokio::test]
+    async fn test_verify_production_readiness_rejects_mock_providers_in_production() {
+        let _lock = TEST_MUTEX.lock().await;
+        let mut config = AppConfig::default();
+        config.cache.backend = "dragonfly".to_string();
+        config.cache.database_backend = "postgres".to_string();
+        config.cache.vector_backend = "qdrant".to_string();
+
+        let state = AppState::new(config);
+
+        std::env::set_var("SUNBORN_ENV", "production");
+        std::env::set_var(
+            "SUNBORN_MASTER_KEK",
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        );
+        std::env::set_var("SUNBORN_ADMIN_KEY", "prod-secure-admin-token-998877");
+
+        let res = state.verify_production_readiness().await;
+
+        std::env::remove_var("SUNBORN_ENV");
+        std::env::remove_var("SUNBORN_MASTER_KEK");
+        std::env::remove_var("SUNBORN_ADMIN_KEY");
+
+        assert!(res.is_err());
+        assert_eq!(
+            res.unwrap_err().code,
+            sunborn_core::ErrorCode::ConfigurationError
         );
     }
 }

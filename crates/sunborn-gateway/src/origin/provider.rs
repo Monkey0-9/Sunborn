@@ -19,6 +19,12 @@ pub struct OriginExecutionResult {
 #[async_trait]
 pub trait LlmOriginProvider: Send + Sync {
     async fn execute(&self, req: &RequestEnvelope) -> Result<OriginExecutionResult>;
+    fn is_mock(&self) -> bool {
+        false
+    }
+    async fn health_check(&self) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// Production HTTP client executing calls against OpenAI/Anthropic/vLLM HTTP endpoints.
@@ -245,6 +251,43 @@ impl LlmOriginProvider for HttpLlmOriginProvider {
             "Origin execution failed after maximum retries".to_string()
         })))
     }
+
+    async fn health_check(&self) -> Result<()> {
+        let base = self.endpoint_url.trim_end_matches('/');
+        let url = if base.ends_with("/chat/completions") {
+            base.replace("/chat/completions", "/models")
+        } else if base.ends_with("/v1") {
+            format!("{}/models", base)
+        } else {
+            base.to_string()
+        };
+
+        let mut req = self.client.get(&url);
+        if let Some(key) = &self.api_key {
+            if !key.is_empty() {
+                req = req.bearer_auth(key);
+            }
+        }
+
+        match req.send().await {
+            Ok(resp)
+                if resp.status().is_success()
+                    || resp.status().as_u16() == 401
+                    || resp.status().as_u16() == 404 =>
+            {
+                Ok(())
+            }
+            Ok(resp) => Err(SunbornError::origin(format!(
+                "LLM Origin endpoint at {} returned error status: {}",
+                url,
+                resp.status()
+            ))),
+            Err(err) => Err(SunbornError::origin(format!(
+                "Failed to connect to LLM Origin endpoint at {}: {}",
+                url, err
+            ))),
+        }
+    }
 }
 
 /// Deterministic mock provider for unit tests, offline CI, and benchmark suites
@@ -264,6 +307,10 @@ impl Default for MockOriginProvider {
 
 #[async_trait]
 impl LlmOriginProvider for MockOriginProvider {
+    fn is_mock(&self) -> bool {
+        true
+    }
+
     async fn execute(&self, req: &RequestEnvelope) -> Result<OriginExecutionResult> {
         let prompt_tokens = (req.prompt.split_whitespace().count() * 2).max(1) as u32;
         let content = format!(

@@ -52,3 +52,9 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    # Allow egress to external LLM origins and embedding providers via HTTPS
+    - ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80

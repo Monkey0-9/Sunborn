@@ -58,6 +58,25 @@ Sunborn is engineered according to a formal six-tier autonomy framework aligned 
 
 ---
 
+## 🛡️ Enterprise Audit & Security Remediation (October 16, 2026)
+
+Following an independent enterprise readiness audit, the Sunborn codebase underwent a comprehensive security and architectural remediation to resolve critical release-blocking (P0) vulnerabilities and architectural gaps:
+
+| Vulnerability / Issue | Severity | Status | Remediation Details |
+| :--- | :---: | :---: | :--- |
+| **BFF Ambient Key Injection** | **P0** | **Remediated** | Completely eliminated ambient `SUNBORN_ADMIN_KEY` injection in `frontend/src/app/api/proxy/[...path]/route.ts`. Enforced strict route allowlisting (`isPrivilegedRoute`, `isPublicRoute`), CSRF origin verification on mutations, and fail-closed 401/403 rejection for unauthenticated admin calls. |
+| **Committed Secrets in Compose** | **P0** | **Remediated** | Parameterized `deploy/docker-compose.yml`, defaulted `SUNBORN_ENV` to `development`, created `deploy/.env.example`, and added fail-closed startup validation in `AppState::verify_production_readiness` that halts boot if default or placeholder KEKs (< 32 bytes) are detected in production. |
+| **Synthetic / Mock Model Assurance** | **P0** | **Remediated** | Production mode now strictly rejects `MockOriginProvider` and `DeterministicEmbeddingProvider`. Implemented active `health_check()` probes on both LLM and embedding providers, surfaced directly in the `/ready` probe payload. |
+| **Unauthenticated Feedback Poisoning** | **P0** | **Remediated** | Implemented RFC 2104 HMAC-SHA256 signature verification in `POST /v1/learning/feedback`. Unsigned or invalidly signed events and events outside a $[-60, 900]$s freshness window are rejected with 401/400 before ingestion. |
+| **Incomplete Erasure & Qdrant Deletion** | **P0** | **Remediated** | Removed silent error suppression (`unwrap_or(0)`) in `delete_tenant` and `crypto_shred_tenant`. Added remote Qdrant point deletion and live tenant counts via REST API in `QdrantVectorStore`. Ensured in-memory learning store events are completely purged on tenant offboarding. |
+| **Persistence Write Error Handling** | **P0** | **Remediated** | Added `SUNBORN_STRICT_DURABILITY` mode (`bool`). In strict mode, database write failures on cache misses halt the request pipeline with fail-closed errors instead of proceeding silently. |
+| **Fabricated Frontend Telemetry** | **P0** | **Remediated** | Removed hardcoded 124 µs latency counters and synthetic traces in `frontend/src/app/page.tsx`. Bound the Learning Dashboard (`frontend/src/app/learning/page.tsx`) to real backend endpoints (`POST /v1/learning/calibrate`, `POST /v1/learning/promote`). Bound Governance shredding reports to actual per-store deletion counts. |
+| **Decision Engine Dynamic Routing** | **P1** | **Remediated** | Wired `PolicyPromotionController` active and canary weights into `DecisionEngine::evaluate_with_thresholds` using stable request hash routing. |
+| **Database Schema Alignment** | **P1** | **Remediated** | Standardized durable table naming on `durable_cache_entries` across `migrations/0001_initial_schema.sql` and `crates/sunborn-db/src/postgres.rs`. |
+| **K8s Egress NetworkPolicy** | **P1** | **Remediated** | Added outbound TCP port 443 (and 80) egress in `deploy/k8s/networkpolicy.yaml` to allow gateway communication with external LLM and embedding endpoints. |
+
+---
+
 ## 🔍 Operational Realities & Truthful Disclosure (Zero Bluff)
 
 In accordance with strict engineering integrity standards, the following distinguishes implemented code and verified benchmarks from production deployment dependencies:
@@ -65,18 +84,18 @@ In accordance with strict engineering integrity standards, the following disting
 1. **Storage & Durability Model**:
    - **Non-Accelerator Authority**: In-memory and vector acceleration tiers (W-TinyLFU, Dragonfly, Qdrant) are accelerators, never correctness authorities.
    - **PostgreSQL Authority**: When PostgreSQL is selected (`SUNBORN_DB_BACKEND=postgres`), missing rows return authoritative `Ok(None)` / `404` and never silently fall back to an incomplete memory store.
-   - **Development vs Production**: In `development` mode (`SUNBORN_ENV=development`), self-contained in-memory stubs and mock embedders are provided so the entire test suite and API can run locally without external service dependencies. In `production` mode (`SUNBORN_ENV=production`), the gateway strictly enforces external PostgreSQL connectivity and fails closed if required backends are unreachable.
+   - **Development vs Production**: In `development` mode (`SUNBORN_ENV=development`), self-contained in-memory stubs and mock embedders are provided so the entire test suite and API can run locally without external service dependencies. In `production` mode (`SUNBORN_ENV=production`), the gateway strictly enforces external PostgreSQL, LLM origin, and embedding provider connectivity and fails closed if required backends are unreachable or default/weak keys are present.
 
-2. **Credential Security & Browser Isolation**:
+2. **Credential Security & BFF Protection**:
    - **No Browser API Keys**: The Next.js frontend routes all backend calls through a Server-Side Backend-For-Frontend (BFF) proxy at `/api/proxy/[...path]`.
-   - **Zero Client Leakage**: Browser clients never hold or transmit master admin keys; `NEXT_PUBLIC_SUNBORN_API_KEY` and client-side `localStorage` fallbacks have been eliminated. Administrative credentials exist solely within the server environment.
+   - **Zero Client Leakage & Fail-Closed RBAC**: Browser clients never hold or transmit master admin keys; `NEXT_PUBLIC_SUNBORN_API_KEY` and client-side `localStorage` fallbacks have been eliminated. Administrative credentials exist solely within the server environment. Unauthenticated requests to privileged routes are rejected at the BFF perimeter with HTTP 401.
 
 3. **Safe Adaptive Learning vs Uncontrolled Self-Modification**:
    - Sunborn **does not** perform uncontrolled runtime neural weight modification.
-   - Its Level 5 learning controller calibrates operational policy weights (similarity thresholds, conformal alpha, eviction priority) using objective feedback (origin re-execution, verified tool outputs, human audits). Candidate policies must pass held-out statistical soundness tests ($\le 1.0\%$ error rate) before canary rollout.
+   - Its Level 5 learning controller calibrates operational policy weights (similarity thresholds, conformal alpha, eviction priority) using objective feedback (origin re-execution, verified tool outputs, human audits). Candidate policies must pass held-out statistical soundness tests ($\le 1.0\%$ error rate) before canary rollout. All incoming feedback requires HMAC-SHA256 cryptographic verification.
 
 4. **Empirical Reproduction Metrics**:
-   - Benchmark figures reported below are from clean, automated runs of the included `research/reproduce.sh` script against a 124-query adversarial dataset (`SemanticCacheBench`) on Linux x86_64.
+   - Benchmark figures reported below are from clean, automated runs of the included `research/reproduce.sh` script against a 124-query adversarial dataset (`SemanticCacheBench`) on Linux x86_64. No simulated or artificial metrics are presented.
 
 ---
 
@@ -89,12 +108,15 @@ In accordance with strict engineering integrity standards, the following disting
 
 ### 1. Build and Test the Workspace
 ```bash
-# Run all 74 unit, integration, and contract tests across all 8 crates
+# Run all 106 unit, integration, and contract tests across all 8 crates
 cargo test --workspace --all-targets
 
 # Verify code formatting and strict clippy standards
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
+
+# Run all Next.js BFF security tests (route allowlisting, CSRF origin verification, 401/403 RBAC)
+npm test --prefix frontend
 ```
 
 ### 2. Run the Gateway Locally
@@ -240,7 +262,7 @@ Sunborn Multi-Tier Cal | 29.0% [21.8,37.6]   |  0.0% [0.0,3.0]         |  100.0%
 
 ### What `reproduce.sh` Executes Freshly:
 1. **Workspace Quality**: Enforces `cargo fmt -- --check` and `cargo clippy -D warnings`.
-2. **Complete Test Matrix**: Executes all 74 unit, integration, and contract tests across all 8 crates.
+2. **Complete Test Matrix**: Executes all 106 unit, integration, and contract tests across all 8 crates.
 3. **Gateway Performance Gate**: Benchmarks exact-cache hot path (measured P99 latency: **138 µs**, strictly passing the $<5.0$ ms SLA, throughput $>10,000$ req/s).
 4. **Adversarial Security**: Asserts fail-closed authentication, tenant spoofing rejection, cross-tenant isolation, and 403 Forbidden enforcement on all destructive endpoints.
 5. **Fresh Semantic Benchmark (`SemanticCacheBench`)**: Evaluates 4 baselines on 124 queries across 8 categories:

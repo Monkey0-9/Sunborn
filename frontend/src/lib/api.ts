@@ -110,13 +110,20 @@ export const sunbornApi = {
 
   // Governance: Cryptographic shredding
   shredTenant: (tenantId: string) =>
-    request<{ status: string; shredding_latency_us?: number }>(
-      "v1/governance/shred",
-      {
-        method: "POST",
-        body: JSON.stringify({ tenant_id: tenantId }),
-      }
-    ),
+    request<{
+      tenant_id: string;
+      status: string;
+      shred_latency_nanos?: number;
+      deleted_db_entries?: number;
+      deleted_exact_cache?: number;
+      deleted_vectors?: number;
+      deleted_execution_tools?: number;
+      deleted_learning_events?: number;
+      verified_multi_store_erasure?: boolean;
+    }>("v1/governance/shred", {
+      method: "POST",
+      body: JSON.stringify({ tenant_id: tenantId }),
+    }),
 
   // Governance: Durable state rebuild from PostgreSQL
   triggerRebuild: (tenantId: string) =>
@@ -181,6 +188,15 @@ export const sunbornApi = {
       body: JSON.stringify(event),
     }),
 
+  calibratePolicy: (version: number) =>
+    request<{
+      status: string;
+      candidate_policy: any;
+    }>("v1/learning/calibrate", {
+      method: "POST",
+      body: JSON.stringify({ version }),
+    }),
+
   startCanaryRollout: (candidatePolicy: any, canaryPercentage: number) =>
     request<{ status: string; canary_percentage: number; timestamp: string }>(
       "v1/learning/canary",
@@ -192,6 +208,15 @@ export const sunbornApi = {
         }),
       }
     ),
+
+  promoteLearningPolicy: () =>
+    request<{
+      status: string;
+      active_policy: any;
+      timestamp: string;
+    }>("v1/learning/promote", {
+      method: "POST",
+    }),
 
   rollbackLearningPolicy: (reason: string) =>
     request<{ status: string; reason: string; timestamp: string }>(

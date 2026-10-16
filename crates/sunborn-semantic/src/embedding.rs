@@ -26,12 +26,24 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 #[async_trait]
 pub trait EmbeddingProvider: Send + Sync {
     async fn embed(&self, text: &str) -> Result<Vector>;
+    fn is_deterministic(&self) -> bool {
+        false
+    }
+    async fn health_check(&self) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[async_trait]
 impl EmbeddingProvider for std::sync::Arc<dyn EmbeddingProvider> {
     async fn embed(&self, text: &str) -> Result<Vector> {
         (**self).embed(text).await
+    }
+    fn is_deterministic(&self) -> bool {
+        (**self).is_deterministic()
+    }
+    async fn health_check(&self) -> Result<()> {
+        (**self).health_check().await
     }
 }
 
@@ -56,6 +68,10 @@ impl Default for DeterministicEmbeddingProvider {
 
 #[async_trait]
 impl EmbeddingProvider for DeterministicEmbeddingProvider {
+    fn is_deterministic(&self) -> bool {
+        true
+    }
+
     async fn embed(&self, text: &str) -> Result<Vector> {
         let mut vector = vec![0.0f32; self.dimension];
         let words: Vec<&str> = text.split_whitespace().collect();
@@ -172,6 +188,38 @@ impl EmbeddingProvider for HttpEmbeddingProvider {
 
         // Resilient fallback for offline unit tests & benchmark runs
         self.fallback_provider.embed(text).await
+    }
+
+    async fn health_check(&self) -> Result<()> {
+        let mut url = self.endpoint_url.trim_end_matches('/').to_string();
+        if !url.ends_with("/embeddings") {
+            url.push_str("/embeddings");
+        }
+
+        let payload = serde_json::json!({
+            "input": "healthcheck",
+            "model": self.model,
+        });
+
+        let mut req = self.client.post(&url).json(&payload);
+        if let Some(key) = &self.api_key {
+            if !key.is_empty() {
+                req = req.bearer_auth(key);
+            }
+        }
+
+        match req.send().await {
+            Ok(resp) if resp.status().is_success() => Ok(()),
+            Ok(resp) => Err(sunborn_core::SunbornError::embedding(format!(
+                "Upstream HTTP embedding provider at {} returned error status: {}",
+                url,
+                resp.status()
+            ))),
+            Err(err) => Err(sunborn_core::SunbornError::embedding(format!(
+                "Failed to connect to upstream HTTP embedding provider at {}: {}",
+                url, err
+            ))),
+        }
     }
 }
 

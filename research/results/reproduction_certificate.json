@@ -1,9 +1,9 @@
 {
   "evaluation": "IEEE/ACM Artifact Reproduction",
   "status": "PASSED",
-  "git_commit": "fd14bb411b45de3bdc997e503f4c59bf6087b3fc",
+  "git_commit": "df4133e456089b2daee99c54a1d8774dff8efcdd",
   "git_branch": "main",
-  "timestamp_utc": "2026-10-16T14:07:24.038801+00:00",
+  "timestamp_utc": "2026-10-16T15:25:11.645729+00:00",
   "environment": {
     "os": "Linux",
     "release": "6.12.0-211.64.1.el10_2.x86_64",

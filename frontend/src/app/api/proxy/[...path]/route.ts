@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  evaluateProxySecurity,
+  isPrivilegedRoute,
+  isPublicRoute,
+} from "@/lib/proxy-policy";
 
 const GATEWAY_URL =
   process.env.SUNBORN_GATEWAY_URL ||
   process.env.API_URL ||
   "http://127.0.0.1:8080";
-
-const ADMIN_API_KEY =
-  process.env.SUNBORN_ADMIN_KEY ||
-  process.env.SUNBORN_API_KEY ||
-  "";
 
 type RouteContext = {
   params: Promise<{ path?: string[] }>;
@@ -17,6 +17,36 @@ type RouteContext = {
 async function handleProxy(req: NextRequest, context: RouteContext) {
   const { path } = await context.params;
   const pathSegment = path ? path.join("/") : "";
+  const normalizedPath = pathSegment.replace(/^\/+|\/+$/g, "");
+
+  // Extract Client Credentials
+  // Priority: explicit Authorization header -> explicit x-api-key -> session cookie
+  const authHeader = req.headers.get("authorization");
+  const apiKeyHeader = req.headers.get("x-api-key");
+  const sessionCookie = req.cookies.get("sunborn_session")?.value;
+
+  const clientCredential =
+    authHeader ||
+    (apiKeyHeader ? `Bearer ${apiKeyHeader}` : null) ||
+    (sessionCookie ? `Bearer ${sessionCookie}` : null);
+
+  const securityDecision = evaluateProxySecurity({
+    method: req.method,
+    normalizedPath,
+    clientCredential,
+    origin: req.headers.get("origin"),
+    host: req.headers.get("host"),
+    telemetryKey: process.env.SUNBORN_READ_ONLY_TOKEN,
+  });
+
+  if (!securityDecision.allowed) {
+    return NextResponse.json(
+      { error: securityDecision.error, detail: securityDecision.detail },
+      { status: securityDecision.status }
+    );
+  }
+
+  // 4. Construct Target Gateway URL & Headers
   const targetUrl = new URL(
     pathSegment,
     GATEWAY_URL.endsWith("/") ? GATEWAY_URL : `${GATEWAY_URL}/`
@@ -29,19 +59,16 @@ async function handleProxy(req: NextRequest, context: RouteContext) {
   const headers = new Headers();
   req.headers.forEach((value, key) => {
     const lowerKey = key.toLowerCase();
-    if (!["host", "connection", "content-length"].includes(lowerKey)) {
+    if (!["host", "connection", "content-length", "cookie"].includes(lowerKey)) {
       headers.set(key, value);
     }
   });
 
-  // Server-side authentication:
-  // If client provided an explicit x-api-key or authorization, keep it;
-  // otherwise, inject server-configured secure key without browser exposure.
-  const clientKey =
-    req.headers.get("x-api-key") || req.headers.get("authorization");
-  if (!clientKey && ADMIN_API_KEY) {
-    headers.set("Authorization", `Bearer ${ADMIN_API_KEY}`);
-    headers.set("x-api-key", ADMIN_API_KEY);
+  // Attach verified client credential
+  if (clientCredential) {
+    headers.set("Authorization", clientCredential);
+  } else if (process.env.SUNBORN_READ_ONLY_TOKEN && req.method === "GET") {
+    headers.set("Authorization", `Bearer ${process.env.SUNBORN_READ_ONLY_TOKEN}`);
   }
 
   try {

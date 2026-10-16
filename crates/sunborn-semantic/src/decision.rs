@@ -83,7 +83,12 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
         (similarity + len_bonus - temp_penalty).clamp(0.0, 1.0)
     }
 
-    pub async fn evaluate(&self, req: &RequestEnvelope) -> Result<DecisionOutcome> {
+    pub async fn evaluate_with_thresholds(
+        &self,
+        req: &RequestEnvelope,
+        min_similarity_threshold: f32,
+        max_risk_threshold: f32,
+    ) -> Result<DecisionOutcome> {
         // 1. Generate query embedding
         let query_vec = self.embedder.embed(&req.prompt).await?;
 
@@ -95,7 +100,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                 &req.application_id,
                 &query_vec,
                 1,
-                self.config.min_similarity_threshold - self.config.revalidation_band,
+                min_similarity_threshold - self.config.revalidation_band,
             )
             .await?;
 
@@ -107,7 +112,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                 Self::compute_confidence(similarity, req.prompt.len(), req.temperature);
 
             // High risk -> Revalidate
-            if risk_score > self.config.max_risk_threshold {
+            if risk_score > max_risk_threshold {
                 return Ok(DecisionOutcome {
                     decision: DecisionRecord {
                         action: DecisionAction::Revalidate,
@@ -123,7 +128,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
             }
 
             // High confidence & similarity >= threshold -> SafeHit C2
-            if similarity >= self.config.min_similarity_threshold {
+            if similarity >= min_similarity_threshold {
                 return Ok(DecisionOutcome {
                     decision: DecisionRecord {
                         action: DecisionAction::SafeHit,
@@ -166,6 +171,15 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                 matched_id: None,
             })
         }
+    }
+
+    pub async fn evaluate(&self, req: &RequestEnvelope) -> Result<DecisionOutcome> {
+        self.evaluate_with_thresholds(
+            req,
+            self.config.min_similarity_threshold,
+            self.config.max_risk_threshold,
+        )
+        .await
     }
 }
 

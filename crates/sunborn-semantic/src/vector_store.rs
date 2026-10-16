@@ -466,11 +466,85 @@ impl VectorStore for QdrantVectorStore {
 
     async fn delete(&self, id: &str) -> Result<bool> {
         let _ = self.fallback_store.delete(id).await;
-        Ok(true)
+        let url = format!(
+            "{}/collections/{}/points/delete",
+            self.endpoint_url.trim_end_matches('/'),
+            self.collection_name
+        );
+        let delete_payload = serde_json::json!({
+            "points": [id]
+        });
+        match self.client.post(&url).json(&delete_payload).send().await {
+            Ok(resp) if resp.status().is_success() => Ok(true),
+            Ok(resp) => {
+                if self.strict_mode {
+                    Err(sunborn_core::SunbornError::vector_store(format!(
+                        "Qdrant point delete failed with status {}",
+                        resp.status()
+                    )))
+                } else {
+                    Ok(true)
+                }
+            }
+            Err(err) => {
+                if self.strict_mode {
+                    Err(sunborn_core::SunbornError::vector_store(format!(
+                        "Qdrant point delete connection failed: {err}"
+                    )))
+                } else {
+                    Ok(true)
+                }
+            }
+        }
     }
 
     async fn count(&self, tenant_id: &TenantId) -> Result<usize> {
-        self.fallback_store.count(tenant_id).await
+        let url = format!(
+            "{}/collections/{}/points/count",
+            self.endpoint_url.trim_end_matches('/'),
+            self.collection_name
+        );
+        let payload = serde_json::json!({
+            "filter": {
+                "must": [
+                    { "key": "tenant_id", "match": { "value": tenant_id.0 } }
+                ]
+            },
+            "exact": true
+        });
+        match self.client.post(&url).json(&payload).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                if let Ok(data) = resp.json::<serde_json::Value>().await {
+                    if let Some(count) = data
+                        .get("result")
+                        .and_then(|r| r.get("count"))
+                        .and_then(|c| c.as_u64())
+                    {
+                        return Ok(count as usize);
+                    }
+                }
+                Ok(0)
+            }
+            Ok(resp) => {
+                if self.strict_mode {
+                    Err(sunborn_core::SunbornError::vector_store(format!(
+                        "Qdrant count failed with status {}",
+                        resp.status()
+                    )))
+                } else {
+                    self.fallback_store.count(tenant_id).await
+                }
+            }
+            Err(err) => {
+                if self.strict_mode {
+                    Err(sunborn_core::SunbornError::vector_store(format!(
+                        "Qdrant count connection failed: {err}"
+                    )))
+                } else {
+                    self.fallback_store.count(tenant_id).await
+                }
+            }
+        }
     }
 
     async fn delete_by_tenant(&self, tenant_id: &TenantId) -> Result<usize> {

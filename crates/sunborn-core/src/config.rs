@@ -27,6 +27,8 @@ pub struct CacheConfig {
     pub database_backend: String,
     pub postgres_url: String,
     pub master_kek: Option<String>,
+    #[serde(default)]
+    pub strict_durability: bool,
 }
 
 impl Default for CacheConfig {
@@ -42,6 +44,7 @@ impl Default for CacheConfig {
             database_backend: "memory".to_string(),
             postgres_url: "postgres://postgres:postgres@localhost:5432/sunborn".to_string(),
             master_kek: None,
+            strict_durability: false,
         }
     }
 }
@@ -127,6 +130,7 @@ impl AppConfig {
             .or_else(|_| std::env::var("DATABASE_URL"))
             .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/sunborn".to_string());
         let master_kek = std::env::var("SUNBORN_MASTER_KEK").ok();
+        let strict_durability = parse_bool_env("SUNBORN_STRICT_DURABILITY", false)?;
 
         let enforce_auth = if std::env::var("SUNBORN_AUTH_ENFORCE").is_ok() {
             parse_bool_env("SUNBORN_AUTH_ENFORCE", true)?
@@ -147,6 +151,7 @@ impl AppConfig {
                 database_backend,
                 postgres_url,
                 master_kek,
+                strict_durability,
             },
             auth: AuthConfig {
                 enforce_auth,

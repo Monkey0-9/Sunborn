@@ -102,43 +102,41 @@ export default function LearningControllerPage() {
     fetchPolicyState();
   }, []);
 
-  const handleSimulateCalibration = async () => {
+  const handleCalibratePolicy = async () => {
     setIsCalibrating(true);
     setActionError(null);
     setActionSuccess(null);
     try {
-      // Simulate synthetic 70/30 offline calibration on empirical feedback
-      const candidate: CandidatePolicy = {
-        policy_id: `policy-v${(activePolicy?.version ?? 1) + 1}-calibrated`,
-        version: (activePolicy?.version ?? 1) + 1,
-        weights: {
-          min_similarity_threshold: 0.91,
-          max_risk_threshold: 0.18,
-          conformal_alpha: 0.01,
-          prefetch_confidence_threshold: 0.65,
-          eviction_staleness_weight: 0.40,
-          eviction_cost_weight: 0.60,
-        },
-        created_at: new Date().toISOString(),
-        evaluation_report: {
-          total_samples: Math.max(100, totalFeedbackEvents || 120),
-          training_samples: Math.floor(Math.max(100, totalFeedbackEvents || 120) * 0.7),
-          held_out_samples: Math.floor(Math.max(100, totalFeedbackEvents || 120) * 0.3),
-          training_false_hit_rate: 0.0,
-          held_out_false_hit_rate: 0.0,
-          held_out_abstention_rate: 0.04,
-          estimated_cost_reduction_pct: 18.4,
-          is_statistically_sound: true,
-        },
-        is_promoted: false,
-      };
-
-      setCalibratedCandidate(candidate);
-      setActionSuccess("Offline calibration completed successfully on 70/30 held-out split (p <= 0.01).");
+      const nextVersion = (activePolicy?.version ?? 1) + 1;
+      const res = await sunbornApi.calibratePolicy(nextVersion);
+      if (res && res.candidate_policy) {
+        setCalibratedCandidate(res.candidate_policy);
+        setActionSuccess(
+          `Offline calibration completed on empirical feedback data via backend engine (Candidate: ${res.candidate_policy.policy_id}).`
+        );
+      } else {
+        setActionError("Backend did not return a valid candidate policy.");
+      }
     } catch (err: any) {
       setActionError(`Calibration failed: ${err.message}`);
     } finally {
       setIsCalibrating(false);
+    }
+  };
+
+  const handlePromotePolicy = async () => {
+    setIsPromoting(true);
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      await sunbornApi.promoteLearningPolicy();
+      setActionSuccess("Canary policy successfully promoted to 100% active production traffic.");
+      setCalibratedCandidate(null);
+      await fetchPolicyState();
+    } catch (err: any) {
+      setActionError(`Promotion failed: ${err.message}`);
+    } finally {
+      setIsPromoting(false);
     }
   };
 
@@ -365,7 +363,7 @@ export default function LearningControllerPage() {
 
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
                 <button
-                  onClick={handleSimulateCalibration}
+                  onClick={handleCalibratePolicy}
                   disabled={isCalibrating}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 border border-cyan-500/30 hover:border-cyan-400 text-cyan-300 font-bold cursor-pointer transition-all"
                 >
@@ -396,11 +394,19 @@ export default function LearningControllerPage() {
                     <div>• Min Similarity: <strong className="text-cyan-300">{canaryPolicy.policy.weights.min_similarity_threshold}</strong></div>
                     <div>• Held-Out Error Rate: <strong className="text-emerald-300">{canaryPolicy.policy.evaluation_report.held_out_false_hit_rate}%</strong></div>
                   </div>
-                  <div className="flex gap-2 pt-1">
+                  <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                    <button
+                      onClick={handlePromotePolicy}
+                      disabled={isPromoting}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold cursor-pointer transition-all"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{isPromoting ? "Promoting..." : "Promote to 100% Production"}</span>
+                    </button>
                     <button
                       onClick={handleRollback}
                       disabled={isRollingBack}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold cursor-pointer"
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold cursor-pointer transition-all"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                       <span>{isRollingBack ? "Rolling Back..." : "Trigger Emergency Rollback"}</span>

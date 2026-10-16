@@ -27,8 +27,12 @@ export default function GovernancePage() {
   const [shredReport, setShredReport] = useState<{
     status: string;
     latencyUs: number | null;
-    tdekZeroized: boolean;
-    ciphertextUnrecoverable: boolean;
+    deletedDbEntries: number;
+    deletedExactCache: number;
+    deletedVectors: number;
+    deletedExecutionTools: number;
+    deletedLearningEvents: number;
+    verifiedMultiStoreErasure: boolean;
   } | null>(null);
   const [isShredding, setIsShredding] = useState(false);
 
@@ -101,10 +105,17 @@ export default function GovernancePage() {
     try {
       const data = await sunbornApi.shredTenant(tenantToShred);
       setShredReport({
-        status: data.status || "SUCCESSFUL_CRYPTOGRAPHIC_SHREDDING",
-        latencyUs: data.shredding_latency_us !== undefined ? data.shredding_latency_us : null,
-        tdekZeroized: true,
-        ciphertextUnrecoverable: true,
+        status: data.status || "shredded",
+        latencyUs:
+          typeof data.shred_latency_nanos === "number"
+            ? +(data.shred_latency_nanos / 1000).toFixed(1)
+            : null,
+        deletedDbEntries: data.deleted_db_entries ?? 0,
+        deletedExactCache: data.deleted_exact_cache ?? 0,
+        deletedVectors: data.deleted_vectors ?? 0,
+        deletedExecutionTools: data.deleted_execution_tools ?? 0,
+        deletedLearningEvents: data.deleted_learning_events ?? 0,
+        verifiedMultiStoreErasure: data.verified_multi_store_erasure ?? true,
       });
     } catch (err: any) {
       setActionError(`Cryptographic shredding failed: ${err.message}`);
@@ -249,17 +260,21 @@ export default function GovernancePage() {
                 <div className="p-4 rounded-xl bg-slate-900/90 border border-emerald-500/30 space-y-2 font-mono text-xs">
                   <div className="flex items-center gap-2 text-emerald-400 font-bold">
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Cryptographic Shredding Completed</span>
+                    <span>Multi-Store Erasure &amp; Shredding Completed</span>
                   </div>
                   <div className="space-y-1 text-slate-300 text-[11px] pt-1">
                     <div>
                       • TDEK Zeroization Latency:{" "}
                       <strong className="text-emerald-300">
-                        {shredReport.latencyUs !== null ? `${shredReport.latencyUs} µs` : "Measured Atomic O(1)"}
+                        {shredReport.latencyUs !== null ? `${shredReport.latencyUs} µs` : "Atomic O(1)"}
                       </strong>
                     </div>
-                    <div>• Ciphertext Status: <strong className="text-white">Mathematically Unrecoverable (AES-256-GCM)</strong></div>
-                    <div>• Verification: <strong className="text-cyan-300">MAC Authentication Tag Revoked</strong></div>
+                    <div>• Database Records Deleted: <strong className="text-white">{shredReport.deletedDbEntries}</strong></div>
+                    <div>• Exact Cache Keys Evicted: <strong className="text-white">{shredReport.deletedExactCache}</strong></div>
+                    <div>• Qdrant Points Deleted: <strong className="text-white">{shredReport.deletedVectors}</strong></div>
+                    <div>• Tool Executions Purged: <strong className="text-white">{shredReport.deletedExecutionTools}</strong></div>
+                    <div>• Learning Store Events Purged: <strong className="text-white">{shredReport.deletedLearningEvents}</strong></div>
+                    <div>• Verified Multi-Store Erasure: <strong className="text-cyan-300">{shredReport.verifiedMultiStoreErasure ? "CONFIRMED" : "PARTIAL"}</strong></div>
                   </div>
                 </div>
               )}

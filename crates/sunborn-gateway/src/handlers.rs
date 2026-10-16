@@ -44,12 +44,20 @@ pub async fn ready(State(state): State<AppState>) -> impl IntoResponse {
         .vector_store
         .count(&TenantId::new("__readiness_probe__"))
         .await;
+    let llm_res = state.origin_provider.health_check().await;
+    let embed_res = state.selected_embedder.health_check().await;
+
+    let is_prod = std::env::var("SUNBORN_ENV")
+        .map(|v| v.to_lowercase() == "production")
+        .unwrap_or(false);
 
     let cache_ok = cache_res.is_ok();
     let db_ok = db_res.is_ok();
     let vector_ok = vector_res.is_ok();
+    let llm_ok = llm_res.is_ok() && (!is_prod || !state.origin_provider.is_mock());
+    let embed_ok = embed_res.is_ok() && (!is_prod || !state.selected_embedder.is_deterministic());
 
-    let all_ok = cache_ok && db_ok && vector_ok;
+    let all_ok = cache_ok && db_ok && vector_ok && llm_ok && embed_ok;
 
     let status_code = if all_ok {
         StatusCode::OK
@@ -72,8 +80,18 @@ pub async fn ready(State(state): State<AppState>) -> impl IntoResponse {
                 "status": if vector_ok { "connected" } else { "unavailable" },
                 "error": vector_res.err().map(|e| e.to_string())
             },
+            "llm_origin": {
+                "status": if llm_ok { "connected" } else { "unavailable" },
+                "is_mock": state.origin_provider.is_mock(),
+                "error": llm_res.err().map(|e| e.to_string())
+            },
+            "embedding_provider": {
+                "status": if embed_ok { "connected" } else { "unavailable" },
+                "is_deterministic": state.selected_embedder.is_deterministic(),
+                "error": embed_res.err().map(|e| e.to_string())
+            },
             "semantic_engine": {
-                "status": if vector_ok { "ready" } else { "degraded" }
+                "status": if vector_ok && embed_ok { "ready" } else { "degraded" }
             },
             "invalidation_bus": {
                 "status": if cache_ok && vector_ok { "ready" } else { "degraded" }
@@ -200,11 +218,24 @@ pub async fn execute_request_inner(
         }
     }
 
-    // 5. Semantic Cache Candidate Evaluation (C2)
+    // 5. Semantic Cache Candidate Evaluation (C2) - Dynamically governed by Learning Controller
     if state.config.cache.semantic_cache_enabled
         && state.circuit_breaker.status().await != sunborn_cache::CircuitStatus::Open
     {
-        if let Ok(outcome) = state.decision_engine.evaluate(&req).await {
+        let req_hash =
+            u64::from_str_radix(&identity.hash[..16.min(identity.hash.len())], 16).unwrap_or(0);
+        let weights = state
+            .learning_controller
+            .select_policy_for_request(req_hash);
+        if let Ok(outcome) = state
+            .decision_engine
+            .evaluate_with_thresholds(
+                &req,
+                weights.min_similarity_threshold,
+                weights.max_risk_threshold,
+            )
+            .await
+        {
             if outcome.decision.action == DecisionAction::SafeHit {
                 if let Some(content) = outcome.matched_content {
                     SEMANTIC_HITS.fetch_add(1, Ordering::Relaxed);
@@ -268,7 +299,7 @@ pub async fn execute_request_inner(
     }
 
     // c) Save to authoritative PostgreSQL system of record
-    let _ = state
+    let db_res = state
         .db
         .insert_cache_entry(sunborn_db::models::DurableCacheRecord {
             key: identity.key.clone(),
@@ -287,6 +318,24 @@ pub async fn execute_request_inner(
             last_accessed_at: Utc::now(),
         })
         .await;
+
+    if let Err(e) = db_res {
+        tracing::error!(
+            key = %identity.key,
+            tenant = %req.tenant_id.0,
+            error = %e,
+            "Authoritative database persistence failed on cache admission"
+        );
+        let is_prod = std::env::var("SUNBORN_ENV")
+            .map(|v| v.to_lowercase() == "production")
+            .unwrap_or(false);
+        if is_prod && state.config.cache.strict_durability {
+            return Err(SunbornError::database(format!(
+                "Strict durability violation: failed to persist authoritative cache entry to database: {e}"
+            ))
+            .into());
+        }
+    }
 
     let duration_ms = start.elapsed().as_millis() as u64;
 
@@ -733,25 +782,26 @@ pub async fn delete_tenant(
         .cache
         .delete_by_prefix(&prefix_sunborn)
         .await
-        .unwrap_or(0);
+        .map_err(AppError::from)?;
     let prefix_legacy = format!("tenant:{}:", tenant_id);
     let exact_deleted_legacy = state
         .cache
         .delete_by_prefix(&prefix_legacy)
         .await
-        .unwrap_or(0);
+        .map_err(AppError::from)?;
     let exact_deleted = exact_deleted_sunborn + exact_deleted_legacy;
 
     let vector_deleted = state
         .vector_store
         .delete_by_tenant(&tenant)
         .await
-        .unwrap_or(0);
+        .map_err(AppError::from)?;
     let execution_deleted = state
         .execution_store
         .evict_by_tenant(&tenant)
         .await
-        .unwrap_or(0);
+        .map_err(AppError::from)?;
+    let learning_deleted = state.learning_store.purge_tenant(&tenant);
 
     tracing::info!(
         tenant = %tenant_id,
@@ -760,6 +810,7 @@ pub async fn delete_tenant(
         exact_deleted,
         vector_deleted,
         execution_deleted,
+        learning_deleted,
         "Completed tenant cascade offboarding"
     );
 
@@ -770,7 +821,9 @@ pub async fn delete_tenant(
         "deleted_db_entries": db_deleted,
         "deleted_exact_cache": exact_deleted,
         "deleted_vectors": vector_deleted,
-        "deleted_execution_tools": execution_deleted
+        "deleted_execution_tools": execution_deleted,
+        "deleted_learning_events": learning_deleted,
+        "verified_multi_store_erasure": true
     })))
 }
 
@@ -907,30 +960,31 @@ pub async fn crypto_shred_tenant(
         .cache
         .delete_by_prefix(&prefix_sunborn)
         .await
-        .unwrap_or(0);
+        .map_err(AppError::from)?;
     let prefix_legacy = format!("tenant:{}:", payload.tenant_id);
     let exact_deleted_legacy = state
         .cache
         .delete_by_prefix(&prefix_legacy)
         .await
-        .unwrap_or(0);
+        .map_err(AppError::from)?;
     let exact_deleted = exact_deleted_sunborn + exact_deleted_legacy;
 
     let vector_deleted = state
         .vector_store
         .delete_by_tenant(&tenant)
         .await
-        .unwrap_or(0);
+        .map_err(AppError::from)?;
     let execution_deleted = state
         .execution_store
         .evict_by_tenant(&tenant)
         .await
-        .unwrap_or(0);
+        .map_err(AppError::from)?;
     let db_deleted = state
         .db
         .delete_tenant_data(&payload.tenant_id)
         .await
-        .unwrap_or(0);
+        .map_err(AppError::from)?;
+    let learning_deleted = state.learning_store.purge_tenant(&tenant);
 
     Ok(Json(json!({
         "tenant_id": payload.tenant_id,
@@ -939,7 +993,9 @@ pub async fn crypto_shred_tenant(
         "deleted_db_entries": db_deleted,
         "deleted_exact_cache": exact_deleted,
         "deleted_vectors": vector_deleted,
-        "deleted_execution_tools": execution_deleted
+        "deleted_execution_tools": execution_deleted,
+        "deleted_learning_events": learning_deleted,
+        "verified_multi_store_erasure": true
     })))
 }
 
@@ -1355,6 +1411,23 @@ pub async fn record_learning_feedback(
         return Err(SunbornError::unauthorized(
             "Cross-tenant feedback injection forbidden: tenant_id mismatch",
         )
+        .into());
+    }
+
+    // P0-4: Verify HMAC-SHA256 signature against server HMAC secret
+    event
+        .verify_signature(&state.learning_hmac_secret)
+        .map_err(AppError::from)?;
+
+    // Timestamp freshness verification: reject feedback older than 15 minutes (900 seconds)
+    // or skewed into the future by more than 60 seconds
+    let now = Utc::now();
+    let age_secs = (now - event.timestamp).num_seconds();
+    if !(-60..=900).contains(&age_secs) {
+        return Err(SunbornError::validation_error(format!(
+            "Feedback timestamp expired or skewed beyond acceptable window: age {}s",
+            age_secs
+        ))
         .into());
     }
 
