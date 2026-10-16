@@ -130,12 +130,12 @@ Demonstrated in `crates/sunborn-identity/src/crypto_shred.rs` and `tests/governa
 
 ## 4. Reverse Engineering Analysis (REA) & Binary Security Audit
 
-Deep binary inspection of the compiled native executable [`target/debug/sunborn-gateway`](file:///home/unknownuser/Sunbron/target/debug/sunborn-gateway) was conducted using the **Reverse Engineer Anything (REA)** MCP provider.
+Deep binary inspection of the compiled native executable `target/debug/sunborn-gateway` was conducted using the **Reverse Engineer Anything (REA)** MCP provider.
 
 ### 4.1 Binary Identification & Evidence
 ```json
 {
-  "path": "/home/unknownuser/Sunbron/target/debug/sunborn-gateway",
+  "path": "target/debug/sunborn-gateway",
   "format": "elf",
   "kind": "executable",
   "architecture": "x86_64",
@@ -200,6 +200,6 @@ bash research/reproduce.sh
 
 All 29 phase gates, ISO/IEC/IEEE 29148 functional requirements (FR-001 through FR-035), REA binary security mitigations, and Level 5/6 autonomic self-learning controllers are certified production-ready.
 
-- **Primary Traceability Matrix**: [`docs/architecture/traceability_matrix.md`](file:///home/unknownuser/Sunbron/docs/architecture/traceability_matrix.md)
-- **Release Acceptance Record**: [`docs/architecture/release_acceptance_record.md`](file:///home/unknownuser/Sunbron/docs/architecture/release_acceptance_record.md)
-- **Reproduction Certificate**: [`research/results/reproduction_certificate.json`](file:///home/unknownuser/Sunbron/research/results/reproduction_certificate.json)
+- **Primary Traceability Matrix**: [`docs/architecture/traceability_matrix.md`](traceability_matrix.md)
+- **Release Acceptance Record**: [`docs/architecture/release_acceptance_record.md`](release_acceptance_record.md)
+- **Reproduction Certificate**: [`research/results/reproduction_certificate.json`](../../research/results/reproduction_certificate.json)
