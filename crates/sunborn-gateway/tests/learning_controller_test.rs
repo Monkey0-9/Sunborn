@@ -17,7 +17,7 @@ use sunborn_gateway::{
 use tower::ServiceExt;
 
 #[test]
-fn test_layer1_feedback_hmac_signature_verification() {
+fn test_layer1_feedback_hmac_signature_verification_and_tamper_detection() {
     let secret = b"test-secret-key-for-hmac";
     let event_id = "ev-1001";
     let tenant_id = TenantId::new("tenant-learning-1");
@@ -42,24 +42,51 @@ fn test_layer1_feedback_hmac_signature_verification() {
         cost_saved_usd: 0.001,
         verified_outcome: outcome,
         verification_source: "origin_execution".to_string(),
-        hmac_signature: valid_signature,
+        hmac_signature: valid_signature.clone(),
         timestamp: ts,
     };
 
     assert!(event.verify_signature(secret).is_ok());
     assert!(event.is_trustworthy());
 
-    // Tamper with signature
+    // 1. Tamper with signature
     event.hmac_signature = "bad_signature_value".to_string();
     assert!(event.verify_signature(secret).is_err());
+    event.hmac_signature = valid_signature.clone();
+
+    // 2. Tamper with outcome (flip outcome without valid HMAC)
+    event.verified_outcome = VerifiedOutcome::VerifiedFalseHit;
+    assert!(event.verify_signature(secret).is_err());
+    event.verified_outcome = VerifiedOutcome::VerifiedCorrect;
+
+    // 3. Tamper with cache_key
+    event.cache_key = "cache:key:sha256:tampered".to_string();
+    assert!(event.verify_signature(secret).is_err());
+    event.cache_key = cache_key.to_string();
+
+    // 4. Tamper with tenant_id
+    event.tenant_id = TenantId::new("tenant-attacker");
+    assert!(event.verify_signature(secret).is_err());
+    event.tenant_id = tenant_id;
+
+    // 5. Verify untrusted sources and opinions
+    event.hmac_signature = valid_signature;
+    event.verified_outcome = VerifiedOutcome::UnverifiedOpinion;
+    assert!(!event.is_trustworthy());
+
+    event.verified_outcome = VerifiedOutcome::VerifiedCorrect;
+    event.verification_source = "untrusted_client".to_string();
+    assert!(!event.is_trustworthy());
 }
 
 #[test]
-fn test_layer2_tenant_safe_store_and_gdpr_purge() {
-    let store = Arc::new(TenantLearningStore::new(100));
+fn test_layer2_tenant_safe_store_isolation_capacity_and_gdpr() {
+    // Test store with capacity 5 to verify eviction bounding
+    let store = Arc::new(TenantLearningStore::new(5));
     let t1 = TenantId::new("tenant-alpha");
     let t2 = TenantId::new("tenant-beta");
 
+    // Insert 10 events for tenant 1; store should cap at 5
     for i in 0..10 {
         let ev = VerifiedFeedbackEvent {
             event_id: format!("ev-t1-{}", i),
@@ -85,7 +112,8 @@ fn test_layer2_tenant_safe_store_and_gdpr_purge() {
         assert!(store.record_event(ev).is_ok());
     }
 
-    for i in 0..5 {
+    // Insert 3 events for tenant 2
+    for i in 0..3 {
         let ev = VerifiedFeedbackEvent {
             event_id: format!("ev-t2-{}", i),
             tenant_id: t2.clone(),
@@ -106,17 +134,137 @@ fn test_layer2_tenant_safe_store_and_gdpr_purge() {
         assert!(store.record_event(ev).is_ok());
     }
 
-    assert_eq!(store.get_tenant_events(&t1).len(), 10);
-    assert_eq!(store.get_tenant_events(&t2).len(), 5);
-    assert_eq!(store.total_events(), 15);
+    // Bounded capacity check: tenant alpha capped at 5
+    assert_eq!(store.get_tenant_events(&t1).len(), 5);
+    assert_eq!(store.tenant_event_count(&t1), 5);
+    // Tenant beta has 3
+    assert_eq!(store.get_tenant_events(&t2).len(), 3);
+    assert_eq!(store.tenant_event_count(&t2), 3);
+    assert_eq!(store.total_events(), 8);
 
     // GDPR purge of tenant alpha
     let purged = store.purge_tenant(&t1);
-    assert_eq!(purged, 10);
+    assert_eq!(purged, 5);
     assert_eq!(store.get_tenant_events(&t1).len(), 0);
+    assert_eq!(store.tenant_event_count(&t1), 0);
     // Tenant beta remains completely intact
-    assert_eq!(store.get_tenant_events(&t2).len(), 5);
-    assert_eq!(store.total_events(), 5);
+    assert_eq!(store.get_tenant_events(&t2).len(), 3);
+    assert_eq!(store.tenant_event_count(&t2), 3);
+    assert_eq!(store.total_events(), 3);
+}
+
+#[test]
+fn test_layer2_poison_defense_and_untrusted_feedback_rejection() {
+    let store = Arc::new(TenantLearningStore::new(100));
+    let tenant_id = TenantId::new("tenant-poison-test");
+
+    // 1. Untrusted opinion rejection
+    let untrusted_ev = VerifiedFeedbackEvent {
+        event_id: "ev-untrusted-1".to_string(),
+        tenant_id: tenant_id.clone(),
+        application_id: ApplicationId::new("app-test"),
+        cache_key: "cache:key:1".to_string(),
+        decision_type: "exact_hit".to_string(),
+        prompt_hash: "hash_1".to_string(),
+        similarity_score: Some(0.95),
+        conformal_risk_score: Some(0.01),
+        latency_ms: 1.0,
+        tokens_saved: 10,
+        cost_saved_usd: 0.0001,
+        verified_outcome: VerifiedOutcome::UnverifiedOpinion,
+        verification_source: "origin_execution".to_string(),
+        hmac_signature: "sig".to_string(),
+        timestamp: Utc::now(),
+    };
+    let err = store.record_event(untrusted_ev);
+    assert!(err.is_err());
+
+    // 2. Untrusted source rejection
+    let untrusted_src = VerifiedFeedbackEvent {
+        event_id: "ev-untrusted-2".to_string(),
+        tenant_id: tenant_id.clone(),
+        application_id: ApplicationId::new("app-test"),
+        cache_key: "cache:key:2".to_string(),
+        decision_type: "exact_hit".to_string(),
+        prompt_hash: "hash_2".to_string(),
+        similarity_score: Some(0.95),
+        conformal_risk_score: Some(0.01),
+        latency_ms: 1.0,
+        tokens_saved: 10,
+        cost_saved_usd: 0.0001,
+        verified_outcome: VerifiedOutcome::VerifiedCorrect,
+        verification_source: "untrusted_third_party".to_string(),
+        hmac_signature: "sig".to_string(),
+        timestamp: Utc::now(),
+    };
+    let err = store.record_event(untrusted_src);
+    assert!(err.is_err());
+
+    // 3. Poison defense: record 1 initial VerifiedCorrect event for cache key 'poison-key'
+    let target_key = "poison-target-cache-key";
+    let base_ev = VerifiedFeedbackEvent {
+        event_id: "ev-base".to_string(),
+        tenant_id: tenant_id.clone(),
+        application_id: ApplicationId::new("app-test"),
+        cache_key: target_key.to_string(),
+        decision_type: "semantic_hit".to_string(),
+        prompt_hash: "hash_target".to_string(),
+        similarity_score: Some(0.92),
+        conformal_risk_score: Some(0.03),
+        latency_ms: 2.0,
+        tokens_saved: 50,
+        cost_saved_usd: 0.001,
+        verified_outcome: VerifiedOutcome::VerifiedCorrect,
+        verification_source: "origin_execution".to_string(),
+        hmac_signature: "sig".to_string(),
+        timestamp: Utc::now(),
+    };
+    assert!(store.record_event(base_ev).is_ok());
+
+    // Now insert 5 contradictory (VerifiedFalseHit) events for the same cache key
+    for i in 0..5 {
+        let contradictory_ev = VerifiedFeedbackEvent {
+            event_id: format!("ev-contradictory-{}", i),
+            tenant_id: tenant_id.clone(),
+            application_id: ApplicationId::new("app-test"),
+            cache_key: target_key.to_string(),
+            decision_type: "semantic_hit".to_string(),
+            prompt_hash: "hash_target".to_string(),
+            similarity_score: Some(0.92),
+            conformal_risk_score: Some(0.03),
+            latency_ms: 2.0,
+            tokens_saved: 50,
+            cost_saved_usd: 0.001,
+            verified_outcome: VerifiedOutcome::VerifiedFalseHit,
+            verification_source: "origin_execution".to_string(),
+            hmac_signature: "sig".to_string(),
+            timestamp: Utc::now(),
+        };
+        assert!(store.record_event(contradictory_ev).is_ok());
+    }
+
+    // Attempt to insert an event with VerifiedCorrect (which now has 5 contradictory VerifiedFalseHit events)
+    let poison_ev = VerifiedFeedbackEvent {
+        event_id: "ev-poison-attempt".to_string(),
+        tenant_id: tenant_id.clone(),
+        application_id: ApplicationId::new("app-test"),
+        cache_key: target_key.to_string(),
+        decision_type: "semantic_hit".to_string(),
+        prompt_hash: "hash_target".to_string(),
+        similarity_score: Some(0.92),
+        conformal_risk_score: Some(0.03),
+        latency_ms: 2.0,
+        tokens_saved: 50,
+        cost_saved_usd: 0.001,
+        verified_outcome: VerifiedOutcome::VerifiedCorrect,
+        verification_source: "origin_execution".to_string(),
+        hmac_signature: "sig".to_string(),
+        timestamp: Utc::now(),
+    };
+    let poison_res = store.record_event(poison_ev);
+    assert!(poison_res.is_err());
+    let err_msg = poison_res.err().unwrap().to_string();
+    assert!(err_msg.contains("Poisoning defense triggered"));
 }
 
 #[test]
@@ -153,11 +301,78 @@ fn test_layer3_offline_calibration_on_held_out_splits() {
         .expect("offline calibration should succeed on >=10 samples");
 
     assert_eq!(candidate.version, 2);
-    assert!(candidate.evaluation_report.total_samples == 100);
-    assert!(candidate.evaluation_report.training_samples == 70);
-    assert!(candidate.evaluation_report.held_out_samples == 30);
+    assert_eq!(candidate.evaluation_report.total_samples, 100);
+    assert_eq!(candidate.evaluation_report.training_samples, 70);
+    assert_eq!(candidate.evaluation_report.held_out_samples, 30);
     assert!(candidate.evaluation_report.is_statistically_sound);
     assert!(candidate.weights.min_similarity_threshold >= 0.85);
+}
+
+#[test]
+fn test_layer3_offline_calibration_safety_gates() {
+    let tenant_id = TenantId::new("tenant-calib-gate");
+
+    // 1. Minimum sample size gate: <10 samples must be rejected
+    let mut small_events = Vec::new();
+    for i in 0..8 {
+        small_events.push(VerifiedFeedbackEvent {
+            event_id: format!("ev-small-{}", i),
+            tenant_id: tenant_id.clone(),
+            application_id: ApplicationId::new("app-test"),
+            cache_key: format!("key-{}", i),
+            decision_type: "exact_hit".to_string(),
+            prompt_hash: format!("hash-{}", i),
+            similarity_score: Some(0.95),
+            conformal_risk_score: Some(0.01),
+            latency_ms: 1.0,
+            tokens_saved: 20,
+            cost_saved_usd: 0.0005,
+            verified_outcome: VerifiedOutcome::VerifiedCorrect,
+            verification_source: "origin_execution".to_string(),
+            hmac_signature: "sig".to_string(),
+            timestamp: Utc::now(),
+        });
+    }
+    let calib_err = OfflineCalibrator::calibrate_policy(&small_events, 2);
+    assert!(calib_err.is_err());
+    assert!(calib_err
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("Insufficient sample size"));
+
+    // 2. Statistical soundness failure: excessive false hits in held-out set
+    let mut high_error_events = Vec::new();
+    for i in 0..20 {
+        // High false hit count: 50% false hits
+        let is_false_hit = i % 2 == 0;
+        high_error_events.push(VerifiedFeedbackEvent {
+            event_id: format!("ev-err-{}", i),
+            tenant_id: tenant_id.clone(),
+            application_id: ApplicationId::new("app-test"),
+            cache_key: format!("key-err-{}", i),
+            decision_type: "semantic_hit".to_string(),
+            prompt_hash: format!("hash-err-{}", i),
+            similarity_score: Some(0.99), // High similarity to bypass threshold
+            conformal_risk_score: Some(0.01),
+            latency_ms: 2.0,
+            tokens_saved: 50,
+            cost_saved_usd: 0.001,
+            verified_outcome: if is_false_hit {
+                VerifiedOutcome::VerifiedFalseHit
+            } else {
+                VerifiedOutcome::VerifiedCorrect
+            },
+            verification_source: "origin_execution".to_string(),
+            hmac_signature: "sig".to_string(),
+            timestamp: Utc::now(),
+        });
+    }
+
+    let candidate = OfflineCalibrator::calibrate_policy(&high_error_events, 3)
+        .expect("calibration computation succeeds");
+    // With 50% false hits on held-out data, statistical soundness must be false (false hit rate > 1%)
+    assert!(!candidate.evaluation_report.is_statistically_sound);
 }
 
 #[test]
@@ -229,7 +444,105 @@ fn test_layer4_counterfactual_shadow_evaluator() {
 }
 
 #[test]
-fn test_layer5_canary_rollout_and_automated_rollback() {
+fn test_layer5_canary_rollout_invariants_and_routing() {
+    let controller = PolicyPromotionController::new();
+
+    // 1. Reject candidate policy failing statistical soundness
+    let unsound_candidate = CandidatePolicy {
+        policy_id: "policy-unsound".to_string(),
+        version: 2,
+        weights: PolicyWeights::default(),
+        created_at: Utc::now(),
+        evaluation_report: CalibrationReport {
+            total_samples: 50,
+            training_samples: 35,
+            held_out_samples: 15,
+            training_false_hit_rate: 0.0,
+            held_out_false_hit_rate: 0.05,
+            held_out_abstention_rate: 0.0,
+            estimated_cost_reduction_pct: 0.0,
+            is_statistically_sound: false,
+        },
+        is_promoted: false,
+    };
+    let err = controller.start_canary(unsound_candidate, 10, "admin");
+    assert!(err.is_err());
+    assert!(err
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("statistical soundness"));
+
+    // 2. Reject candidate policy violating min_similarity_threshold security invariant (<0.75)
+    let unsafe_threshold_candidate = CandidatePolicy {
+        policy_id: "policy-unsafe-threshold".to_string(),
+        version: 2,
+        weights: PolicyWeights {
+            min_similarity_threshold: 0.70, // Violates invariant
+            ..Default::default()
+        },
+        created_at: Utc::now(),
+        evaluation_report: CalibrationReport {
+            total_samples: 50,
+            training_samples: 35,
+            held_out_samples: 15,
+            training_false_hit_rate: 0.0,
+            held_out_false_hit_rate: 0.0,
+            held_out_abstention_rate: 0.0,
+            estimated_cost_reduction_pct: 10.0,
+            is_statistically_sound: true,
+        },
+        is_promoted: false,
+    };
+    let err = controller.start_canary(unsafe_threshold_candidate, 10, "admin");
+    assert!(err.is_err());
+    assert!(err
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("minimum similarity threshold cannot be below 0.75"));
+
+    // 3. Canary percentage clamping: requesting 50% clamps to 25% max canary limit
+    let valid_candidate = CandidatePolicy {
+        policy_id: "policy-v2-clamped".to_string(),
+        version: 2,
+        weights: PolicyWeights {
+            min_similarity_threshold: 0.92,
+            max_risk_threshold: 0.20,
+            ..Default::default()
+        },
+        created_at: Utc::now(),
+        evaluation_report: CalibrationReport {
+            total_samples: 50,
+            training_samples: 35,
+            held_out_samples: 15,
+            training_false_hit_rate: 0.0,
+            held_out_false_hit_rate: 0.0,
+            held_out_abstention_rate: 0.02,
+            estimated_cost_reduction_pct: 12.0,
+            is_statistically_sound: true,
+        },
+        is_promoted: false,
+    };
+    controller
+        .start_canary(valid_candidate.clone(), 50, "admin")
+        .expect("canary start succeeds");
+
+    let canary_status = controller.get_canary_status().unwrap();
+    assert_eq!(canary_status.1, 25); // Clamped to 25%
+
+    // 4. Test deterministic canary routing via select_policy_for_request
+    // Hashes where hash % 100 < 25 receive canary weights (min_similarity_threshold = 0.92)
+    let canary_routed_weights = controller.select_policy_for_request(10);
+    assert_eq!(canary_routed_weights.min_similarity_threshold, 0.92);
+
+    // Hashes where hash % 100 >= 25 receive baseline weights (min_similarity_threshold = 0.88)
+    let baseline_routed_weights = controller.select_policy_for_request(85);
+    assert_eq!(baseline_routed_weights.min_similarity_threshold, 0.88);
+}
+
+#[test]
+fn test_layer5_canary_rollout_promotion_and_automated_rollback() {
     let controller = PolicyPromotionController::new();
 
     let candidate = CandidatePolicy {
@@ -281,22 +594,57 @@ fn test_layer5_canary_rollout_and_automated_rollback() {
 
     let audit = controller.get_audit_trail();
     assert!(audit.iter().any(|l| l.action == "ROLLED_BACK"));
+
+    // Full promotion lifecycle test:
+    // Start canary again and promote to production
+    controller
+        .start_canary(candidate, 20, "deployer")
+        .expect("canary restart succeeds");
+    let promoted = controller
+        .complete_promotion("admin-promoter")
+        .expect("full promotion succeeds");
+    assert!(promoted.is_promoted);
+    assert!(controller.get_canary_status().is_none());
+    assert_eq!(controller.get_active_policy().policy_id, "policy-v2-canary");
+    assert_eq!(
+        controller.get_active_weights().min_similarity_threshold,
+        0.90
+    );
+
+    let audit_after = controller.get_audit_trail();
+    assert!(audit_after.iter().any(|l| l.action == "FULLY_PROMOTED"));
+
+    // Attempting complete_promotion when no canary is active must fail
+    assert!(controller.complete_promotion("admin-promoter").is_err());
 }
 
 #[tokio::test]
-async fn test_learning_http_api_endpoints() {
+async fn test_learning_http_api_endpoints_full_lifecycle() {
     let state = AppState::new(sunborn_core::AppConfig::default());
     let app = create_router(state.clone());
+
+    let admin_tenant = TenantId::new("tenant-system");
+    let user_tenant = TenantId::new("tenant-regular");
 
     // Register test admin key
     state.api_key_registry.register_key(
         "test-key-admin-learning",
-        TenantId::new("tenant-system"),
+        admin_tenant.clone(),
         ApplicationId::new("app-admin"),
         vec!["admin".to_string(), "read".to_string(), "write".to_string()],
         true,
     );
-    let auth_header = "Bearer test-key-admin-learning";
+    let admin_auth = "Bearer test-key-admin-learning";
+
+    // Register regular (non-admin) key
+    state.api_key_registry.register_key(
+        "test-key-regular-user",
+        user_tenant.clone(),
+        ApplicationId::new("app-user"),
+        vec!["read".to_string(), "write".to_string()],
+        false,
+    );
+    let user_auth = "Bearer test-key-regular-user";
 
     // 1. GET /v1/learning/policies
     let res = app
@@ -304,7 +652,7 @@ async fn test_learning_http_api_endpoints() {
         .oneshot(
             Request::builder()
                 .uri("/v1/learning/policies")
-                .header("Authorization", auth_header)
+                .header("Authorization", admin_auth)
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -316,14 +664,15 @@ async fn test_learning_http_api_endpoints() {
     let json: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["active_policy"]["policy_id"], "policy-v1-baseline");
 
-    // 2. POST /v1/learning/feedback
-    let fb_payload = json!({
-        "event_id": "ev-api-1",
+    // 2. Cross-tenant feedback injection check:
+    // Non-admin user trying to submit feedback for admin_tenant must be rejected with 401 Unauthorized
+    let cross_tenant_payload = json!({
+        "event_id": "ev-cross-1",
         "tenant_id": "tenant-system",
         "application_id": "app-admin",
-        "cache_key": "cache:test:1",
+        "cache_key": "cache:cross:1",
         "decision_type": "exact_hit",
-        "prompt_hash": "hash_123",
+        "prompt_hash": "hash_cross",
         "similarity_score": 0.98,
         "conformal_risk_score": 0.01,
         "latency_ms": 1.5,
@@ -341,42 +690,113 @@ async fn test_learning_http_api_endpoints() {
             Request::builder()
                 .method("POST")
                 .uri("/v1/learning/feedback")
-                .header("Authorization", auth_header)
+                .header("Authorization", user_auth)
                 .header("Content-Type", "application/json")
-                .body(Body::from(fb_payload.to_string()))
+                .body(Body::from(cross_tenant_payload.to_string()))
                 .unwrap(),
         )
         .await
         .unwrap();
 
-    assert_eq!(res.status(), StatusCode::CREATED);
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
 
-    // 3. POST /v1/learning/canary
+    // 3. Record 12 verified feedback events for admin_tenant to enable calibration
+    let secret = b"hmac-key-for-test-http";
+    for i in 0..12 {
+        let event_id = format!("ev-api-{}", i);
+        let cache_key = format!("cache:test:{}", i);
+        let outcome = VerifiedOutcome::VerifiedCorrect;
+        let ts = Utc::now();
+        let sig = VerifiedFeedbackEvent::sign(
+            &event_id,
+            &admin_tenant,
+            &cache_key,
+            &outcome,
+            &ts,
+            secret,
+        );
+
+        let fb_payload = json!({
+            "event_id": event_id,
+            "tenant_id": "tenant-system",
+            "application_id": "app-admin",
+            "cache_key": cache_key,
+            "decision_type": "semantic_hit",
+            "prompt_hash": format!("hash_{}", i),
+            "similarity_score": 0.96,
+            "conformal_risk_score": 0.01,
+            "latency_ms": 1.5,
+            "tokens_saved": 40,
+            "cost_saved_usd": 0.001,
+            "verified_outcome": "VerifiedCorrect",
+            "verification_source": "origin_execution",
+            "hmac_signature": sig,
+            "timestamp": ts
+        });
+
+        let res = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/learning/feedback")
+                    .header("Authorization", admin_auth)
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(fb_payload.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(res.status(), StatusCode::CREATED);
+    }
+
+    // 4. POST /v1/learning/calibrate
+    let calib_req = json!({ "version": 2 });
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/learning/calibrate")
+                .header("Authorization", admin_auth)
+                .header("Content-Type", "application/json")
+                .body(Body::from(calib_req.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    let calib_resp: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(calib_resp["status"], "POLICY_CALIBRATED");
+    let candidate = calib_resp["candidate_policy"].clone();
+
+    // 5. POST /v1/learning/evaluate (counterfactual shadow evaluation)
+    let eval_req = json!({ "candidate_policy": candidate });
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/learning/evaluate")
+                .header("Authorization", admin_auth)
+                .header("Content-Type", "application/json")
+                .body(Body::from(eval_req.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    let eval_resp: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(eval_resp["status"], "COUNTERFACTUAL_EVALUATION_COMPLETED");
+
+    // 6. Security gate: non-admin trying to start canary rollout must be rejected with 403 Forbidden
     let canary_payload = json!({
-        "candidate_policy": {
-            "policy_id": "policy-v2-api-canary",
-            "version": 2,
-            "weights": {
-                "min_similarity_threshold": 0.90,
-                "max_risk_threshold": 0.20,
-                "conformal_alpha": 0.01,
-                "prefetch_confidence_threshold": 0.70,
-                "eviction_staleness_weight": 0.40,
-                "eviction_cost_weight": 0.60
-            },
-            "created_at": Utc::now(),
-            "evaluation_report": {
-                "total_samples": 40,
-                "training_samples": 28,
-                "held_out_samples": 12,
-                "training_false_hit_rate": 0.0,
-                "held_out_false_hit_rate": 0.0,
-                "held_out_abstention_rate": 0.02,
-                "estimated_cost_reduction_pct": 14.0,
-                "is_statistically_sound": true
-            },
-            "is_promoted": false
-        },
+        "candidate_policy": candidate,
         "canary_percentage": 10
     });
 
@@ -386,7 +806,24 @@ async fn test_learning_http_api_endpoints() {
             Request::builder()
                 .method("POST")
                 .uri("/v1/learning/canary")
-                .header("Authorization", auth_header)
+                .header("Authorization", user_auth)
+                .header("Content-Type", "application/json")
+                .body(Body::from(canary_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+    // 7. Admin starts canary rollout
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/learning/canary")
+                .header("Authorization", admin_auth)
                 .header("Content-Type", "application/json")
                 .body(Body::from(canary_payload.to_string()))
                 .unwrap(),
@@ -396,17 +833,69 @@ async fn test_learning_http_api_endpoints() {
 
     assert_eq!(res.status(), StatusCode::OK);
 
-    // 4. POST /v1/learning/rollback
+    // 8. Security gate: non-admin trying to promote policy must be rejected with 403 Forbidden
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/learning/promote")
+                .header("Authorization", user_auth)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+    // 9. Admin promotes candidate policy to 100% production
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/learning/promote")
+                .header("Authorization", admin_auth)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    let promote_resp: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(promote_resp["status"], "POLICY_FULLY_PROMOTED");
+
+    // 10. Security gate: non-admin trying to trigger rollback must be rejected with 403 Forbidden
     let rollback_payload = json!({
         "reason": "Test emergency rollback verification via API"
     });
 
     let res = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/v1/learning/rollback")
-                .header("Authorization", auth_header)
+                .header("Authorization", user_auth)
+                .header("Content-Type", "application/json")
+                .body(Body::from(rollback_payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+    // 11. Admin triggers emergency rollback
+    let res = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/learning/rollback")
+                .header("Authorization", admin_auth)
                 .header("Content-Type", "application/json")
                 .body(Body::from(rollback_payload.to_string()))
                 .unwrap(),
