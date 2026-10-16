@@ -1,9 +1,11 @@
 use chrono::Utc;
-use sunborn_cache::{CacheEntry, ExactCacheStore, MemoryExactCache};
+use std::sync::Arc;
+use sunborn_cache::{CacheEntry, DragonflyCacheStore, ExactCacheStore, MemoryExactCache};
 use sunborn_core::model::{ApplicationId, TenantId};
-use sunborn_db::{DatabaseStore, MemoryDatabaseStore};
+use sunborn_db::{DatabaseStore, MemoryDatabaseStore, PostgresDatabaseStore};
 use sunborn_semantic::{
-    DeterministicEmbeddingProvider, EmbeddingProvider, MemoryVectorStore, VectorEntry, VectorStore,
+    DeterministicEmbeddingProvider, EmbeddingProvider, HttpEmbeddingProvider, MemoryVectorStore,
+    QdrantVectorStore, VectorEntry, VectorStore,
 };
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
@@ -18,10 +20,74 @@ async fn main() -> anyhow::Result<()> {
     info!("Starting Sunborn Disaster Recovery & Rebuild Engine...");
     info!("Architecture Invariant: PostgreSQL is authoritative; Dragonfly and Qdrant are fully reconstructible.");
 
-    let db = MemoryDatabaseStore::new();
-    let cache = MemoryExactCache::new();
-    let vector_store = MemoryVectorStore::new();
-    let embedder = DeterministicEmbeddingProvider::new();
+    let is_postgres = std::env::var("SUNBORN_DB_BACKEND")
+        .map(|v| v.to_lowercase() == "postgres")
+        .unwrap_or(false)
+        || std::env::var("POSTGRES_URL").is_ok()
+        || std::env::var("DATABASE_URL").is_ok();
+
+    let db: Arc<dyn DatabaseStore> = if is_postgres {
+        let url = std::env::var("POSTGRES_URL")
+            .or_else(|_| std::env::var("DATABASE_URL"))
+            .unwrap_or_else(|_| "postgres://sunborn:sunborn@localhost:5432/sunborn".to_string());
+        info!(backend = "postgres", url = %url, "Initializing Authoritative Database Store");
+        Arc::new(PostgresDatabaseStore::new(url))
+    } else {
+        info!(backend = "memory", "Initializing In-Memory Database Store");
+        Arc::new(MemoryDatabaseStore::new())
+    };
+
+    let is_dragonfly = std::env::var("SUNBORN_CACHE_BACKEND")
+        .map(|v| v.to_lowercase() == "dragonfly")
+        .unwrap_or(false)
+        || std::env::var("DRAGONFLY_URL").is_ok();
+
+    let cache: Arc<dyn ExactCacheStore> = if is_dragonfly {
+        let url =
+            std::env::var("DRAGONFLY_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+        info!(backend = "dragonfly", url = %url, "Initializing Exact Cache Store");
+        Arc::new(DragonflyCacheStore::new(url))
+    } else {
+        info!(
+            backend = "memory",
+            "Initializing In-Memory Exact Cache Store"
+        );
+        Arc::new(MemoryExactCache::new())
+    };
+
+    let is_qdrant = std::env::var("SUNBORN_VECTOR_BACKEND")
+        .map(|v| v.to_lowercase() == "qdrant")
+        .unwrap_or(false)
+        || std::env::var("QDRANT_URL").is_ok();
+
+    let vector_store: Arc<dyn VectorStore> = if is_qdrant {
+        let url =
+            std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://127.0.0.1:6333".to_string());
+        let collection =
+            std::env::var("QDRANT_COLLECTION").unwrap_or_else(|_| "sunborn_vectors".to_string());
+        info!(backend = "qdrant", url = %url, collection = %collection, "Initializing Vector Store");
+        Arc::new(QdrantVectorStore::new(url, collection))
+    } else {
+        info!(backend = "memory", "Initializing In-Memory Vector Store");
+        Arc::new(MemoryVectorStore::new())
+    };
+
+    let embedder: Arc<dyn EmbeddingProvider> =
+        if let Ok(url) = std::env::var("SUNBORN_EMBEDDING_URL") {
+            let api_key = std::env::var("SUNBORN_EMBEDDING_API_KEY")
+                .or_else(|_| std::env::var("OPENAI_API_KEY"))
+                .ok();
+            let model = std::env::var("SUNBORN_EMBEDDING_MODEL")
+                .unwrap_or_else(|_| "text-embedding-3-small".to_string());
+            info!(backend = "http", url = %url, model = %model, "Initializing Embedding Provider");
+            Arc::new(HttpEmbeddingProvider::new(url, model, api_key))
+        } else {
+            info!(
+                backend = "deterministic",
+                "Initializing Deterministic Embedding Provider"
+            );
+            Arc::new(DeterministicEmbeddingProvider::new())
+        };
 
     let total_records = db.count_cache_entries().await.unwrap_or(0);
     info!(

@@ -19,6 +19,20 @@ build:
 test:
 	cargo test --all-targets --all-features
 
+test-frontend:
+	npm test --prefix frontend
+
+build-frontend:
+	npm run build --prefix frontend
+
+test-sdk:
+	python3 -m unittest sdk/python/test_sunborn_agent.py
+
+reproduce:
+	bash research/reproduce.sh
+
+verify-all: check test test-frontend build-frontend test-sdk reproduce
+
 check:
 	cargo check --workspace
 

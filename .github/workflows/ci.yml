@@ -69,6 +69,10 @@ jobs:
         working-directory: frontend
         run: npx tsc --noEmit
 
+      - name: Run BFF Security Tests
+        working-directory: frontend
+        run: npm test
+
       - name: Build Frontend Application
         working-directory: frontend
         run: npm run build
@@ -88,6 +92,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Run Python SDK Unit Tests
+        run: python3 -m unittest sdk/python/test_sunborn_agent.py
 
       - name: Execute Full Reproducibility Verification Suite
         run: bash research/reproduce.sh

@@ -34,6 +34,10 @@ echo "==> Code formatting and strict clippy checks PASSED."
 echo ""
 echo "[2/5] Running Core System Verification Test Suites..."
 cargo test --workspace --all-targets
+python3 -m unittest sdk/python/test_sunborn_agent.py
+if command -v npm >/dev/null 2>&1; then
+    npm test --prefix frontend
+fi
 echo "==> All unit, integration, and contract tests PASSED."
 
 echo ""
