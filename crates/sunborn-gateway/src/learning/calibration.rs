@@ -70,25 +70,47 @@ impl OfflineCalibrator {
         let split_idx = (events.len() * 7) / 10;
         let (train_split, held_out_split) = events.split_at(split_idx);
 
-        // Find optimal conservative similarity threshold on train split
-        // Maximize recall while strictly enforcing false-hit rate <= 1%
+        // Find optimal conservative similarity threshold on train split:
+        // Maximize recall (select lowest safe threshold) subject to false-hit rate <= 1.0% (conformal alpha)
+        let total_train_evals = train_split
+            .iter()
+            .filter(|e| e.similarity_score.is_some())
+            .count();
+
         let mut best_threshold = 0.90f32;
+        let mut best_hits = 0;
         let mut min_false_hits = usize::MAX;
 
         for step in 0..15 {
             let candidate_threshold = 0.85f32 + (step as f32 * 0.01);
             let mut false_hits = 0;
+            let mut hits = 0;
             for ev in train_split {
                 if let Some(sim) = ev.similarity_score {
-                    if sim >= candidate_threshold
-                        && ev.verified_outcome == VerifiedOutcome::VerifiedFalseHit
-                    {
-                        false_hits += 1;
+                    if sim >= candidate_threshold {
+                        if ev.verified_outcome == VerifiedOutcome::VerifiedFalseHit {
+                            false_hits += 1;
+                        } else {
+                            hits += 1;
+                        }
                     }
                 }
             }
 
-            if false_hits <= min_false_hits {
+            let false_hit_rate = if total_train_evals > 0 {
+                false_hits as f64 / total_train_evals as f64
+            } else {
+                1.0
+            };
+
+            // Constrained objective: satisfy false-hit constraint <= 1.0%, then maximize hit volume (recall)
+            if false_hit_rate <= 0.01 {
+                if hits >= best_hits {
+                    best_hits = hits;
+                    best_threshold = candidate_threshold;
+                    min_false_hits = false_hits;
+                }
+            } else if min_false_hits == usize::MAX || false_hits < min_false_hits {
                 min_false_hits = false_hits;
                 best_threshold = candidate_threshold;
             }
@@ -99,9 +121,9 @@ impl OfflineCalibrator {
         let conformal_alpha = 0.01f32;
 
         // Evaluate candidate policy on HELD-OUT split (zero data leakage)
-        let mut held_out_false_hits = 0;
-        let mut held_out_abstentions = 0;
-        let mut held_out_total_evals = 0;
+        let mut held_out_false_hits: usize = 0;
+        let mut held_out_abstentions: usize = 0;
+        let mut held_out_total_evals: usize = 0;
 
         for ev in held_out_split {
             if let Some(sim) = ev.similarity_score {
@@ -118,26 +140,42 @@ impl OfflineCalibrator {
             }
         }
 
-        let train_false_hit_rate = if !train_split.is_empty() {
-            min_false_hits as f64 / train_split.len() as f64
+        // SB-P0-01: Reject empty or insufficient effective held-out denominators
+        if held_out_total_evals == 0 {
+            return Err(SunbornError::validation_error(
+                "Held-out validation split contains no scored events with similarity scores; cannot statistically evaluate candidate policy",
+            ));
+        }
+
+        let train_false_hit_rate = if total_train_evals > 0 {
+            min_false_hits as f64 / total_train_evals as f64
         } else {
             0.0
         };
 
-        let held_out_false_hit_rate = if held_out_total_evals > 0 {
-            held_out_false_hits as f64 / held_out_total_evals as f64
+        let held_out_false_hit_rate = held_out_false_hits as f64 / held_out_total_evals as f64;
+        let held_out_abstention_rate = held_out_abstentions as f64 / held_out_total_evals as f64;
+
+        // Enforce safety invariant: held-out false hit rate must NOT exceed 1.0% with non-empty denominator
+        let is_statistically_sound = held_out_total_evals >= 3 && held_out_false_hit_rate <= 0.01;
+
+        // SB-P0-01: Calculate net savings from explicit counts and measured costs
+        let unit_origin_cost = 0.00625f64; // GPT-4o baseline origin query
+        let unit_embedding_cost = 0.00010f64; // Embedding inference
+        let unit_cache_overhead = 0.000005f64; // In-memory/Dragonfly lookup
+
+        let held_out_hits = held_out_total_evals
+            .saturating_sub(held_out_abstentions)
+            .saturating_sub(held_out_false_hits);
+        let gross_savings = (held_out_hits as f64) * (unit_origin_cost - unit_embedding_cost);
+        let total_overhead = (held_out_total_evals as f64) * unit_cache_overhead;
+        let baseline_cost = (held_out_total_evals as f64) * unit_origin_cost;
+
+        let estimated_cost_reduction_pct = if baseline_cost > 0.0 {
+            (((gross_savings - total_overhead) / baseline_cost) * 100.0).max(0.0)
         } else {
             0.0
         };
-
-        let held_out_abstention_rate = if held_out_total_evals > 0 {
-            held_out_abstentions as f64 / held_out_total_evals as f64
-        } else {
-            0.0
-        };
-
-        // Enforce safety invariant: held-out false hit rate must NOT exceed 1.0%
-        let is_statistically_sound = held_out_false_hit_rate <= 0.01;
 
         let report = CalibrationReport {
             total_samples: events.len(),
@@ -146,7 +184,7 @@ impl OfflineCalibrator {
             training_false_hit_rate: (train_false_hit_rate * 10000.0).round() / 100.0,
             held_out_false_hit_rate: (held_out_false_hit_rate * 10000.0).round() / 100.0,
             held_out_abstention_rate: (held_out_abstention_rate * 10000.0).round() / 100.0,
-            estimated_cost_reduction_pct: 42.5,
+            estimated_cost_reduction_pct: (estimated_cost_reduction_pct * 100.0).round() / 100.0,
             is_statistically_sound,
         };
 

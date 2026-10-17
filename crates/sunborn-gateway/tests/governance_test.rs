@@ -155,6 +155,12 @@ async fn test_tenant_cascade_offboarding_zero_lingering_data() {
     let resp: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(resp["status"], "erased");
     assert_eq!(resp["deleted_db_entries"], 1);
+    assert_eq!(resp["verified_multi_store_erasure"], true);
+    assert_eq!(resp["residual_records"]["db"], 0);
+    assert_eq!(resp["residual_records"]["exact_cache"], 0);
+    assert_eq!(resp["residual_records"]["vector_store"], 0);
+    assert_eq!(resp["residual_records"]["execution_store"], 0);
+    assert_eq!(resp["residual_records"]["learning_store"], 0);
 
     // 3. CRITICAL VERIFICATION: Zero lingering records across all tiers
     assert!(
@@ -185,6 +191,72 @@ async fn test_tenant_cascade_offboarding_zero_lingering_data() {
         0,
         "Tenant learning feedback events must be purged"
     );
+}
+
+#[tokio::test]
+async fn test_sb_p0_03_multi_store_erasure_partial_failure_detection() {
+    let config = AppConfig::default();
+    let state = AppState::new(config);
+
+    let target_tenant = "tenant-lingering-records";
+    let _tenant_id = TenantId::new(target_tenant);
+
+    // Seed a record directly into DB
+    state
+        .db
+        .insert_tenant(TenantRecord {
+            id: target_tenant.into(),
+            name: "Lingering Inc".into(),
+            status: "active".into(),
+            rate_limit_rps: 10,
+            created_at: chrono::Utc::now(),
+        })
+        .await
+        .unwrap();
+
+    // Verify before erasure check
+    let (verified_before, residuals_before) =
+        sunborn_gateway::handlers::verify_multi_store_erasure_integrity(&state, target_tenant)
+            .await;
+    assert!(!verified_before, "Pre-erasure state must verify false");
+    assert_eq!(residuals_before.db, 1);
+
+    // Seed into exact cache
+    state
+        .cache
+        .set(CacheEntry::new(
+            format!("sunborn:{}:lingering_key", target_tenant),
+            "lingering value",
+            Some(3600),
+        ))
+        .await
+        .unwrap();
+
+    let (verified_with_cache, residuals_cache) =
+        sunborn_gateway::handlers::verify_multi_store_erasure_integrity(&state, target_tenant)
+            .await;
+    assert!(!verified_with_cache);
+    assert_eq!(residuals_cache.db, 1);
+    assert_eq!(residuals_cache.exact_cache, 1);
+
+    // Now delete DB entry and cache entry
+    state.db.delete_tenant_data(target_tenant).await.unwrap();
+    state
+        .cache
+        .delete_by_prefix(&format!("sunborn:{}:", target_tenant))
+        .await
+        .unwrap();
+
+    // Now verification must succeed with all zeros
+    let (verified_after, residuals_after) =
+        sunborn_gateway::handlers::verify_multi_store_erasure_integrity(&state, target_tenant)
+            .await;
+    assert!(verified_after, "Post-erasure state must verify true");
+    assert_eq!(residuals_after.db, 0);
+    assert_eq!(residuals_after.exact_cache, 0);
+    assert_eq!(residuals_after.vector_store, 0);
+    assert_eq!(residuals_after.execution_store, 0);
+    assert_eq!(residuals_after.learning_store, 0);
 }
 
 #[tokio::test]

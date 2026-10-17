@@ -222,6 +222,10 @@ pub struct DecisionRecord {
     pub risk_score: f32,
     pub reason_code: String,
     pub latency_saved_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_version: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -141,7 +141,7 @@ export default function SecurityPage() {
 
               <div className="flex items-center justify-between">
                 <div className="text-xs font-mono text-slate-400">
-                  <span>Conformal Risk Score: </span>
+                  <span>Heuristic Risk Score: </span>
                   <strong
                     className={
                       firewallResult.threatDetected ? "text-rose-400 font-bold" : "text-emerald-400 font-bold"

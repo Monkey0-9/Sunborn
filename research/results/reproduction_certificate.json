@@ -1,9 +1,9 @@
 {
-  "evaluation": "IEEE/ACM Artifact Reproduction",
+  "evaluation": "Sunborn Internal Empirical Reproduction",
   "status": "PASSED",
-  "git_commit": "1b411011828ea31ec3bb39a95e0877891dfe2ecc",
+  "git_commit": "525abc0dd6a5cfc669c4e254f9fc6c194065916b",
   "git_branch": "main",
-  "timestamp_utc": "2026-10-17T04:55:01.090874+00:00",
+  "timestamp_utc": "2026-10-17T13:11:47.685244+00:00",
   "environment": {
     "os": "Linux",
     "release": "6.12.0-211.64.1.el10_2.x86_64",

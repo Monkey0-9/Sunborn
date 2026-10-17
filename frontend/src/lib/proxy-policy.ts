@@ -92,16 +92,14 @@ export function evaluateProxySecurity(params: {
     return { allowed: true };
   }
 
-  // 4. Protected general routes
+  // 4. Deny-by-default for all non-public endpoints regardless of HTTP method
   if (!clientCredential) {
-    if (!telemetryKey && method !== "GET") {
-      return {
-        allowed: false,
-        status: 401,
-        error: "AUTHENTICATION_REQUIRED",
-        detail: "Missing authentication header or session for protected API endpoint.",
-      };
-    }
+    return {
+      allowed: false,
+      status: 401,
+      error: "AUTHENTICATION_REQUIRED",
+      detail: `Access to protected endpoint '/${normalizedPath}' requires authenticated credentials or active session.`,
+    };
   }
 
   return { allowed: true };

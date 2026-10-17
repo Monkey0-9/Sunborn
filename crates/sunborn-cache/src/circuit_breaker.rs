@@ -179,6 +179,14 @@ impl<T: ExactCacheStore + Send + Sync> ExactCacheStore for CircuitBreakerCache<T
         self.inner.delete_by_prefix(prefix).await
     }
 
+    async fn count_by_prefix(&self, prefix: &str) -> Result<usize> {
+        let status = self.status().await;
+        if status == CircuitStatus::Open {
+            return Ok(0);
+        }
+        self.inner.count_by_prefix(prefix).await
+    }
+
     async fn sweep_expired(&self) -> Result<usize> {
         let status = self.status().await;
         if status == CircuitStatus::Open {

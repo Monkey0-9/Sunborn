@@ -30,8 +30,10 @@ pub struct FinOpsEngine;
 impl FinOpsEngine {
     // Cloud RAM storage cost estimate: ~$0.01 per GB per hour -> ~1e-11 per byte per hour
     pub const RAM_COST_PER_BYTE_HOUR: f64 = 0.00000000001;
-    // Embedding compute cost (local ONNX CPU amortized: ~$0.000001 per call)
-    pub const LOCAL_EMBED_COST_PER_CALL: f64 = 0.000001;
+    // Embedding compute cost (local ONNX/API amortized: ~$0.000005 per call)
+    pub const LOCAL_EMBED_COST_PER_CALL: f64 = 0.000005;
+    // Cache lookup and indexing overhead: ~$0.000001 per query
+    pub const CACHE_LOOKUP_OVERHEAD_PER_CALL: f64 = 0.000001;
 
     /// Calculate gross token cost avoided by serving from cache
     pub fn calculate_token_cost_avoided(
@@ -52,7 +54,7 @@ impl FinOpsEngine {
         completion_tokens: u32,
     ) -> f64 {
         let gross = Self::calculate_token_cost_avoided(pricing, prompt_tokens, completion_tokens);
-        (gross - Self::LOCAL_EMBED_COST_PER_CALL).max(0.0)
+        (gross - Self::LOCAL_EMBED_COST_PER_CALL - Self::CACHE_LOOKUP_OVERHEAD_PER_CALL).max(0.0)
     }
 
     /// Calculate break-even hit rate for an entry of given size and TTL

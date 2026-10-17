@@ -56,10 +56,23 @@ async function handleProxy(req: NextRequest, context: RouteContext) {
     targetUrl.searchParams.append(key, value);
   });
 
+  const ALLOWED_REQUEST_HEADERS = new Set([
+    "accept",
+    "accept-encoding",
+    "accept-language",
+    "authorization",
+    "content-type",
+    "user-agent",
+    "x-api-key",
+    "x-request-id",
+    "x-tenant-id",
+    "x-application-id",
+  ]);
+
   const headers = new Headers();
   req.headers.forEach((value, key) => {
     const lowerKey = key.toLowerCase();
-    if (!["host", "connection", "content-length", "cookie"].includes(lowerKey)) {
+    if (ALLOWED_REQUEST_HEADERS.has(lowerKey)) {
       headers.set(key, value);
     }
   });
@@ -84,10 +97,21 @@ async function handleProxy(req: NextRequest, context: RouteContext) {
       cache: "no-store",
     });
 
+    const DISALLOWED_RESPONSE_HEADERS = new Set([
+      "server",
+      "x-powered-by",
+      "x-aspnet-version",
+    ]);
+
     const responseHeaders = new Headers();
     gatewayRes.headers.forEach((value, key) => {
       const lower = key.toLowerCase();
-      if (!["content-encoding", "transfer-encoding"].includes(lower)) {
+      if (
+        !["content-encoding", "transfer-encoding"].includes(lower) &&
+        !DISALLOWED_RESPONSE_HEADERS.has(lower) &&
+        !lower.startsWith("internal-") &&
+        !lower.startsWith("x-internal-")
+      ) {
         responseHeaders.set(key, value);
       }
     });

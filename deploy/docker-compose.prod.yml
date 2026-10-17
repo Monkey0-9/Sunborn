@@ -1,0 +1,134 @@
+version: '3.8'
+
+# ==============================================================================
+# Sunborn Production Docker Compose Stack (Fail-Closed Architecture)
+# Strictly requires high-entropy secrets and production backend services.
+# Zero insecure dev fallbacks are permitted in this configuration.
+# ==============================================================================
+
+services:
+  gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: sunborn-gateway-prod
+    restart: unless-stopped
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      SUNBORN_ENV: "production"
+      SUNBORN_DB_BACKEND: "postgres"
+      POSTGRES_URL: "postgres://${POSTGRES_USER:?POSTGRES_USER must be set}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB must be set}"
+      SUNBORN_CACHE_BACKEND: "dragonfly"
+      DRAGONFLY_URL: "${DRAGONFLY_URL:-redis://dragonfly:6379}"
+      SUNBORN_VECTOR_BACKEND: "qdrant"
+      QDRANT_URL: "${QDRANT_URL:-http://qdrant:6333}"
+      SUNBORN_MASTER_KEK: "${SUNBORN_MASTER_KEK:?SUNBORN_MASTER_KEK must be set (32-byte 256-bit key)}"
+      SUNBORN_ADMIN_KEY: "${SUNBORN_ADMIN_KEY:?SUNBORN_ADMIN_KEY must be set (minimum 16 characters)}"
+      SUNBORN_LEARNING_HMAC_SECRET: "${SUNBORN_LEARNING_HMAC_SECRET:?SUNBORN_LEARNING_HMAC_SECRET must be set (minimum 16 characters)}"
+      SUNBORN_LLM_ORIGIN_URL: "${SUNBORN_LLM_ORIGIN_URL:?SUNBORN_LLM_ORIGIN_URL must be configured for production LLM origin}"
+      SUNBORN_EMBEDDING_URL: "${SUNBORN_EMBEDDING_URL:?SUNBORN_EMBEDDING_URL must be configured for production embeddings}"
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/sunborn-gateway", "healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    networks:
+      - sunborn-prod-net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: sunborn-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:?POSTGRES_DB must be set}"
+      POSTGRES_USER: "${POSTGRES_USER:?POSTGRES_USER must be set}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}"
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+      - ../migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sunborn-prod-net
+
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.20.0
+    container_name: sunborn-dragonfly-prod
+    restart: unless-stopped
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sunborn-prod-net
+
+  qdrant:
+    image: qdrant/qdrant:v1.10.0
+    container_name: sunborn-qdrant-prod
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
+    volumes:
+      - qdrant_data_prod:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:6333/readyz || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sunborn-prod-net
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+    container_name: sunborn-frontend-prod
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      SUNBORN_GATEWAY_URL: "http://gateway:8080"
+      SUNBORN_READ_ONLY_TOKEN: "${SUNBORN_READ_ONLY_TOKEN:-}"
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - sunborn-prod-net
+
+networks:
+  sunborn-prod-net:
+    driver: bridge
+
+volumes:
+  pgdata_prod:
+  qdrant_data_prod:

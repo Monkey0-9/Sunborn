@@ -23,6 +23,7 @@ pub trait DatabaseStore: Send + Sync {
         offset: usize,
     ) -> Result<Vec<DurableCacheRecord>>;
     async fn count_cache_entries(&self) -> Result<usize>;
+    async fn count_tenant_entries(&self, tenant_id: &str) -> Result<usize>;
     async fn delete_tenant_data(&self, tenant_id: &str) -> Result<usize>;
 }
 
@@ -151,6 +152,16 @@ impl DatabaseStore for MemoryDatabaseStore {
         });
 
         Ok(deleted_cache)
+    }
+
+    async fn count_tenant_entries(&self, tenant_id: &str) -> Result<usize> {
+        let mut count = 0;
+        if self.tenants.read().await.contains_key(tenant_id) {
+            count += 1;
+        }
+        let cache = self.cache_entries.read().await;
+        count += cache.values().filter(|v| v.tenant_id == tenant_id).count();
+        Ok(count)
     }
 }
 

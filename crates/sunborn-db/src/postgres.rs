@@ -584,4 +584,32 @@ impl DatabaseStore for PostgresDatabaseStore {
         let mem_deleted = self.fallback_store.delete_tenant_data(tenant_id).await?;
         Ok(pg_deleted.max(mem_deleted))
     }
+
+    async fn count_tenant_entries(&self, tenant_id: &str) -> Result<usize> {
+        let mut pg_count = 0;
+        if let Some(pool) = self.get_pool().await {
+            let cache_res: std::result::Result<(i64,), sqlx::Error> =
+                sqlx::query_as("SELECT COUNT(*) FROM durable_cache_entries WHERE tenant_id = $1")
+                    .bind(tenant_id)
+                    .fetch_one(&pool)
+                    .await;
+            if let Ok(cache_rows) = cache_res {
+                pg_count += cache_rows.0 as usize;
+            }
+            let tenant_res: std::result::Result<(i64,), sqlx::Error> =
+                sqlx::query_as("SELECT COUNT(*) FROM tenants WHERE id = $1")
+                    .bind(tenant_id)
+                    .fetch_one(&pool)
+                    .await;
+            if let Ok(tenant_rows) = tenant_res {
+                pg_count += tenant_rows.0 as usize;
+            }
+        } else if self.strict_durability {
+            return Err(sunborn_core::SunbornError::database(
+                "PostgreSQL connection pool unavailable; fail-closed durability enforced",
+            ));
+        }
+        let mem_count = self.fallback_store.count_tenant_entries(tenant_id).await?;
+        Ok(pg_count.max(mem_count))
+    }
 }

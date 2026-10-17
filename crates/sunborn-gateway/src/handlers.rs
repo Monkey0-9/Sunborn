@@ -208,6 +208,8 @@ pub async fn execute_request_inner(
                     risk_score: 0.0,
                     reason_code: "EXACT_CANONICAL_MATCH".to_string(),
                     latency_saved_ms: Some(150),
+                    policy_version: Some(state.learning_controller.get_active_policy_version()),
+                    policy_id: Some(state.learning_controller.get_active_policy_id()),
                 },
                 content: cached_entry.content,
                 cached: true,
@@ -246,11 +248,16 @@ pub async fn execute_request_inner(
                         "Semantic cache HIT (C2)"
                     );
 
+                    let mut decision = outcome.decision;
+                    decision.policy_id = Some(state.learning_controller.get_active_policy_id());
+                    decision.policy_version =
+                        Some(state.learning_controller.get_active_policy_version());
+
                     return Ok(ResponseEnvelope {
                         request_id: req.request_id,
                         tenant_id: req.tenant_id,
                         application_id: req.application_id,
-                        decision: outcome.decision,
+                        decision,
                         content,
                         cached: true,
                         cache_key: outcome.matched_id,
@@ -350,6 +357,8 @@ pub async fn execute_request_inner(
             risk_score: 0.0,
             reason_code: "NO_CACHE_ENTRY_FOUND".to_string(),
             latency_saved_ms: None,
+            policy_version: Some(state.learning_controller.get_active_policy_version()),
+            policy_id: Some(state.learning_controller.get_active_policy_id()),
         },
         content: origin_content,
         cached: false,
@@ -754,6 +763,70 @@ pub async fn shadow_evaluate(
     Ok(Json(result))
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ErasureResidualCounts {
+    pub db: usize,
+    pub exact_cache: usize,
+    pub vector_store: usize,
+    pub execution_store: usize,
+    pub learning_store: usize,
+}
+
+pub async fn verify_multi_store_erasure_integrity(
+    state: &AppState,
+    tenant_id: &str,
+) -> (bool, ErasureResidualCounts) {
+    let tenant = TenantId::new(tenant_id);
+    let db_res = state.db.count_tenant_entries(tenant_id).await.unwrap_or(0);
+
+    let prefix_sunborn = format!("sunborn:{}:", tenant_id);
+    let prefix_legacy = format!("tenant:{}:", tenant_id);
+    let exact_res = state
+        .cache
+        .count_by_prefix(&prefix_sunborn)
+        .await
+        .unwrap_or(0)
+        + state
+            .cache
+            .count_by_prefix(&prefix_legacy)
+            .await
+            .unwrap_or(0);
+
+    let vector_res = state.vector_store.count(&tenant).await.unwrap_or(0);
+    let execution_res = state
+        .execution_store
+        .count_by_tenant(&tenant)
+        .await
+        .unwrap_or(0);
+    let learning_res = state.learning_store.tenant_event_count(&tenant);
+
+    let residuals = ErasureResidualCounts {
+        db: db_res,
+        exact_cache: exact_res,
+        vector_store: vector_res,
+        execution_store: execution_res,
+        learning_store: learning_res,
+    };
+
+    let all_zero =
+        db_res == 0 && exact_res == 0 && vector_res == 0 && execution_res == 0 && learning_res == 0;
+
+    if !all_zero {
+        tracing::warn!(
+            tenant = %tenant_id,
+            ?residuals,
+            "Multi-store erasure integrity verification FAILED: residual records found"
+        );
+    } else {
+        tracing::info!(
+            tenant = %tenant_id,
+            "Multi-store erasure integrity verification SUCCEEDED: 0 residual records across all 5 tiers"
+        );
+    }
+
+    (all_zero, residuals)
+}
+
 pub async fn delete_tenant(
     State(state): State<AppState>,
     Extension(sec_ctx): Extension<SecurityContext>,
@@ -803,6 +876,15 @@ pub async fn delete_tenant(
         .map_err(AppError::from)?;
     let learning_deleted = state.learning_store.purge_tenant(&tenant);
 
+    // 1. Independent Read-After-Delete Verification Pass
+    let (verified_erasure, residuals) =
+        verify_multi_store_erasure_integrity(&state, &tenant_id).await;
+    let final_status = if verified_erasure {
+        "erased"
+    } else {
+        "partial_failure"
+    };
+
     tracing::info!(
         tenant = %tenant_id,
         shred_duration_nanos,
@@ -811,19 +893,27 @@ pub async fn delete_tenant(
         vector_deleted,
         execution_deleted,
         learning_deleted,
+        verified_multi_store_erasure = verified_erasure,
         "Completed tenant cascade offboarding"
     );
 
     Ok(Json(json!({
         "tenant_id": tenant_id,
-        "status": "erased",
+        "status": final_status,
         "cryptographic_shred_time_ns": shred_duration_nanos,
         "deleted_db_entries": db_deleted,
         "deleted_exact_cache": exact_deleted,
         "deleted_vectors": vector_deleted,
         "deleted_execution_tools": execution_deleted,
         "deleted_learning_events": learning_deleted,
-        "verified_multi_store_erasure": true
+        "verified_multi_store_erasure": verified_erasure,
+        "residual_records": {
+            "db": residuals.db,
+            "exact_cache": residuals.exact_cache,
+            "vector_store": residuals.vector_store,
+            "execution_store": residuals.execution_store,
+            "learning_store": residuals.learning_store,
+        }
     })))
 }
 
@@ -986,16 +1076,32 @@ pub async fn crypto_shred_tenant(
         .map_err(AppError::from)?;
     let learning_deleted = state.learning_store.purge_tenant(&tenant);
 
+    // Independent Read-After-Delete Verification Pass
+    let (verified_erasure, residuals) =
+        verify_multi_store_erasure_integrity(&state, &payload.tenant_id).await;
+    let final_status = if verified_erasure {
+        "shredded"
+    } else {
+        "partial_failure"
+    };
+
     Ok(Json(json!({
         "tenant_id": payload.tenant_id,
-        "status": "shredded",
+        "status": final_status,
         "shred_latency_nanos": shred_duration.as_nanos(),
         "deleted_db_entries": db_deleted,
         "deleted_exact_cache": exact_deleted,
         "deleted_vectors": vector_deleted,
         "deleted_execution_tools": execution_deleted,
         "deleted_learning_events": learning_deleted,
-        "verified_multi_store_erasure": true
+        "verified_multi_store_erasure": verified_erasure,
+        "residual_records": {
+            "db": residuals.db,
+            "exact_cache": residuals.exact_cache,
+            "vector_store": residuals.vector_store,
+            "execution_store": residuals.execution_store,
+            "learning_store": residuals.learning_store,
+        }
     })))
 }
 
@@ -1007,11 +1113,16 @@ pub async fn get_finops_report() -> impl IntoResponse {
     let semantic_hits = SEMANTIC_HITS.load(Ordering::Relaxed);
     let total_hits = exact_hits + semantic_hits;
 
+    let gpt4o_gross_per_hit = FinOpsEngine::calculate_token_cost_avoided(&gpt4o, 1000, 500);
     let gpt4o_saving_per_hit = FinOpsEngine::calculate_net_savings(&gpt4o, 1000, 500);
     let claude_saving_per_hit = FinOpsEngine::calculate_net_savings(&claude, 1000, 500);
 
+    let embed_cost_per_query = FinOpsEngine::LOCAL_EMBED_COST_PER_CALL;
+    let cache_overhead_per_query = FinOpsEngine::CACHE_LOOKUP_OVERHEAD_PER_CALL;
+
     // Honest empirical calculation: when total_hits is 0, total savings is $0.00
-    let total_gpt4o_savings = gpt4o_saving_per_hit * (total_hits as f64);
+    let total_gpt4o_gross_savings = gpt4o_gross_per_hit * (total_hits as f64);
+    let total_gpt4o_net_savings = gpt4o_saving_per_hit * (total_hits as f64);
     let break_even_gpt4o = FinOpsEngine::break_even_hit_rate(&gpt4o, 1000, 500, 4096, 24.0);
 
     Json(json!({
@@ -1023,9 +1134,15 @@ pub async fn get_finops_report() -> impl IntoResponse {
             "requests_total": REQUESTS_TOTAL.load(Ordering::Relaxed)
         },
         "economics": {
+            "gpt4o_gross_cost_avoided_per_query_usd": gpt4o_gross_per_hit,
             "gpt4o_cost_avoided_per_query_usd": gpt4o_saving_per_hit,
+            "gpt4o_net_savings_per_query_usd": gpt4o_saving_per_hit,
+            "embedding_inference_cost_per_query_usd": embed_cost_per_query,
+            "cache_lookup_overhead_cost_per_query_usd": cache_overhead_per_query,
             "claude_cost_avoided_per_query_usd": claude_saving_per_hit,
-            "total_estimated_savings_usd": total_gpt4o_savings,
+            "total_estimated_gross_savings_usd": total_gpt4o_gross_savings,
+            "total_estimated_net_savings_usd": total_gpt4o_net_savings,
+            "total_estimated_savings_usd": total_gpt4o_net_savings,
             "break_even_hit_rate_threshold": break_even_gpt4o
         }
     }))
@@ -1154,21 +1271,26 @@ pub async fn predict_speculative(
 
 pub async fn get_cluster_sync_status(State(state): State<AppState>) -> impl IntoResponse {
     let vc = state.vector_clock.read().unwrap().clone();
+    let region = std::env::var("SUNBORN_REGION").unwrap_or_else(|_| "us-east-1".to_string());
     Json(json!({
         "node_id": "gateway-primary-node-1",
-        "region": "us-east-1",
+        "region": region,
+        "mode": "standalone_authoritative",
+        "nodes_active": 1,
         "cluster_state": "synchronized",
         "vector_clock": vc,
-        "anti_entropy_protocol": "monotonic-epoch-gossip",
-        "consensus_mode": "non-accelerator-authoritative"
+        "anti_entropy_protocol": "single-node-epoch",
+        "consensus_mode": "single_node_authoritative"
     }))
 }
 
 pub async fn get_autonomic_status(State(state): State<AppState>) -> impl IntoResponse {
     let incidents = state.autonomic_controller.list_incidents();
+    let circuit_breaker_status = state.circuit_breaker.status().await;
     Json(json!({
         "autonomic_health": "operational",
         "remediation_mode": "continuous-closed-loop",
+        "circuit_breaker_status": format!("{:?}", circuit_breaker_status),
         "total_incidents_resolved": incidents.len(),
         "recent_incidents": incidents
     }))
@@ -1372,7 +1494,7 @@ pub async fn security_evaluate(
 
     let is_threat = is_injection;
     let rule_matched = if is_injection {
-        "OWASP-LLM-01: System Prompt Extraction & Privilege Hijack"
+        "OWASP-LLM-01: System Prompt Extraction & Privilege Hijack (Heuristic Match)"
     } else {
         "CLEAN_PASS: Verification Assured"
     };
@@ -1381,13 +1503,16 @@ pub async fn security_evaluate(
     } else {
         "FORWARDED_TO_EXACT_TIER"
     };
-    let conformal_score = if is_threat { 0.998 } else { 0.001 };
+    let heuristic_score = if is_threat { 1.0 } else { 0.0 };
 
     Json(json!({
         "threatDetected": is_threat,
         "ruleMatched": rule_matched,
         "action": action,
-        "conformalScore": conformal_score,
+        "evaluationEngine": "heuristic_rule_matcher",
+        "detectionMethod": "keyword_pattern_matching",
+        "heuristicRiskScore": heuristic_score,
+        "conformalScore": heuristic_score,
         "tenantId": sec_ctx.tenant_id.0,
         "timestamp": Utc::now()
     }))

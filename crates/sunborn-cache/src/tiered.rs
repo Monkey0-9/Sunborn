@@ -97,6 +97,12 @@ impl<L2: ExactCacheStore + Send + Sync> ExactCacheStore for TieredExactCache<L2>
         self.l2.delete_by_prefix(prefix).await
     }
 
+    async fn count_by_prefix(&self, prefix: &str) -> Result<usize> {
+        let l1_count = self.l1.count_by_prefix(prefix).await.unwrap_or(0);
+        let l2_count = self.l2.count_by_prefix(prefix).await.unwrap_or(0);
+        Ok(l1_count.max(l2_count))
+    }
+
     async fn sweep_expired(&self) -> Result<usize> {
         let l1_swept = self.l1.sweep_expired().await.unwrap_or(0);
         let l2_swept = self.l2.sweep_expired().await.unwrap_or(0);

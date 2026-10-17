@@ -374,6 +374,10 @@ Sunborn/
 
 Sunborn includes an automated local evaluation package ([`research/reproduce.sh`](research/reproduce.sh)) that executes the full test matrix, builds the release binary, tests gateway performance SLOs, and benchmarks semantic caching precision against baselines.
 
+> [!NOTE]
+> **Empirical Scope & Benchmark Bounds**:
+> The reported empirical results reflect internal evaluation on the curated `SemanticCacheBench` benchmark suite (124 queries across 8 categories, including adversarial negation traps and intent shifts). While confirming 0.0% false hits on this evaluation set, production deployment requires continuous calibration (`/v1/learning/calibrate`) and tenant-specific domain feedback to maintain these guarantees on heterogeneous production traffic.
+
 ### 8.1 SemanticCacheBench Baseline Evaluation (124 Queries, 8 Categories, 95% Wilson CI)
 
 The empirical figures below are taken verbatim from [`research/results/benchmark_run.json`](research/results/benchmark_run.json):

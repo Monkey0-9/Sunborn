@@ -16,3 +16,6 @@ __pycache__/
 .vscode/
 .trunk/
 frontend/.agents/
+data/
+**/data/
+system_inventory.md

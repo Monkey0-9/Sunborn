@@ -152,3 +152,85 @@ async fn test_production_startup_rejects_change_me_and_fixtures() {
     assert_eq!(err.code, ErrorCode::ConfigurationError);
     assert!(err.message.contains("SUNBORN_ADMIN_KEY"));
 }
+
+const VALID_PROD_HMAC_SECRET: &str = "prod_learning_hmac_secret_256bit_secure_token";
+
+#[tokio::test]
+async fn test_production_startup_rejects_missing_or_insecure_learning_hmac_secret() {
+    let _lock = ENV_LOCK.lock().await;
+    let _guard = EnvGuard::new(&[
+        "SUNBORN_ENV",
+        "SUNBORN_MASTER_KEK",
+        "SUNBORN_ADMIN_KEY",
+        "SUNBORN_CACHE_BACKEND",
+        "SUNBORN_DB_BACKEND",
+        "SUNBORN_VECTOR_BACKEND",
+        "SUNBORN_LLM_ORIGIN_URL",
+        "SUNBORN_EMBEDDING_URL",
+        "SUNBORN_LEARNING_HMAC_SECRET",
+    ]);
+
+    std::env::set_var("SUNBORN_ENV", "production");
+    std::env::set_var("SUNBORN_MASTER_KEK", VALID_PROD_KEK);
+    std::env::set_var("SUNBORN_ADMIN_KEY", VALID_PROD_ADMIN_KEY);
+    std::env::set_var("SUNBORN_CACHE_BACKEND", "dragonfly");
+    std::env::set_var("SUNBORN_DB_BACKEND", "postgres");
+    std::env::set_var("SUNBORN_VECTOR_BACKEND", "qdrant");
+    std::env::set_var("SUNBORN_LLM_ORIGIN_URL", "https://api.openai.com/v1");
+    std::env::set_var("SUNBORN_EMBEDDING_URL", "https://api.openai.com/v1");
+
+    // Case 1: Missing SUNBORN_LEARNING_HMAC_SECRET
+    std::env::remove_var("SUNBORN_LEARNING_HMAC_SECRET");
+    let mut config = AppConfig::default();
+    config.cache.backend = "dragonfly".to_string();
+    config.cache.database_backend = "postgres".to_string();
+    config.cache.vector_backend = "qdrant".to_string();
+
+    let state = AppState::new(config.clone());
+    let res = state.verify_production_readiness().await;
+    assert!(res.is_err());
+    let err = res.unwrap_err();
+    assert_eq!(err.code, ErrorCode::ConfigurationError);
+    assert!(err.message.contains("SUNBORN_LEARNING_HMAC_SECRET"));
+
+    // Case 2: Insecure dev default SUNBORN_LEARNING_HMAC_SECRET
+    std::env::set_var(
+        "SUNBORN_LEARNING_HMAC_SECRET",
+        "sunborn-insecure-dev-hmac-secret-change-in-production",
+    );
+    let state = AppState::new(config);
+    let res = state.verify_production_readiness().await;
+    assert!(res.is_err());
+    let err = res.unwrap_err();
+    assert_eq!(err.code, ErrorCode::ConfigurationError);
+    assert!(err.message.contains("SUNBORN_LEARNING_HMAC_SECRET"));
+}
+
+#[tokio::test]
+async fn test_production_startup_rejects_in_memory_fallbacks() {
+    let _lock = ENV_LOCK.lock().await;
+    let _guard = EnvGuard::new(&[
+        "SUNBORN_ENV",
+        "SUNBORN_MASTER_KEK",
+        "SUNBORN_ADMIN_KEY",
+        "SUNBORN_CACHE_BACKEND",
+        "SUNBORN_DB_BACKEND",
+        "SUNBORN_VECTOR_BACKEND",
+        "SUNBORN_LEARNING_HMAC_SECRET",
+    ]);
+
+    std::env::set_var("SUNBORN_ENV", "production");
+    std::env::set_var("SUNBORN_MASTER_KEK", VALID_PROD_KEK);
+    std::env::set_var("SUNBORN_ADMIN_KEY", VALID_PROD_ADMIN_KEY);
+    std::env::set_var("SUNBORN_LEARNING_HMAC_SECRET", VALID_PROD_HMAC_SECRET);
+
+    // Default config has in-memory backends
+    let config = AppConfig::default();
+    let state = AppState::new(config);
+    let res = state.verify_production_readiness().await;
+
+    assert!(res.is_err());
+    let err = res.unwrap_err();
+    assert_eq!(err.code, ErrorCode::ConfigurationError);
+    assert!(err.message.contains("forbids ephemeral in-memory"));
+}

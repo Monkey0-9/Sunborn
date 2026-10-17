@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Sunborn Empirical Reproducibility Package (IEEE/ACM Artifact Evaluation)
+# Sunborn Empirical Reproducibility Package (Internal Empirical Evaluation)
 # Executes complete test matrix, benchmarks, security validations, and verifies
-# that empirical metrics match publication manuscript tables.
+# that empirical metrics match internal reproducibility standards.
 # ==============================================================================
 
 set -euo pipefail
@@ -16,7 +16,7 @@ GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 START_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 echo "========================================================================"
-echo "Sunborn IEEE/ACM Artifact Reproducibility Evaluation Suite"
+echo "Sunborn Internal Empirical Reproducibility Suite"
 echo "Git Commit  : ${GIT_SHA} (${GIT_BRANCH})"
 echo "Timestamp   : ${START_TIME}"
 echo "Environment : Linux $(uname -r) / Architecture: $(uname -m)"
@@ -130,7 +130,7 @@ if b2['false_hits'] <= 0:
     print(f\"WARNING: Baseline B2 expected false hits on adversarial traps, got {b2['false_hits']}\", file=sys.stderr)
 
 certificate = {
-    'evaluation': 'IEEE/ACM Artifact Reproduction',
+    'evaluation': 'Sunborn Internal Empirical Reproduction',
     'status': 'PASSED',
     'git_commit': '${GIT_SHA}',
     'git_branch': '${GIT_BRANCH}',

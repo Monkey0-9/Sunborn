@@ -177,6 +177,14 @@ impl AppState {
         let learning_store = Arc::new(crate::learning::TenantLearningStore::default());
         let learning_controller = Arc::new(crate::learning::PolicyPromotionController::default());
 
+        let is_prod = std::env::var("SUNBORN_ENV")
+            .or_else(|_| std::env::var("ENVIRONMENT"))
+            .map(|v| {
+                let v = v.to_lowercase();
+                v == "production" || v == "prod"
+            })
+            .unwrap_or(false);
+
         let learning_hmac_secret: Vec<u8> =
             if let Ok(secret) = std::env::var("SUNBORN_LEARNING_HMAC_SECRET") {
                 secret.into_bytes()
@@ -185,6 +193,8 @@ impl AppState {
                 hasher.update(b"sunborn-learning-hmac-v1:");
                 hasher.update(master_kek.as_bytes());
                 hasher.finalize().to_vec()
+            } else if is_prod {
+                Vec::new()
             } else {
                 b"sunborn-insecure-dev-hmac-secret-change-in-production".to_vec()
             };
@@ -225,7 +235,11 @@ impl AppState {
     /// DragonflyDB, and Qdrant must succeed before the gateway can start serving traffic.
     pub async fn verify_production_readiness(&self) -> Result<(), sunborn_core::SunbornError> {
         let is_prod = std::env::var("SUNBORN_ENV")
-            .map(|v| v.to_lowercase() == "production")
+            .or_else(|_| std::env::var("ENVIRONMENT"))
+            .map(|v| {
+                let v = v.to_lowercase();
+                v == "production" || v == "prod"
+            })
             .unwrap_or(false);
 
         let cache_backend = std::env::var("SUNBORN_CACHE_BACKEND")
@@ -237,17 +251,17 @@ impl AppState {
 
         // 1. Production environment strictness: disallow ephemeral in-memory stores, insecure secrets, and mock providers
         if is_prod {
-            if cache_backend.eq_ignore_ascii_case("memory") {
+            if !cache_backend.eq_ignore_ascii_case("dragonfly") {
                 return Err(sunborn_core::SunbornError::configuration_error(
                     "Production environment SUNBORN_ENV=production forbids ephemeral in-memory cache backend. Set SUNBORN_CACHE_BACKEND=dragonfly.",
                 ));
             }
-            if db_backend.eq_ignore_ascii_case("memory") {
+            if !db_backend.eq_ignore_ascii_case("postgres") {
                 return Err(sunborn_core::SunbornError::configuration_error(
                     "Production environment SUNBORN_ENV=production forbids ephemeral in-memory database backend. Set SUNBORN_DB_BACKEND=postgres.",
                 ));
             }
-            if vector_backend.eq_ignore_ascii_case("memory") {
+            if !vector_backend.eq_ignore_ascii_case("qdrant") {
                 return Err(sunborn_core::SunbornError::configuration_error(
                     "Production environment SUNBORN_ENV=production forbids ephemeral in-memory vector backend. Set SUNBORN_VECTOR_BACKEND=qdrant.",
                 ));
@@ -308,6 +322,27 @@ impl AppState {
             if self.selected_embedder.is_deterministic() {
                 return Err(sunborn_core::SunbornError::configuration_error(
                     "Production environment SUNBORN_ENV=production forbids DeterministicEmbeddingProvider. Configure SUNBORN_EMBEDDING_URL.",
+                ));
+            }
+
+            // SB-P0-04: Genuine Learning HMAC Secret validation
+            let learning_hmac = std::env::var("SUNBORN_LEARNING_HMAC_SECRET").map_err(|_| {
+                sunborn_core::SunbornError::configuration_error(
+                    "Production requires SUNBORN_LEARNING_HMAC_SECRET environment variable to be configured",
+                )
+            })?;
+            let lower_hmac = learning_hmac.to_lowercase();
+            if lower_hmac == "sunborn-insecure-dev-hmac-secret-change-in-production"
+                || lower_hmac.contains("changeme")
+                || lower_hmac.contains("change-me")
+                || lower_hmac.contains("insecure")
+                || lower_hmac.contains("dev-")
+                || lower_hmac.contains("dev_")
+                || lower_hmac.contains("placeholder")
+                || learning_hmac.len() < 16
+            {
+                return Err(sunborn_core::SunbornError::configuration_error(
+                    "Production SUNBORN_LEARNING_HMAC_SECRET is using a default or insecure value. Provide a secure, high-entropy key.",
                 ));
             }
         }

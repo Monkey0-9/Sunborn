@@ -241,6 +241,34 @@ impl ExactCacheStore for DragonflyCacheStore {
         Ok(deleted_count.max(mem_count))
     }
 
+    async fn count_by_prefix(&self, prefix: &str) -> Result<usize> {
+        let mut df_count = 0;
+        if let Some(mut conn) = self.get_connection().await {
+            let pattern = format!("{}*", prefix);
+            match conn.keys::<_, Vec<String>>(&pattern).await {
+                Ok(keys) => {
+                    df_count = keys.len();
+                }
+                Err(err) => {
+                    tracing::error!(error = %err, "DragonflyDB keys scan failed");
+                    if self.strict_mode {
+                        return Err(sunborn_core::SunbornError::cache(format!(
+                            "DragonflyDB count_by_prefix failed: {}",
+                            err
+                        )));
+                    }
+                }
+            }
+        } else if self.strict_mode {
+            return Err(sunborn_core::SunbornError::cache(
+                "DragonflyDB connection unavailable; fail-closed prefix count enforced",
+            ));
+        }
+
+        let mem_count = self.fallback_cache.count_by_prefix(prefix).await?;
+        Ok(df_count.max(mem_count))
+    }
+
     async fn sweep_expired(&self) -> Result<usize> {
         self.fallback_cache.sweep_expired().await
     }

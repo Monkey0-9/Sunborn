@@ -149,3 +149,38 @@ test("BFF Security: All 12 privileged routes strictly reject anonymous access wi
     assert.equal(decision.status, 401);
   }
 });
+
+test("BFF Security: SB-P0-05 Deny-by-default unauthenticated GET requests to protected endpoints return 401", () => {
+  const protectedEndpoints = [
+    "v1/models",
+    "v1/finops/report",
+    "v1/security/audit",
+    "v1/cluster/status",
+    "v1/learning/policies",
+    "v1/chaos/status",
+  ];
+
+  for (const route of protectedEndpoints) {
+    const decision = evaluateProxySecurity({
+      method: "GET",
+      normalizedPath: route,
+      clientCredential: null,
+    });
+    assert.equal(
+      decision.allowed,
+      false,
+      `Protected GET '${route}' must require authentication`
+    );
+    assert.equal(decision.status, 401);
+    assert.equal(decision.error, "AUTHENTICATION_REQUIRED");
+  }
+});
+
+test("BFF Security: Authenticated requests to protected endpoints are granted", () => {
+  const decision = evaluateProxySecurity({
+    method: "GET",
+    normalizedPath: "v1/finops/report",
+    clientCredential: "Bearer valid-user-token",
+  });
+  assert.equal(decision.allowed, true);
+});

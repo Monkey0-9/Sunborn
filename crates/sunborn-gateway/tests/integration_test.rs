@@ -415,6 +415,9 @@ async fn test_cryptographic_shredding_endpoint() {
     assert_eq!(shred_json["status"], "shredded");
     assert_eq!(shred_json["tenant_id"], "tenant-alpha");
     assert!(shred_json["shred_latency_nanos"].as_u64().is_some());
+    assert_eq!(shred_json["verified_multi_store_erasure"], true);
+    assert_eq!(shred_json["residual_records"]["db"], 0);
+    assert_eq!(shred_json["residual_records"]["exact_cache"], 0);
 }
 
 #[tokio::test]

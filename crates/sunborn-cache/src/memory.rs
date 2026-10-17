@@ -94,6 +94,11 @@ impl ExactCacheStore for MemoryExactCache {
         Ok(before - entries.len())
     }
 
+    async fn count_by_prefix(&self, prefix: &str) -> Result<usize> {
+        let entries = self.entries.read().await;
+        Ok(entries.keys().filter(|k| k.starts_with(prefix)).count())
+    }
+
     async fn sweep_expired(&self) -> Result<usize> {
         let mut entries = self.entries.write().await;
         let before = entries.len();

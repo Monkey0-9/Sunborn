@@ -5,6 +5,9 @@
 use crate::learning::calibration::{CandidatePolicy, PolicyWeights};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::fs::{File, OpenOptions};
+use std::io::Write;
+use std::path::PathBuf;
 use std::sync::RwLock;
 use sunborn_core::{Result, SunbornError};
 
@@ -27,15 +30,66 @@ pub enum RollbackTrigger {
     ManualIntervention,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersistedPolicyState {
+    pub active_policy: CandidatePolicy,
+    pub canary_policy: Option<(CandidatePolicy, u8)>,
+    pub audit_logs: Vec<PromotionAuditLog>,
+}
+
 pub struct PolicyPromotionController {
     active_policy: RwLock<CandidatePolicy>,
     canary_policy: RwLock<Option<(CandidatePolicy, u8)>>, // (policy, canary_percent)
     audit_logs: RwLock<Vec<PromotionAuditLog>>,
+    persist_path: Option<PathBuf>,
 }
 
 impl Default for PolicyPromotionController {
     fn default() -> Self {
-        let initial_policy = CandidatePolicy {
+        let default_path = std::env::var("SUNBORN_POLICY_REGISTRY_PATH")
+            .ok()
+            .map(PathBuf::from);
+        Self::new_with_persistence(default_path)
+    }
+}
+
+impl PolicyPromotionController {
+    pub fn new() -> Self {
+        Self {
+            active_policy: RwLock::new(Self::baseline_policy()),
+            canary_policy: RwLock::new(None),
+            audit_logs: RwLock::new(Vec::new()),
+            persist_path: None,
+        }
+    }
+
+    pub fn new_with_persistence(persist_path: Option<PathBuf>) -> Self {
+        let mut initial_active = Self::baseline_policy();
+        let mut initial_canary = None;
+        let mut initial_logs = Vec::new();
+
+        if let Some(ref path) = persist_path {
+            if path.exists() {
+                if let Ok(file) = File::open(path) {
+                    if let Ok(state) = serde_json::from_reader::<_, PersistedPolicyState>(file) {
+                        initial_active = state.active_policy;
+                        initial_canary = state.canary_policy;
+                        initial_logs = state.audit_logs;
+                    }
+                }
+            }
+        }
+
+        Self {
+            active_policy: RwLock::new(initial_active),
+            canary_policy: RwLock::new(initial_canary),
+            audit_logs: RwLock::new(initial_logs),
+            persist_path,
+        }
+    }
+
+    fn baseline_policy() -> CandidatePolicy {
+        CandidatePolicy {
             policy_id: "policy-v1-baseline".to_string(),
             version: 1,
             weights: PolicyWeights::default(),
@@ -51,19 +105,30 @@ impl Default for PolicyPromotionController {
                 is_statistically_sound: true,
             },
             is_promoted: true,
-        };
-
-        Self {
-            active_policy: RwLock::new(initial_policy),
-            canary_policy: RwLock::new(None),
-            audit_logs: RwLock::new(Vec::new()),
         }
     }
-}
 
-impl PolicyPromotionController {
-    pub fn new() -> Self {
-        Self::default()
+    fn save_state(&self) {
+        if let Some(ref path) = self.persist_path {
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let state = PersistedPolicyState {
+                active_policy: self.active_policy.read().unwrap().clone(),
+                canary_policy: self.canary_policy.read().unwrap().clone(),
+                audit_logs: self.audit_logs.read().unwrap().clone(),
+            };
+            if let Ok(mut file) = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(path)
+            {
+                if let Ok(json_bytes) = serde_json::to_vec_pretty(&state) {
+                    let _ = file.write_all(&json_bytes);
+                }
+            }
+        }
     }
 
     /// Retrieve the currently active production policy weights
@@ -134,20 +199,24 @@ impl PolicyPromotionController {
         };
 
         self.audit_logs.write().unwrap().push(log);
+        self.save_state();
         Ok(())
     }
 
     /// Promote canary policy to 100% active production policy
     pub fn complete_promotion(&self, actor: &str) -> Result<CandidatePolicy> {
-        let mut canary_guard = self.canary_policy.write().unwrap();
-        let (mut canary, _) = canary_guard
-            .take()
-            .ok_or_else(|| SunbornError::validation_error("No active canary policy to promote"))?;
+        let (canary, prev_id) = {
+            let mut canary_guard = self.canary_policy.write().unwrap();
+            let (mut c, _) = canary_guard.take().ok_or_else(|| {
+                SunbornError::validation_error("No active canary policy to promote")
+            })?;
+            c.is_promoted = true;
 
-        canary.is_promoted = true;
-        let mut active_guard = self.active_policy.write().unwrap();
-        let prev_id = active_guard.policy_id.clone();
-        *active_guard = canary.clone();
+            let mut active_guard = self.active_policy.write().unwrap();
+            let pid = active_guard.policy_id.clone();
+            *active_guard = c.clone();
+            (c, pid)
+        };
 
         let log = PromotionAuditLog {
             policy_id: canary.policy_id.clone(),
@@ -160,24 +229,31 @@ impl PolicyPromotionController {
         };
 
         self.audit_logs.write().unwrap().push(log);
+        self.save_state();
         Ok(canary)
     }
 
     /// Automated or manual emergency rollback of the canary policy
     pub fn trigger_rollback(&self, trigger: RollbackTrigger, reason: &str) -> Result<()> {
-        let mut canary_guard = self.canary_policy.write().unwrap();
-        if let Some((canary, _)) = canary_guard.take() {
-            let active_guard = self.active_policy.read().unwrap();
-            let log = PromotionAuditLog {
-                policy_id: active_guard.policy_id.clone(),
-                previous_policy_id: canary.policy_id.clone(),
-                version: active_guard.version,
-                action: "ROLLED_BACK".to_string(),
-                canary_percentage: 0,
-                reason: format!("Rollback triggered by {:?}: {}", trigger, reason),
-                timestamp: Utc::now(),
-            };
+        let rollback_log = {
+            let mut canary_guard = self.canary_policy.write().unwrap();
+            if let Some((canary, _)) = canary_guard.take() {
+                let active_guard = self.active_policy.read().unwrap();
+                Some(PromotionAuditLog {
+                    policy_id: active_guard.policy_id.clone(),
+                    previous_policy_id: canary.policy_id.clone(),
+                    version: active_guard.version,
+                    action: "ROLLED_BACK".to_string(),
+                    canary_percentage: 0,
+                    reason: format!("Rollback triggered by {:?}: {}", trigger, reason),
+                    timestamp: Utc::now(),
+                })
+            } else {
+                None
+            }
+        };
 
+        if let Some(log) = rollback_log {
             tracing::warn!(
                 trigger = ?trigger,
                 reason = %reason,
@@ -185,14 +261,23 @@ impl PolicyPromotionController {
             );
 
             self.audit_logs.write().unwrap().push(log);
-            Ok(())
-        } else {
-            Ok(())
+            self.save_state();
         }
+        Ok(())
     }
 
     /// Fetch audit trail of policy promotions and rollbacks
     pub fn get_audit_trail(&self) -> Vec<PromotionAuditLog> {
         self.audit_logs.read().unwrap().clone()
+    }
+
+    /// Get active policy ID
+    pub fn get_active_policy_id(&self) -> String {
+        self.active_policy.read().unwrap().policy_id.clone()
+    }
+
+    /// Get active policy version
+    pub fn get_active_policy_version(&self) -> u32 {
+        self.active_policy.read().unwrap().version
     }
 }

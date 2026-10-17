@@ -373,6 +373,32 @@ fn test_layer3_offline_calibration_safety_gates() {
         .expect("calibration computation succeeds");
     // With 50% false hits on held-out data, statistical soundness must be false (false hit rate > 1%)
     assert!(!candidate.evaluation_report.is_statistically_sound);
+
+    // 3. SB-P0-01: Reject empty held-out scored denominator
+    let mut unscored_events = Vec::new();
+    for i in 0..15 {
+        unscored_events.push(VerifiedFeedbackEvent {
+            event_id: format!("ev-unscored-{}", i),
+            tenant_id: tenant_id.clone(),
+            application_id: ApplicationId::new("app-test"),
+            cache_key: format!("key-{}", i),
+            decision_type: "exact_hit".to_string(),
+            prompt_hash: format!("hash-{}", i),
+            similarity_score: if i < 10 { Some(0.92) } else { None }, // held-out split (indices 10..15) has None
+            conformal_risk_score: Some(0.01),
+            latency_ms: 1.0,
+            tokens_saved: 20,
+            cost_saved_usd: 0.0005,
+            verified_outcome: VerifiedOutcome::VerifiedCorrect,
+            verification_source: "origin_execution".to_string(),
+            hmac_signature: "sig".to_string(),
+            timestamp: Utc::now(),
+        });
+    }
+    let empty_held_out_err = OfflineCalibrator::calibrate_policy(&unscored_events, 3);
+    assert!(empty_held_out_err.is_err());
+    let err_str = empty_held_out_err.err().unwrap().to_string();
+    assert!(err_str.contains("Held-out validation split contains no scored events"));
 }
 
 #[test]

@@ -317,12 +317,16 @@ export default function LearningControllerPage() {
               <div className="p-3.5 rounded-xl bg-slate-900/90 border border-white/10 space-y-2">
                 <div className="flex items-center justify-between text-xs font-bold text-white">
                   <span>Held-Out Validation Split Evaluation</span>
-                  <Badge variant="success" dot>STATISTICALLY SOUND (p &le; 0.01)</Badge>
+                  {activePolicy?.evaluation_report ? (
+                    <Badge variant="success" dot>STATISTICALLY SOUND (p &le; 0.01)</Badge>
+                  ) : (
+                    <Badge variant="outline">PENDING CALIBRATION</Badge>
+                  )}
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-[11px] text-slate-300 pt-1">
-                  <div>• Training Samples: <strong className="text-white">{activePolicy?.evaluation_report.training_samples ?? 70}</strong></div>
-                  <div>• Held-Out Samples: <strong className="text-white">{activePolicy?.evaluation_report.held_out_samples ?? 30}</strong></div>
-                  <div>• Held-Out Error Rate: <strong className="text-emerald-300">{((activePolicy?.evaluation_report.held_out_false_hit_rate ?? 0) * 100).toFixed(2)}%</strong></div>
+                  <div>• Training Samples: <strong className="text-white">{activePolicy?.evaluation_report?.training_samples !== undefined ? activePolicy.evaluation_report.training_samples : "—"}</strong></div>
+                  <div>• Held-Out Samples: <strong className="text-white">{activePolicy?.evaluation_report?.held_out_samples !== undefined ? activePolicy.evaluation_report.held_out_samples : "—"}</strong></div>
+                  <div>• Held-Out Error Rate: <strong className="text-emerald-300">{activePolicy?.evaluation_report?.held_out_false_hit_rate !== undefined ? `${(activePolicy.evaluation_report.held_out_false_hit_rate * 100).toFixed(2)}%` : "—"}</strong></div>
                 </div>
               </div>
             </CardContent>
