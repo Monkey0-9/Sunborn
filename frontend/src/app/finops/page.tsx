@@ -17,6 +17,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { formatCurrency, formatNumber } from "@/lib/utils";
+import { sunbornApi } from "@/lib/api";
 
 export default function FinOpsPage() {
   const [monthlyQueries, setMonthlyQueries] = useState<number>(500000);
@@ -24,6 +25,31 @@ export default function FinOpsPage() {
   const [avgInputTokens, setAvgInputTokens] = useState<number>(1200);
   const [avgOutputTokens, setAvgOutputTokens] = useState<number>(600);
   const [modelPricing, setModelPricing] = useState<"gpt-4o" | "claude-3-5-sonnet" | "llama-3-1-70b">("gpt-4o");
+
+  const [liveReport, setLiveReport] = useState<{
+    exactHits: number;
+    semanticHits: number;
+    totalHits: number;
+    requestsTotal: number;
+    estimatedSavingsUsd: number;
+  } | null>(null);
+
+  React.useEffect(() => {
+    sunbornApi
+      .getFinOpsReport()
+      .then((data) => {
+        if (data && data.metrics) {
+          setLiveReport({
+            exactHits: data.metrics.exact_hits ?? 0,
+            semanticHits: data.metrics.semantic_hits ?? 0,
+            totalHits: data.metrics.total_hits ?? 0,
+            requestsTotal: data.metrics.requests_total ?? 0,
+            estimatedSavingsUsd: data.economics?.total_estimated_savings_usd ?? 0,
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Model Pricing Rates ($ per Million Tokens)
   const rates = {
@@ -73,6 +99,31 @@ export default function FinOpsPage() {
           </Badge>
         </div>
       </div>
+
+      {/* Live Gateway Telemetry Banner */}
+      {liveReport && (
+        <div className="p-4 rounded-xl bg-slate-900/80 border border-cyan-500/30 flex flex-wrap items-center justify-between gap-4 font-mono text-xs">
+          <div className="flex items-center gap-3">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+            <span className="text-slate-400 uppercase tracking-wider font-semibold">Live Gateway Telemetry:</span>
+            <span className="text-white font-bold">{formatNumber(liveReport.requestsTotal)} Total Requests</span>
+          </div>
+          <div className="flex items-center gap-6 text-slate-300">
+            <div>
+              <span className="text-slate-500 mr-1.5">Exact Hits:</span>
+              <span className="text-cyan-400 font-bold">{formatNumber(liveReport.exactHits)}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 mr-1.5">Semantic Hits:</span>
+              <span className="text-emerald-400 font-bold">{formatNumber(liveReport.semanticHits)}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 mr-1.5">Measured Savings:</span>
+              <span className="text-emerald-300 font-bold">{formatCurrency(liveReport.estimatedSavingsUsd)}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Primary KPI Ribbon */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

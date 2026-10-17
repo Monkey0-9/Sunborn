@@ -254,6 +254,43 @@ export const sunbornApi = {
       }>;
     }>("v1/security/audit", { method: "GET" }),
 
+  // Governance: Cryptographic Merkle DAG Attestation & Verification (Level 6/7)
+  generateMerkleAttestation: (leafHashes: string[]) =>
+    request<{
+      status: string;
+      root_hash: string;
+      leaf_count: number;
+      proofs: Array<{
+        leaf_hash: string;
+        root_hash: string;
+        path: Array<{ sibling_hash: string; is_right: boolean }>;
+      }>;
+    }>("v1/governance/attest", {
+      method: "POST",
+      body: JSON.stringify({ leaf_hashes: leafHashes }),
+    }),
+
+  verifyMerkleProof: (payload: {
+    proof?: {
+      leaf_hash: string;
+      root_hash: string;
+      path: Array<{ sibling_hash: string; is_right: boolean }>;
+    };
+    merkle_root?: string;
+    root_hash?: string;
+    leaf_hash?: string;
+    path?: Array<{ sibling_hash: string; is_right: boolean }>;
+  }) =>
+    request<{
+      is_valid: boolean;
+      valid: boolean;
+      root_hash: string;
+      leaf_hash: string;
+    }>("v1/governance/verify-proof", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
   // FinOps & Metrics
   getFinOpsReport: () =>
     request<any>("v1/finops/report", { method: "GET" }),

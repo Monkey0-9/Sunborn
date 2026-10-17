@@ -1085,17 +1085,45 @@ pub async fn generate_merkle_attestation(
 
 #[derive(Deserialize)]
 pub struct VerifyProofPayload {
-    pub proof: sunborn_execution::MerkleInclusionProof,
+    #[serde(default)]
+    pub proof: Option<sunborn_execution::MerkleInclusionProof>,
+    #[serde(default)]
+    pub root_hash: Option<String>,
+    #[serde(default)]
+    pub merkle_root: Option<String>,
+    #[serde(default)]
+    pub leaf_hash: Option<String>,
+    #[serde(default)]
+    pub path: Option<Vec<sunborn_execution::MerkleProofStep>>,
 }
 
 pub async fn verify_merkle_attestation(
     Json(payload): Json<VerifyProofPayload>,
 ) -> impl IntoResponse {
-    let is_valid = payload.proof.verify();
+    let proof_opt = payload.proof.or_else(|| {
+        let root = payload.root_hash.or(payload.merkle_root)?;
+        let leaf = payload.leaf_hash?;
+        let path = payload.path.unwrap_or_default();
+        Some(sunborn_execution::MerkleInclusionProof {
+            leaf_hash: leaf,
+            root_hash: root,
+            path,
+        })
+    });
+
+    let (is_valid, root, leaf) = match proof_opt {
+        Some(p) => {
+            let valid = p.verify();
+            (valid, p.root_hash, p.leaf_hash)
+        }
+        None => (false, String::new(), String::new()),
+    };
+
     Json(json!({
         "is_valid": is_valid,
-        "root_hash": payload.proof.root_hash,
-        "leaf_hash": payload.proof.leaf_hash
+        "valid": is_valid,
+        "root_hash": root,
+        "leaf_hash": leaf
     }))
 }
 
