@@ -1,10 +1,16 @@
+pub mod conformal;
 pub mod decision;
 pub mod embedding;
 pub mod guardrails;
 pub mod microbatch;
 pub mod vector_store;
 
-pub use decision::{DecisionConfig, DecisionEngine, DecisionOutcome};
+pub use conformal::{StreamingOODDetector, TaskStratifiedConformalCalibrator, TaskStratum};
+
+pub use decision::{
+    CascadeStage, DecisionConfig, DecisionEngine, DecisionOutcome, VerificationCascade,
+    VerificationCascadeResult,
+};
 pub use embedding::{
     cosine_similarity, DeterministicEmbeddingProvider, EmbeddingProvider, HttpEmbeddingProvider,
     Vector,

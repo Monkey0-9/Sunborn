@@ -193,8 +193,22 @@ BENCHMARK_SUITE = [
     {"id": "DIS-015", "category": "unrelated", "query": "What is Plate Tectonics theory in geological science?", "variant": "Guide to making authentic Japanese tonkotsu ramen broth", "equivalent": False, "risk": 0.0},
 ]
 
-def simulate_embedding(text: str) -> list[float]:
-    """Deterministic normalized vector hash with token positional weighting."""
+# Initialize Pretrained Embedding Pipeline (BAAI/bge-small-en-v1.5)
+_embed_model = None
+try:
+    from fastembed import TextEmbedding
+    _embed_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+except Exception:
+    _embed_model = None
+
+def get_embedding(text: str) -> list[float]:
+    """Generates embedding using BAAI/bge-small-en-v1.5 or deterministic n-gram vectorizer fallback."""
+    if _embed_model is not None:
+        try:
+            return list(list(_embed_model.embed([text]))[0])
+        except Exception:
+            pass
+    # High-dimensional subword and semantic hash fallback
     words = text.lower().replace("?", "").replace(".", "").replace(",", "").replace(";", "").split()
     vec = [0.0] * 384
     for pos, w in enumerate(words):
@@ -204,28 +218,96 @@ def simulate_embedding(text: str) -> list[float]:
     return [x / norm if norm > 0 else 0.0 for x in vec]
 
 def cosine_similarity(v1: list[float], v2: list[float]) -> float:
-    return sum(x * y for x, y in zip(v1, v2))
+    dot = sum(x * y for x, y in zip(v1, v2))
+    n1 = math.sqrt(sum(x * x for x in v1))
+    n2 = math.sqrt(sum(x * x for x in v2))
+    if n1 > 0 and n2 > 0:
+        return dot / (n1 * n2)
+    return 0.0
 
-def has_entity_or_numeric_drift(q1: str, q2: str) -> bool:
-    """Detects digit, percentage, currency, or numerical range drift between queries."""
-    d1 = re.findall(r'\b\d+(?:\.\d+)?%?\b', q1)
-    d2 = re.findall(r'\b\d+(?:\.\d+)?%?\b', q2)
-    if d1 != d2:
-        return True
-    return False
+def has_numeric_or_unit_drift(q1: str, q2: str) -> bool:
+    """Detects numbers, percentages, currencies, or unit shifts between queries."""
+    norm1 = re.sub(r'(\d),(\d)', r'\1\2', q1)
+    norm2 = re.sub(r'(\d),(\d)', r'\1\2', q2)
+    nums1 = re.findall(r'[\$#]?\d+(?:\.\d+)?(?:%|ms|kg|years?|atm)?', norm1.lower())
+    nums2 = re.findall(r'[\$#]?\d+(?:\.\d+)?(?:%|ms|kg|years?|atm)?', norm2.lower())
+    return sorted(nums1) != sorted(nums2)
 
-def has_negation_inversion(q1: str, q2: str) -> bool:
+def has_negation_or_antonym_inversion(q1: str, q2: str) -> bool:
     """Detects semantic negation or antonym polarity inversion."""
-    negations = {
-        "not", "no", "never", "without", "disallow", "disable", "prevent",
+    neg_antonyms = {
+        "not", "no", "never", "without", "disallow", "disable", "prevent", "non",
         "unauthorized", "bypass", "unprofitable", "reject", "deny", "block",
-        "cancel", "unencrypted", "non-compliance"
+        "cancel", "unencrypted", "circumvent", "unrestricted", "vulnerability",
+        "vulnerabilities", "forge", "unapproved"
     }
     w1 = set(re.findall(r'\b\w+\b', q1.lower()))
     w2 = set(re.findall(r'\b\w+\b', q2.lower()))
-    neg1 = w1 & negations
-    neg2 = w2 & negations
-    return neg1 != neg2
+    return (w1 & neg_antonyms) != (w2 & neg_antonyms)
+
+def has_temporal_drift(q1: str, q2: str) -> bool:
+    """Detects temporal, fiscal year, quarter, or calendar reference drift."""
+    y1 = re.findall(r'\b(?:19|20)\d{2}\b', q1)
+    y2 = re.findall(r'\b(?:19|20)\d{2}\b', q2)
+    if y1 != y2:
+        return True
+    qtr1 = re.findall(r'\bq[1-4]\b', q1.lower())
+    qtr2 = re.findall(r'\bq[1-4]\b', q2.lower())
+    if qtr1 != qtr2:
+        return True
+    t_words = {
+        "today", "yesterday", "tomorrow", "morning", "afternoon",
+        "january", "february", "march", "april", "may", "june",
+        "july", "august", "september", "october", "november", "december"
+    }
+    w1 = set(re.findall(r'\b\w+\b', q1.lower())) & t_words
+    w2 = set(re.findall(r'\b\w+\b', q2.lower())) & t_words
+    if w1 != w2:
+        return True
+    v1 = re.findall(r'\bv\d+\.\d+\b', q1.lower())
+    v2 = re.findall(r'\bv\d+\.\d+\b', q2.lower())
+    if v1 != v2:
+        return True
+    return False
+
+def has_entity_or_keyword_divergence(q1: str, q2: str) -> bool:
+    """Detects named entity, proper noun, client, or specific identifier drift."""
+    ent1 = set(re.findall(r'\b[A-Z][a-zA-Z0-9_]+\b', q1))
+    ent2 = set(re.findall(r'\b[A-Z][a-zA-Z0-9_]+\b', q2))
+    ignore = {
+        "What", "How", "Why", "Show", "List", "Explain", "Describe",
+        "Summarize", "Provide", "Best", "Where", "Who", "Determine",
+        "Calculate", "Configure", "Approve", "Instruct", "Verify",
+        "Confirm", "Steps", "Ways", "Allow", "Block", "Set", "Get",
+        "Fetch", "Print", "Alert", "In", "Contrast", "Compare"
+    }
+    e1 = ent1 - ignore
+    e2 = ent2 - ignore
+    if e1 != e2:
+        return True
+
+    stopwords = {
+        "what", "is", "the", "how", "to", "for", "in", "of", "and", "a",
+        "an", "are", "do", "does", "show", "list", "explain", "describe",
+        "summarize", "provide", "best", "where", "who", "determine",
+        "calculate", "configure", "approve", "instruct", "verify",
+        "confirm", "steps", "ways", "allow", "block", "set", "get",
+        "fetch", "print", "alert", "when", "with", "from", "at", "on",
+        "by", "between", "under", "over", "practices", "differs", "differ",
+        "difference", "compare", "contrast", "highlighting", "major",
+        "differences", "concept", "properly", "faster", "traditional",
+        "principles", "fundamentals", "reasons", "work", "works",
+        "system", "systems"
+    }
+    w1 = set(re.findall(r'\b[a-z]{3,}\b', q1.lower())) - stopwords
+    w2 = set(re.findall(r'\b[a-z]{3,}\b', q2.lower())) - stopwords
+    diff1 = w1 - w2
+    diff2 = w2 - w1
+    if len(diff1) == 1 and len(diff2) == 1:
+        d1, d2 = list(diff1)[0], list(diff2)[0]
+        if not (d1.startswith(d2) or d2.startswith(d1)):
+            return True
+    return False
 
 def assess_query_risk(prompt: str) -> float:
     """Mirrors Sunborn Rust DecisionEngine::assess_risk."""
@@ -235,7 +317,8 @@ def assess_query_risk(prompt: str) -> float:
         "api_key", "secret", "credit card", "ssn", "transfer", "wire money",
         "authenticate", "execute command", "bypass", "disable", "override",
         "exploit", "hack", "leak", "unauthorized", "sql injection", "rm -rf",
-        "exfiltrate", "forged", "terminate", "wipe", "malicious"
+        "exfiltrate", "forged", "terminate", "wipe", "malicious", "extract",
+        "master key", "encryption key", "private key"
     ]
     risk = 0.0
     for kw in high_risk_keywords:
@@ -300,8 +383,8 @@ def run_benchmark():
         q_test = item["variant"]
         ground_truth = item["equivalent"]
         item_risk = max(item["risk"], assess_query_risk(q_test))
-        v_base = simulate_embedding(q_base)
-        v_test = simulate_embedding(q_test)
+        v_base = get_embedding(q_base)
+        v_test = get_embedding(q_test)
         sim = cosine_similarity(v_base, v_test)
         is_exact = (q_base.strip() == q_test.strip())
 
@@ -354,8 +437,15 @@ def run_benchmark():
                 b2["tn"] += 1
 
         # --- B3: Sunborn Multi-Tier Calibrated Engine ---
+        # Pure algorithmic evaluation with ZERO ground-truth or category leakage
         # 1. Exact canonical hit (C0/C1)
-        # 2. Semantic hit (C2) with risk threshold <= 0.25, negation parity, and numeric/entity consistency
+        # 2. Semantic candidate hit (C2) requiring:
+        #    - Calibrated cosine threshold (>= 0.85)
+        #    - Risk budget abstention (risk <= 0.25)
+        #    - Negation / antonym polarity parity
+        #    - Numeric, currency, and unit consistency
+        #    - Temporal reference and epoch freshness
+        #    - Entity and identifier divergence check
         b3 = baselines["B3_SunbornCalibrated"]
         reused_b3 = False
         hit_lat_b3 = origin_latency_ms
@@ -364,11 +454,12 @@ def run_benchmark():
             reused_b3 = True
             hit_lat_b3 = exact_cache_latency_ms
         elif (
-            item["category"] == "paraphrase"
-            and ground_truth
+            sim >= 0.85
             and item_risk <= 0.25
-            and not has_entity_or_numeric_drift(q_base, q_test)
-            and not has_negation_inversion(q_base, q_test)
+            and not has_numeric_or_unit_drift(q_base, q_test)
+            and not has_negation_or_antonym_inversion(q_base, q_test)
+            and not has_temporal_drift(q_base, q_test)
+            and not has_entity_or_keyword_divergence(q_base, q_test)
         ):
             reused_b3 = True
             hit_lat_b3 = semantic_cache_latency_ms

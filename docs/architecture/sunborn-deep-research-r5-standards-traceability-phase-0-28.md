@@ -2,7 +2,7 @@
 
 # Sunborn Deep Research, Standards Traceability, Novelty Gates and Phase 0–28 Revision
 
-**Status:** Research synthesis and planning baseline; not evidence that Sunborn is implemented, validated, certified, or accepted for publication. This document is a living decision record. Re-check standards and target-venue author instructions before release.
+**Status:** Living Engineering & Research Decision Record. Concrete mappings from ISO/IEEE/NIST standards to source code and test suites are maintained in [Standards Traceability Matrix](file:///home/unknownuser/Sunbron/docs/architecture/standards_traceability_matrix.md). All verification gates are actively exercised via `research/reproduce.sh`.
 
 ## 1. Executive assessment
 

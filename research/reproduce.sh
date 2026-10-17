@@ -75,49 +75,72 @@ cargo test --test simulation_test -- --nocapture
 cargo test --test learning_controller_test -- --nocapture
 echo "==> Zero cross-tenant leakage, tenant spoofing prevention, circuit-breaker fallback, DST Non-Accelerator Authority, and 5-layer learning controller verified."
 
+PYTHON_BIN="python3"
+if [[ -x "${WORKSPACE_ROOT}/.venv/bin/python" ]]; then
+    PYTHON_BIN="${WORKSPACE_ROOT}/.venv/bin/python"
+fi
+
 echo ""
 echo "[5/5] Executing Semantic Cache Benchmark & Empirical Artifact Verification..."
 BENCHMARK_ARTIFACT="research/results/benchmark_run.json"
+MANIFEST_ARTIFACT="research/results/run_manifest.json"
 CERTIFICATE_ARTIFACT="research/results/reproduction_certificate.json"
 
 # Remove any stale results before running to guarantee fresh execution evidence
-rm -f "${BENCHMARK_ARTIFACT}" "${CERTIFICATE_ARTIFACT}"
+rm -f "${BENCHMARK_ARTIFACT}" "${MANIFEST_ARTIFACT}" "${CERTIFICATE_ARTIFACT}"
 
-python3 benchmarks/semantic_cache_bench.py
-python3 benchmarks/capacity_soak.py
+${PYTHON_BIN} benchmarks/semantic_cache_bench.py
+${PYTHON_BIN} benchmarks/capacity_soak.py
+${PYTHON_BIN} benchmarks/semantic_cache_bench_t.py
 
 if [[ ! -f "${BENCHMARK_ARTIFACT}" ]]; then
     echo "ERROR: Benchmark artifact was not generated at ${BENCHMARK_ARTIFACT}" >&2
     exit 1
 fi
 
+if [[ ! -f "${MANIFEST_ARTIFACT}" ]]; then
+    echo "ERROR: Temporal manifest artifact was not generated at ${MANIFEST_ARTIFACT}" >&2
+    exit 1
+fi
+
 echo "------------------------------------------------------------------------"
-echo "Fresh Dynamic Verification from ${BENCHMARK_ARTIFACT}:"
-python3 -c "
+echo "Fresh Dynamic Verification from ${BENCHMARK_ARTIFACT} and ${MANIFEST_ARTIFACT}:"
+${PYTHON_BIN} -c "
 import json
 import sys
 import platform
 from datetime import datetime, timezone
 
 with open('${BENCHMARK_ARTIFACT}') as f:
-    data = json.load(f)
+    bench_data = json.load(f)
 
-meta = data.get('metadata', {})
-baselines = data.get('baselines', {})
+with open('${MANIFEST_ARTIFACT}') as f:
+    manifest_data = json.load(f)
+
+meta = bench_data.get('metadata', {})
+baselines = bench_data.get('baselines', {})
 b2 = baselines.get('B2_NaiveCosine')
 b3 = baselines.get('B3_SunbornCalibrated')
 
-if not b2 or not b3:
-    print('ERROR: Missing required baselines in benchmark output', file=sys.stderr)
+t_baselines = manifest_data.get('baselines', {})
+t_b2 = t_baselines.get('B2_NaiveCosine')
+t_b3 = t_baselines.get('B3_SunbornTemporal')
+
+if not b2 or not b3 or not t_b2 or not t_b3:
+    print('ERROR: Missing required baselines in benchmark or manifest outputs', file=sys.stderr)
     sys.exit(1)
 
-print(f\"  Total Evaluation Queries : {meta.get('total_benchmark_queries', 'N/A')}\")
-print(f\"  Naive B2 False-Hit Rate  : {b2['false_hit_rate_pct']}% ({b2['false_hits']} false hits)\")
-print(f\"  Sunborn B3 False-Hit Rate: {b3['false_hit_rate_pct']}% ({b3['false_hits']} false hits)\")
-print(f\"  Sunborn B3 Precision     : {b3['precision_pct']}%\")
-print(f\"  Sunborn B3 Token Savings : {b3['cost_savings_pct']}%\")
+print(f\"  [Benchmark] Total Evaluation Queries : {meta.get('total_benchmark_queries', 'N/A')}\")
+print(f\"  [Benchmark] Naive B2 False-Hit Rate  : {b2['false_hit_rate_pct']}% ({b2['false_hits']} false hits)\")
+print(f\"  [Benchmark] Sunborn B3 False-Hit Rate: {b3['false_hit_rate_pct']}% ({b3['false_hits']} false hits)\")
+print(f\"  [Benchmark] Sunborn B3 Precision     : {b3['precision_pct']}%\")
+print(f\"  [Benchmark] Sunborn B3 Token Savings : {b3['cost_savings_pct']}%\")
+print(f\"  [Temporal-T] Total Stateful Scenarios: {manifest_data.get('metadata', {}).get('total_temporal_scenarios', 'N/A')}\")
+print(f\"  [Temporal-T] Naive B2 False-Hit Rate : {t_b2['false_hit_rate_pct']}% ({t_b2['false_hits']} false hits)\")
+print(f\"  [Temporal-T] Sunborn B3 False-Hits   : {t_b3['false_hits']} ({t_b3['false_hit_rate_pct']}%)\")
+print(f\"  [Temporal-T] Sunborn B3 Precision    : {t_b3['precision_pct']}%\")
 
-# Strictly enforce empirical correctness invariants
+# Strictly enforce empirical correctness invariants on both benchmark suites
 if b3['false_hit_rate_pct'] != 0.0 or b3['false_hits'] != 0:
     print(f\"FATAL: Sunborn B3 false-hit rate invariant violated: {b3['false_hit_rate_pct']}%\", file=sys.stderr)
     sys.exit(1)
@@ -126,8 +149,16 @@ if b3['precision_pct'] != 100.0:
     print(f\"FATAL: Sunborn B3 precision must be exactly 100.0%: got {b3['precision_pct']}%\", file=sys.stderr)
     sys.exit(1)
 
-if b2['false_hits'] <= 0:
-    print(f\"WARNING: Baseline B2 expected false hits on adversarial traps, got {b2['false_hits']}\", file=sys.stderr)
+if t_b3['false_hit_rate_pct'] != 0.0 or t_b3['false_hits'] != 0:
+    print(f\"FATAL: SemanticCacheBench-T Sunborn B3 false-hit rate violated: {t_b3['false_hit_rate_pct']}%\", file=sys.stderr)
+    sys.exit(1)
+
+if t_b3['precision_pct'] != 100.0:
+    print(f\"FATAL: SemanticCacheBench-T Sunborn B3 precision must be 100.0%: got {t_b3['precision_pct']}%\", file=sys.stderr)
+    sys.exit(1)
+
+if b2['false_hits'] <= 0 or t_b2['false_hits'] <= 0:
+    print(f\"WARNING: Baseline B2 expected false hits on adversarial/temporal traps\", file=sys.stderr)
 
 certificate = {
     'evaluation': 'Sunborn Internal Empirical Reproduction',
@@ -146,19 +177,23 @@ certificate = {
         'sunborn_b3_false_hit_rate_pct': b3['false_hit_rate_pct'],
         'sunborn_b3_precision_pct': b3['precision_pct'],
         'sunborn_b3_cost_savings_pct': b3['cost_savings_pct'],
+        'sunborn_b3_temporal_false_hits': t_b3['false_hits'],
+        'sunborn_b3_temporal_precision_pct': t_b3['precision_pct'],
         'naive_b2_false_hits': b2['false_hits'],
-        'naive_b2_false_hit_rate_pct': b2['false_hit_rate_pct']
+        'naive_b2_false_hit_rate_pct': b2['false_hit_rate_pct'],
+        'naive_b2_temporal_false_hits': t_b2['false_hits'],
+        'naive_b2_temporal_false_hit_rate_pct': t_b2['false_hit_rate_pct']
     }
 }
 
 with open('${CERTIFICATE_ARTIFACT}', 'w') as f_cert:
     json.dump(certificate, f_cert, indent=2)
 
-print('  Verification Assertions  : PASSED (B3 zero false hits & 100% precision verified)')
+print('  Verification Assertions  : PASSED (B3 zero false hits & 100% precision verified on static & temporal benchmarks)')
 print(f\"  Certificate Generated    : ${CERTIFICATE_ARTIFACT}\")
 "
 echo "------------------------------------------------------------------------"
-echo "==> SemanticCacheBench & Capacity Soak verification completed successfully."
+echo "==> SemanticCacheBench, SemanticCacheBench-T & Capacity Soak verification completed successfully."
 
 echo ""
 echo "========================================================================"

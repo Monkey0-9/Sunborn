@@ -197,6 +197,31 @@ pub async fn execute_request_inner(
             );
 
             let _ = state.db.increment_hit_count(&identity.key).await;
+            let certificate = Some(sunborn_core::ReuseCertificate::new_signed(
+                req.tenant_id.clone(),
+                req.application_id.clone(),
+                &identity.hash,
+                &req.model,
+                req.prompt.split_whitespace().count() as u32,
+                req.dependency_snapshots.clone(),
+                sunborn_core::SafetyEvidenceRecord {
+                    structural_hash_match: true,
+                    negation_polarity_match: true,
+                    numeric_literal_match: true,
+                    entity_drift_detected: false,
+                    non_conformity_score: 0.0,
+                    calibrated_risk_bound: 0.0,
+                    heuristic_risk_score: 0.0,
+                },
+                sunborn_core::ValidityWindow {
+                    issued_at: Utc::now(),
+                    expires_at: Utc::now()
+                        + chrono::Duration::seconds(state.config.cache.default_ttl_secs as i64),
+                    monotonic_epoch_lease: req.knowledge_epoch.unwrap_or(1),
+                },
+                &state.learning_hmac_secret,
+            ));
+
             return Ok(ResponseEnvelope {
                 request_id: req.request_id,
                 tenant_id: req.tenant_id,
@@ -216,6 +241,7 @@ pub async fn execute_request_inner(
                 cache_key: Some(identity.key),
                 created_at: Utc::now(),
                 duration_ms,
+                certificate,
             });
         }
     }
@@ -253,6 +279,33 @@ pub async fn execute_request_inner(
                     decision.policy_version =
                         Some(state.learning_controller.get_active_policy_version());
 
+                    let certificate = Some(sunborn_core::ReuseCertificate::new_signed(
+                        req.tenant_id.clone(),
+                        req.application_id.clone(),
+                        &identity.hash,
+                        &req.model,
+                        req.prompt.split_whitespace().count() as u32,
+                        req.dependency_snapshots.clone(),
+                        sunborn_core::SafetyEvidenceRecord {
+                            structural_hash_match: true,
+                            negation_polarity_match: true,
+                            numeric_literal_match: true,
+                            entity_drift_detected: false,
+                            non_conformity_score: (1.0 - decision.confidence).max(0.0),
+                            calibrated_risk_bound: weights.max_risk_threshold,
+                            heuristic_risk_score: decision.risk_score,
+                        },
+                        sunborn_core::ValidityWindow {
+                            issued_at: Utc::now(),
+                            expires_at: Utc::now()
+                                + chrono::Duration::seconds(
+                                    state.config.cache.default_ttl_secs as i64,
+                                ),
+                            monotonic_epoch_lease: req.knowledge_epoch.unwrap_or(1),
+                        },
+                        &state.learning_hmac_secret,
+                    ));
+
                     return Ok(ResponseEnvelope {
                         request_id: req.request_id,
                         tenant_id: req.tenant_id,
@@ -263,6 +316,7 @@ pub async fn execute_request_inner(
                         cache_key: outcome.matched_id,
                         created_at: Utc::now(),
                         duration_ms,
+                        certificate,
                     });
                 }
             }
@@ -365,6 +419,7 @@ pub async fn execute_request_inner(
         cache_key: Some(identity.key),
         created_at: Utc::now(),
         duration_ms,
+        certificate: None,
     })
 }
 

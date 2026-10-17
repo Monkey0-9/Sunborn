@@ -142,6 +142,8 @@ pub struct RequestEnvelope {
     #[serde(default)]
     pub retrieval_context_hashes: Vec<String>,
     #[serde(default)]
+    pub dependency_snapshots: Vec<crate::certificate::SourceVersionSnapshot>,
+    #[serde(default)]
     pub metadata: serde_json::Value,
     #[serde(default = "chrono::Utc::now")]
     pub timestamp: DateTime<Utc>,
@@ -171,6 +173,7 @@ impl RequestEnvelope {
             response_format: None,
             knowledge_epoch: None,
             retrieval_context_hashes: Vec::new(),
+            dependency_snapshots: Vec::new(),
             metadata: serde_json::json!({}),
             timestamp: Utc::now(),
         }
@@ -239,4 +242,6 @@ pub struct ResponseEnvelope {
     pub cache_key: Option<String>,
     pub created_at: DateTime<Utc>,
     pub duration_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub certificate: Option<crate::certificate::ReuseCertificate>,
 }

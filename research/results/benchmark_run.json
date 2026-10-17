@@ -1,8 +1,8 @@
 {
   "metadata": {
-    "evaluation_time_utc": "2026-10-17T13:11:47.343236+00:00",
+    "evaluation_time_utc": "2026-10-17T13:47:41.832300+00:00",
     "platform": "Linux-6.12.0-211.64.1.el10_2.x86_64-x86_64-with-glibc2.39",
-    "python_version": "3.12.15",
+    "python_version": "3.13.16",
     "total_benchmark_queries": 124,
     "categories_evaluated": 8,
     "cost_model": {
@@ -78,43 +78,43 @@
     },
     "B2_NaiveCosine": {
       "name": "Naive Cosine (Fixed tau=0.70)",
-      "hits": 66,
-      "hit_rate_pct": 53.23,
+      "hits": 100,
+      "hit_rate_pct": 80.65,
       "hit_rate_ci_95": [
-        44.48,
-        61.78
+        72.81,
+        86.63
       ],
-      "false_hits": 51,
-      "false_hit_rate_pct": 41.13,
+      "false_hits": 60,
+      "false_hit_rate_pct": 48.39,
       "false_hit_ci_95": [
-        32.86,
-        49.93
+        39.77,
+        57.1
       ],
-      "precision_pct": 22.73,
+      "precision_pct": 40.0,
       "precision_ci_95": [
-        14.29,
-        34.17
+        30.94,
+        49.8
       ],
-      "recall_pct": 37.5,
+      "recall_pct": 100.0,
       "recall_ci_95": [
-        24.22,
-        52.97
+        91.24,
+        100.0
       ],
-      "avg_latency_ms": 214.74,
-      "total_cost_usd": 0.362566,
-      "cost_savings_pct": 53.22,
-      "tp": 15,
-      "fp": 51,
-      "tn": 33,
-      "fn": 25
+      "avg_latency_ms": 93.55,
+      "total_cost_usd": 0.1501,
+      "cost_savings_pct": 80.63,
+      "tp": 40,
+      "fp": 60,
+      "tn": 24,
+      "fn": 0
     },
     "B3_SunbornCalibrated": {
       "name": "Sunborn Multi-Tier Calibrated Engine",
-      "hits": 36,
-      "hit_rate_pct": 29.03,
+      "hits": 29,
+      "hit_rate_pct": 23.39,
       "hit_rate_ci_95": [
-        21.77,
-        37.56
+        16.81,
+        31.57
       ],
       "false_hits": 0,
       "false_hit_rate_pct": 0.0,
@@ -124,21 +124,21 @@
       ],
       "precision_pct": 100.0,
       "precision_ci_95": [
-        90.36,
+        88.3,
         100.0
       ],
-      "recall_pct": 90.0,
+      "recall_pct": 72.5,
       "recall_ci_95": [
-        76.95,
-        96.04
+        57.17,
+        83.89
       ],
-      "avg_latency_ms": 320.94,
-      "total_cost_usd": 0.550036,
-      "cost_savings_pct": 29.03,
-      "tp": 36,
+      "avg_latency_ms": 345.9,
+      "total_cost_usd": 0.593779,
+      "cost_savings_pct": 23.38,
+      "tp": 29,
       "fp": 0,
       "tn": 84,
-      "fn": 4
+      "fn": 11
     }
   }
 }

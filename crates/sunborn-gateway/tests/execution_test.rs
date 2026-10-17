@@ -64,30 +64,30 @@ async fn test_execution_dag_reuse_and_invalidation() {
     // Node 2: "summarize_portfolio" depending on Node 1 (non-deterministic synthesis)
     let reordered_args = serde_json::json!({ "currency": "USD", "ticker": "MSFT" });
     let mut plan = ExecutionPlan::new();
-    plan.add_node(ExecutionNode {
-        id: "step_fetch".into(),
-        name: "Fetch MSFT Price".into(),
-        dependencies: vec![],
-        tool_call: Some(ToolCall {
+    plan.add_node(ExecutionNode::new(
+        "step_fetch",
+        "Fetch MSFT Price",
+        vec![],
+        Some(ToolCall {
             tool_name: "fetch_stock_price".into(),
             tool_version: "1.0.0".into(),
             arguments: reordered_args,
             context_hash: None,
         }),
-        is_deterministic: true,
-    });
-    plan.add_node(ExecutionNode {
-        id: "step_synthesize".into(),
-        name: "Synthesize Report".into(),
-        dependencies: vec!["step_fetch".into()],
-        tool_call: Some(ToolCall {
+        true,
+    ));
+    plan.add_node(ExecutionNode::new(
+        "step_synthesize",
+        "Synthesize Report",
+        vec!["step_fetch".into()],
+        Some(ToolCall {
             tool_name: "llm_synthesize".into(),
             tool_version: "1.0.0".into(),
             arguments: serde_json::json!({ "format": "markdown" }),
             context_hash: None,
         }),
-        is_deterministic: false,
-    });
+        false,
+    ));
 
     let plan_payload = serde_json::json!({
         "tenant_id": tenant,

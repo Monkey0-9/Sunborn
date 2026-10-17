@@ -2,6 +2,27 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum ExecutionEffect {
+    /// Pure mathematical or deterministic transformation without side effects.
+    #[default]
+    PureDeterministic,
+    /// Read-only idempotent operation bound to versioned external state.
+    ReadOnlyIdempotent {
+        required_state_version: u64,
+        #[serde(default)]
+        source_ids: Vec<uuid::Uuid>,
+    },
+    /// Time-sensitive computation bounded by strict time-to-live.
+    TimeSensitiveNonDeterministic { max_ttl_secs: u64 },
+    /// External mutation or non-idempotent action (e.g. payment, write, command).
+    /// NEVER reusable without explicit re-execution and transaction handling.
+    MutatingSideEffecting {
+        operation_type: String,
+        idempotency_key: String,
+    },
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolDefinition {
     pub name: String,
@@ -9,6 +30,8 @@ pub struct ToolDefinition {
     pub is_deterministic: bool,
     pub is_side_effect_free: bool,
     pub default_ttl_secs: Option<u64>,
+    #[serde(default)]
+    pub effect: ExecutionEffect,
 }
 
 impl ToolDefinition {
@@ -18,12 +41,24 @@ impl ToolDefinition {
         deterministic: bool,
         side_effect_free: bool,
     ) -> Self {
+        let effect = if !side_effect_free {
+            ExecutionEffect::MutatingSideEffecting {
+                operation_type: "external_action".to_string(),
+                idempotency_key: uuid::Uuid::new_v4().to_string(),
+            }
+        } else if deterministic {
+            ExecutionEffect::PureDeterministic
+        } else {
+            ExecutionEffect::TimeSensitiveNonDeterministic { max_ttl_secs: 60 }
+        };
+
         Self {
             name: name.into(),
             version: version.into(),
             is_deterministic: deterministic,
             is_side_effect_free: side_effect_free,
             default_ttl_secs: None,
+            effect,
         }
     }
 }
@@ -55,6 +90,36 @@ pub struct ExecutionNode {
     pub dependencies: Vec<String>,
     pub tool_call: Option<ToolCall>,
     pub is_deterministic: bool,
+    #[serde(default)]
+    pub effect: ExecutionEffect,
+}
+
+impl ExecutionNode {
+    pub fn new(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        dependencies: Vec<String>,
+        tool_call: Option<ToolCall>,
+        is_deterministic: bool,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            name: name.into(),
+            dependencies,
+            tool_call,
+            is_deterministic,
+            effect: if is_deterministic {
+                ExecutionEffect::PureDeterministic
+            } else {
+                ExecutionEffect::TimeSensitiveNonDeterministic { max_ttl_secs: 60 }
+            },
+        }
+    }
+
+    pub fn with_effect(mut self, effect: ExecutionEffect) -> Self {
+        self.effect = effect;
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

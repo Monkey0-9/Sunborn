@@ -139,18 +139,18 @@ async fn test_cross_tenant_execution_dag_isolation() {
 
     // Tenant Beta plans the exact same tool call
     let mut plan = ExecutionPlan::new();
-    plan.add_node(ExecutionNode {
-        id: "step_1".into(),
-        name: "Query Balance".into(),
-        dependencies: vec![],
-        tool_call: Some(ToolCall {
+    plan.add_node(ExecutionNode::new(
+        "step_1",
+        "Query Balance",
+        vec![],
+        Some(ToolCall {
             tool_name: "query_account_balance".into(),
             tool_version: "1.0.0".into(),
             arguments: tool_args,
             context_hash: None,
         }),
-        is_deterministic: true,
-    });
+        true,
+    ));
 
     let plan_payload = serde_json::json!({
         "tenant_id": "tenant-beta",
