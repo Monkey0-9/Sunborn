@@ -4,7 +4,7 @@
 **Document Identifier**: `SUNBORN-SPEC-L5-L6-2026.1`  
 **Standard Compliance**: IEEE/ACM Artifact Evaluation Guidelines (v2024), ISO/IEC/IEEE 29148:2018  
 **System Target**: Sunborn Gateway & Core v0.1.0  
-**Verification Digest (SHA-256)**: `1ad97e3741ee125ffd40a9d99caf9bfe3d227aefc86446aac495adc3b4396ba6`  
+**Verification Digest (SHA-256)**: `059500e9fea4b5ca13a2d7bfe13e4cd4d3bb981938f18386120026ebfa987635`  
 **Classification**: Production Architecture & Formal Verification Dossier  
 
 ---
@@ -130,16 +130,28 @@ Demonstrated in `crates/sunborn-identity/src/crypto_shred.rs` and `tests/governa
 
 ## 4. Reverse Engineering Analysis (REA) & Binary Security Audit
 
-Deep binary inspection of the compiled native executable `target/debug/sunborn-gateway` was conducted using the **Reverse Engineer Anything (REA)** MCP provider.
+Deep binary inspection of the compiled native executables was conducted using the **Reverse Engineer Anything (REA)** MCP provider.
 
-### 4.1 Binary Identification & Evidence
+### 4.1 Production Binary Identification & Evidence
 ```json
 {
-  "path": "target/debug/sunborn-gateway",
-  "format": "elf",
-  "kind": "executable",
-  "architecture": "x86_64",
-  "sha256": "1ad97e3741ee125ffd40a9d99caf9bfe3d227aefc86446aac495adc3b4396ba6"
+  "production_release": {
+    "path": "target/release/sunborn-gateway",
+    "format": "elf",
+    "architecture": "x86_64",
+    "bytes": 14357008,
+    "sha256": "059500e9fea4b5ca13a2d7bfe13e4cd4d3bb981938f18386120026ebfa987635",
+    "evidence_id": "ev_cfe1cb4f1a9dc5609df5147f975b23b5242e46fc9744b1c72bb56b5869c4f0af",
+    "inferred_rustc_commit": "b940084d7eb6a299eb4bfeb8e34901bc051e7ac4"
+  },
+  "debug_verification": {
+    "path": "target/debug/sunborn-gateway",
+    "format": "elf",
+    "architecture": "x86_64",
+    "bytes": 161864328,
+    "sha256": "4b00ef4727e1c153be5d13b4fdd9a98545893259208a2a1fab1b16e84d94914e",
+    "evidence_id": "ev_018858357df7c6d03399c9bee2052cd2dddd35d7a66b1ecf9f212f018b4d6995"
+  }
 }
 ```
 
@@ -147,10 +159,10 @@ Deep binary inspection of the compiled native executable `target/debug/sunborn-g
 
 | Mitigation | Binary Header Observation | Status | Security Guarantee |
 |---|---|---|---|
-| **PIE (Position Independent Executable)** | `flags 0x00000150: HAS_SYMS, DYNAMIC, D_PAGED` | **ACTIVE** | Full Address Space Layout Randomization (ASLR) compatibility; prevents static ROP gadgets. |
-| **Full RELRO (Read-Only Relocations)** | `GNU_RELRO 0x00000000012f8ff0` | **ACTIVE** | Global Offset Table (GOT) is marked read-only after dynamic linker initialization; prevents GOT-overwrite attacks. |
-| **NX / DEP (No-Execute Stack)** | `GNU_STACK 0x0000000000000000` | **ACTIVE** | Stack pages are strictly non-executable (`RW-`); prevents direct shellcode injection into stack frames. |
-| **Stack Smashing Protection** | `__stack_chk_fail` symbol binding | **ACTIVE** | Compiler-inserted stack canaries detect buffer overflows prior to return address execution. |
+| **PIE (Position Independent Executable)** | `FLAGS_1: NOW PIE` | **ACTIVE** | Full Address Space Layout Randomization (ASLR) compatibility; prevents static ROP gadgets. |
+| **Full RELRO (Read-Only Relocations)** | `FLAGS: BIND_NOW`, `GNU_RELRO` | **ACTIVE** | Global Offset Table (GOT) is marked read-only after dynamic linker initialization; prevents GOT-overwrite attacks. |
+| **NX / DEP (No-Execute Stack)** | `GNU_STACK (RW-)` | **ACTIVE** | Stack pages are strictly non-executable (`RW-`); prevents direct shellcode injection into stack frames. |
+| **Stack Smashing Protection** | Subroutine canary frame checks | **ACTIVE** | Compiler-inserted stack canaries detect buffer overflows prior to return address execution. |
 | **Zero Secret Rodata Leakage** | `.rodata` hex dump inspection | **ACTIVE** | Zero API keys, passwords, or deterministic encryption keys embedded in binary text/data segments. |
 
 ---
