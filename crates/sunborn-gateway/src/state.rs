@@ -87,19 +87,20 @@ impl AppState {
             .unwrap_or_else(|_| config.cache.postgres_url.clone());
         let postgres_db = Arc::new(sunborn_db::PostgresDatabaseStore::new(&postgres_url));
 
-        let selected_embedder: Arc<dyn sunborn_semantic::EmbeddingProvider> =
-            if let Ok(url) = std::env::var("SUNBORN_EMBEDDING_URL") {
-                let api_key = std::env::var("SUNBORN_EMBEDDING_API_KEY")
-                    .or_else(|_| std::env::var("OPENAI_API_KEY"))
-                    .ok();
-                let model = std::env::var("SUNBORN_EMBEDDING_MODEL")
-                    .unwrap_or_else(|_| "text-embedding-3-small".to_string());
-                Arc::new(sunborn_semantic::HttpEmbeddingProvider::new(
-                    url, model, api_key,
-                ))
-            } else {
-                Arc::new(DeterministicEmbeddingProvider::new())
-            };
+        let selected_embedder: Arc<dyn sunborn_semantic::EmbeddingProvider> = if let Ok(url) =
+            std::env::var("SUNBORN_EMBEDDING_URL").or_else(|_| std::env::var("EMBEDDING_API_URL"))
+        {
+            let api_key = std::env::var("SUNBORN_EMBEDDING_API_KEY")
+                .or_else(|_| std::env::var("OPENAI_API_KEY"))
+                .ok();
+            let model = std::env::var("SUNBORN_EMBEDDING_MODEL")
+                .unwrap_or_else(|_| "text-embedding-3-small".to_string());
+            Arc::new(sunborn_semantic::HttpEmbeddingProvider::new(
+                url, model, api_key,
+            ))
+        } else {
+            Arc::new(DeterministicEmbeddingProvider::new())
+        };
 
         let is_dragonfly = config.cache.backend == "dragonfly"
             || std::env::var("SUNBORN_CACHE_BACKEND")
@@ -253,11 +254,13 @@ impl AppState {
             }
 
             // P0-2: Fail-closed secret hygiene validation
-            let master_kek = std::env::var("SUNBORN_MASTER_KEK").map_err(|_| {
-                sunborn_core::SunbornError::configuration_error(
-                    "Production requires SUNBORN_MASTER_KEK environment variable to be configured",
-                )
-            })?;
+            let master_kek = std::env::var("SUNBORN_MASTER_KEK")
+                .or_else(|_| std::env::var("MASTER_KEK"))
+                .map_err(|_| {
+                    sunborn_core::SunbornError::configuration_error(
+                        "Production requires SUNBORN_MASTER_KEK environment variable to be configured",
+                    )
+                })?;
             let lower_kek = master_kek.to_lowercase();
             if lower_kek.contains("changeme")
                 || lower_kek.contains("placeholder")

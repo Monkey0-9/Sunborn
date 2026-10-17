@@ -33,8 +33,8 @@ gateway:
 
   securityContext:
     runAsNonRoot: true
-    runAsUser: 1000
-    runAsGroup: 1000
+    runAsUser: 65532
+    runAsGroup: 65532
     readOnlyRootFilesystem: true
     allowPrivilegeEscalation: false
     capabilities:
@@ -82,8 +82,8 @@ frontend:
 
   securityContext:
     runAsNonRoot: true
-    runAsUser: 1000
-    runAsGroup: 1000
+    runAsUser: 1001
+    runAsGroup: 1001
     allowPrivilegeEscalation: false
     capabilities:
       drop:
@@ -132,12 +132,19 @@ env:
   SUNBORN_ENV: "production"
   LOG_LEVEL: "info,sunborn_gateway=info"
   PORT: "8080"
-  DATABASE_URL: "postgres://sunborn_app:change_me_in_secret@sunborn-postgres:5432/sunborn_prod"
+  SUNBORN_CACHE_BACKEND: "dragonfly"
+  SUNBORN_DB_BACKEND: "postgres"
+  SUNBORN_VECTOR_BACKEND: "qdrant"
+  DRAGONFLY_URL: "redis://sunborn-dragonfly:6379"
   REDIS_URL: "redis://sunborn-dragonfly:6379"
+  POSTGRES_URL: "postgres://sunborn_app:change_me_in_secret@sunborn-postgres:5432/sunborn_prod"
+  DATABASE_URL: "postgres://sunborn_app:change_me_in_secret@sunborn-postgres:5432/sunborn_prod"
   QDRANT_URL: "http://sunborn-qdrant:6333"
+  SUNBORN_EMBEDDING_URL: "http://sunborn-embedder:8000/v1/embeddings"
+  EMBEDDING_API_URL: "http://sunborn-embedder:8000/v1/embeddings"
+  SUNBORN_EMBEDDING_MODEL: "text-embedding-3-small"
   OPENAI_API_BASE: "https://api.openai.com/v1"
   EMBEDDING_PROVIDER: "http"
-  EMBEDDING_API_URL: "http://sunborn-embedder:8000/v1/embeddings"
   EMBEDDING_DIMENSIONS: "1536"
   DECISION_EXACT_ONLY: "false"
   DECISION_SIMILARITY_THRESHOLD: "0.85"
@@ -150,6 +157,7 @@ secrets:
   sunbornAdminKey: "replace-with-cryptographically-secure-32byte-hex-admin-key"
   openaiApiKey: ""
   masterKek: "replace-with-256bit-master-kek-hex"
+  learningHmacSecret: "replace-with-256bit-hmac-secret-hex"
 
 networkPolicy:
   enabled: true

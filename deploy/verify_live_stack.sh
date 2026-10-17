@@ -30,12 +30,19 @@ for name, s in services.items():
     for p in ports:
         assert p.startswith('127.0.0.1:'), f'Security violation: Service {name} binds port insecurely: {p}'
 print('  ✓ All service ports strictly bound to 127.0.0.1 loopback')
+
+# Verify gateway and frontend healthchecks are configured
+assert 'healthcheck' in services['gateway'], 'gateway must have native healthcheck'
+assert 'healthcheck' in services['frontend'], 'frontend must have healthcheck'
+assert services['frontend']['depends_on']['gateway']['condition'] == 'service_healthy', 'frontend must depend on healthy gateway'
+print('  ✓ Gateway & frontend healthchecks and dependency sequencing verified')
 "
 
 # 2. Verify Backend Dockerfile Non-Root and Security Compliance
 echo "[2/6] Verifying deploy/Dockerfile security contract..."
 grep -q "USER " "${SCRIPT_DIR}/Dockerfile" || (echo "FAILED: deploy/Dockerfile must specify non-root USER" && exit 1)
-echo "  ✓ Non-root user verified in backend Dockerfile"
+grep -q "HEALTHCHECK" "${SCRIPT_DIR}/Dockerfile" || (echo "FAILED: deploy/Dockerfile must define HEALTHCHECK" && exit 1)
+echo "  ✓ Non-root user and native HEALTHCHECK verified in backend Dockerfile"
 
 # 3. Verify Frontend Dockerfile Non-Root and Healthcheck
 echo "[3/6] Verifying deploy/Dockerfile.frontend security contract..."
@@ -58,7 +65,12 @@ with open('${SCRIPT_DIR}/helm/sunborn/values.yaml') as f:
 assert vals['gateway']['replicaCount'] >= 2
 assert vals['frontend']['enabled'] is True
 assert vals['networkPolicy']['enabled'] is True
-print('  ✓ Helm values validated (HA replicas, NetworkPolicy, Ingress, Probes)')
+assert vals['gateway']['securityContext']['runAsUser'] == 65532
+assert vals['frontend']['securityContext']['runAsUser'] == 1001
+assert vals['env']['SUNBORN_CACHE_BACKEND'] == 'dragonfly'
+assert vals['env']['SUNBORN_DB_BACKEND'] == 'postgres'
+assert vals['env']['SUNBORN_VECTOR_BACKEND'] == 'qdrant'
+print('  ✓ Helm values validated (HA replicas, NetworkPolicy, Ingress, SecurityContext, Envs)')
 "
 
 # 5. Verify Kustomize GitOps Manifest

@@ -116,10 +116,12 @@ impl AppConfig {
         let host = std::env::var("HOST")
             .or_else(|_| std::env::var("SUNBORN_SERVER__HOST"))
             .unwrap_or_else(|_| "0.0.0.0".to_string());
-        let dragonfly_url =
-            std::env::var("DRAGONFLY_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
-        let qdrant_url =
-            std::env::var("QDRANT_URL").unwrap_or_else(|_| "http://127.0.0.1:6333".to_string());
+        let dragonfly_url = std::env::var("DRAGONFLY_URL")
+            .or_else(|_| std::env::var("REDIS_URL"))
+            .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+        let qdrant_url = std::env::var("QDRANT_URL")
+            .or_else(|_| std::env::var("SUNBORN_QDRANT_URL"))
+            .unwrap_or_else(|_| "http://127.0.0.1:6333".to_string());
         let backend =
             std::env::var("SUNBORN_CACHE_BACKEND").unwrap_or_else(|_| "memory".to_string());
         let vector_backend =
@@ -129,7 +131,9 @@ impl AppConfig {
         let postgres_url = std::env::var("POSTGRES_URL")
             .or_else(|_| std::env::var("DATABASE_URL"))
             .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/sunborn".to_string());
-        let master_kek = std::env::var("SUNBORN_MASTER_KEK").ok();
+        let master_kek = std::env::var("SUNBORN_MASTER_KEK")
+            .or_else(|_| std::env::var("MASTER_KEK"))
+            .ok();
         let strict_durability = parse_bool_env("SUNBORN_STRICT_DURABILITY", false)?;
 
         let enforce_auth = if std::env::var("SUNBORN_AUTH_ENFORCE").is_ok() {

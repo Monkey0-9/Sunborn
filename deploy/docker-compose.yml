@@ -22,6 +22,11 @@ services:
       SUNBORN_LEARNING_HMAC_SECRET: "${SUNBORN_LEARNING_HMAC_SECRET:-dev_insecure_hmac_secret_32bytes_local}"
     ports:
       - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/sunborn-gateway", "healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     depends_on:
       postgres:
         condition: service_healthy
@@ -146,7 +151,8 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
-      - gateway
+      gateway:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/api/health || exit 1"]
       interval: 10s

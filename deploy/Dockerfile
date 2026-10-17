@@ -9,7 +9,7 @@
 # ------------------------------------------------------------------------------
 # Stage 1: Rust Builder
 # ------------------------------------------------------------------------------
-FROM rust:1.80-bullseye AS builder
+FROM rust:1.80-bookworm AS builder
 
 WORKDIR /usr/src/sunborn
 
@@ -53,5 +53,8 @@ EXPOSE 8080
 ENV RUST_LOG="info,sunborn_gateway=debug" \
     SUNBORN_SERVER__HOST="0.0.0.0" \
     SUNBORN_SERVER__PORT="8080"
+
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
+  CMD ["/usr/local/bin/sunborn-gateway", "healthcheck"]
 
 ENTRYPOINT ["/usr/local/bin/sunborn-gateway"]
