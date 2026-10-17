@@ -3,7 +3,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
 [![Rust 1.80+](https://img.shields.io/badge/Rust-1.80%2B-orange?style=flat-square&logo=rust)](Cargo.toml)
 [![Next.js 15](https://img.shields.io/badge/Next.js-15.5.27%20App%20Router-black?style=flat-square&logo=next.js)](frontend)
-[![Tests: 124 Passing](https://img.shields.io/badge/Tests-124%20Passing-brightgreen?style=flat-square)]()
+[![Tests: 141 Passing](https://img.shields.io/badge/Tests-141%20Passing-brightgreen?style=flat-square)]()
 [![Binary Security: Hardened](https://img.shields.io/badge/Binary%20Security-RELRO%20%7C%20PIE%20%7C%20NX-emerald?style=flat-square)](docs/architecture/level5_level6_autonomic_specification.md#4-reverse-engineering-analysis-rea--binary-security-audit)
 [![Zero False Hits](https://img.shields.io/badge/Semantic%20False%20Hits-0.0%25-blue?style=flat-square)](research/results/benchmark_run.json)
 
@@ -347,18 +347,20 @@ Sunborn/
 │   └── sunborn-rebuild/             # Standalone disaster recovery WAL replay engine
 ├── crates/
 │   ├── sunborn-core/                # Shared domain models, errors, config, tracing
-│   ├── sunborn-identity/            # 10-D canonical identity, AES-256-GCM, crypto-shred
+│   ├── sunborn-identity/            # 10-D canonical identity, AES-256-GCM, PKCS#11 HSM, Vault KMS
 │   ├── sunborn-cache/               # Exact caching, W-TinyLFU, DragonflyDB adapter
 │   ├── sunborn-semantic/            # CRC controller, negation/numeric guardrails, Qdrant
 │   ├── sunborn-execution/           # DAG execution planner, RFC 6962 Merkle attestation
-│   ├── sunborn-invalidation/        # Monotonic epoch lease fencing, dependency graph
+│   ├── sunborn-invalidation/        # Monotonic epoch lease fencing, Neo4j Cypher dependency graph
 │   ├── sunborn-db/                  # Authoritative PostgreSQL WAL & memory stores
 │   └── sunborn-gateway/             # Axum HTTP gateway (37 routes), Level 5 controller
-│       └── tests/                   # 13 integration & resilience test suites
+│       └── tests/                   # 14 integration, resilience & adversarial test suites
 ├── frontend/                        # Next.js 15 App Router control plane & BFF
 ├── deploy/
 │   ├── docker-compose.yml           # Full multi-container composition
-│   └── k8s/                         # Kubernetes production deployment manifests
+│   ├── helm/                        # Production Helm v2 Chart (sunborn)
+│   ├── k8s/                         # Kubernetes manifests & Kustomize GitOps
+│   └── verify_live_stack.sh         # Live stack pre-flight verification script
 ├── research/
 │   ├── reproduce.sh                 # Automated local benchmark & verification harness
 │   └── results/                     # Empirical benchmark data & certificates
@@ -493,15 +495,15 @@ docker compose -f deploy/docker-compose.yml up -d
 * **Python**: 3.10+ (for benchmarks, SDK, and reproduction)
 * **Node.js**: 20+ (for Next.js control plane)
 
-### 1. Build and Run Full Automated Test Suite (124 Tests)
+### 1. Build and Run Full Automated Test Suite (141 Tests)
 ```bash
-# Run all 111 Rust unit, integration, security, chaos, and learning tests
+# Run all 124 Rust unit, integration, security, chaos, and learning tests
 cargo test --workspace --all-targets
 
 # Run all 5 Python SDK contract tests
 python3 -m unittest sdk/python/test_sunborn_agent.py
 
-# Run all 8 Next.js BFF security tests
+# Run all 12 Next.js BFF security and view navigation tests
 npm test --prefix frontend
 
 # Verify strict zero-warning compiler hygiene

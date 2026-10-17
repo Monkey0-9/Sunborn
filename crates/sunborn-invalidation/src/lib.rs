@@ -3,5 +3,8 @@ pub mod graph;
 pub mod outbox;
 
 pub use epoch::{EpochFence, EpochLeaseManager};
-pub use graph::{DependencyGraph, DocumentVersion, KnowledgeSource};
+pub use graph::{
+    DependencyGraph, DocumentVersion, InMemoryGraphStore, KnowledgeGraphStore, KnowledgeSource,
+    MockNeo4jCypherStore, Neo4jCypherGraphStore,
+};
 pub use outbox::{InvalidationEngine, InvalidationEvent};

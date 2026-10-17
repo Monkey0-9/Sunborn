@@ -38,9 +38,9 @@ export default function RootLayout({
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <span className="w-2 h-2 rounded-full bg-emerald-400" />
-              <span>Sunborn Autonomous Platform · Level 7 Enterprise Release</span>
+              <span>Sunborn Autonomous Platform · Level 5/6 Autonomic Invariance</span>
               <span className="text-slate-600">|</span>
-              <span className="text-slate-400">IEEE/ACM ISCA 2026 Artifact Verified</span>
+              <span className="text-slate-400">Automated Invariant & Empirical Verification</span>
             </div>
             <div className="flex items-center gap-4">
               <span>Non-Accelerator Authority: PostgreSQL Active</span>

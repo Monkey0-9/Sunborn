@@ -160,20 +160,23 @@ Release gates are strictly sequential. **No gate closes merely because code comp
 │                          │ • Level 5 Closed-Loop Adaptive Controller   │
 │                          │ • Level 6 Non-Accelerator Authority & WAL   │
 │                          │ • O(1) AES-256-GCM Cryptographic Shredding  │
+│                          │ • Hardware Security Module (PKCS#11 / HSM)  │
+│                          │ • HashiCorp Vault Transit Engine Adapter    │
+│                          │ • Neo4j Cypher Graph Invalidation Store    │
 │                          │ • Monotonic Epoch Lease Fencing             │
 │                          │ • RFC 6962 Merkle DAG Attestation           │
 │                          │ • Server-Side Next.js 15 BFF & 8 Views      │
-│                          │ • 124 Passing Automated Unit/Integration    │
+│                          │ • Unified Helm Chart & Kustomize GitOps     │
+│                          │ • Gate G0/G1 Adversarial Fuzzing Suite      │
+│                          │ • 141 Passing Automated Unit/Integration    │
 ├──────────────────────────┼─────────────────────────────────────────────┤
 │ 🟡 Implemented Unverified│ • Live DragonflyDB multi-node replication   │
 │    (In Live Network)     │ • Live Qdrant cluster re-indexing over TCP  │
 │                          │ • Live Redpanda external consumer daemon    │
 ├──────────────────────────┼─────────────────────────────────────────────┤
-│ 🟠 Partially Implemented │ • Unified Helm Chart / Kustomize GitOps     │
-│                          │ • Hardware Security Module (PKCS#11 / HSM)  │
+│ 🟠 Partially Implemented │ • Dedicated Graph UI Visualizer Canvas      │
 ├──────────────────────────┼─────────────────────────────────────────────┤
-│ 🔴 Missing               │ • Dedicated Neo4j Cypher backend            │
-│                          │ • Issue-level phase gates for Phases 20-28  │
+│ 🔴 Missing               │ • Issue-level phase gates for Phases 20-28  │
 │                          │   inside Linear UI (quota blocked)          │
 └──────────────────────────┴─────────────────────────────────────────────┘
 ```

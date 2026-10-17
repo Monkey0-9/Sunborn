@@ -90,7 +90,7 @@ export function Header() {
                     SUNBORN
                   </span>
                   <Badge variant="cyan" className="px-1.5 py-0 text-[10px]">
-                    L7 FAANG
+                    L5/L6 Core
                   </Badge>
                 </div>
                 <span className="text-[10px] font-mono text-slate-400">
