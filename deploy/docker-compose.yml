@@ -133,6 +133,28 @@ services:
     networks:
       - sunborn-net
 
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+    container_name: sunborn-frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      SUNBORN_GATEWAY_URL: "http://gateway:8080"
+      SUNBORN_READ_ONLY_TOKEN: "${SUNBORN_READ_ONLY_TOKEN:-}"
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - gateway
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - sunborn-net
+
 networks:
   sunborn-net:
     driver: bridge

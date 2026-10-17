@@ -122,3 +122,30 @@ test("BFF Security: Cross-Site Request Forgery (CSRF) origin mismatch is rejecte
   assert.equal(csrfDecision.status, 403);
   assert.equal(csrfDecision.error, "CSRF_ORIGIN_MISMATCH");
 });
+
+test("BFF Security: All 12 privileged routes strictly reject anonymous access with 401", () => {
+  const adminRoutes = [
+    "v1/tenants",
+    "v1/tenants/victim-123",
+    "v1/governance/shred",
+    "v1/learning/canary",
+    "v1/learning/promote",
+    "v1/learning/rollback",
+    "v1/rebuild",
+    "v1/invalidation",
+    "v1/execution/evict",
+    "v1/chaos/trip",
+    "v1/chaos/reset",
+    "v1/lifecycle/sweep",
+  ];
+
+  for (const route of adminRoutes) {
+    const decision = evaluateProxySecurity({
+      method: "POST",
+      normalizedPath: route,
+      clientCredential: null,
+    });
+    assert.equal(decision.allowed, false, `Route '${route}' must be rejected when unauthenticated`);
+    assert.equal(decision.status, 401);
+  }
+});

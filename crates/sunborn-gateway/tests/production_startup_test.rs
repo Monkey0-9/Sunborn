@@ -122,3 +122,33 @@ async fn test_production_startup_rejects_deterministic_embedder() {
             || err.message.contains("MockOriginProvider")
     );
 }
+
+#[tokio::test]
+async fn test_production_startup_rejects_change_me_and_fixtures() {
+    let _lock = ENV_LOCK.lock().await;
+    let _guard = EnvGuard::new(&[
+        "SUNBORN_ENV",
+        "SUNBORN_MASTER_KEK",
+        "SUNBORN_ADMIN_KEY",
+        "SUNBORN_CACHE_BACKEND",
+        "SUNBORN_DB_BACKEND",
+        "SUNBORN_VECTOR_BACKEND",
+    ]);
+
+    std::env::set_var("SUNBORN_ENV", "production");
+    std::env::set_var("SUNBORN_MASTER_KEK", VALID_PROD_KEK);
+    std::env::set_var("SUNBORN_ADMIN_KEY", "admin-secret-key-change-me");
+
+    let mut config = AppConfig::default();
+    config.cache.backend = "dragonfly".to_string();
+    config.cache.database_backend = "postgres".to_string();
+    config.cache.vector_backend = "qdrant".to_string();
+
+    let state = AppState::new(config);
+    let res = state.verify_production_readiness().await;
+
+    assert!(res.is_err());
+    let err = res.unwrap_err();
+    assert_eq!(err.code, ErrorCode::ConfigurationError);
+    assert!(err.message.contains("SUNBORN_ADMIN_KEY"));
+}

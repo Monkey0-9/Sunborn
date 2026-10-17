@@ -3,7 +3,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
 [![Rust 1.80+](https://img.shields.io/badge/Rust-1.80%2B-orange?style=flat-square&logo=rust)](Cargo.toml)
 [![Next.js 15](https://img.shields.io/badge/Next.js-15.5.27%20App%20Router-black?style=flat-square&logo=next.js)](frontend)
-[![Tests: 122 Passing](https://img.shields.io/badge/Tests-122%20Passing-brightgreen?style=flat-square)]()
+[![Tests: 124 Passing](https://img.shields.io/badge/Tests-124%20Passing-brightgreen?style=flat-square)]()
 [![Binary Security: Hardened](https://img.shields.io/badge/Binary%20Security-RELRO%20%7C%20PIE%20%7C%20NX-emerald?style=flat-square)](docs/architecture/level5_level6_autonomic_specification.md#4-reverse-engineering-analysis-rea--binary-security-audit)
 [![Zero False Hits](https://img.shields.io/badge/Semantic%20False%20Hits-0.0%25-blue?style=flat-square)](research/results/benchmark_run.json)
 
@@ -493,15 +493,15 @@ docker compose -f deploy/docker-compose.yml up -d
 * **Python**: 3.10+ (for benchmarks, SDK, and reproduction)
 * **Node.js**: 20+ (for Next.js control plane)
 
-### 1. Build and Run Full Automated Test Suite (122 Tests)
+### 1. Build and Run Full Automated Test Suite (124 Tests)
 ```bash
-# Run all 110 Rust unit, integration, security, chaos, and learning tests
+# Run all 111 Rust unit, integration, security, chaos, and learning tests
 cargo test --workspace --all-targets
 
 # Run all 5 Python SDK contract tests
 python3 -m unittest sdk/python/test_sunborn_agent.py
 
-# Run all 7 Next.js BFF security tests
+# Run all 8 Next.js BFF security tests
 npm test --prefix frontend
 
 # Verify strict zero-warning compiler hygiene

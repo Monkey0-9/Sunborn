@@ -282,6 +282,8 @@ impl AppState {
             if lower_admin == "dev-admin-key"
                 || lower_admin == "admin"
                 || lower_admin.contains("changeme")
+                || lower_admin.contains("change-me")
+                || lower_admin.contains("sunborn-admin-key")
                 || lower_admin.contains("placeholder")
                 || lower_admin.contains("dev_insecure")
                 || lower_admin.contains("dev-insecure")
