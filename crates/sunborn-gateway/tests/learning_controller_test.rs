@@ -4,7 +4,7 @@ use http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
 use std::sync::Arc;
-use sunborn_core::{ApplicationId, TenantId};
+use sunborn_core::{AppConfig, ApplicationId, RequestEnvelope, ResponseEnvelope, TenantId};
 use sunborn_gateway::{
     create_router,
     learning::{
@@ -939,4 +939,207 @@ async fn test_learning_http_api_endpoints_full_lifecycle() {
         .unwrap();
 
     assert_eq!(res.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_live_policy_driven_decision_engine_dynamic_threshold_evaluation() {
+    let mut config = AppConfig::default();
+    config.cache.semantic_cache_enabled = true;
+    let state = AppState::new(config);
+    let app = create_router(state.clone());
+
+    let tenant = TenantId::new("tenant-policy-test");
+    sunborn_gateway::middleware::auth::get_global_registry().register_key(
+        "test-key-policy-test",
+        tenant.clone(),
+        ApplicationId::new("app-default"),
+        vec!["*".to_string()],
+        true,
+    );
+    let auth_header = "Bearer test-key-policy-test";
+
+    // 1. Initial request: populate cache and vector store with base query
+    let initial_req = RequestEnvelope::new(
+        "tenant-policy-test",
+        "app-default",
+        "gpt-4o",
+        "Explain the fundamentals of quantum computing algorithms",
+    );
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("Authorization", auth_header)
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_vec(&initial_req).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    let initial_resp: ResponseEnvelope = serde_json::from_slice(&body).unwrap();
+    assert!(!initial_resp.cached);
+
+    // 2. Candidate query that has high similarity (e.g. ~0.85-0.92) but not 1.0 exact match
+    let similar_req = RequestEnvelope::new(
+        "tenant-policy-test",
+        "app-default",
+        "gpt-4o",
+        "Explain the fundamentals of quantum computing principles",
+    );
+
+    // Check similarity between the two embeddings using deterministic embedder
+    let v1 = state
+        .selected_embedder
+        .embed(&initial_req.prompt)
+        .await
+        .unwrap();
+    let v2 = state
+        .selected_embedder
+        .embed(&similar_req.prompt)
+        .await
+        .unwrap();
+    let sim = sunborn_semantic::embedding::cosine_similarity(&v1, &v2);
+    assert!(
+        sim > 0.75 && sim < 1.0,
+        "Similarity should be in intermediate range: {}",
+        sim
+    );
+
+    // 3. Set a strict policy requiring similarity >= 0.99 (higher than sim)
+    let strict_candidate = CandidatePolicy {
+        policy_id: "policy-strict-eval".to_string(),
+        version: 10,
+        weights: PolicyWeights {
+            min_similarity_threshold: 0.99,
+            max_risk_threshold: 0.20,
+            ..Default::default()
+        },
+        created_at: Utc::now(),
+        evaluation_report: CalibrationReport {
+            total_samples: 50,
+            training_samples: 35,
+            held_out_samples: 15,
+            training_false_hit_rate: 0.0,
+            held_out_false_hit_rate: 0.0,
+            held_out_abstention_rate: 0.05,
+            estimated_cost_reduction_pct: 10.0,
+            is_statistically_sound: true,
+        },
+        is_promoted: false,
+    };
+    state
+        .learning_controller
+        .start_canary(strict_candidate, 100, "test-runner")
+        .unwrap();
+    state
+        .learning_controller
+        .complete_promotion("test-runner")
+        .unwrap();
+
+    // Query must MISS under strict policy
+    let res_strict = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("Authorization", auth_header)
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_vec(&similar_req).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body_strict = res_strict.into_body().collect().await.unwrap().to_bytes();
+    let resp_strict: ResponseEnvelope = serde_json::from_slice(&body_strict).unwrap();
+    assert!(
+        !resp_strict.cached,
+        "Should miss when similarity {} < threshold 0.99",
+        sim
+    );
+
+    // 4. Update and promote a permissive policy requiring similarity <= 0.75
+    let permissive_candidate = CandidatePolicy {
+        policy_id: "policy-permissive-eval".to_string(),
+        version: 11,
+        weights: PolicyWeights {
+            min_similarity_threshold: 0.75,
+            max_risk_threshold: 0.30,
+            ..Default::default()
+        },
+        created_at: Utc::now(),
+        evaluation_report: CalibrationReport {
+            total_samples: 50,
+            training_samples: 35,
+            held_out_samples: 15,
+            training_false_hit_rate: 0.0,
+            held_out_false_hit_rate: 0.0,
+            held_out_abstention_rate: 0.02,
+            estimated_cost_reduction_pct: 35.0,
+            is_statistically_sound: true,
+        },
+        is_promoted: false,
+    };
+    state
+        .learning_controller
+        .start_canary(permissive_candidate, 100, "test-runner")
+        .unwrap();
+    state
+        .learning_controller
+        .complete_promotion("test-runner")
+        .unwrap();
+
+    // Fresh similar query that is not yet in exact cache
+    let permissive_req = RequestEnvelope::new(
+        "tenant-policy-test",
+        "app-default",
+        "gpt-4o",
+        "Explain the fundamentals of quantum computing architectures",
+    );
+    let v_perm = state
+        .selected_embedder
+        .embed(&permissive_req.prompt)
+        .await
+        .unwrap();
+    let sim_perm = sunborn_semantic::embedding::cosine_similarity(&v1, &v_perm);
+    assert!(
+        sim_perm >= 0.75,
+        "Permissive query similarity {} must be >= 0.75",
+        sim_perm
+    );
+
+    // Query must now HIT semantic cache under permissive policy
+    let res_permissive = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("Authorization", auth_header)
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_vec(&permissive_req).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body_permissive = res_permissive
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes();
+    let resp_permissive: ResponseEnvelope = serde_json::from_slice(&body_permissive).unwrap();
+    assert!(
+        resp_permissive.cached,
+        "Should hit when similarity {} >= threshold 0.75",
+        sim_perm
+    );
+    assert_eq!(
+        resp_permissive.decision.cache_path,
+        sunborn_core::CachePath::Semantic
+    );
 }

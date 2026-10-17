@@ -104,10 +104,31 @@ async fn test_tenant_cascade_offboarding_zero_lingering_data() {
         .await
         .unwrap();
 
+    // e) Tenant Learning Store Tier
+    let feedback_event = sunborn_gateway::learning::VerifiedFeedbackEvent {
+        event_id: "ev-offboard-1".to_string(),
+        tenant_id: tenant_id.clone(),
+        application_id: app_id.clone(),
+        cache_key: exact_key.clone(),
+        decision_type: "exact_hit".to_string(),
+        prompt_hash: "hash-123".to_string(),
+        similarity_score: Some(1.0),
+        conformal_risk_score: Some(0.0),
+        latency_ms: 1.2,
+        tokens_saved: 50,
+        cost_saved_usd: 0.001,
+        verified_outcome: sunborn_gateway::learning::VerifiedOutcome::VerifiedCorrect,
+        verification_source: "origin_execution".to_string(),
+        hmac_signature: "mock_signature".to_string(),
+        timestamp: chrono::Utc::now(),
+    };
+    state.learning_store.record_event(feedback_event).unwrap();
+
     // Verify all tiers contain data before offboarding
     assert!(state.db.get_tenant(target_tenant).await.unwrap().is_some());
     assert_eq!(state.vector_store.count(&tenant_id).await.unwrap(), 1);
     assert!(state.cache.exists(&exact_key).await.unwrap());
+    assert_eq!(state.learning_store.tenant_event_count(&tenant_id), 1);
     assert!(state
         .execution_store
         .get(&tenant_id, sig)
@@ -157,6 +178,12 @@ async fn test_tenant_cascade_offboarding_zero_lingering_data() {
             .unwrap()
             .is_none(),
         "Agent tool execution records must be purged"
+    );
+    assert_eq!(resp["deleted_learning_events"], 1);
+    assert_eq!(
+        state.learning_store.tenant_event_count(&tenant_id),
+        0,
+        "Tenant learning feedback events must be purged"
     );
 }
 
