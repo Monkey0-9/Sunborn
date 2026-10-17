@@ -294,4 +294,64 @@ export const sunbornApi = {
   // FinOps & Metrics
   getFinOpsReport: () =>
     request<any>("v1/finops/report", { method: "GET" }),
+
+  // Level 7: Speculative Predictive Prefetching
+  predictSpeculative: (currentAction: string, recordTransitionTo?: string) =>
+    request<{
+      current_action: string;
+      predictions: Array<{
+        predicted_action: string;
+        confidence_score: number;
+        estimated_savings_ms: number;
+      }>;
+      speculative_cache_warmed: boolean;
+    }>("v1/speculative/predict", {
+      method: "POST",
+      body: JSON.stringify({
+        current_action: currentAction,
+        record_transition_to: recordTransitionTo,
+      }),
+    }),
+
+  // Level 7: Autonomic Health & Incident History
+  getAutonomicStatus: () =>
+    request<{
+      autonomic_health: string;
+      remediation_mode: string;
+      circuit_breaker_status: string;
+      total_incidents_resolved: number;
+      recent_incidents: Array<{
+        incident_id: string;
+        component: string;
+        trigger_reason: string;
+        recovery_action: string;
+        resolved_at: string;
+      }>;
+    }>("v1/autonomic/status", { method: "GET" }),
+
+  // Level 7: Prefix KV-Cache Affinity & Cost Arbitrage Routing
+  radixRoute: (prompt: string, warmPrefix?: string, warmNode?: string) =>
+    request<{
+      selected_node: string;
+      is_kv_affinity_hit: boolean;
+      matched_tokens: number;
+      estimated_prefill_savings_pct: number;
+    }>("v1/routing/radix/route", {
+      method: "POST",
+      body: JSON.stringify({
+        prompt,
+        warm_prefix: warmPrefix,
+        warm_node: warmNode,
+      }),
+    }),
+
+  radixInspect: () =>
+    request<{
+      status: string;
+      backend_nodes: string[];
+      min_affinity_tokens: number;
+      max_load_factor: number;
+      strategy: string;
+    }>("v1/routing/radix/inspect", { method: "GET" }),
 };
+

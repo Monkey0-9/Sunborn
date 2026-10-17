@@ -21,6 +21,7 @@ import { CanvasManifold } from "@/components/ui/canvas-manifold";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
+import { TextShimmer } from "@/components/ui/text-shimmer";
 import { formatNumber, formatCurrency, formatMicroseconds } from "@/lib/utils";
 import { sunbornApi } from "@/lib/api";
 
@@ -116,7 +117,7 @@ export default function OverviewPage() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/60 border border-cyan-500/30 text-xs font-mono text-cyan-300 backdrop-blur-md">
             <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-            <span>LEVEL 7 FRONTIER AUTONOMOUS EXECUTION ENGINE</span>
+            <TextShimmer className="text-xs font-mono font-bold">LEVEL 7 FRONTIER AUTONOMOUS EXECUTION ENGINE</TextShimmer>
             <span className="text-cyan-600">·</span>
             <span className="text-white font-semibold">IEEE/ACM ISCA 2026</span>
           </div>

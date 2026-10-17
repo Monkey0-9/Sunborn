@@ -89,10 +89,12 @@ pub fn create_router(state: AppState) -> Router {
             "/v1/cluster/sync/status",
             get(handlers::get_cluster_sync_status),
         )
+        .route("/v1/cluster/status", get(handlers::get_cluster_sync_status))
         .route(
             "/v1/autonomic/incidents",
             get(handlers::get_autonomic_status),
         )
+        .route("/v1/autonomic/status", get(handlers::get_autonomic_status))
         .route("/v1/finops/report", get(handlers::get_finops_report))
         .route("/v1/routing/radix/inspect", get(handlers::radix_inspect))
         .route("/v1/routing/radix/route", post(handlers::radix_route))
