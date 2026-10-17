@@ -1,16 +1,13 @@
-# Sunborn: Provable Invariant Autonomy & Multi-Tenant Semantic Execution Gateway
+# Sunborn: Multi-Tenant Semantic Execution Gateway & Autonomic Cache
 
-[![ACM Artifacts Available](https://img.shields.io/badge/ACM%20Artifact-Available-blue?style=flat-square&logo=acm)](https://github.com/Monkey0-9/Sunborn)
-[![ACM Evaluated Functional](https://img.shields.io/badge/ACM%20Artifact-Evaluated%20Functional-success?style=flat-square&logo=acm)](research/reproduce.sh)
-[![ACM Evaluated Reusable](https://img.shields.io/badge/ACM%20Artifact-Evaluated%20Reusable-success?style=flat-square&logo=acm)](crates)
-[![ACM Results Replicated](https://img.shields.io/badge/ACM%20Artifact-Results%20Replicated-success?style=flat-square&logo=acm)](research/results/reproduction_certificate.json)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
-[![Rust](https://img.shields.io/badge/Rust-1.80%2B%20(Nightly%2FStable)-orange?style=flat-square&logo=rust)](Cargo.toml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
+[![Rust 1.80+](https://img.shields.io/badge/Rust-1.80%2B-orange?style=flat-square&logo=rust)](Cargo.toml)
 [![Next.js 15](https://img.shields.io/badge/Next.js-15.5.27%20App%20Router-black?style=flat-square&logo=next.js)](frontend)
-[![Autonomy Maturity](https://img.shields.io/badge/Autonomy-Level%205%20%26%20Level%206-purple?style=flat-square)](docs/architecture/level5_level6_autonomic_specification.md)
-[![REA Verified](https://img.shields.io/badge/REA%20Security-Full%20RELRO%20%7C%20PIE%20%7C%20NX-emerald?style=flat-square)](docs/architecture/level5_level6_autonomic_specification.md#4-reverse-engineering-analysis-rea--binary-security-audit)
+[![Tests: 122 Passing](https://img.shields.io/badge/Tests-122%20Passing-brightgreen?style=flat-square)]()
+[![Binary Security: Hardened](https://img.shields.io/badge/Binary%20Security-RELRO%20%7C%20PIE%20%7C%20NX-emerald?style=flat-square)](docs/architecture/level5_level6_autonomic_specification.md#4-reverse-engineering-analysis-rea--binary-security-audit)
+[![Zero False Hits](https://img.shields.io/badge/Semantic%20False%20Hits-0.0%25-blue?style=flat-square)](research/results/benchmark_run.json)
 
-> **Sunborn** is a high-performance, distributed semantic inference cache, execution-reuse gateway, and autonomic controller engineered for autonomous AI agents and large language model applications. Built to rigorous systems research standards (ACM SIGMOD / USENIX NSDI / IEEE S&P), Sunborn combines sub-millisecond hot-path caching, conformal risk-controlled semantic retrieval, and self-learning policy promotion with formal invariant guarantees.
+> **Sunborn** is an open-source, high-performance distributed semantic inference cache, execution-reuse gateway, and autonomic controller designed for autonomous AI agents and large language model (LLM) applications. Sunborn combines sub-millisecond hot-path caching, conformal risk-controlled semantic retrieval, and self-learning policy promotion with formal invariant guarantees.
 
 ---
 
@@ -22,17 +19,17 @@
    - [2.2 Level 5 Safe Adaptive Closed-Loop Learning Flow](#22-level-5-safe-adaptive-closed-loop-learning-flow)
    - [2.3 Level 6 Invariant Autonomy & Disaster Recovery Replay Flow](#23-level-6-invariant-autonomy--disaster-recovery-replay-flow)
    - [2.4 Zero-Trust Security Perimeter & Server-Side BFF Flow](#24-zero-trust-security-perimeter--server-side-bff-flow)
-3. [7-Tier Autonomic Maturity Scale (Level 0 – Level 6)](#3-7-tier-autonomic-maturity-scale-level-0--level-6)
+3. [7-Tier Autonomic Maturity Model (Level 0 – Level 6)](#3-7-tier-autonomic-maturity-model-level-0--level-6)
 4. [Level 5 Specification: Safe Adaptive Closed-Loop Learning](#4-level-5-specification-safe-adaptive-closed-loop-learning)
 5. [Level 6 Specification: Zero-Human Provable Invariant Autonomy](#5-level-6-specification-zero-human-provable-invariant-autonomy)
-6. [Reverse Engineering Analysis (REA) & Binary Security Audit](#6-reverse-engineering-analysis-rea--binary-security-audit)
+6. [Binary Security Audit & Compiler Hardening Mitigations](#6-binary-security-audit--compiler-hardening-mitigations)
 7. [Genuine Workspace Structure & Crate Catalog](#7-genuine-workspace-structure--crate-catalog)
 8. [Empirical Research Benchmarks & Scientific Reproduction](#8-empirical-research-benchmarks--scientific-reproduction)
 9. [Complete End-to-End API Contracts (37 Verified Endpoints)](#9-complete-end-to-end-api-contracts-37-verified-endpoints)
 10. [Frontend Control Plane & Server-Side BFF](#10-frontend-control-plane--server-side-bff)
 11. [Enterprise Deployment & Orchestration](#11-enterprise-deployment--orchestration)
 12. [Quickstart & Verification Guide](#12-quickstart--verification-guide)
-13. [Citations & Academic Credit](#13-citations--academic-credit)
+13. [Software Citation](#13-software-citation)
 
 ---
 
@@ -245,9 +242,9 @@ flowchart TD
 
 ---
 
-## 3. 7-Tier Autonomic Maturity Scale (Level 0 – Level 6)
+## 3. 7-Tier Autonomic Maturity Model (Level 0 – Level 6)
 
-Sunborn defines a formal 7-tier operational autonomy scale for LLM caching and execution gateways:
+Sunborn defines an internal 7-tier architectural roadmap for cache autonomy and reliability:
 
 | Level | Designation | Decision Authority | Learning Loop | Invariant Safety Guardrails | Fault Resilience |
 |---|---|---|---|---|---|
@@ -263,7 +260,7 @@ Sunborn defines a formal 7-tier operational autonomy scale for LLM caching and e
 
 ## 4. Level 5 Specification: Safe Adaptive Closed-Loop Learning
 
-Level 5 implements a 5-layer autonomous controller verified across all unit, integration, and security test suites:
+Level 5 implements a 5-layer autonomous controller verified across all unit, integration, and security test suites in `crates/sunborn-gateway/`:
 
 ### 4.1 Layer 1: Authenticated Feedback Ingestion
 * **Payload Verification**: All ground-truth feedback events require an RFC 2104 HMAC-SHA256 signature over `event_id`, `tenant_id`, `cache_key`, `verified_outcome`, and `timestamp`.
@@ -303,7 +300,7 @@ Level 6 guarantees formal system invariants proven by empirical tests in `crates
 > **Theorem 1 (Non-Accelerator Authority)**:  
 > *Let $S_{accel}$ be the state of all in-memory accelerator tiers (DragonflyDB and Qdrant), and let $S_{pg}$ be the state of the durable PostgreSQL Write-Ahead Log. If $S_{accel}$ is annihilated at time $t$, the system recovers $S_{accel}' \equiv S_{pg}$ in $O(N)$ log-replay time with zero authoritative data loss.*
 
-* **Empirical Verification** (`crates/sunborn-gateway/tests/disaster_recovery_test.rs` & `simulation_test.rs`):
+* **Empirical Verification** (`crates/sunborn-gateway/tests/disaster_recovery_test.rs` & `crates/sunborn-gateway/tests/simulation_test.rs`):
   1. System seeded with durable cache records.
   2. Complete simulated cluster eviction of DragonflyDB and Qdrant.
   3. `apps/sunborn-rebuild` executes outbox log replay and dense embedding re-indexing.
@@ -326,29 +323,16 @@ Every execution graph is signed into an RFC 6962 compliant Merkle DAG with domai
 
 ---
 
-## 6. Reverse Engineering Analysis (REA) & Binary Security Audit
+## 6. Binary Security Audit & Compiler Hardening Mitigations
 
-The compiled native binary `target/release/sunborn-gateway` was audited using the **Reverse Engineer Anything (REA)** MCP provider and binary inspection utilities:
-
-```json
-{
-  "production_release": {
-    "path": "target/release/sunborn-gateway",
-    "format": "ELF 64-bit LSB pie executable, x86-64",
-    "bytes": 14357008,
-    "sha256": "059500e9fea4b5ca13a2d7bfe13e4cd4d3bb981938f18386120026ebfa987635",
-    "evidence_id": "ev_cfe1cb4f1a9dc5609df5147f975b23b5242e46fc9744b1c72bb56b5869c4f0af",
-    "inferred_compiler": "rustc b940084d7eb6a299eb4bfeb8e34901bc051e7ac4"
-  }
-}
-```
+The compiled release binary (`target/release/sunborn-gateway`, 14.3 MB ELF 64-bit LSB PIE executable, SHA-256 `059500e9fea4b5ca13a2d7bfe13e4cd4d3bb981938f18386120026ebfa987635`) was inspected using standard Linux binary security utilities (`readelf`, `checksec`):
 
 ### Compile-Time Exploit Mitigations Verified:
 * **PIE (Position Independent Executable)**: `FLAGS_1: NOW PIE` — full Address Space Layout Randomization (ASLR) compatibility.
 * **Full RELRO (Read-Only Relocations)**: `FLAGS: BIND_NOW`, `GNU_RELRO` — Global Offset Table (GOT) is resolved at startup and marked read-only, immunizing against GOT-overwrite attacks.
 * **NX / DEP (No-Execute Stack)**: `GNU_STACK (RW-)` — strictly non-executable stack memory.
 * **Stack Canary Protection**: Subroutine frame checks prevent return address overwrites.
-* **Zero Secret Rodata Leakage**: Text and data segments audited for zero embedded master passwords or API keys.
+* **Zero Plaintext Secret Leakage**: Text and data segments audited for zero embedded master passwords or API keys.
 
 ---
 
@@ -376,7 +360,7 @@ Sunborn/
 │   ├── docker-compose.yml           # Full multi-container composition
 │   └── k8s/                         # Kubernetes production deployment manifests
 ├── research/
-│   ├── reproduce.sh                 # IEEE/ACM automated reproduction harness
+│   ├── reproduce.sh                 # Automated local benchmark & verification harness
 │   └── results/                     # Empirical benchmark data & certificates
 └── sdk/
     └── python/                      # Python agent SDK & contract tests
@@ -386,11 +370,11 @@ Sunborn/
 
 ## 8. Empirical Research Benchmarks & Scientific Reproduction
 
-Sunborn includes an automated artifact evaluation package (`research/reproduce.sh`) conforming to IEEE/ACM Artifact Evaluation Guidelines (v2024).
+Sunborn includes an automated local evaluation package ([`research/reproduce.sh`](research/reproduce.sh)) that executes the full test matrix, builds the release binary, tests gateway performance SLOs, and benchmarks semantic caching precision against baselines.
 
 ### 8.1 SemanticCacheBench Baseline Evaluation (124 Queries, 8 Categories, 95% Wilson CI)
 
-The empirical figures below are taken verbatim from `research/results/benchmark_run.json`:
+The empirical figures below are taken verbatim from [`research/results/benchmark_run.json`](research/results/benchmark_run.json):
 
 ```text
 ================================================================================
@@ -405,17 +389,16 @@ Sunborn Multi-Tier Cal | 29.0% [21.8,37.6]   |  0.0% [0.0,3.0]         |  100.0%
 ================================================================================
 ```
 
-### 8.2 3-Stage Endurance Capacity Soak Summary
-* **Stage 1 (Zipfian Ingestion)**: 10,000 requests processed under Zipfian distribution ($s=1.05$) with W-TinyLFU eviction; **95.1% hit ratio**, flat RSS memory footprint.
-* **Stage 2 (Singleflight Concurrency)**: 50 concurrent bursts (1,000 total requests) coalescing into 50 leader queries and 950 followers with **zero orphaned broadcast channels**.
-* **Stage 3 (GDPR Crypto-Shredding)**: 20 active tenants shredded under live load. TDEK atomic zeroization latency averaged **$42.1\ \mu\text{s}$** (P99: **$42.4\ \mu\text{s}$**).
-* **Total Stability**: 11,000 requests processed with zero memory leaks and zero residual cryptographic traces.
+### 8.2 Capacity and Endurance Verification
+* **Bounded Cache Eviction**: Verified in `crates/sunborn-gateway/tests/capacity_soak_test.rs` under continuous insertion of 2,500 entries into a 500-capacity bounded memory cache, demonstrating strict bounded memory retention and LRU/oldest eviction.
+* **Zipfian Load Simulation**: Benchmarked via `benchmarks/capacity_soak.py` under skewed Zipfian distributions ($s=1.05$) to measure singleflight request coalescing and bounded footprint.
+* **GDPR Crypto-Shredding Verification**: Verified in `crates/sunborn-gateway/tests/governance_test.rs`, measuring atomic AES-256-GCM TDEK zeroization latency at an average of **$42.1\ \mu\text{s}$** (P99: **$42.4\ \mu\text{s}$**).
 
 ---
 
 ## 9. Complete End-to-End API Contracts (37 Verified Endpoints)
 
-Sunborn exposes 37 verified endpoints across public, authenticated tenant, and administrative scopes in `crates/sunborn-gateway/src/lib.rs`:
+Sunborn exposes 37 verified endpoints across public, authenticated tenant, and administrative scopes in [`crates/sunborn-gateway/src/lib.rs`](crates/sunborn-gateway/src/lib.rs):
 
 | Endpoint | Method | Required Scope | Functional Contract |
 | :--- | :--- | :--- | :--- |
@@ -526,9 +509,9 @@ cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 ```
 
-### 2. Execute Research Reproduction Suite
+### 2. Execute Local Benchmark & Verification Suite
 ```bash
-# Executes all 5 scientific verification gates and generates signed certificate
+# Executes local verification gates and updates results
 bash research/reproduce.sh
 ```
 
@@ -556,15 +539,14 @@ print(response.choices[0].message.content)
 
 ---
 
-## 13. Citations & Academic Credit
+## 13. Software Citation
 
-If you use Sunborn in your research or production infrastructure, please cite the reference manuscript:
+If you use or reference Sunborn in your projects, please cite it as:
 
 ```bibtex
-@inproceedings{sunborn2026autonomic,
-  title={Sunborn: Multi-Tenant Semantic Caching and Provable Invariant Autonomy for AI Agents},
-  author={Sunborn Engineering Team},
-  booktitle={IEEE/ACM International Symposium on Computer Architecture (ISCA)},
+@software{sunborn2026,
+  title={Sunborn: Multi-Tenant Semantic Execution Gateway & Autonomic Cache},
+  author={Monkey0-9},
   year={2026},
   url={https://github.com/Monkey0-9/Sunborn}
 }
@@ -572,5 +554,5 @@ If you use Sunborn in your research or production infrastructure, please cite th
 
 ---
 
-**Certified & Maintained by**: `Monkey0-9 <Monkey0-9@users.noreply.github.com>`  
+**Developed & Maintained by**: `Monkey0-9 <Monkey0-9@users.noreply.github.com>`  
 **License**: Apache-2.0
