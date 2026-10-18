@@ -3,7 +3,8 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
 [![Rust 1.80+](https://img.shields.io/badge/Rust-1.80%2B-orange?style=flat-square&logo=rust)](Cargo.toml)
 [![Next.js 15](https://img.shields.io/badge/Next.js-15.5.27%20App%20Router-black?style=flat-square&logo=next.js)](frontend)
-[![Tests: 146 Passing](https://img.shields.io/badge/Tests-146%20Passing-brightgreen?style=flat-square)]()
+[![Python SDK](https://img.shields.io/badge/Python%20SDK-OpenAI%20%7C%20Claude%20%7C%20Async-3776ab?style=flat-square&logo=python)](sdk/python)
+[![Tests: 158 Passing](https://img.shields.io/badge/Tests-158%20Passing-brightgreen?style=flat-square)]()
 [![Binary Security: Hardened](https://img.shields.io/badge/Binary%20Security-RELRO%20%7C%20PIE%20%7C%20NX-emerald?style=flat-square)](docs/architecture/autonomic_invariance_specification.md#4-reverse-engineering-analysis-rea--binary-security-audit)
 [![Zero False Hits](https://img.shields.io/badge/Semantic%20False%20Hits-0.0%25-blue?style=flat-square)](research/results/benchmark_run.json)
 
@@ -25,17 +26,21 @@
 6. [Binary Security Audit & Compiler Hardening Mitigations](#6-binary-security-audit--compiler-hardening-mitigations)
 7. [Genuine Workspace Structure & Crate Catalog](#7-genuine-workspace-structure--crate-catalog)
 8. [Empirical Research Benchmarks & Scientific Reproduction](#8-empirical-research-benchmarks--scientific-reproduction)
-9. [Complete End-to-End API Contracts (37 Verified Endpoints)](#9-complete-end-to-end-api-contracts-37-verified-endpoints)
-10. [Frontend Control Plane & Server-Side BFF](#10-frontend-control-plane--server-side-bff)
-11. [Enterprise Deployment & Orchestration](#11-enterprise-deployment--orchestration)
-12. [Quickstart & Verification Guide](#12-quickstart--verification-guide)
-13. [Software Citation](#13-software-citation)
+   - [8.1 SemanticCacheBench Static Evaluation](#81-semanticcachebench-baseline-evaluation-124-queries-8-categories-95-wilson-ci)
+   - [8.2 SemanticCacheBench-T Stateful Temporal Evaluation](#82-semanticcachebench-t-stateful-temporal--adversarial-benchmark)
+   - [8.3 Capacity Soak & Memory Stability Verification](#83-capacity-soak--memory-stability-verification)
+9. [Python Agent Integration SDK & Tool Memoization](#9-python-agent-integration-sdk--tool-memoization)
+10. [Complete End-to-End API Contracts (37 Verified Endpoints)](#10-complete-end-to-end-api-contracts-37-verified-endpoints)
+11. [Frontend Control Plane & Server-Side BFF](#11-frontend-control-plane--server-side-bff)
+12. [Enterprise Deployment & Orchestration](#12-enterprise-deployment--orchestration)
+13. [Quickstart & Verification Guide](#13-quickstart--verification-guide)
+14. [Software Citation](#14-software-citation)
 
 ---
 
 ## 1. Executive Summary & The Semantic Inversion Fallacy
 
-Traditional semantic caches rely on uncalibrated cosine similarity against dense vector embeddings. Across realistic agent workloads, this approach suffers from the **Semantic Inversion Fallacy**: queries with opposing intent (e.g., negations, numeric parameter shifts, tenant boundary leaks, or prompt injections) map to near-identical vector representations, inducing a catastrophic **41.13% false-hit rate**.
+Traditional semantic caches rely on uncalibrated cosine similarity against dense vector embeddings. Across realistic agent workloads, this approach suffers from the **Semantic Inversion Fallacy**: queries with opposing intent (e.g., negations, numeric parameter shifts, tenant boundary leaks, or prompt injections) map to near-identical vector representations, inducing a catastrophic **48.39% false-hit rate**.
 
 ```
 Query A: "How do I securely store user passwords in PostgreSQL?"  ──┐ Cosine Similarity: 0.941
@@ -43,16 +48,17 @@ Query B: "How do I bypass secure user password checks in PostgreSQL?" ──┘ 
 ```
 
 Sunborn prevents this through a multi-tier, formally bounded pipeline:
-* **Tier 0/1 (Exact Deterministic Match)**: Normalized whitespace, sorted JSON keys, canonical multi-turn histories, and temperature isolation executed via in-memory W-TinyLFU and DragonflyDB (**P99: 240 µs**).
-* **Tier 2 (Conformal Semantic Retrieval)**: Structural pre-filtering (extracting numeric literals and negation polarity bits) combined with Conformal Risk Control ($1-\alpha$ coverage) ensuring empirical error $\le 0.01$.
-* **Tier 3 (Agentic DAG Reuse)**: Cryptographically verified tool execution subgraphs using RFC 6962 Merkle trees.
-* **Tier 4 (Authoritative Durability)**: Non-Accelerator Authority with PostgreSQL write-ahead logging and transactional outbox event streams.
+* **Tier 0/1 (Exact Deterministic Match)**: Normalized whitespace, sorted JSON keys, canonical multi-turn histories, and temperature isolation executed via in-memory FinOps GDSF byte-budgeted cache and DragonflyDB (**P99: 240 µs** loopback; **88 µs** in-process engine latency).
+* **Tier 2 (Conformal Semantic Retrieval)**: Structural pre-filtering (extracting numeric literals and negation polarity bits) combined with non-exchangeable conformal calibrator ($1-\alpha$ coverage) ensuring empirical error $\le 0.01$.
+* **Tier 3 (Agentic DAG Reuse)**: Transitive causal DAG effect envelope closure and cryptographically verified tool execution subgraphs using sorted Merkle roots.
+* **Tier 4 (Authoritative Durability)**: Non-Accelerator Authority with PostgreSQL write-ahead logging and watermark-fenced write-behind cache leases.
 * **Adaptive Autonomic Control**: Closed-loop self-learning controller with HMAC authentication, poison defense, held-out calibration, and zero-downtime canary promotion.
 
-**Empirical Research Benchmarks (from `research/results/benchmark_run.json`)**:
-* **Sunborn False-Hit Rate**: **0.0%** (100% precision, 95% Wilson CI $[0.0, 3.0]$) vs. Naive Cosine **41.13%**.
-* **Net Cost Reduction**: **29.03%** verified token cost savings.
-* **Gateway Latency**: P99 hot-path retrieval at **240 µs** ($< 5.0\text{ ms}$ SLO).
+**Empirical Research Benchmarks (verifiable via `bash research/reproduce.sh`)**:
+* **Sunborn False-Hit Rate**: **0.0%** (100% precision, 95% Wilson CI $[0.0, 3.0]$) vs. Naive Cosine **48.39%** (60 false hits on traps).
+* **Temporal Mutation Safety (SemanticCacheBench-T)**: **0.0%** false hits across 19 stateful mutation scenarios vs. Naive Cosine **63.16%** false hits.
+* **Net Cost Reduction**: **23.38%** verified net token cost savings.
+* **Sustained Soak Throughput**: **39,400+ req/s** with flat RSS memory variation ($\le 1.2\%$).
 
 ---
 
@@ -390,19 +396,83 @@ Baseline               | Hit% (95% CI)       | FalseHit% (95% CI)      | Prec%  
 --------------------------------------------------------------------------------------------------------------------------------
 No Cache (Direct Origi |  0.0% [0.0,3.0]     |  0.0% [0.0,3.0]         |  100.0% |     0.0% |   450.0 ms | $ 0.77500 |     0.0%
 Exact Hash Only (C0/C1 | 10.5% [6.2,17.1]    |  0.0% [0.0,3.0]         |  100.0% |    32.5% |   402.9 ms | $ 0.69376 |    10.5%
-Naive Cosine (Fixed ta | 53.2% [44.5,61.8]   | 41.1% [32.9,49.9]       |   22.7% |    37.5% |   214.7 ms | $ 0.36257 |    53.2%
-Sunborn Multi-Tier Cal | 29.0% [21.8,37.6]   |  0.0% [0.0,3.0]         |  100.0% |    90.0% |   320.9 ms | $ 0.55004 |    29.0%
+Naive Cosine (Fixed ta | 80.6% [72.8,86.6]   | 48.4% [39.8,57.1]       |   40.0% |   100.0% |    93.5 ms | $ 0.15010 |    80.6%
+Sunborn Multi-Tier Cal | 23.4% [16.8,31.6]   |  0.0% [0.0,3.0]         |  100.0% |    72.5% |   345.9 ms | $ 0.59378 |    23.4%
 ================================================================================
 ```
 
-### 8.2 Capacity and Endurance Verification
-* **Bounded Cache Eviction**: Verified in `crates/sunborn-gateway/tests/capacity_soak_test.rs` under continuous insertion of 2,500 entries into a 500-capacity bounded memory cache, demonstrating strict bounded memory retention and LRU/oldest eviction.
-* **Zipfian Load Simulation**: Benchmarked via `benchmarks/capacity_soak.py` under skewed Zipfian distributions ($s=1.05$) to measure singleflight request coalescing and bounded footprint.
-* **GDPR Crypto-Shredding Verification**: Verified in `crates/sunborn-gateway/tests/governance_test.rs`, measuring atomic AES-256-GCM TDEK zeroization latency at an average of **$42.1\ \mu\text{s}$** (P99: **$42.4\ \mu\text{s}$**).
+### 8.2 SemanticCacheBench-T: Stateful Temporal & Adversarial Benchmark
+
+Evaluates 19 stateful mutation scenarios across 6 phases (Knowledge mutation, Permission revocation, Policy drift, Side-effecting tool changes, Outbox race conditions, Adversarial injection). Taken verbatim from [`research/results/run_manifest.json`](research/results/run_manifest.json):
+
+```text
+================================================================================
+SUNBORN SEMANTICCACHEBENCH-T: STATEFUL TEMPORAL & ADVERSARIAL BENCHMARK
+================================================================================
+Baseline                  | Hit% (95% CI)       | FalseHit% (95% CI)      | Prec%   | Recall%  | Avg Lat    | Cost USD   | Savings%
+-----------------------------------------------------------------------------------------------------------------------------------
+No Cache (Direct Origin)  |  0.0% [0.0,16.8]    |  0.0% [0.0,16.8]        |  100.0% |     0.0% |   450.0 ms | $ 0.11875 |     0.0%
+Exact Hash Only (C0/C1)   |  0.0% [0.0,16.8]    |  0.0% [0.0,16.8]        |  100.0% |     0.0% |   450.0 ms | $ 0.11875 |     0.0%
+Naive Cosine (Fixed tau=0 | 94.7% [75.4,99.1]   | 63.2% [41.0,80.8]       |   33.3% |   100.0% |    31.3 ms | $ 0.00627 |    94.7%
+Sunborn Proof-Carrying Te | 10.5% [2.9,31.4]    |  0.0% [0.0,16.8]        |  100.0% |    33.3% |   403.5 ms | $ 0.10625 |    10.5%
+================================================================================
+```
+
+### 8.3 Capacity Soak & Memory Stability Verification
+* **Sustained Zipfian Churn**: Benchmarked via `benchmarks/capacity_soak.py` achieving **39,400+ req/s** throughput under high skew ($s=1.05$) with bounded FinOps GDSF byte capacity.
+* **Singleflight Burst Coalescing**: 50 concurrent bursts with 20 identical callers spawned 50 leaders and attached 950 followers, leaving **0 orphaned or leaked broadcast channels** upon completion.
+* **GDPR Article 17 Crypto-Shredding**: Verified in `crates/sunborn-gateway/tests/governance_test.rs`, measuring atomic AES-256-GCM TDEK zeroization latency at an average of **$42.0\ \mu\text{s}$** (P99: **$42.1\ \mu\text{s}$**).
+* **Process Memory RSS Envelope**: RSS variation remained strictly flat ($\le 1.2\%$ envelope variation over 11,000 sustained requests).
 
 ---
 
-## 9. Complete End-to-End API Contracts (37 Verified Endpoints)
+## 9. Python Agent Integration SDK & Tool Memoization
+
+Sunborn provides a native, zero-dependency Python SDK ([`sdk/python/sunborn_agent.py`](sdk/python/sunborn_agent.py)) supporting both synchronous and asynchronous AI agent runtimes:
+
+### 9.1 SDK Capabilities & Guarantees
+1. **OpenAI & Anthropic Wire Parity**: Native drop-in support for `/v1/chat/completions` (OpenAI format with `temperature`, `top_p`, `max_tokens`, `stop`, `seed`, `response_format`) and `/v1/messages` (Anthropic Claude format).
+2. **Deterministic ContextDigest Merkle Root**: `compute_context_digest(model_id, system_prompt, rag_chunk_ids)` computes the exact 32-byte sorted Merkle tree root matching Rust `sunborn-semantic`.
+3. **Synchronous & Asynchronous `@sunborn_tool` Memoization**: Decorates Python functions or coroutines to automatically query DAG reuse from the Sunborn Execution Engine.
+4. **Strict Fallback Governance**: Supports `FallbackPolicy.FAIL_CLOSED` (throws `RuntimeError` if cache infrastructure fails) and `FallbackPolicy.PERMISSIVE` (falls back to native computation).
+5. **Async Client**: `AsyncSunbornClient` leveraging `asyncio.to_thread` for non-blocking event-loop integration.
+
+### 9.2 Python SDK Code Example
+
+```python
+import asyncio
+from sunborn_agent import SunbornClient, AsyncSunbornClient, sunborn_tool, FallbackPolicy
+
+# 1. Initialize Client
+client = SunbornClient(
+    base_url="http://localhost:8080/v1",
+    api_key="key-enterprise-fintech",
+    tenant_id="tenant-alpha"
+)
+
+# 2. Decorate Deterministic Agent Tools (Sync or Async)
+@sunborn_tool(name="fetch_portfolio_balance", ttl_secs=300, policy=FallbackPolicy.FAIL_CLOSED, client=client)
+def fetch_portfolio_balance(account_id: str) -> dict:
+    # Executes only on cache miss; automatically memoized in Sunborn DAG
+    return {"account_id": account_id, "balance_usd": 1250450.00}
+
+@sunborn_tool(name="query_market_depth", client=client)
+async def query_market_depth(ticker: str) -> dict:
+    return {"ticker": ticker, "spread": 0.02}
+
+# 3. OpenAI-Compatible Chat Completion
+response = client.chat_completion(
+    model="gpt-4o",
+    prompt="Summarize the portfolio balance.",
+    system_prompt="You are a financial advisor.",
+    temperature=0.0
+)
+print(response["choices"][0]["message"]["content"])
+```
+
+---
+
+## 10. Complete End-to-End API Contracts (37 Verified Endpoints)
 
 Sunborn exposes 37 verified endpoints across public, authenticated tenant, and administrative scopes in [`crates/sunborn-gateway/src/lib.rs`](crates/sunborn-gateway/src/lib.rs):
 
@@ -449,7 +519,7 @@ Sunborn exposes 37 verified endpoints across public, authenticated tenant, and a
 
 ---
 
-## 10. Frontend Control Plane & Server-Side BFF
+## 11. Frontend Control Plane & Server-Side BFF
 
 Sunborn includes a Next.js 15 control plane ([`frontend/`](frontend)) built with Tailwind CSS, Lucide icons, and Motion animations:
 
@@ -469,9 +539,9 @@ Sunborn includes a Next.js 15 control plane ([`frontend/`](frontend)) built with
 
 ---
 
-## 11. Enterprise Deployment & Orchestration
+## 12. Enterprise Deployment & Orchestration
 
-### 11.1 Docker Compose Multi-Container Stack ([`deploy/docker-compose.yml`](deploy/docker-compose.yml))
+### 12.1 Docker Compose Multi-Container Stack ([`deploy/docker-compose.yml`](deploy/docker-compose.yml))
 Boots a production-ready stack in isolated network bridges with healthchecks:
 * **PostgreSQL 16**: Authoritative durability engine with automatic migration execution.
 * **DragonflyDB**: In-memory Redis-compatible exact cache accelerator.
@@ -484,7 +554,7 @@ Boots a production-ready stack in isolated network bridges with healthchecks:
 docker compose -f deploy/docker-compose.yml up -d
 ```
 
-### 11.2 Kubernetes Production Manifests ([`deploy/k8s/`](deploy/k8s/))
+### 12.2 Kubernetes Production Manifests ([`deploy/k8s/`](deploy/k8s/))
 * Gateway Deployment & Service with liveness/readiness HTTP probes.
 * Horizontal Pod Autoscaler (HPA) targeting 70% CPU utilization.
 * NetworkPolicy permitting external LLM/embedding egress on port 443.
@@ -492,32 +562,34 @@ docker compose -f deploy/docker-compose.yml up -d
 
 ---
 
-## 12. Quickstart & Verification Guide
+## 13. Quickstart & Verification Guide
 
 ### Prerequisites
 * **Rust**: 1.80+ (`rustc`, `cargo`)
 * **Python**: 3.10+ (for benchmarks, SDK, and reproduction)
 * **Node.js**: 20+ (for Next.js control plane)
 
-### 1. Build and Run Full Automated Test Suite (146 Tests)
+### 1. Build and Run Full Automated Test Suite (158 Tests)
 ```bash
-# Run all 129 Rust unit, integration, security, chaos, and learning tests
-cargo test --workspace --all-targets
+# Run all 125+ Rust unit, integration, security, chaos, and learning tests
+cargo test --locked --workspace --all-targets
 
-# Run all 5 Python SDK contract tests
-python3 -m unittest sdk/python/test_sunborn_agent.py
+# Run all 19 Python SDK unit and contract tests
+python3 -m unittest -v sdk/python/test_sunborn_agent.py
 
-# Run all 12 Next.js BFF security and view navigation tests
+# Run all 14 Next.js BFF security and view navigation tests
 npm test --prefix frontend
 
-# Verify strict zero-warning compiler hygiene
+# Verify strict zero-warning compiler & linter hygiene
 cargo fmt --all -- --check
-cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+uvx ruff check sdk/python
+uvx ruff format --check sdk/python
 ```
 
 ### 2. Execute Local Benchmark & Verification Suite
 ```bash
-# Executes local verification gates and updates results
+# Executes local 5-gate verification suite and generates cryptographic attestation
 bash research/reproduce.sh
 ```
 
@@ -526,26 +598,26 @@ bash research/reproduce.sh
 cargo run --release -p sunborn-gateway
 ```
 
-### 4. Connect via Python OpenAI SDK
+### 4. Connect via Python SDK
 ```python
-from openai import OpenAI
+from sunborn_agent import SunbornClient
 
-client = OpenAI(
+client = SunbornClient(
     base_url="http://localhost:8080/v1",
     api_key="key-enterprise-fintech"
 )
 
-response = client.chat.completions.create(
+response = client.chat_completion(
     model="gpt-4o",
-    messages=[{"role": "user", "content": "Explain non-accelerator authority."}],
+    prompt="Explain non-accelerator authority.",
     temperature=0.0
 )
-print(response.choices[0].message.content)
+print(response["choices"][0]["message"]["content"])
 ```
 
 ---
 
-## 13. Software Citation
+## 14. Software Citation
 
 If you use or reference Sunborn in your projects, please cite it as:
 
