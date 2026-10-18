@@ -14,21 +14,23 @@ Provides:
 6. Asynchronous client `AsyncSunbornClient` for asyncio workflows.
 """
 
-import os
-import json
-import time
+import asyncio
 import functools
 import hashlib
-import asyncio
-import urllib.request
+import inspect
+import json
+import os
+import time
 import urllib.error
-from typing import Any, Callable, Dict, List, Optional, Union
+import urllib.request
+from collections.abc import Callable
+from typing import Any
 
 
 def compute_context_digest(
     model_id: str,
-    system_prompt: Optional[str] = None,
-    rag_chunk_ids: Optional[List[str]] = None,
+    system_prompt: str | None = None,
+    rag_chunk_ids: list[str] | None = None,
 ) -> str:
     """
     Computes the 32-byte hexadecimal ContextDigest matching the Sunborn Rust Merkle root contract:
@@ -47,13 +49,13 @@ def compute_context_digest(
         system_hash = h_sys.digest()
 
     # 2. RAG Chunk IDs Merkle Root
-    chunks = sorted(list(rag_chunk_ids)) if rag_chunk_ids else []
+    chunks = sorted(rag_chunk_ids) if rag_chunk_ids else []
     if not chunks:
         h_rag = hashlib.sha256()
         h_rag.update(b"sunborn:rag_root:empty")
         rag_root = h_rag.digest()
     else:
-        current_hashes: List[bytes] = []
+        current_hashes: list[bytes] = []
         for c in chunks:
             h_leaf = hashlib.sha256()
             h_leaf.update(b"sunborn:rag_leaf:")
@@ -61,10 +63,12 @@ def compute_context_digest(
             current_hashes.append(h_leaf.digest())
 
         while len(current_hashes) > 1:
-            next_level: List[bytes] = []
+            next_level: list[bytes] = []
             for i in range(0, len(current_hashes), 2):
                 chunk0 = current_hashes[i]
-                chunk1 = current_hashes[i + 1] if i + 1 < len(current_hashes) else chunk0
+                chunk1 = (
+                    current_hashes[i + 1] if i + 1 < len(current_hashes) else chunk0
+                )
                 h_node = hashlib.sha256()
                 h_node.update(b"sunborn:rag_node:")
                 h_node.update(chunk0)
@@ -91,7 +95,7 @@ class SunbornClient:
     def __init__(
         self,
         base_url: str = "http://localhost:8080/v1",
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         tenant_id: str = "default-tenant",
         application_id: str = "default-app",
         timeout: float = 30.0,
@@ -111,7 +115,9 @@ class SunbornClient:
         self.application_id = application_id
         self.timeout = timeout
 
-    def _post(self, path: str, payload: dict, custom_headers: Optional[dict] = None) -> dict:
+    def _post(
+        self, path: str, payload: dict, custom_headers: dict | None = None
+    ) -> dict:
         url = f"{self.base_url}/{path.lstrip('/')}"
         data = json.dumps(payload, default=str).encode("utf-8")
         headers = {
@@ -130,14 +136,17 @@ class SunbornClient:
         )
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
+                content = response.read().decode("utf-8")
+                return json.loads(content) if content else {}
         except urllib.error.HTTPError as e:
-            error_body = e.read().decode("utf-8")
+            error_body = e.read().decode("utf-8") if getattr(e, "fp", None) else str(e)
             raise RuntimeError(f"Sunborn Gateway error [{e.code}]: {error_body}") from e
         except urllib.error.URLError as e:
-            raise ConnectionError(f"Failed to connect to Sunborn Gateway at {url}: {e.reason}") from e
+            raise ConnectionError(
+                f"Failed to connect to Sunborn Gateway at {url}: {e.reason}"
+            ) from e
 
-    def _get(self, path: str, custom_headers: Optional[dict] = None) -> dict:
+    def _get(self, path: str, custom_headers: dict | None = None) -> dict:
         url = f"{self.base_url}/{path.lstrip('/')}"
         headers = {
             "Content-Type": "application/json",
@@ -154,16 +163,21 @@ class SunbornClient:
         )
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
+                content = response.read().decode("utf-8")
+                return json.loads(content) if content else {}
         except urllib.error.HTTPError as e:
-            error_body = e.read().decode("utf-8")
+            error_body = e.read().decode("utf-8") if getattr(e, "fp", None) else str(e)
             raise RuntimeError(f"Sunborn Gateway error [{e.code}]: {error_body}") from e
         except urllib.error.URLError as e:
-            raise ConnectionError(f"Failed to connect to Sunborn Gateway at {url}: {e.reason}") from e
+            raise ConnectionError(
+                f"Failed to connect to Sunborn Gateway at {url}: {e.reason}"
+            ) from e
 
-    def login(self, client_id: str, client_secret: str, tenant_id: Optional[str] = None) -> dict:
+    def login(
+        self, client_id: str, client_secret: str, tenant_id: str | None = None
+    ) -> dict:
         """Authenticates with the Sunborn Gateway login endpoint (/v1/auth/login)."""
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "client_id": client_id,
             "client_secret": client_secret,
         }
@@ -182,18 +196,18 @@ class SunbornClient:
     def chat_completion(
         self,
         model: str = "gpt-4o",
-        messages: Optional[List[Dict[str, str]]] = None,
-        prompt: Optional[str] = None,
-        system_prompt: Optional[str] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        stop: Optional[Union[str, List[str]]] = None,
-        seed: Optional[int] = None,
-        response_format: Optional[dict] = None,
-        tools: Optional[List[dict]] = None,
+        messages: list[dict[str, str]] | None = None,
+        prompt: str | None = None,
+        system_prompt: str | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        max_tokens: int | None = None,
+        stop: str | list[str] | None = None,
+        seed: int | None = None,
+        response_format: dict | None = None,
+        tools: list[dict] | None = None,
         allow_stochastic: bool = False,
-        context_digest: Optional[str] = None,
+        context_digest: str | None = None,
     ) -> dict:
         """Invokes the OpenAI-compatible /chat/completions endpoint."""
         msgs = list(messages) if messages else []
@@ -202,7 +216,7 @@ class SunbornClient:
                 msgs.append({"role": "system", "content": system_prompt})
             msgs.append({"role": "user", "content": prompt})
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": model,
             "messages": msgs,
         }
@@ -232,15 +246,15 @@ class SunbornClient:
     def create_message(
         self,
         model: str = "claude-3-5-sonnet-20241022",
-        messages: Optional[List[Dict[str, Any]]] = None,
-        system: Optional[Union[str, List[dict]]] = None,
-        max_tokens: Optional[int] = 1024,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        stop_sequences: Optional[List[str]] = None,
+        messages: list[dict[str, Any]] | None = None,
+        system: str | list[dict] | None = None,
+        max_tokens: int | None = 1024,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        stop_sequences: list[str] | None = None,
     ) -> dict:
         """Invokes the Anthropic-compatible /messages endpoint."""
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "model": model,
             "messages": messages or [],
         }
@@ -264,7 +278,7 @@ class SunbornClient:
         """Retrieves the live FinOps cost and token savings report."""
         return self._get("finops/report")
 
-    def plan_execution_dag(self, plan_nodes: List[dict]) -> dict:
+    def plan_execution_dag(self, plan_nodes: list[dict]) -> dict:
         """Submits an Agent Execution DAG to evaluate memoized tool subgraph reuse."""
         payload = {
             "tenant_id": self.tenant_id,
@@ -280,8 +294,8 @@ class SunbornClient:
         arguments: dict,
         output: Any,
         execution_latency_ms: int = 0,
-        context_hash: Optional[str] = None,
-        ttl_secs: Optional[int] = None,
+        context_hash: str | None = None,
+        ttl_secs: int | None = None,
         is_error: bool = False,
     ) -> dict:
         """Stores a deterministic tool execution result in the Sunborn Execution Cache."""
@@ -306,7 +320,7 @@ class AsyncSunbornClient:
     def __init__(
         self,
         base_url: str = "http://localhost:8080/v1",
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         tenant_id: str = "default-tenant",
         application_id: str = "default-app",
         timeout: float = 30.0,
@@ -331,27 +345,40 @@ class AsyncSunbornClient:
     def application_id(self) -> str:
         return self._sync_client.application_id
 
+    @property
+    def api_key(self) -> str:
+        return self._sync_client.api_key
+
+    async def login(
+        self, client_id: str, client_secret: str, tenant_id: str | None = None
+    ) -> dict:
+        """Asynchronously authenticates with the Sunborn Gateway login endpoint."""
+        return await asyncio.to_thread(
+            self._sync_client.login, client_id, client_secret, tenant_id
+        )
+
     async def chat_completion(self, *args, **kwargs) -> dict:
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, lambda: self._sync_client.chat_completion(*args, **kwargs))
+        return await asyncio.to_thread(
+            self._sync_client.chat_completion, *args, **kwargs
+        )
 
     async def create_message(self, *args, **kwargs) -> dict:
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, lambda: self._sync_client.create_message(*args, **kwargs))
+        return await asyncio.to_thread(
+            self._sync_client.create_message, *args, **kwargs
+        )
 
     messages = create_message
 
     async def get_finops_report(self) -> dict:
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self._sync_client.get_finops_report)
+        return await asyncio.to_thread(self._sync_client.get_finops_report)
 
-    async def plan_execution_dag(self, plan_nodes: List[dict]) -> dict:
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, lambda: self._sync_client.plan_execution_dag(plan_nodes))
+    async def plan_execution_dag(self, plan_nodes: list[dict]) -> dict:
+        return await asyncio.to_thread(self._sync_client.plan_execution_dag, plan_nodes)
 
     async def record_tool_result(self, *args, **kwargs) -> dict:
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, lambda: self._sync_client.record_tool_result(*args, **kwargs))
+        return await asyncio.to_thread(
+            self._sync_client.record_tool_result, *args, **kwargs
+        )
 
 
 def get_default_client() -> SunbornClient:
@@ -374,31 +401,28 @@ class FallbackPolicy:
 
 
 def sunborn_tool(
-    name: Optional[str] = None,
+    name: str | None = None,
     version: str = "1.0",
     deterministic: bool = True,
-    ttl_secs: Optional[int] = None,
-    context_hash: Optional[str] = None,
+    ttl_secs: int | None = None,
+    context_hash: str | None = None,
     policy: str = FallbackPolicy.FAIL_CLOSED,
-    client: Optional[SunbornClient] = None,
+    client: SunbornClient | None = None,
 ):
     """
     Decorator for AI agent tools to automatically memoize deterministic calls
     via the Sunborn Execution Engine with strict fallback governance.
+    Supports both synchronous and asynchronous tool functions.
     """
+
     def decorator(fn: Callable):
         tool_name = name or fn.__name__
+        is_async = inspect.iscoroutinefunction(fn)
 
-        @functools.wraps(fn)
-        def wrapper(*args, **kwargs):
-            if not deterministic:
-                return fn(*args, **kwargs)
-
-            sunborn = client or get_default_client()
-            arguments = {"args": list(args), "kwargs": kwargs}
-
-            # 1. Query Gateway plan to check if memoized tool call exists
-            arg_bytes = json.dumps(arguments, sort_keys=True, default=str).encode("utf-8")
+        def _build_plan(arguments: dict) -> tuple[str, list[dict]]:
+            arg_bytes = json.dumps(arguments, sort_keys=True, default=str).encode(
+                "utf-8"
+            )
             node_id = f"node-{tool_name}-{hashlib.sha256(arg_bytes).hexdigest()[:8]}"
             plan_nodes = [
                 {
@@ -406,9 +430,9 @@ def sunborn_tool(
                     "name": tool_name,
                     "dependencies": [],
                     "is_deterministic": True,
-                    "effect": "PureDeterministic" if ttl_secs is None else {
-                        "TimeSensitiveNonDeterministic": {"max_ttl_secs": ttl_secs}
-                    },
+                    "effect": "PureDeterministic"
+                    if ttl_secs is None
+                    else {"TimeSensitiveNonDeterministic": {"max_ttl_secs": ttl_secs}},
                     "tool_call": {
                         "tool_name": tool_name,
                         "tool_version": version,
@@ -417,45 +441,107 @@ def sunborn_tool(
                     },
                 }
             ]
+            return node_id, plan_nodes
 
-            try:
-                eval_result = sunborn.plan_execution_dag(plan_nodes)
-                if eval_result.get("cached_nodes", 0) > 0:
-                    status = eval_result["node_statuses"].get(node_id, {})
-                    if status.get("status") == "Cached":
-                        return status["details"]["output"]
-            except Exception as e:
-                if policy == FallbackPolicy.FAIL_CLOSED:
-                    raise RuntimeError(
-                        f"Sunborn Policy FAIL_CLOSED: Execution plan query failed for '{tool_name}': {e}"
-                    ) from e
-                # In PERMISSIVE mode, proceed to execute natively
+        if is_async:
 
-            # 2. Execute underlying function
-            t0 = time.time()
-            result = fn(*args, **kwargs)
-            latency_ms = int((time.time() - t0) * 1000)
+            @functools.wraps(fn)
+            async def async_wrapper(*args, **kwargs):
+                if not deterministic:
+                    return await fn(*args, **kwargs)
 
-            # 3. Store result back into Sunborn Execution Cache
-            try:
-                sunborn.record_tool_result(
-                    tool_name=tool_name,
-                    tool_version=version,
-                    arguments=arguments,
-                    output=result,
-                    execution_latency_ms=latency_ms,
-                    context_hash=context_hash,
-                    ttl_secs=ttl_secs,
-                )
-            except Exception as e:
-                if policy == FallbackPolicy.FAIL_CLOSED:
-                    raise RuntimeError(
-                        f"Sunborn Policy FAIL_CLOSED: Recording tool result failed for '{tool_name}': {e}"
-                    ) from e
+                sunborn = client or get_default_client()
+                arguments = {"args": list(args), "kwargs": kwargs}
+                node_id, plan_nodes = _build_plan(arguments)
 
-            return result
+                try:
+                    eval_result = await asyncio.to_thread(
+                        sunborn.plan_execution_dag, plan_nodes
+                    )
+                    if eval_result.get("cached_nodes", 0) > 0:
+                        status = eval_result["node_statuses"].get(node_id, {})
+                        if status.get("status") == "Cached":
+                            return status["details"]["output"]
+                except Exception as e:
+                    if policy == FallbackPolicy.FAIL_CLOSED:
+                        raise RuntimeError(
+                            f"Sunborn Policy FAIL_CLOSED: Execution plan query failed for '{tool_name}': {e}"
+                        ) from e
 
-        return wrapper
+                t0 = time.time()
+                result = await fn(*args, **kwargs)
+                latency_ms = int((time.time() - t0) * 1000)
+
+                try:
+                    await asyncio.to_thread(
+                        sunborn.record_tool_result,
+                        tool_name=tool_name,
+                        tool_version=version,
+                        arguments=arguments,
+                        output=result,
+                        execution_latency_ms=latency_ms,
+                        context_hash=context_hash,
+                        ttl_secs=ttl_secs,
+                    )
+                except Exception as e:
+                    if policy == FallbackPolicy.FAIL_CLOSED:
+                        raise RuntimeError(
+                            f"Sunborn Policy FAIL_CLOSED: Recording tool result failed for '{tool_name}': {e}"
+                        ) from e
+
+                return result
+
+            return async_wrapper
+        else:
+
+            @functools.wraps(fn)
+            def sync_wrapper(*args, **kwargs):
+                if not deterministic:
+                    return fn(*args, **kwargs)
+
+                sunborn = client or get_default_client()
+                arguments = {"args": list(args), "kwargs": kwargs}
+                node_id, plan_nodes = _build_plan(arguments)
+
+                # 1. Query Gateway plan to check if memoized tool call exists
+                try:
+                    eval_result = sunborn.plan_execution_dag(plan_nodes)
+                    if eval_result.get("cached_nodes", 0) > 0:
+                        status = eval_result["node_statuses"].get(node_id, {})
+                        if status.get("status") == "Cached":
+                            return status["details"]["output"]
+                except Exception as e:
+                    if policy == FallbackPolicy.FAIL_CLOSED:
+                        raise RuntimeError(
+                            f"Sunborn Policy FAIL_CLOSED: Execution plan query failed for '{tool_name}': {e}"
+                        ) from e
+                    # In PERMISSIVE mode, proceed to execute natively
+
+                # 2. Execute underlying function
+                t0 = time.time()
+                result = fn(*args, **kwargs)
+                latency_ms = int((time.time() - t0) * 1000)
+
+                # 3. Store result back into Sunborn Execution Cache
+                try:
+                    sunborn.record_tool_result(
+                        tool_name=tool_name,
+                        tool_version=version,
+                        arguments=arguments,
+                        output=result,
+                        execution_latency_ms=latency_ms,
+                        context_hash=context_hash,
+                        ttl_secs=ttl_secs,
+                    )
+                except Exception as e:
+                    if policy == FallbackPolicy.FAIL_CLOSED:
+                        raise RuntimeError(
+                            f"Sunborn Policy FAIL_CLOSED: Recording tool result failed for '{tool_name}': {e}"
+                        ) from e
+
+                return result
+
+            return sync_wrapper
 
     return decorator
 

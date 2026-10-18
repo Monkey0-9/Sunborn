@@ -1,27 +1,26 @@
+import asyncio
+import datetime
 import os
 import sys
-import uuid
-import datetime
-import asyncio
 import unittest
-from unittest.mock import MagicMock, patch
 import urllib.error
+import uuid
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sunborn_agent import (
-    SunbornClient,
     AsyncSunbornClient,
     FallbackPolicy,
-    sunborn_tool,
+    SunbornClient,
     compute_context_digest,
+    sunborn_tool,
 )
 
 
 class TestSunbornClient(unittest.TestCase):
     def test_client_init_requires_key(self):
-        with patch.dict("os.environ", {}, clear=True):
-            with self.assertRaises(ValueError):
-                SunbornClient()
+        with patch.dict("os.environ", {}, clear=True), self.assertRaises(ValueError):
+            SunbornClient()
 
     def test_client_init_with_explicit_key(self):
         client = SunbornClient(
@@ -39,13 +38,17 @@ class TestSunbornClient(unittest.TestCase):
         client1 = SunbornClient(base_url="http://localhost:8080", api_key="test-key")
         self.assertEqual(client1.base_url, "http://localhost:8080/v1")
 
-        client2 = SunbornClient(base_url="http://localhost:8080/v1/", api_key="test-key")
+        client2 = SunbornClient(
+            base_url="http://localhost:8080/v1/", api_key="test-key"
+        )
         self.assertEqual(client2.base_url, "http://localhost:8080/v1")
 
     @patch("sunborn_agent.urllib.request.urlopen")
     def test_chat_completion_request_payload_full_options(self, mock_urlopen):
         mock_response = MagicMock()
-        mock_response.read.return_value = b'{"choices": [{"message": {"content": "ok"}}]}'
+        mock_response.read.return_value = (
+            b'{"choices": [{"message": {"content": "ok"}}]}'
+        )
         mock_response.__enter__.return_value = mock_response
         mock_urlopen.return_value = mock_response
 
@@ -69,12 +72,16 @@ class TestSunbornClient(unittest.TestCase):
         # Verify request call arguments
         req = mock_urlopen.call_args[0][0]
         self.assertEqual(req.headers.get("X-sunborn-cache-policy"), "allow-stochastic")
-        self.assertEqual(req.headers.get("X-sunborn-context-digest"), "abcd1234efgh5678")
+        self.assertEqual(
+            req.headers.get("X-sunborn-context-digest"), "abcd1234efgh5678"
+        )
 
     @patch("sunborn_agent.urllib.request.urlopen")
     def test_anthropic_messages_payload(self, mock_urlopen):
         mock_response = MagicMock()
-        mock_response.read.return_value = b'{"id": "msg_1", "content": [{"type": "text", "text": "hello"}]}'
+        mock_response.read.return_value = (
+            b'{"id": "msg_1", "content": [{"type": "text", "text": "hello"}]}'
+        )
         mock_response.__enter__.return_value = mock_response
         mock_urlopen.return_value = mock_response
 
@@ -152,7 +159,9 @@ class TestSunbornClient(unittest.TestCase):
         client = MagicMock(spec=SunbornClient)
         client.plan_execution_dag.side_effect = RuntimeError("Network partition")
 
-        @sunborn_tool(name="strict_tool", policy=FallbackPolicy.FAIL_CLOSED, client=client)
+        @sunborn_tool(
+            name="strict_tool", policy=FallbackPolicy.FAIL_CLOSED, client=client
+        )
         def strict_calc():
             return 100
 
@@ -173,7 +182,10 @@ class TestSunbornClient(unittest.TestCase):
 
     def test_tool_decorator_complex_types(self):
         client = MagicMock(spec=SunbornClient)
-        client.plan_execution_dag.return_value = {"cached_nodes": 0, "node_statuses": {}}
+        client.plan_execution_dag.return_value = {
+            "cached_nodes": 0,
+            "node_statuses": {},
+        }
 
         @sunborn_tool(name="complex_tool", client=client)
         def process_record(u_id, dt):
@@ -197,7 +209,13 @@ class TestSunbornClient(unittest.TestCase):
 
     @patch("sunborn_agent.urllib.request.urlopen")
     def test_error_handling_http_error(self, mock_urlopen):
-        err = urllib.error.HTTPError("http://localhost:8080/v1/fail", 401, "Unauthorized", {}, MagicMock(read=lambda: b'{"error":"invalid_api_key"}'))
+        err = urllib.error.HTTPError(
+            "http://localhost:8080/v1/fail",
+            401,
+            "Unauthorized",
+            {},
+            MagicMock(read=lambda: b'{"error":"invalid_api_key"}'),
+        )
         mock_urlopen.side_effect = err
 
         client = SunbornClient(api_key="bad-key")
@@ -219,13 +237,89 @@ class TestSunbornClient(unittest.TestCase):
     @patch("sunborn_agent.urllib.request.urlopen")
     def test_async_sunborn_client(self, mock_urlopen):
         mock_response = MagicMock()
-        mock_response.read.return_value = b'{"choices": [{"message": {"content": "async_ok"}}]}'
+        mock_response.read.return_value = (
+            b'{"choices": [{"message": {"content": "async_ok"}}]}'
+        )
         mock_response.__enter__.return_value = mock_response
         mock_urlopen.return_value = mock_response
 
         client = AsyncSunbornClient(api_key="test-key")
+        self.assertEqual(client.api_key, "test-key")
+        self.assertEqual(client.base_url, "http://localhost:8080/v1")
+        self.assertEqual(client.tenant_id, "default-tenant")
+        self.assertEqual(client.application_id, "default-app")
+
         res = asyncio.run(client.chat_completion(model="gpt-4o", prompt="Async test"))
         self.assertEqual(res["choices"][0]["message"]["content"], "async_ok")
+
+    @patch("sunborn_agent.urllib.request.urlopen")
+    def test_async_sunborn_client_login(self, mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.read.return_value = b'{"access_token": "token-123", "tenant_id": "t-1", "application_id": "app-1"}'
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        client = AsyncSunbornClient(api_key="init-key")
+        res = asyncio.run(client.login(client_id="cid", client_secret="csecret"))
+        self.assertEqual(res["access_token"], "token-123")
+        self.assertEqual(client.api_key, "token-123")
+        self.assertEqual(client.tenant_id, "t-1")
+        self.assertEqual(client.application_id, "app-1")
+
+    def test_async_tool_decorator_cached_hit(self):
+        client = MagicMock(spec=SunbornClient)
+        client.plan_execution_dag.return_value = {
+            "cached_nodes": 1,
+            "node_statuses": {
+                "node-async_calc-f2a89c4b": {
+                    "status": "Cached",
+                    "details": {"output": 84},
+                }
+            },
+        }
+
+        with patch("sunborn_agent.hashlib.sha256") as mock_sha:
+            mock_hasher = MagicMock()
+            mock_hasher.hexdigest.return_value = "f2a89c4b123456"
+            mock_sha.return_value = mock_hasher
+
+            @sunborn_tool(name="async_calc", client=client)
+            async def async_compute(x):
+                return x * 4
+
+            val = asyncio.run(async_compute(21))
+            self.assertEqual(val, 84)
+            client.record_tool_result.assert_not_called()
+
+    def test_async_tool_decorator_miss_executes_and_records(self):
+        client = MagicMock(spec=SunbornClient)
+        client.plan_execution_dag.return_value = {
+            "cached_nodes": 0,
+            "node_statuses": {},
+        }
+
+        @sunborn_tool(name="async_multiply", client=client, ttl_secs=60)
+        async def async_mult(a, b):
+            return a * b
+
+        val = asyncio.run(async_mult(6, 7))
+        self.assertEqual(val, 42)
+        client.record_tool_result.assert_called_once()
+        _, kwargs = client.record_tool_result.call_args
+        self.assertEqual(kwargs["tool_name"], "async_multiply")
+        self.assertEqual(kwargs["output"], 42)
+        self.assertEqual(kwargs["ttl_secs"], 60)
+
+    @patch("sunborn_agent.urllib.request.urlopen")
+    def test_empty_response_decoding(self, mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.read.return_value = b""
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        client = SunbornClient(api_key="test-key")
+        res = client._get("empty/endpoint")
+        self.assertEqual(res, {})
 
 
 if __name__ == "__main__":
