@@ -552,3 +552,137 @@ async fn test_cluster_sync_vector_clock_and_autonomic_status() {
     let auto_json: Value = serde_json::from_slice(&auto_body).unwrap();
     assert_eq!(auto_json["autonomic_health"], "operational");
 }
+
+#[tokio::test]
+async fn test_runtime_reuse_certificate_admissibility_and_rejection() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state.clone());
+
+    state.api_key_registry.register_key(
+        "test-key-proof",
+        sunborn_core::TenantId::new("tenant-proof"),
+        sunborn_core::ApplicationId::new("app-verification"),
+        vec!["*".to_string()],
+        true,
+    );
+
+    // 1. Initial Request (Cache Miss -> Origin Executed with Signed Certificate)
+    let payload1 = serde_json::json!({
+        "tenant_id": "tenant-proof",
+        "application_id": "app-verification",
+        "model": "gpt-4o",
+        "prompt": "What are the core properties of acid transactions?",
+        "temperature": 0.0,
+        "knowledge_epoch": 1
+    });
+
+    let resp1 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", "test-key-proof")
+                .body(Body::from(payload1.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp1.status(), StatusCode::OK);
+    let body1 = resp1.into_body().collect().await.unwrap().to_bytes();
+    let json1: Value = serde_json::from_slice(&body1).unwrap();
+    assert_eq!(json1["decision"]["action"], "origin_execute");
+
+    // 2. Exact Cache Hit -> Valid Certificate Issued & Admissibility Verified
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", "test-key-proof")
+                .body(Body::from(payload1.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp2.status(), StatusCode::OK);
+    let body2 = resp2.into_body().collect().await.unwrap().to_bytes();
+    let json2: Value = serde_json::from_slice(&body2).unwrap();
+    assert_eq!(json2["decision"]["action"], "safe_hit");
+    assert_eq!(json2["cached"], true);
+    assert!(json2["certificate"].is_object());
+    assert_eq!(json2["certificate"]["tenant_id"], "tenant-proof");
+    assert_eq!(json2["certificate"]["model_name"], "gpt-4o");
+
+    // 3. Stale Knowledge Epoch (Client claims epoch 5, lease was epoch 1)
+    // Certificate admissibility fails closed -> Abstains to Revalidate
+    let payload_stale = serde_json::json!({
+        "tenant_id": "tenant-proof",
+        "application_id": "app-verification",
+        "model": "gpt-4o",
+        "prompt": "What are the core properties of acid transactions?",
+        "temperature": 0.0,
+        "knowledge_epoch": 5
+    });
+
+    let resp3 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", "test-key-proof")
+                .body(Body::from(payload_stale.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp3.status(), StatusCode::OK);
+    let body3 = resp3.into_body().collect().await.unwrap().to_bytes();
+    let json3: Value = serde_json::from_slice(&body3).unwrap();
+    assert_eq!(json3["decision"]["action"], "revalidate");
+    assert_eq!(json3["cached"], false);
+    assert!(json3["decision"]["reason_code"]
+        .as_str()
+        .unwrap()
+        .contains("CERTIFICATE_ADMISSIBILITY_REJECTED"));
+
+    // 4. Exact Cache Entry with Tampered Certificate Signature -> Fails closed to Revalidate
+    let req_env1: RequestEnvelope = serde_json::from_value(payload1.clone()).unwrap();
+    let identity = sunborn_identity::IdentityEngine::compute_identity(&req_env1);
+    if let Ok(Some(mut cached)) = state.cache.get(&identity.key).await {
+        cached.metadata["certificate"]["signature"] =
+            serde_json::json!("tampered-signature-0000000000000000");
+        state.cache.set(cached).await.unwrap();
+    }
+
+    let resp4 = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", "test-key-proof")
+                .body(Body::from(payload1.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp4.status(), StatusCode::OK);
+    let body4 = resp4.into_body().collect().await.unwrap().to_bytes();
+    let json4: Value = serde_json::from_slice(&body4).unwrap();
+    assert_eq!(json4["decision"]["action"], "revalidate");
+    assert_eq!(json4["cached"], false);
+    assert!(json4["decision"]["reason_code"]
+        .as_str()
+        .unwrap()
+        .contains("CERTIFICATE_ADMISSIBILITY_REJECTED"));
+}

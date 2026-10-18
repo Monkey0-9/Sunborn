@@ -243,6 +243,113 @@ impl ReuseCertificate {
 
         true
     }
+
+    /// Evaluates all end-to-end admissibility conditions for cache reuse:
+    /// 1. Cryptographic integrity of Merkle root over canonical fields
+    /// 2. HMAC signature verification against signing key
+    /// 3. Tenant and Application boundary match (cross-tenant substitution rejection)
+    /// 4. Model compatibility match
+    /// 5. Point-in-time validity window (not expired and not future-dated)
+    /// 6. Monotonic knowledge epoch lease monotonicity (current_epoch <= lease_epoch)
+    /// 7. Source snapshot freshness (no authoritative source mutation)
+    /// 8. Structural and semantic safety evidence conformance
+    #[allow(clippy::too_many_arguments)]
+    pub fn verify_admissibility(
+        &self,
+        signing_key: &[u8],
+        expected_tenant: &TenantId,
+        expected_app: &ApplicationId,
+        expected_model: &str,
+        expected_identity_hash: Option<&str>,
+        current_time: DateTime<Utc>,
+        current_knowledge_epoch: u64,
+        current_source_epochs: &[(Uuid, u64)],
+    ) -> Result<()> {
+        // 1 & 2. Merkle Root & Signature Integrity
+        self.verify_certificate_integrity(signing_key)?;
+
+        // 3. Tenant Boundary Invariant (Strict multi-tenant isolation)
+        if self.tenant_id != *expected_tenant {
+            return Err(SunbornError::forbidden(format!(
+                "Admissibility failed: tenant mismatch (cert tenant: {}, expected: {})",
+                self.tenant_id.0, expected_tenant.0
+            )));
+        }
+
+        // 3b. Application Boundary Invariant
+        if self.application_id != *expected_app {
+            return Err(SunbornError::forbidden(format!(
+                "Admissibility failed: application mismatch (cert app: {}, expected: {})",
+                self.application_id.0, expected_app.0
+            )));
+        }
+
+        // 4. Model Compatibility
+        if self.model_name != expected_model {
+            return Err(SunbornError::validation_error(format!(
+                "Admissibility failed: model mismatch (cert model: {}, expected: {})",
+                self.model_name, expected_model
+            )));
+        }
+
+        // 4b. Identity Hash Match (enforced when exact matching is evaluated)
+        if let Some(expected_hash) = expected_identity_hash {
+            if self.request_identity_hash != expected_hash {
+                return Err(SunbornError::validation_error(
+                    "Admissibility failed: request identity canonical hash mismatch",
+                ));
+            }
+        }
+
+        // 5. Validity Window (Lease Expiration & Clock Sanity)
+        if current_time > self.validity_window.expires_at {
+            return Err(SunbornError::validation_error(
+                "Admissibility failed: certificate validity lease has expired",
+            ));
+        }
+        if current_time < self.validity_window.issued_at - chrono::Duration::seconds(5) {
+            return Err(SunbornError::validation_error(
+                "Admissibility failed: certificate issued in the future (clock skew)",
+            ));
+        }
+
+        // 6. Monotonic Epoch Lease Fence (Prevents stale writeback and read-repair race)
+        if current_knowledge_epoch > self.validity_window.monotonic_epoch_lease {
+            return Err(SunbornError::validation_error(format!(
+                "Admissibility failed: knowledge epoch advanced (current: {}, cert lease: {})",
+                current_knowledge_epoch, self.validity_window.monotonic_epoch_lease
+            )));
+        }
+
+        // 7. Source Version Snapshot Freshness
+        for (source_id, current_epoch) in current_source_epochs {
+            if let Some(snap) = self
+                .source_snapshots
+                .iter()
+                .find(|s| s.source_id == *source_id)
+            {
+                if snap.snapshot_epoch != *current_epoch {
+                    return Err(SunbornError::validation_error(format!(
+                        "Admissibility failed: source dependency {} epoch mutated (cert: {}, current: {})",
+                        source_id, snap.snapshot_epoch, current_epoch
+                    )));
+                }
+            }
+        }
+
+        // 8. Safety Evidence Conformance
+        if !self.safety_evidence.structural_hash_match
+            || !self.safety_evidence.negation_polarity_match
+            || !self.safety_evidence.numeric_literal_match
+            || self.safety_evidence.entity_drift_detected
+        {
+            return Err(SunbornError::validation_error(
+                "Admissibility failed: safety evidence indicates structural violation or entity drift",
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -306,5 +413,165 @@ mod tests {
         // Expired window
         let future = Utc::now() + Duration::hours(2);
         assert!(!cert.is_fresh_at(future, &[(doc_id, 1)]));
+    }
+
+    #[test]
+    fn test_certificate_admissibility_enforcement_and_rejections() {
+        let key = b"admissibility-key-32-bytes-long!";
+        let tenant = TenantId::new("tenant-safe");
+        let app = ApplicationId::new("app-analytics");
+        let doc_id = Uuid::new_v4();
+
+        let cert = ReuseCertificate::new_signed(
+            tenant.clone(),
+            app.clone(),
+            "req-identity-hash-abc",
+            "claude-3-5-sonnet",
+            200,
+            vec![SourceVersionSnapshot {
+                source_id: doc_id,
+                snapshot_epoch: 5,
+                content_hash: "hash-doc-v5".to_string(),
+            }],
+            SafetyEvidenceRecord {
+                structural_hash_match: true,
+                negation_polarity_match: true,
+                numeric_literal_match: true,
+                entity_drift_detected: false,
+                non_conformity_score: 0.02,
+                calibrated_risk_bound: 0.01,
+                heuristic_risk_score: 0.0,
+            },
+            ValidityWindow {
+                issued_at: Utc::now(),
+                expires_at: Utc::now() + Duration::minutes(30),
+                monotonic_epoch_lease: 5,
+            },
+            key,
+        );
+
+        let now = Utc::now();
+
+        // 1. Valid request matches perfectly
+        assert!(cert
+            .verify_admissibility(
+                key,
+                &tenant,
+                &app,
+                "claude-3-5-sonnet",
+                Some("req-identity-hash-abc"),
+                now,
+                5,
+                &[(doc_id, 5)],
+            )
+            .is_ok());
+
+        // 2. Cross-tenant substitution rejected
+        let other_tenant = TenantId::new("tenant-adversary");
+        let err = cert
+            .verify_admissibility(
+                key,
+                &other_tenant,
+                &app,
+                "claude-3-5-sonnet",
+                Some("req-identity-hash-abc"),
+                now,
+                5,
+                &[(doc_id, 5)],
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains("tenant mismatch"));
+
+        // 3. Model mismatch rejected
+        let err = cert
+            .verify_admissibility(
+                key,
+                &tenant,
+                &app,
+                "gpt-4o",
+                Some("req-identity-hash-abc"),
+                now,
+                5,
+                &[(doc_id, 5)],
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains("model mismatch"));
+
+        // 4. Identity hash mismatch rejected
+        let err = cert
+            .verify_admissibility(
+                key,
+                &tenant,
+                &app,
+                "claude-3-5-sonnet",
+                Some("forged-identity-hash"),
+                now,
+                5,
+                &[(doc_id, 5)],
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains("identity canonical hash mismatch"));
+
+        // 5. Expired lease rejected
+        let future_time = Utc::now() + Duration::hours(1);
+        let err = cert
+            .verify_admissibility(
+                key,
+                &tenant,
+                &app,
+                "claude-3-5-sonnet",
+                Some("req-identity-hash-abc"),
+                future_time,
+                5,
+                &[(doc_id, 5)],
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains("validity lease has expired"));
+
+        // 6. Monotonic epoch advancement fence (epoch 6 > lease 5)
+        let err = cert
+            .verify_admissibility(
+                key,
+                &tenant,
+                &app,
+                "claude-3-5-sonnet",
+                Some("req-identity-hash-abc"),
+                now,
+                6,
+                &[(doc_id, 5)],
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains("knowledge epoch advanced"));
+
+        // 7. Source snapshot mutated (source epoch mutated from 5 to 6)
+        let err = cert
+            .verify_admissibility(
+                key,
+                &tenant,
+                &app,
+                "claude-3-5-sonnet",
+                Some("req-identity-hash-abc"),
+                now,
+                5,
+                &[(doc_id, 6)],
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains("epoch mutated"));
+
+        // 8. Key rotation / forged signature rejected
+        let bad_key = b"wrong-key-32-bytes-long-bad!!!!";
+        let err = cert
+            .verify_admissibility(
+                bad_key,
+                &tenant,
+                &app,
+                "claude-3-5-sonnet",
+                Some("req-identity-hash-abc"),
+                now,
+                5,
+                &[(doc_id, 5)],
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains("signature verification failed"));
     }
 }

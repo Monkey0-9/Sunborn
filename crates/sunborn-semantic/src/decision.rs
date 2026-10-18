@@ -4,7 +4,9 @@ use crate::guardrails::StructuralFingerprint;
 use crate::vector_store::VectorStore;
 use serde::{Deserialize, Serialize};
 use sunborn_core::certificate::SafetyEvidenceRecord;
-use sunborn_core::{CachePath, DecisionAction, DecisionRecord, RequestEnvelope, Result};
+use sunborn_core::{
+    CachePath, DecisionAction, DecisionRecord, RequestEnvelope, Result, ReuseCertificate,
+};
 
 #[derive(Debug, Clone)]
 pub struct DecisionConfig {
@@ -185,10 +187,12 @@ impl VerificationCascade {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct DecisionOutcome {
     pub decision: DecisionRecord,
     pub matched_content: Option<String>,
     pub matched_id: Option<String>,
+    pub matched_certificate: Option<ReuseCertificate>,
     pub safety_evidence: Option<SafetyEvidenceRecord>,
 }
 
@@ -284,6 +288,12 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
             let confidence =
                 Self::compute_confidence(similarity, req.prompt.len(), req.temperature);
 
+            let candidate_cert: Option<ReuseCertificate> = best
+                .entry
+                .metadata
+                .get("certificate")
+                .and_then(|v| serde_json::from_value(v.clone()).ok());
+
             // Execute Verification Cascade
             let cascade_res = self
                 .cascade
@@ -304,6 +314,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                     },
                     matched_content: Some(best.entry.content.clone()),
                     matched_id: Some(best.entry.id.clone()),
+                    matched_certificate: candidate_cert,
                     safety_evidence: Some(cascade_res.safety_evidence),
                 });
             }
@@ -323,6 +334,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                     },
                     matched_content: Some(best.entry.content.clone()),
                     matched_id: Some(best.entry.id.clone()),
+                    matched_certificate: candidate_cert,
                     safety_evidence: Some(cascade_res.safety_evidence),
                 });
             }
@@ -342,6 +354,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                     },
                     matched_content: Some(best.entry.content.clone()),
                     matched_id: Some(best.entry.id.clone()),
+                    matched_certificate: candidate_cert,
                     safety_evidence: Some(cascade_res.safety_evidence),
                 });
             }
@@ -360,6 +373,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                 },
                 matched_content: Some(best.entry.content.clone()),
                 matched_id: Some(best.entry.id.clone()),
+                matched_certificate: candidate_cert,
                 safety_evidence: Some(cascade_res.safety_evidence),
             })
         } else {
@@ -377,6 +391,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                 },
                 matched_content: None,
                 matched_id: None,
+                matched_certificate: None,
                 safety_evidence: None,
             })
         }
