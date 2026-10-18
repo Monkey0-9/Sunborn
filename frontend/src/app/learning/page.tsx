@@ -198,7 +198,7 @@ export default function LearningControllerPage() {
             <h1 className="text-2xl font-bold text-white tracking-tight">
               Adaptive Learning & Autonomous Promotion Controller
             </h1>
-            <Badge variant="cyan">LEVEL 5 / LEVEL 6</Badge>
+            <Badge variant="cyan">CLOSED-LOOP GOVERNANCE</Badge>
           </div>
           <p className="text-xs text-slate-400 font-mono mt-1">
             5-Layer closed-loop learning: verified feedback, 70/30 held-out calibration, counterfactual evaluation, and automated rollback.

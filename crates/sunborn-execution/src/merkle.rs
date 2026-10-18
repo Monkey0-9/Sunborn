@@ -47,7 +47,7 @@ pub struct MerkleProofStep {
     pub is_right: bool,
 }
 
-/// Cryptographic Merkle Inclusion Proof for zero-knowledge auditability (Level 7)
+/// Cryptographic Merkle Inclusion Proof for verifiable auditability
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MerkleInclusionProof {
     pub leaf_hash: String,
@@ -187,7 +187,7 @@ impl MerkleExecutionEngine {
         })
     }
 
-    /// Construct binary Merkle Tree and return (RootHash, Proofs for each leaf) for Level 7 Attestation
+    /// Construct binary Merkle Tree and return (RootHash, Proofs for each leaf) for cryptographic attestation
     pub fn build_merkle_tree(leaf_hashes: &[String]) -> (String, Vec<MerkleInclusionProof>) {
         if leaf_hashes.is_empty() {
             let empty_root = hex::encode(Sha256::digest(b""));

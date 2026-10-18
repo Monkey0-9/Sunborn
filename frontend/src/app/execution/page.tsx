@@ -32,7 +32,7 @@ export default function ExecutionDAGPage() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [merkleProofs, setMerkleProofs] = useState<any[]>([]);
 
-  // Level 7 Speculative Markov Prefetching State
+  // Speculative Markov Prefetching State
   const [currentAction, setCurrentAction] = useState<string>("search_documents");
   const [speculativePredictions, setSpeculativePredictions] = useState<
     Array<{ predicted_action: string; confidence_score: number; estimated_savings_ms: number }>
@@ -352,13 +352,13 @@ export default function ExecutionDAGPage() {
         </div>
       </div>
 
-      {/* Level 7: Speculative Markov Prefetching & Proactive Warming Console */}
+      {/* Speculative Markov Prefetching & Proactive Warming Console */}
       <Card glow="cyan">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <div>
             <CardTitle className="text-base flex items-center gap-2 text-white">
               <Radio className="w-4 h-4 text-cyan-400 animate-pulse" />
-              <span>Level 7 Speculative Markov Prefetching Engine</span>
+              <span>Speculative Markov Prefetching Engine</span>
             </CardTitle>
             <CardDescription>
               Predicts multi-agent workflow sequence transitions with Markov confidence priors and proactively warms speculative cache entries before dispatch.

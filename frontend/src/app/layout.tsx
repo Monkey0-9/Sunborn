@@ -6,7 +6,7 @@ import { Header } from "@/components/layout/header";
 export const metadata: Metadata = {
   title: "Sunborn | Autonomous AI Execution & Conformal Semantic Cache",
   description:
-    "Level 7 Enterprise Multi-Tenant Semantic Caching and Safe Execution-Reuse Platform for Autonomous AI Agents.",
+    "Enterprise Multi-Tenant Semantic Caching and Proof-Carrying Temporal Reuse Platform for Autonomous AI Agents.",
 };
 
 export default function RootLayout({
@@ -38,7 +38,7 @@ export default function RootLayout({
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <span className="w-2 h-2 rounded-full bg-emerald-400" />
-              <span>Sunborn Autonomous Platform · Level 5/6 Autonomic Invariance</span>
+              <span>Sunborn Autonomous Platform · Adaptive Closed-Loop Verification</span>
               <span className="text-slate-600">|</span>
               <span className="text-slate-400">Automated Invariant & Empirical Verification</span>
             </div>

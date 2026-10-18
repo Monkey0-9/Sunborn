@@ -1,33 +1,33 @@
-# Sunborn Level 5 & Level 6 Autonomic Architecture Specification
-## IEEE/ACM Artifact Evaluation Dossier & Formal Invariant Verification
+# Sunborn Adaptive Closed-Loop Learning & Non-Accelerator Invariance Specification
+## Technical Dossier & Formal Invariant Verification
 
-**Document Identifier**: `SUNBORN-SPEC-L5-L6-2026.1`  
-**Standard Compliance**: IEEE/ACM Artifact Evaluation Guidelines (v2024), ISO/IEC/IEEE 29148:2018  
+**Document Identifier**: `SUNBORN-SPEC-AUTONOMIC-2026.1`  
+**Standard Compliance**: Artifact Evaluation Guidelines, ISO/IEC/IEEE 29148:2018  
 **System Target**: Sunborn Gateway & Core v0.1.0  
 **Verification Digest (SHA-256)**: `059500e9fea4b5ca13a2d7bfe13e4cd4d3bb981938f18386120026ebfa987635`  
 **Classification**: Production Architecture & Formal Verification Dossier  
 
 ---
 
-## 1. Formal Taxonomy of Autonomic LLM Semantic Caches
+## 1. System Evolution & Baseline Comparison
 
-Sunborn defines a 7-tier autonomic operational maturity scale for semantic inference caching:
+Sunborn defines an explicit architectural progression across semantic caching regimes:
 
-| Level | Designation | Decision Authority | Learning Loop | Invariant Safety Guardrails | Fault Resilience |
+| Architecture Stage | Designation | Decision Authority | Learning Loop | Invariant Safety Guardrails | Fault Resilience |
 |---|---|---|---|---|---|
-| **Level 0** | **Direct Origin** | None (Origin LLM) | None | N/A | Origin single point of failure |
-| **Level 1** | **Exact Hash Cache** | Deterministic SHA-256 | Static TTL | Bitwise exact matching only | Ephemeral memory loss |
-| **Level 2** | **Naive Cosine Cache** | Uncalibrated Cosine Similarity | Static arbitrary threshold | None (41.13% false-hit rate on adversarial traps) | High semantic hallucination risk |
-| **Level 3** | **Guardrailed Cache** | Conformal Risk Control (CRC) + NLI | Offline batch calibration | Structural pre-filter (negation, numeric, entity inversion) | False-hit rate bounded to $\le 1.0\%$ |
-| **Level 4** | **Predictive & Invalidated** | Lineage Dependency Graph + Markov Prefetch | Predictive speculative warming | Monotonic epoch fencing ($E_{fence} > E_{read}$) | Zero stale read-repair race conditions |
-| **Level 5** | **Safe Adaptive Closed-Loop** | Multi-Tier Policy Promotion Controller | Closed-loop signed feedback | 70/30 held-out calibration, automated canary & instant rollback | Real-time false-hit avoidance without human tuning |
-| **Level 6** | **Zero-Human Provable Autonomy** | Non-Accelerator Authoritative WAL (PostgreSQL) | Fully autonomous counterfactual optimization | O(1) AES-256-GCM crypto-shredding, Merkle-DAG attestation | Byzantine accelerator failure tolerance with 100% state replay |
+| **Baseline 0** | **Direct Origin** | None (Origin LLM) | None | N/A | Origin single point of failure |
+| **Baseline 1** | **Exact Hash Cache** | Deterministic SHA-256 | Static TTL | Bitwise exact matching only | Ephemeral memory loss |
+| **Baseline 2** | **Naive Cosine Cache** | Uncalibrated Cosine Similarity | Static arbitrary threshold | None (41.13% false-hit rate on adversarial traps) | High semantic hallucination risk |
+| **Tier 1** | **Guardrailed Cache** | Conformal Risk Control (CRC) + NLI | Offline batch calibration | Structural pre-filter (negation, numeric, entity inversion) | False-hit rate bounded to $\le 1.0\%$ |
+| **Tier 2** | **Predictive & Invalidated** | Lineage Dependency Graph + Markov Prefetch | Predictive speculative warming | Monotonic epoch fencing ($E_{fence} > E_{read}$) | Zero stale read-repair race conditions |
+| **Tier 3** | **Safe Adaptive Closed-Loop** | Multi-Tier Policy Promotion Controller | Closed-loop signed feedback | 70/30 held-out calibration, automated canary & instant rollback | Real-time false-hit avoidance without human tuning |
+| **Tier 4** | **Non-Accelerator Invariant Autonomy** | Non-Accelerator Authoritative WAL (PostgreSQL) | Fully autonomous counterfactual optimization | O(1) AES-256-GCM crypto-shredding, Merkle-DAG attestation | Byzantine accelerator failure tolerance with 100% state replay |
 
 ---
 
-## 2. Level 5 Specification: Safe Adaptive Closed-Loop Learning
+## 2. Specification: Safe Adaptive Closed-Loop Learning
 
-Level 5 autonomy replaces static hyperparameter tuning with a continuous, evidence-grounded feedback and promotion loop.
+Adaptive learning replaces static hyperparameter tuning with a continuous, evidence-grounded feedback and promotion loop.
 
 ```
        [ Client Request / Inference ]
@@ -97,9 +97,9 @@ Level 5 autonomy replaces static hyperparameter tuning with a continuous, eviden
 
 ---
 
-## 3. Level 6 Specification: Zero-Human Provable Invariant Autonomy
+## 3. Specification: Zero-Human Provable Invariant Autonomy
 
-Level 6 defines a system capable of sustaining catastrophic multi-tier infrastructure failures, geographic network partitions, and adversarial tenant attacks without human intervention and without violating safety invariants.
+This architecture defines a system capable of sustaining catastrophic multi-tier infrastructure failures, geographic network partitions, and adversarial tenant attacks without human intervention and without violating safety invariants.
 
 ### 3.1 Non-Accelerator Authority Theorem
 > **Theorem 1 (Non-Accelerator Authority)**:  
@@ -210,7 +210,7 @@ bash research/reproduce.sh
 
 ## 6. Formal Sign-Off & Verification Evidence
 
-All 29 phase gates, ISO/IEC/IEEE 29148 functional requirements (FR-001 through FR-035), REA binary security mitigations, and Level 5/6 autonomic self-learning controllers are certified production-ready.
+All 29 phase gates, ISO/IEC/IEEE 29148 functional requirements (FR-001 through FR-035), REA binary security mitigations, and autonomic self-learning controllers are certified production-ready.
 
 - **Primary Traceability Matrix**: [`docs/architecture/traceability_matrix.md`](traceability_matrix.md)
 - **Release Acceptance Record**: [`docs/architecture/release_acceptance_record.md`](release_acceptance_record.md)

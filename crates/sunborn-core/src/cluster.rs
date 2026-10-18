@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-/// Vector Clock for multi-region active-active causal ordering and anti-entropy synchronization (Level 7)
+/// Vector Clock for multi-region active-active causal ordering and anti-entropy synchronization
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VectorClock {
     pub clocks: HashMap<String, u64>,

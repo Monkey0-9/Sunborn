@@ -10,7 +10,7 @@ pub struct PrefetchPrediction {
     pub estimated_savings_ms: u64,
 }
 
-/// Level 7 Speculative Predictive Prefetching & Proactive Warming Engine
+/// Speculative Predictive Prefetching & Proactive Warming Engine
 pub struct PredictivePrefetchEngine {
     // Transition graph: from_action -> (to_action -> count)
     transitions: RwLock<HashMap<String, HashMap<String, u64>>>,

@@ -12,7 +12,7 @@ pub struct HealingIncident {
     pub resolved_at: DateTime<Utc>,
 }
 
-/// Level 7 Autonomic Self-Healing & Continuous Closed-Loop Controller
+/// Autonomic Self-Healing & Continuous Closed-Loop Controller
 pub struct AutonomicSelfHealingController {
     incidents: RwLock<Vec<HealingIncident>>,
 }

@@ -387,7 +387,7 @@ export default function GovernancePage() {
             </CardContent>
           </Card>
 
-          {/* Level 5/6 Safe Adaptive Learning Controller */}
+          {/* Safe Adaptive Learning Controller */}
           <Card glow="cyan">
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <div>

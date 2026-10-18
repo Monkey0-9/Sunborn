@@ -39,11 +39,11 @@
 | **26** | Governance & GDPR | Cascade tenant erasure API & lifecycle sweeper | `tests/governance_test.rs` | **APPROVED** |
 | **27** | Production Readiness | Operations runbooks & acceptance records | `docs/runbooks/operations.md` | **APPROVED** |
 | **28** | Research Publication | IEEE/ACM manuscript & reproduction harness | `research/paper/sunborn_ieee.tex` | **APPROVED** |
-| **29** | Level 5/6 Hardening & Adaptive Learning | Dynamic backend traits, PostgreSQL durability, BFF secret isolation, 5-layer adaptive controller | `crates/sunborn-gateway/src/learning/`, `tests/learning_controller_test.rs`, `frontend/src/app/api/proxy/` | **APPROVED** |
-| **30** | REA Binary Exploit Mitigations & Audit | PIE, Full RELRO, NX Stack, and binary digest evidence verification via REA | `docs/architecture/level5_level6_autonomic_specification.md` | **APPROVED** |
+| **29** | Adaptive Learning & Durability Hardening | Dynamic backend traits, PostgreSQL durability, BFF secret isolation, 5-layer adaptive controller | `crates/sunborn-gateway/src/learning/`, `tests/learning_controller_test.rs`, `frontend/src/app/api/proxy/` | **APPROVED** |
+| **30** | REA Binary Exploit Mitigations & Audit | PIE, Full RELRO, NX Stack, and binary digest evidence verification via REA | `docs/architecture/autonomic_invariance_specification.md` | **APPROVED** |
 
 ---
 
 ## 2. Release Certification
 All 30 phase gates and core architectural invariants have been formally verified through reproducible unit, integration, security, performance, self-learning, and REA binary mitigation test suites.
-The Sunborn Platform is certified for production deployment with full Level 5/6 compliance.
+The Sunborn Platform is certified for production deployment with full invariant and adaptive learning compliance.

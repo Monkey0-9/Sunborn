@@ -22,7 +22,7 @@ The auditor correctly identified an apparent planning inconsistency:
 **Root Cause & Verification Truth**:
 1. **Linear Free-Tier Quota Ceiling**: Linear Free workspaces enforce a strict limit of 250 active issues. When the team attempted to register issue-level sub-tasks for Phases 20–28 (`MON-546` through `MON-562`), the Linear API rejected creation with `USAGE_LIMIT_EXCEEDED` (275 existing issues).
 2. **Roadmap Authority**: The 29 phase milestone containers (Phases 0 through 28) and newly created Phases 29/30 exist in Linear.
-3. **Source Code Implementation**: The engineering work corresponding to Phases 20–30 (FinOps economics, circuit-breaker chaos, Kubernetes manifests, disaster recovery rebuild, performance soak, GDPR crypto-shredding, Level 5 adaptive learning, and Level 6 non-accelerator invariance) is **not absent**; it is implemented in source code and backed by automated test suites.
+3. **Source Code Implementation**: The engineering work corresponding to Phases 20–30 (FinOps economics, circuit-breaker chaos, Kubernetes manifests, disaster recovery rebuild, performance soak, GDPR crypto-shredding, adaptive learning, and non-accelerator invariance) is **not absent**; it is implemented in source code and backed by automated test suites.
 4. **Authoritative Ledger**: To eliminate ambiguity without deleting historical tickets, git architecture ledgers (`docs/architecture/linear_status_reconciliation.md` and this document) serve as the authoritative traceability spine until workspace seats are expanded.
 
 ---
@@ -157,8 +157,8 @@ Release gates are strictly sequential. **No gate closes merely because code comp
 │ 🟢 Verified Implemented  │ • Axum Gateway (37 endpoints)               │
 │                          │ • 10-D Identity Canonicalizer               │
 │                          │ • Structural Guardrails & Conformal Risk    │
-│                          │ • Level 5 Closed-Loop Adaptive Controller   │
-│                          │ • Level 6 Non-Accelerator Authority & WAL   │
+│                          │ • Closed-Loop Adaptive Controller           │
+│                          │ • Non-Accelerator Authority & WAL           │
 │                          │ • O(1) AES-256-GCM Cryptographic Shredding  │
 │                          │ • Hardware Security Module (PKCS#11 / HSM)  │
 │                          │ • HashiCorp Vault Transit Engine Adapter    │

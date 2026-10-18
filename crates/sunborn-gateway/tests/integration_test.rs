@@ -421,7 +421,7 @@ async fn test_cryptographic_shredding_endpoint() {
 }
 
 #[tokio::test]
-async fn test_level7_merkle_attestation_and_proof_verification() {
+async fn test_merkle_attestation_and_proof_verification() {
     let state = AppState::new(AppConfig::default());
     let app = create_router(state);
 
@@ -479,7 +479,7 @@ async fn test_level7_merkle_attestation_and_proof_verification() {
 }
 
 #[tokio::test]
-async fn test_level7_predictive_speculative_prefetching() {
+async fn test_predictive_speculative_prefetching() {
     let state = AppState::new(AppConfig::default());
     let app = create_router(state);
 
@@ -512,7 +512,7 @@ async fn test_level7_predictive_speculative_prefetching() {
 }
 
 #[tokio::test]
-async fn test_level7_cluster_sync_vector_clock_and_autonomic_status() {
+async fn test_cluster_sync_vector_clock_and_autonomic_status() {
     let state = AppState::new(AppConfig::default());
     let app = create_router(state);
 

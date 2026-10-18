@@ -165,7 +165,7 @@ impl PolicyPromotionController {
         canary_percent: u8,
         actor: &str,
     ) -> Result<()> {
-        // Enforce Level 5/6 Safety Gating:
+        // Enforce Adaptive Closed-Loop Safety Gating:
         if !candidate.evaluation_report.is_statistically_sound {
             return Err(SunbornError::forbidden(
                 "Promotion rejected: candidate policy failed statistical soundness gate (held-out false hit rate > 1%)",

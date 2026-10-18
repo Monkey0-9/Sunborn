@@ -8,7 +8,7 @@
 
 Sunborn's core problem is not “similarity search” alone. It is safe reuse of computation when correctness depends on request meaning, tenant/security context, model and tool versions, mutable knowledge, temporal state, policy, provenance, and the cost of recomputation. The existing 29-phase architecture covers the major systems, but a research-grade plan needs enforceable evidence, falsifiable novelty claims, clean baselines, independent reproduction, and a no-look-ahead protocol.
 
-**Important standards distinction:** “IEEE/ACM Level 5” is not a single universal certification or publication grade. Sunborn will use an explicit internal target called **Research/Engineering Maturity R5** (defined below) and map applicable work to the exact standards, venue rules, and control objectives. Do not claim IEEE/ACM compliance, certification, novelty, or acceptance merely because a checklist exists.
+**Important standards distinction:** Commercial marketing tiers or self-assigned autonomy rankings are not recognized IEEE/ACM standards. Sunborn grounds its engineering in an explicit internal target called **Research/Engineering Maturity R5** (defined below) and maps applicable work to exact ISO, IEEE, and NIST control objectives. Do not claim IEEE/ACM compliance, certification, novelty, or acceptance merely because a checklist exists.
 
 ## 2. Authoritative standards and frameworks to map
 

@@ -4,7 +4,7 @@
 [![Rust 1.80+](https://img.shields.io/badge/Rust-1.80%2B-orange?style=flat-square&logo=rust)](Cargo.toml)
 [![Next.js 15](https://img.shields.io/badge/Next.js-15.5.27%20App%20Router-black?style=flat-square&logo=next.js)](frontend)
 [![Tests: 146 Passing](https://img.shields.io/badge/Tests-146%20Passing-brightgreen?style=flat-square)]()
-[![Binary Security: Hardened](https://img.shields.io/badge/Binary%20Security-RELRO%20%7C%20PIE%20%7C%20NX-emerald?style=flat-square)](docs/architecture/level5_level6_autonomic_specification.md#4-reverse-engineering-analysis-rea--binary-security-audit)
+[![Binary Security: Hardened](https://img.shields.io/badge/Binary%20Security-RELRO%20%7C%20PIE%20%7C%20NX-emerald?style=flat-square)](docs/architecture/autonomic_invariance_specification.md#4-reverse-engineering-analysis-rea--binary-security-audit)
 [![Zero False Hits](https://img.shields.io/badge/Semantic%20False%20Hits-0.0%25-blue?style=flat-square)](research/results/benchmark_run.json)
 
 > **Sunborn** is an open-source, high-performance distributed semantic inference cache, execution-reuse gateway, and autonomic controller designed for autonomous AI agents and large language model (LLM) applications. Sunborn combines sub-millisecond hot-path caching, conformal risk-controlled semantic retrieval, and self-learning policy promotion with formal invariant guarantees.
@@ -16,12 +16,12 @@
 1. [Executive Summary & The Semantic Inversion Fallacy](#1-executive-summary--the-semantic-inversion-fallacy)
 2. [Verified System Architecture & Flow Diagrams](#2-verified-system-architecture--flow-diagrams)
    - [2.1 End-to-End Multi-Tier Inference Flow](#21-end-to-end-multi-tier-inference-flow)
-   - [2.2 Level 5 Safe Adaptive Closed-Loop Learning Flow](#22-level-5-safe-adaptive-closed-loop-learning-flow)
-   - [2.3 Level 6 Invariant Autonomy & Disaster Recovery Replay Flow](#23-level-6-invariant-autonomy--disaster-recovery-replay-flow)
+   - [2.2 Safe Adaptive Closed-Loop Learning Flow](#22-safe-adaptive-closed-loop-learning-flow)
+   - [2.3 Invariant State Protection & Disaster Recovery Replay Flow](#23-invariant-state-protection--disaster-recovery-replay-flow)
    - [2.4 Zero-Trust Security Perimeter & Server-Side BFF Flow](#24-zero-trust-security-perimeter--server-side-bff-flow)
-3. [7-Tier Autonomic Maturity Model (Level 0 – Level 6)](#3-7-tier-autonomic-maturity-model-level-0--level-6)
-4. [Level 5 Specification: Safe Adaptive Closed-Loop Learning](#4-level-5-specification-safe-adaptive-closed-loop-learning)
-5. [Level 6 Specification: Zero-Human Provable Invariant Autonomy](#5-level-6-specification-zero-human-provable-invariant-autonomy)
+3. [System Evolution & Baseline Comparison](#3-system-evolution--baseline-comparison)
+4. [Adaptive Closed-Loop Learning Specification](#4-adaptive-closed-loop-learning-specification)
+5. [Provable Invariant State & Disaster Recovery Specification](#5-provable-invariant-state--disaster-recovery-specification)
 6. [Binary Security Audit & Compiler Hardening Mitigations](#6-binary-security-audit--compiler-hardening-mitigations)
 7. [Genuine Workspace Structure & Crate Catalog](#7-genuine-workspace-structure--crate-catalog)
 8. [Empirical Research Benchmarks & Scientific Reproduction](#8-empirical-research-benchmarks--scientific-reproduction)
@@ -47,7 +47,7 @@ Sunborn prevents this through a multi-tier, formally bounded pipeline:
 * **Tier 2 (Conformal Semantic Retrieval)**: Structural pre-filtering (extracting numeric literals and negation polarity bits) combined with Conformal Risk Control ($1-\alpha$ coverage) ensuring empirical error $\le 0.01$.
 * **Tier 3 (Agentic DAG Reuse)**: Cryptographically verified tool execution subgraphs using RFC 6962 Merkle trees.
 * **Tier 4 (Authoritative Durability)**: Non-Accelerator Authority with PostgreSQL write-ahead logging and transactional outbox event streams.
-* **Tier 5/6 (Autonomic Control)**: Closed-loop self-learning controller with HMAC authentication, poison defense, held-out calibration, and zero-downtime canary promotion.
+* **Adaptive Autonomic Control**: Closed-loop self-learning controller with HMAC authentication, poison defense, held-out calibration, and zero-downtime canary promotion.
 
 **Empirical Research Benchmarks (from `research/results/benchmark_run.json`)**:
 * **Sunborn False-Hit Rate**: **0.0%** (100% precision, 95% Wilson CI $[0.0, 3.0]$) vs. Naive Cosine **41.13%**.
@@ -119,15 +119,15 @@ flowchart TD
 
 ---
 
-### 2.2 Level 5 Safe Adaptive Closed-Loop Learning Flow
+### 2.2 Safe Adaptive Closed-Loop Learning Flow
 
-Level 5 replaces static similarity thresholds with an autonomic, statistically certified feedback and policy promotion controller.
+Sunborn replaces static similarity thresholds with an autonomic, statistically certified feedback and policy promotion controller.
 
 ```mermaid
 flowchart TD
     AgentAuditor["Ground-Truth Feedback Source<br/>(Auditor / Execution Verification)"] -->|"POST /v1/learning/feedback"| L1
     
-    subgraph Level5Controller["Level 5 Closed-Loop Autonomic Learning System"]
+    subgraph AdaptiveLearningController["Closed-Loop Adaptive Learning System"]
         L1["Layer 1: HMAC Signature & Trust Gate<br/>• RFC 2104 HMAC-SHA256 verification<br/>• Rejects subjective opinion ratings"] --> L2
         
         L2["Layer 2: Tenant-Safe Bounded Isolation<br/>• Strict TenantId partitioning<br/>• Sliding-window contradiction quarantine (>5 conflicts)"] --> L3
@@ -155,9 +155,9 @@ flowchart TD
 
 ---
 
-### 2.3 Level 6 Invariant Autonomy & Disaster Recovery Replay Flow
+### 2.3 Invariant State Protection & Disaster Recovery Replay Flow
 
-Level 6 guarantees formal system invariants across catastrophic infrastructure crashes, GDPR offboarding, and writeback races.
+Sunborn guarantees formal system invariants across catastrophic infrastructure crashes, GDPR offboarding, and writeback races.
 
 ```mermaid
 flowchart LR
@@ -242,25 +242,25 @@ flowchart TD
 
 ---
 
-## 3. 7-Tier Autonomic Maturity Model (Level 0 – Level 6)
+## 3. System Evolution & Baseline Comparison
 
-Sunborn defines an internal 7-tier architectural roadmap for cache autonomy and reliability:
+Sunborn systematically evaluates cache designs against standard baselines and verifiable invariants:
 
-| Level | Designation | Decision Authority | Learning Loop | Invariant Safety Guardrails | Fault Resilience |
-|---|---|---|---|---|---|
-| **Level 0** | **Direct Origin** | None (Origin LLM) | None | N/A | Origin single point of failure |
-| **Level 1** | **Exact Hash Cache** | Deterministic SHA-256 | Static TTL | Bitwise exact matching only | Ephemeral memory loss |
-| **Level 2** | **Naive Cosine Cache** | Uncalibrated Cosine | Static threshold | None (41.13% false-hit error rate) | Semantic hallucination risk |
-| **Level 3** | **Guardrailed Cache** | Conformal Risk Control + NLI | Offline batch | Structural pre-filter (negation, numeric) | False-hit rate bounded to $\le 1.0\%$ |
-| **Level 4** | **Predictive & Invalidated** | Lineage Graph + Markov | Speculative warming | Monotonic epoch fence ($E_{\text{fence}} > E_{\text{read}}$) | Zero stale read-repair race conditions |
-| **Level 5** | **Safe Adaptive Closed-Loop** | Multi-Tier Policy Controller | Signed ground-truth | 70/30 held-out calibration ($p \le 0.01$), canary auto-rollback | Real-time false-hit avoidance |
-| **Level 6** | **Zero-Human Provable Autonomy** | Non-Accelerator Authoritative WAL | Autonomous counterfactual | $O(1)$ AES-256-GCM shredding ($42.1\ \mu\text{s}$), Merkle DAG | Byzantine accelerator failure tolerance with 100% replay |
+| Baseline / Tier | Architecture | Decision Engine | Invariant Safety Controls | Error Rate / Resilience |
+|---|---|---|---|---|
+| **B0: Direct Origin** | Upstream Origin LLM | None | N/A | Origin single point of failure |
+| **B1: Exact Hash Cache** | Canonical SHA-256 | Bitwise exact matching | Whitespace & JSON key normalization | Ephemeral memory loss on restart |
+| **B2: Naive Cosine Cache** | Uncalibrated Cosine | Static threshold ($\tau=0.75$) | None | Catastrophic false-hit rate (48.39%) |
+| **B3-Static: Guardrailed Cache** | Conformal Risk Control | Structural Guardrails (Negation, Numerics) | Heuristic risk ceiling ($\le 0.25$) | Bounded false hits ($\le 1.0\%$) |
+| **Stage 1: Causal Freshness** | Monotonic Epoch Leases & Vector Clocks | Multi-source atomic validation | Causal dependency fencing | Zero stale reads under delayed outbox events |
+| **Stage 2: Adaptive Closed-Loop** | 5-Layer Policy Promotion Controller | RFC 2104 signed feedback | 70/30 held-out split ($p \le 0.01$), auto-rollback | Real-time false-hit avoidance |
+| **Sunborn Unified: Proof-Carrying Reuse** | Cryptographic Merkle Certificates | 4-Stage Verification Cascade | Typed DAG execution effects, non-accelerator WAL | 0.0% false-hit rate, Byzantine accelerator resilience |
 
 ---
 
-## 4. Level 5 Specification: Safe Adaptive Closed-Loop Learning
+## 4. Adaptive Closed-Loop Learning Specification
 
-Level 5 implements a 5-layer autonomous controller verified across all unit, integration, and security test suites in `crates/sunborn-gateway/`:
+Sunborn implements a 5-layer autonomous feedback controller verified across all unit, integration, and security test suites in `crates/sunborn-gateway/`:
 
 ### 4.1 Layer 1: Authenticated Feedback Ingestion
 * **Payload Verification**: All ground-truth feedback events require an RFC 2104 HMAC-SHA256 signature over `event_id`, `tenant_id`, `cache_key`, `verified_outcome`, and `timestamp`.
@@ -292,9 +292,9 @@ Level 5 implements a 5-layer autonomous controller verified across all unit, int
 
 ---
 
-## 5. Level 6 Specification: Zero-Human Provable Invariant Autonomy
+## 5. Provable Invariant State & Disaster Recovery Specification
 
-Level 6 guarantees formal system invariants proven by empirical tests in `crates/sunborn-gateway/tests/`:
+Sunborn guarantees formal system invariants proven by empirical tests in `crates/sunborn-gateway/tests/`:
 
 ### 5.1 Theorem 1: Non-Accelerator Authority
 > **Theorem 1 (Non-Accelerator Authority)**:  
@@ -353,7 +353,7 @@ Sunborn/
 │   ├── sunborn-execution/           # DAG execution planner, RFC 6962 Merkle attestation
 │   ├── sunborn-invalidation/        # Monotonic epoch lease fencing, Neo4j Cypher dependency graph
 │   ├── sunborn-db/                  # Authoritative PostgreSQL WAL & memory stores
-│   └── sunborn-gateway/             # Axum HTTP gateway (37 routes), Level 5 controller
+│   └── sunborn-gateway/             # Axum HTTP gateway (37 routes), adaptive learning controller
 │       └── tests/                   # 14 integration, resilience & adversarial test suites
 ├── frontend/                        # Next.js 15 App Router control plane & BFF
 ├── deploy/

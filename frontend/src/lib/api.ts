@@ -254,7 +254,7 @@ export const sunbornApi = {
       }>;
     }>("v1/security/audit", { method: "GET" }),
 
-  // Governance: Cryptographic Merkle DAG Attestation & Verification (Level 6/7)
+  // Governance: Cryptographic Merkle DAG Attestation & Verification
   generateMerkleAttestation: (leafHashes: string[]) =>
     request<{
       status: string;
@@ -295,7 +295,7 @@ export const sunbornApi = {
   getFinOpsReport: () =>
     request<any>("v1/finops/report", { method: "GET" }),
 
-  // Level 7: Speculative Predictive Prefetching
+  // Predictive Routing & Speculative Prefetching
   predictSpeculative: (currentAction: string, recordTransitionTo?: string) =>
     request<{
       current_action: string;
@@ -313,7 +313,7 @@ export const sunbornApi = {
       }),
     }),
 
-  // Level 7: Autonomic Health & Incident History
+  // Autonomic Health & Incident History
   getAutonomicStatus: () =>
     request<{
       autonomic_health: string;
@@ -329,7 +329,7 @@ export const sunbornApi = {
       }>;
     }>("v1/autonomic/status", { method: "GET" }),
 
-  // Level 7: Prefix KV-Cache Affinity & Cost Arbitrage Routing
+  // Prefix KV-Cache Affinity & Cost Arbitrage Routing
   radixRoute: (prompt: string, warmPrefix?: string, warmNode?: string) =>
     request<{
       selected_node: string;

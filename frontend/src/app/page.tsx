@@ -117,9 +117,9 @@ export default function OverviewPage() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/60 border border-cyan-500/30 text-xs font-mono text-cyan-300 backdrop-blur-md">
             <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-            <TextShimmer className="text-xs font-mono font-bold">LEVEL 7 FRONTIER AUTONOMOUS EXECUTION ENGINE</TextShimmer>
+            <TextShimmer className="text-xs font-mono font-bold">PROOF-CARRYING TEMPORAL REUSE</TextShimmer>
             <span className="text-cyan-600">·</span>
-            <span className="text-white font-semibold">IEEE/ACM ISCA 2026</span>
+            <span className="text-white font-semibold">STANDARDS-ALIGNED</span>
           </div>
 
           {isConnected === true && (
