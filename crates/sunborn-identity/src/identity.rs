@@ -42,16 +42,33 @@ impl IdentityEngine {
         hasher.update(b"|");
         hasher.update(canonical_prompt.as_bytes());
 
-        // State-Complete Dimension 1: Temperature (distinguish explicit 0.0 vs absent None)
-        match req.temperature {
-            Some(t) => hasher.update(format!("|t={:.4}", t).as_bytes()),
-            None => hasher.update(b"|t=none"),
-        }
+        // State-Complete Dimension 1 & 2: Sampling Gate (IEEE 754 temperature & stochastic isolation)
+        let effective_temp = req.temperature.unwrap_or(0.0);
+        let is_deterministic = effective_temp <= 1e-6;
 
-        // State-Complete Dimension 2: Top-P
-        match req.top_p {
-            Some(p) => hasher.update(format!("|p={:.4}", p).as_bytes()),
-            None => hasher.update(b"|p=none"),
+        let seed = req.metadata.get("seed").and_then(|v| v.as_u64());
+        if is_deterministic {
+            // Parameter Equivalence: temperature 0.0 and absent None both resolve to deterministic t=0
+            hasher.update(b"|t=0");
+            match req.top_p {
+                Some(p) if (p - 1.0).abs() > 1e-6 => {
+                    hasher.update(format!("|p={:.4}", p).as_bytes())
+                }
+                _ => hasher.update(b"|p=1"),
+            }
+        } else {
+            // Sampling Parameter Gate: Canonicalize (temperature, top_p, seed) tuple
+            // so identical stochastic parameters can share an exact cache identity key,
+            // while deterministic callers (t=0) are strictly isolated and never polluted.
+            let p_val = req.top_p.unwrap_or(1.0);
+            match seed {
+                Some(s) => hasher.update(
+                    format!("|t={:.4}|p={:.4}|seed={}", effective_temp, p_val, s).as_bytes(),
+                ),
+                None => hasher.update(
+                    format!("|t={:.4}|p={:.4}|seed=none", effective_temp, p_val).as_bytes(),
+                ),
+            }
         }
 
         // State-Complete Dimension 3: Max Tokens
@@ -218,7 +235,7 @@ mod tests {
     }
 
     #[test]
-    fn test_explicit_vs_default_temperature_isolation() {
+    fn test_canonical_temperature_equivalence_and_stochastic_gate() {
         let req_none = RequestEnvelope::new("tenant-a", "app-1", "gpt-4o", "Generate code");
         let mut req_zero = req_none.clone();
         req_zero.temperature = Some(0.0);
@@ -226,10 +243,26 @@ mod tests {
         let id1 = IdentityEngine::compute_identity(&req_none);
         let id2 = IdentityEngine::compute_identity(&req_zero);
 
-        assert_ne!(
+        // Parameter equivalence (RFC 8785): None and explicit 0.0 temperature are both deterministic t=0
+        assert_eq!(
             id1.hash, id2.hash,
-            "None vs explicit Some(0.0) temperature must not collide"
+            "None and explicit Some(0.0) temperature must map to the same deterministic identity"
         );
+
+        // Stochastic request (temperature 0.7) must NOT collide with deterministic t=0
+        let mut req_stochastic = req_none.clone();
+        req_stochastic.temperature = Some(0.7);
+        let id3 = IdentityEngine::compute_identity(&req_stochastic);
+        assert_ne!(id1.hash, id3.hash);
+
+        // Seeded stochastic request is deterministic for identical seeds
+        let mut req_seeded1 = req_stochastic.clone();
+        req_seeded1.metadata = serde_json::json!({ "seed": 42 });
+        let mut req_seeded2 = req_stochastic.clone();
+        req_seeded2.metadata = serde_json::json!({ "seed": 42 });
+        let id_s1 = IdentityEngine::compute_identity(&req_seeded1);
+        let id_s2 = IdentityEngine::compute_identity(&req_seeded2);
+        assert_eq!(id_s1.hash, id_s2.hash);
     }
 
     #[test]

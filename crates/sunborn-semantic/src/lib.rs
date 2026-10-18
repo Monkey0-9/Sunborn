@@ -1,11 +1,16 @@
 pub mod conformal;
+pub mod context_digest;
 pub mod decision;
 pub mod embedding;
 pub mod guardrails;
 pub mod microbatch;
 pub mod vector_store;
 
-pub use conformal::{StreamingOODDetector, TaskStratifiedConformalCalibrator, TaskStratum};
+pub use conformal::{
+    NonExchangeableConformalCalibrator, ShadowObservation, StreamingOODDetector,
+    TaskStratifiedConformalCalibrator, TaskStratum,
+};
+pub use context_digest::ContextDigest;
 
 pub use decision::{
     CascadeStage, DecisionConfig, DecisionEngine, DecisionOutcome, VerificationCascade,
@@ -13,7 +18,7 @@ pub use decision::{
 };
 pub use embedding::{
     cosine_similarity, DeterministicEmbeddingProvider, EmbeddingProvider, HttpEmbeddingProvider,
-    Vector,
+    LshRandomProjectionEmbeddingProvider, Vector,
 };
 pub use guardrails::{
     ConformalRiskController, CrossEncoderVerifier, EntailmentScores, StructuralFingerprint,

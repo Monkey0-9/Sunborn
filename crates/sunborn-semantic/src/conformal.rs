@@ -190,6 +190,98 @@ impl StreamingOODDetector {
     }
 }
 
+// ============================================================================
+// Non-Exchangeable Exponentially Weighted Conformal Risk Calibrator
+// Dynamically calibrates similarity threshold \hat{\lambda}_t under drift.
+// ============================================================================
+use std::collections::VecDeque;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ShadowObservation {
+    pub cosine_similarity: f64,
+    pub semantic_loss: f64, // 0.0 if origin & cache agree (entailed), 1.0 if contradicted
+}
+
+pub struct NonExchangeableConformalCalibrator {
+    window: VecDeque<ShadowObservation>,
+    max_window_size: usize,
+    decay_rho: f64, // e.g., 0.995 exponential forgetting factor for distribution drift
+    target_alpha: f64, // e.g., 0.005 (0.5% maximum allowed false-positive rate)
+    loss_tolerance: f64, // e.g., 0.15 maximum acceptable semantic loss
+    fallback_threshold: f64,
+}
+
+impl NonExchangeableConformalCalibrator {
+    pub fn new(max_window_size: usize, decay_rho: f64, target_alpha: f64) -> Self {
+        Self {
+            window: VecDeque::with_capacity(max_window_size),
+            max_window_size,
+            decay_rho: decay_rho.clamp(0.90, 1.0),
+            target_alpha: target_alpha.clamp(0.0001, 0.25),
+            loss_tolerance: 0.15,
+            fallback_threshold: 0.97,
+        }
+    }
+
+    pub fn record_shadow_evaluation(&mut self, cosine_similarity: f64, semantic_loss: f64) {
+        if self.window.len() == self.max_window_size {
+            self.window.pop_front();
+        }
+        self.window.push_back(ShadowObservation {
+            cosine_similarity,
+            semantic_loss,
+        });
+    }
+
+    /// Computes the lowest safe cosine similarity threshold \hat{\lambda}_t in [0.85, 0.995]
+    /// that guarantees weighted empirical false-positive risk <= target_alpha.
+    pub fn calibrated_threshold(&self) -> f64 {
+        let n = self.window.len();
+        if n < 30 {
+            return self.fallback_threshold; // Require minimum finite-sample burn-in
+        }
+
+        // Precompute exponential recency weights w_i = \rho^{n - 1 - i}, plus w_{n+1} = 1.0 test point mass
+        let mut total_weight = 1.0_f64;
+        let mut weights = Vec::with_capacity(n);
+        for i in 0..n {
+            let w = self.decay_rho.powi((n - 1 - i) as i32);
+            weights.push(w);
+            total_weight += w;
+        }
+
+        // Scan candidate thresholds from conservative (0.995) down to permissive (0.850)
+        // Monotone risk check: stop as soon as lowering \lambda violates the conformal bound
+        let mut best_lambda = 0.995;
+        let mut step = 995_i32;
+        while step >= 850 {
+            let candidate_lambda = (step as f64) / 1000.0;
+            let mut weighted_error_mass = 1.0_f64; // Includes the +w_{n+1} finite-sample conservative penalty
+
+            for (obs, &w) in self.window.iter().zip(weights.iter()) {
+                let is_false_hit = obs.cosine_similarity >= candidate_lambda
+                    && obs.semantic_loss > self.loss_tolerance;
+                if is_false_hit {
+                    weighted_error_mass += w;
+                }
+            }
+
+            let empirical_risk = weighted_error_mass / total_weight;
+            if empirical_risk <= self.target_alpha {
+                best_lambda = candidate_lambda;
+                step -= 1;
+            } else {
+                break; // Monotone stopping rule (Angelopoulos et al. Conformal Risk Control)
+            }
+        }
+        best_lambda
+    }
+
+    pub fn window_len(&self) -> usize {
+        self.window.len()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -231,6 +323,37 @@ mod tests {
         assert!(
             drift_detected,
             "Anomalous low similarity must trigger OOD drift detection"
+        );
+    }
+
+    #[test]
+    fn test_non_exchangeable_conformal_calibrator_burn_in_and_adaptation() {
+        let mut cal = NonExchangeableConformalCalibrator::new(100, 0.995, 0.05);
+
+        // 1. Burn-in: Under 30 samples, returns fallback conservative threshold 0.97
+        for _ in 0..25 {
+            cal.record_shadow_evaluation(0.95, 0.0);
+        }
+        assert_eq!(cal.calibrated_threshold(), 0.97);
+
+        // 2. Feed 15 more safe samples (total 40 >= 30) -> threshold relaxes down
+        for _ in 0..15 {
+            cal.record_shadow_evaluation(0.95, 0.0);
+        }
+        let relaxed_thresh = cal.calibrated_threshold();
+        assert!(
+            relaxed_thresh < 0.97,
+            "Threshold should relax when all samples have zero semantic loss"
+        );
+
+        // 3. Inject a burst of semantic loss errors at similarity 0.90
+        for _ in 0..10 {
+            cal.record_shadow_evaluation(0.90, 0.80);
+        }
+        let tightened_thresh = cal.calibrated_threshold();
+        assert!(
+            tightened_thresh > relaxed_thresh,
+            "Threshold must tighten when errors occur at candidate similarities"
         );
     }
 }

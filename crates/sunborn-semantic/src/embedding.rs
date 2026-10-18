@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use sha2::{Digest, Sha256};
 use sunborn_core::Result;
 
 pub type Vector = Vec<f32>;
@@ -47,16 +46,109 @@ impl EmbeddingProvider for std::sync::Arc<dyn EmbeddingProvider> {
     }
 }
 
-/// A high-performance deterministic embedding provider for local development,
-/// testing, and headless execution. Generates 384-dimensional normalized vectors.
+/// Locality-Sensitive Hashing (LSH) Signed Random Projection Embedding Provider.
+/// A zero-dependency, high-throughput CPU baseline that extracts word and character
+/// n-grams and projects them onto signed hyperplanes, preserving locality-sensitive
+/// cosine similarity between semantically similar and paraphrased texts.
+#[derive(Clone, Debug)]
+pub struct LshRandomProjectionEmbeddingProvider {
+    pub dimension: usize,
+}
+
+impl LshRandomProjectionEmbeddingProvider {
+    pub fn new() -> Self {
+        Self { dimension: 384 }
+    }
+
+    pub fn with_dimension(dimension: usize) -> Self {
+        Self { dimension }
+    }
+
+    #[inline]
+    fn fnv1a_64(bytes: &[u8]) -> u64 {
+        let mut hash: u64 = 0xcbf29ce484222325;
+        for &byte in bytes {
+            hash ^= byte as u64;
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        hash
+    }
+}
+
+impl Default for LshRandomProjectionEmbeddingProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl EmbeddingProvider for LshRandomProjectionEmbeddingProvider {
+    fn is_deterministic(&self) -> bool {
+        true
+    }
+
+    async fn embed(&self, text: &str) -> Result<Vector> {
+        let mut vector = vec![0.0f32; self.dimension];
+        let lower = text.to_lowercase();
+        let words: Vec<&str> = lower.split_whitespace().collect();
+
+        if words.is_empty() {
+            return Ok(vector);
+        }
+
+        // 1. Word unigram signed projections
+        for (pos, word) in words.iter().enumerate() {
+            let h = Self::fnv1a_64(word.as_bytes());
+            let dim_idx = (h as usize) % self.dimension;
+            let sign = if (h & (1 << 63)) != 0 {
+                1.0f32
+            } else {
+                -1.0f32
+            };
+            let pos_decay = 1.0 / (1.0 + pos as f32 * 0.05);
+            vector[dim_idx] += sign * pos_decay;
+
+            // 2. Character 3-grams for subword morphological preservation
+            let chars: Vec<char> = word.chars().collect();
+            if chars.len() >= 3 {
+                for window in chars.windows(3) {
+                    let s: String = window.iter().collect();
+                    let ch_h = Self::fnv1a_64(s.as_bytes());
+                    let ch_dim = (ch_h as usize) % self.dimension;
+                    let ch_sign = if (ch_h & (1 << 63)) != 0 {
+                        0.5f32
+                    } else {
+                        -0.5f32
+                    };
+                    vector[ch_dim] += ch_sign * pos_decay;
+                }
+            }
+        }
+
+        // L2 Normalization
+        let norm: f32 = vector.iter().map(|v| v * v).sum::<f32>().sqrt();
+        if norm > 0.0 {
+            for v in vector.iter_mut() {
+                *v /= norm;
+            }
+        }
+
+        Ok(vector)
+    }
+}
+
+/// A deterministic embedding provider for local development, testing, and headless execution.
+/// Uses the LshRandomProjectionEmbeddingProvider as its underlying projection engine.
 #[derive(Clone, Debug)]
 pub struct DeterministicEmbeddingProvider {
-    pub dimension: usize,
+    inner: LshRandomProjectionEmbeddingProvider,
 }
 
 impl DeterministicEmbeddingProvider {
     pub fn new() -> Self {
-        Self { dimension: 384 }
+        Self {
+            inner: LshRandomProjectionEmbeddingProvider::new(),
+        }
     }
 }
 
@@ -73,36 +165,7 @@ impl EmbeddingProvider for DeterministicEmbeddingProvider {
     }
 
     async fn embed(&self, text: &str) -> Result<Vector> {
-        let mut vector = vec![0.0f32; self.dimension];
-        let words: Vec<&str> = text.split_whitespace().collect();
-
-        if words.is_empty() {
-            return Ok(vector);
-        }
-
-        for (pos, word) in words.iter().enumerate() {
-            let mut hasher = Sha256::new();
-            hasher.update(word.to_lowercase().as_bytes());
-            let hash = hasher.finalize();
-
-            // Project word hash onto vector dimensions
-            for i in 0..4 {
-                let idx =
-                    ((hash[i * 2] as usize) << 8 | (hash[i * 2 + 1] as usize)) % self.dimension;
-                let weight = 1.0 / (1.0 + pos as f32 * 0.1);
-                vector[idx] += weight;
-            }
-        }
-
-        // L2 Normalize
-        let norm: f32 = vector.iter().map(|v| v * v).sum::<f32>().sqrt();
-        if norm > 0.0 {
-            for v in vector.iter_mut() {
-                *v /= norm;
-            }
-        }
-
-        Ok(vector)
+        self.inner.embed(text).await
     }
 }
 

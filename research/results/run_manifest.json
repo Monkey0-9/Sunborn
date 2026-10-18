@@ -1,10 +1,10 @@
 {
   "metadata": {
     "evaluation_suite": "SemanticCacheBench-T (Temporal & Stateful)",
-    "evaluation_time_utc": "2026-10-18T05:51:20.060002+00:00",
+    "evaluation_time_utc": "2026-10-18T06:22:08.030426+00:00",
     "platform": "Linux-6.12.0-211.64.1.el10_2.x86_64-x86_64-with-glibc2.39",
     "python_version": "3.13.16",
-    "git_commit": "e7280d152ea4955ad8970c9b5bcc9eb55ea9ca30",
+    "git_commit": "df08539ed7cfbb657ac95019888d3427cab6495b",
     "embedding_backend": "BAAI/bge-small-en-v1.5 (fastembed)",
     "decision_engine": "Sunborn-Semantic DecisionEngine (VerificationCascade + Causal Leases + Conformal Risk Bound <= 0.25)",
     "total_temporal_scenarios": 19,
