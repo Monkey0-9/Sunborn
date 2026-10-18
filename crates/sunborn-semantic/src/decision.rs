@@ -300,6 +300,36 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                 .verify(req, &best.entry.prompt, similarity, true)
                 .await;
 
+            // Tier C2 Context-Lineage Binding Verification:
+            // If request and candidate specify ContextDigest, they must match exactly.
+            let req_context_digest = req.metadata.get("context_digest").and_then(|v| v.as_str());
+            let candidate_context_digest = best
+                .entry
+                .metadata
+                .get("context_digest")
+                .and_then(|v| v.as_str());
+
+            if let (Some(req_cd), Some(cand_cd)) = (req_context_digest, candidate_context_digest) {
+                if req_cd != cand_cd {
+                    return Ok(DecisionOutcome {
+                        decision: DecisionRecord {
+                            action: DecisionAction::Revalidate,
+                            cache_path: CachePath::Semantic,
+                            confidence,
+                            risk_score,
+                            reason_code: "CONTEXT_DIGEST_MISMATCH".to_string(),
+                            latency_saved_ms: None,
+                            policy_version: None,
+                            policy_id: None,
+                        },
+                        matched_content: Some(best.entry.content.clone()),
+                        matched_id: Some(best.entry.id.clone()),
+                        matched_certificate: candidate_cert,
+                        safety_evidence: Some(cascade_res.safety_evidence),
+                    });
+                }
+            }
+
             if !cascade_res.is_eligible_for_reuse {
                 return Ok(DecisionOutcome {
                     decision: DecisionRecord {

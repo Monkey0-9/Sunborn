@@ -33,17 +33,37 @@ pub struct ShadowEvaluationResult {
 
 pub struct ShadowEvaluator {
     embedder: Arc<dyn EmbeddingProvider>,
+    calibrator: Arc<std::sync::RwLock<sunborn_semantic::NonExchangeableConformalCalibrator>>,
 }
 
 impl ShadowEvaluator {
     pub fn new() -> Self {
         Self {
             embedder: Arc::new(DeterministicEmbeddingProvider::new()),
+            calibrator: Arc::new(std::sync::RwLock::new(
+                sunborn_semantic::NonExchangeableConformalCalibrator::new(1000, 0.995, 0.005),
+            )),
         }
     }
 
     pub fn with_embedder(embedder: Arc<dyn EmbeddingProvider>) -> Self {
-        Self { embedder }
+        Self {
+            embedder,
+            calibrator: Arc::new(std::sync::RwLock::new(
+                sunborn_semantic::NonExchangeableConformalCalibrator::new(1000, 0.995, 0.005),
+            )),
+        }
+    }
+
+    pub fn calibrated_threshold(&self) -> f32 {
+        self.calibrator.read().unwrap().calibrated_threshold() as f32
+    }
+
+    pub fn record_observation(&self, similarity: f64, semantic_loss: f64) {
+        self.calibrator
+            .write()
+            .unwrap()
+            .record_shadow_evaluation(similarity, semantic_loss);
     }
 
     /// Evaluates semantic divergence between cached content and origin execution.
@@ -62,6 +82,10 @@ impl ShadowEvaluator {
 
         let similarity = cosine_similarity(&cached_vec, &origin_vec);
         let is_drift_detected = similarity < threshold;
+
+        // Feed non-exchangeable conformal calibrator
+        let loss = if is_drift_detected { 1.0 } else { 0.0 };
+        self.record_observation(similarity as f64, loss);
 
         let status = if is_drift_detected {
             SHADOW_DRIFT_DETECTED_TOTAL.fetch_add(1, Ordering::Relaxed);

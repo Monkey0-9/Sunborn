@@ -37,6 +37,7 @@ pub struct AppState {
     pub invalidation_engine:
         Arc<InvalidationEngine<dyn ExactCacheStore, dyn sunborn_semantic::VectorStore>>,
     pub epoch_lease_manager: Arc<sunborn_invalidation::EpochLeaseManager>,
+    pub watermark_fencer: Arc<sunborn_invalidation::WatermarkLineageFencer>,
     pub db: Arc<dyn sunborn_db::DatabaseStore>,
     pub memory_db: Arc<MemoryDatabaseStore>,
     pub postgres_db: Arc<sunborn_db::PostgresDatabaseStore>,
@@ -57,7 +58,12 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(config: AppConfig) -> Self {
-        let memory_cache = Arc::new(MemoryExactCache::new());
+        let l1_max_bytes = std::env::var("SUNBORN_L1_MAX_BYTES")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(256 * 1024 * 1024); // 256 MiB default
+        let memory_cache = Arc::new(MemoryExactCache::with_byte_budget(l1_max_bytes, 0.5));
+        let watermark_fencer = Arc::new(sunborn_invalidation::WatermarkLineageFencer::new());
         let dragonfly_cache = Arc::new(sunborn_cache::DragonflyCacheStore::new(
             &config.cache.dragonfly_url,
         ));
@@ -214,6 +220,7 @@ impl AppState {
             dependency_graph,
             invalidation_engine,
             epoch_lease_manager,
+            watermark_fencer,
             db: selected_db,
             memory_db: db,
             postgres_db,

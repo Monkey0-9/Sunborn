@@ -176,6 +176,14 @@ pub async fn execute_request_inner(
     // 2. Validate payload boundaries and constraints
     req.validate().map_err(AppError::from)?;
 
+    // Snapshot fine-grained lineage watermark lease for transactional write-behind fencing
+    let lineage_keys: Vec<String> = req
+        .dependency_snapshots
+        .iter()
+        .map(|d| d.source_id.to_string())
+        .collect();
+    let watermark_read_view = state.watermark_fencer.snapshot_read_view(&lineage_keys);
+
     // 3. Compute deterministic Cache Identity (C1)
     let identity = IdentityEngine::compute_identity(&req);
     tracing::info!(
@@ -436,11 +444,16 @@ pub async fn execute_request_inner(
         .epoch_lease_manager
         .validate_multi_source_leases(&req.dependency_snapshots)
         .await;
+    let is_watermark_valid = state
+        .watermark_fencer
+        .validate_and_commit(&watermark_read_view);
 
-    if !is_lease_valid {
+    if !is_lease_valid || !is_watermark_valid {
         tracing::warn!(
             request_id = %req.request_id.0,
-            "Monotonic epoch lease violation detected prior to cache writeback -> Aborting stale cache admission"
+            is_lease_valid = %is_lease_valid,
+            is_watermark_valid = %is_watermark_valid,
+            "Transactional freshness fence violation detected prior to cache writeback -> Aborting stale cache admission"
         );
     } else {
         let prompt_risk = sunborn_semantic::DecisionEngine::<
@@ -960,10 +973,15 @@ pub async fn trigger_invalidation(
         .bump_epoch(payload.source_id)
         .await;
 
+    let bumped_watermark = state
+        .watermark_fencer
+        .advance_watermark(&payload.source_id.to_string());
+
     Ok(Json(json!({
         "status": "processed",
         "source_id": payload.source_id,
         "bumped_epoch": bumped_epoch,
+        "bumped_watermark": bumped_watermark,
         "evicted_cache_count": evicted_count
     })))
 }

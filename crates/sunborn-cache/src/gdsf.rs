@@ -180,6 +180,10 @@ impl<V: Clone> FinOpsGdsfCache<V> {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+
+    pub fn keys(&self) -> impl Iterator<Item = &String> {
+        self.entries.keys()
+    }
 }
 
 #[cfg(test)]

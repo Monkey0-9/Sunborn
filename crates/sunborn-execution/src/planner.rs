@@ -18,12 +18,60 @@ impl ExecutionPlanner {
     ) -> Result<PlanEvaluation, SunbornError> {
         let sorted_nodes = Self::topological_sort(&plan.nodes)?;
 
+        // Compute L7 Transitive Closure over the entire DAG topology:
+        let dag_specs: Vec<crate::transitive_closure::DagNodeSpec> = plan
+            .nodes
+            .iter()
+            .map(|n| {
+                let (intrinsic_purity, intrinsic_ttl_ms) = match &n.effect {
+                    crate::model::ExecutionEffect::PureDeterministic => (
+                        crate::transitive_closure::ToolPurity::PureDeterministic,
+                        None,
+                    ),
+                    crate::model::ExecutionEffect::ReadOnlyIdempotent { .. } => {
+                        (crate::transitive_closure::ToolPurity::ReadIdempotent, None)
+                    }
+                    crate::model::ExecutionEffect::TimeSensitiveNonDeterministic {
+                        max_ttl_secs,
+                    } => (
+                        crate::transitive_closure::ToolPurity::ReadIdempotent,
+                        Some(*max_ttl_secs * 1000),
+                    ),
+                    crate::model::ExecutionEffect::MutatingSideEffecting { .. } => (
+                        crate::transitive_closure::ToolPurity::SideEffectingMutator,
+                        None,
+                    ),
+                };
+
+                let intrinsic_lineage_keys = n
+                    .tool_call
+                    .as_ref()
+                    .and_then(|tc| tc.context_hash.clone())
+                    .map(|h| std::collections::BTreeSet::from([h]))
+                    .unwrap_or_default();
+
+                crate::transitive_closure::DagNodeSpec {
+                    node_id: n.id.clone(),
+                    intrinsic_purity,
+                    intrinsic_ttl_ms,
+                    intrinsic_lineage_keys,
+                    parents: n.dependencies.clone(),
+                }
+            })
+            .collect();
+
+        let envelopes = crate::transitive_closure::compute_dag_transitive_envelopes(&dag_specs)
+            .map_err(SunbornError::invalid_payload)?;
+
         let mut node_statuses: HashMap<String, NodeExecutionStatus> = HashMap::new();
         let mut reused_node_ids = Vec::new();
         let mut pending_node_ids = Vec::new();
         let mut estimated_latency_saved_ms = 0u64;
 
         for node in &sorted_nodes {
+            let env = envelopes.get(&node.id);
+            let is_ancestor_contaminated = env.map(|e| !e.cacheable).unwrap_or(false);
+
             // Invariant 1: Topological Descendant Invalidation
             // If any upstream dependency is pending execution or was recomputed, this node must also recompute.
             let has_pending_dependency = node
@@ -53,8 +101,18 @@ impl ExecutionPlanner {
                 crate::model::ExecutionEffect::MutatingSideEffecting { .. } => (false, None),
             };
 
-            let can_reuse =
-                !has_pending_dependency && effect_permits_reuse && node.tool_call.is_some();
+            let derived_max_ttl = env.and_then(|e| e.effective_ttl_ms).map(|ms| ms / 1000);
+            let effective_ttl = match (max_ttl, derived_max_ttl) {
+                (Some(a), Some(b)) => Some(a.min(b)),
+                (Some(a), None) => Some(a),
+                (None, Some(b)) => Some(b),
+                (None, None) => None,
+            };
+
+            let can_reuse = !is_ancestor_contaminated
+                && !has_pending_dependency
+                && effect_permits_reuse
+                && node.tool_call.is_some();
 
             if can_reuse {
                 let tool_call = node.tool_call.as_ref().unwrap();
@@ -90,7 +148,7 @@ impl ExecutionPlanner {
 
                 if let Some(cached_result) = store.get(tenant_id, &signature).await? {
                     // Check TTL validity for time-sensitive results
-                    let is_valid = if let Some(ttl_secs) = max_ttl {
+                    let is_valid = if let Some(ttl_secs) = effective_ttl {
                         let age = (Utc::now() - cached_result.created_at).num_seconds();
                         age >= 0 && (age as u64) <= ttl_secs
                     } else {
