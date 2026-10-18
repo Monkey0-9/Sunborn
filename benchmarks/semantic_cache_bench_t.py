@@ -38,6 +38,8 @@ try:
 except Exception:
     _embed_model = None
 
+EMBEDDING_BACKEND_NAME = "BAAI/bge-small-en-v1.5 (fastembed)" if _embed_model is not None else "deterministic_subword_384d_hash_vectorizer (fallback, fastembed uninstalled)"
+
 def get_embedding(text: str) -> list[float]:
     """Generates embedding using BAAI/bge-small-en-v1.5 or deterministic n-gram vectorizer fallback."""
     if _embed_model is not None:
@@ -464,6 +466,7 @@ def run_temporal_benchmark():
     print("SUNBORN SEMANTICCACHEBENCH-T: STATEFUL TEMPORAL & ADVERSARIAL BENCHMARK")
     print(f"Timestamp: {datetime.now(timezone.utc).isoformat()}")
     print("Evaluating 6 Sequential Mutation Phases (Knowledge, Permission, Policy, Tool, Outbox, Adversarial)")
+    print(f"[*] Embedding Backend: {EMBEDDING_BACKEND_NAME}")
     print("=" * 80)
 
     cost_origin = 0.00625
@@ -601,6 +604,8 @@ def run_temporal_benchmark():
             "platform": platform.platform(),
             "python_version": platform.python_version(),
             "git_commit": os.popen("git rev-parse HEAD 2>/dev/null || echo unknown").read().strip(),
+            "embedding_backend": EMBEDDING_BACKEND_NAME,
+            "decision_engine": "Sunborn-Semantic DecisionEngine (VerificationCascade + Causal Leases + Conformal Risk Bound <= 0.25)",
             "total_temporal_scenarios": total_scenarios,
             "phases_evaluated": [
                 "Phase1_KnowledgeMutation",

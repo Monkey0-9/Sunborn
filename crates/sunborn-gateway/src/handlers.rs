@@ -196,38 +196,41 @@ pub async fn execute_request_inner(
                 "Exact cache HIT (C0/C1)"
             );
 
-            let cert: sunborn_core::ReuseCertificate = cached_entry
-                .metadata
-                .get("certificate")
-                .and_then(|v| serde_json::from_value(v.clone()).ok())
-                .unwrap_or_else(|| {
-                    sunborn_core::ReuseCertificate::new_signed(
-                        req.tenant_id.clone(),
-                        req.application_id.clone(),
-                        &identity.hash,
-                        &req.model,
-                        req.prompt.split_whitespace().count() as u32,
-                        req.dependency_snapshots.clone(),
-                        sunborn_core::SafetyEvidenceRecord {
-                            structural_hash_match: true,
-                            negation_polarity_match: true,
-                            numeric_literal_match: true,
-                            entity_drift_detected: false,
-                            non_conformity_score: 0.0,
-                            calibrated_risk_bound: 0.0,
-                            heuristic_risk_score: 0.0,
+            let cert = match cached_entry.metadata.get("certificate").and_then(|v| {
+                serde_json::from_value::<sunborn_core::ReuseCertificate>(v.clone()).ok()
+            }) {
+                Some(c) => c,
+                None => {
+                    tracing::warn!(
+                        request_id = %req.request_id.0,
+                        cache_key = %identity.key,
+                        "Exact cache entry lacks a valid cryptographic ReuseCertificate -> Abstaining to Revalidate"
+                    );
+                    return Ok(ResponseEnvelope {
+                        request_id: req.request_id,
+                        tenant_id: req.tenant_id,
+                        application_id: req.application_id,
+                        decision: DecisionRecord {
+                            action: DecisionAction::Revalidate,
+                            cache_path: CachePath::Exact,
+                            confidence: 0.5,
+                            risk_score: 1.0,
+                            reason_code: "CERTIFICATE_MISSING_OR_INVALID".to_string(),
+                            latency_saved_ms: None,
+                            policy_version: Some(
+                                state.learning_controller.get_active_policy_version(),
+                            ),
+                            policy_id: Some(state.learning_controller.get_active_policy_id()),
                         },
-                        sunborn_core::ValidityWindow {
-                            issued_at: Utc::now(),
-                            expires_at: Utc::now()
-                                + chrono::Duration::seconds(
-                                    state.config.cache.default_ttl_secs as i64,
-                                ),
-                            monotonic_epoch_lease: req.knowledge_epoch.unwrap_or(1),
-                        },
-                        &state.learning_hmac_secret,
-                    )
-                });
+                        content: cached_entry.content,
+                        cached: false,
+                        cache_key: Some(identity.key),
+                        created_at: Utc::now(),
+                        duration_ms,
+                        certificate: None,
+                    });
+                }
+            };
 
             // Enforce proof-carrying admissibility contract at runtime:
             let source_epochs: Vec<(uuid::Uuid, u64)> = req
@@ -334,36 +337,31 @@ pub async fn execute_request_inner(
                     decision.policy_version =
                         Some(state.learning_controller.get_active_policy_version());
 
-                    let cert = outcome.matched_certificate.unwrap_or_else(|| {
-                        sunborn_core::ReuseCertificate::new_signed(
-                            req.tenant_id.clone(),
-                            req.application_id.clone(),
-                            &identity.hash,
-                            &req.model,
-                            req.prompt.split_whitespace().count() as u32,
-                            req.dependency_snapshots.clone(),
-                            outcome
-                                .safety_evidence
-                                .unwrap_or(sunborn_core::SafetyEvidenceRecord {
-                                    structural_hash_match: true,
-                                    negation_polarity_match: true,
-                                    numeric_literal_match: true,
-                                    entity_drift_detected: false,
-                                    non_conformity_score: (1.0 - decision.confidence).max(0.0),
-                                    calibrated_risk_bound: weights.max_risk_threshold,
-                                    heuristic_risk_score: decision.risk_score,
-                                }),
-                            sunborn_core::ValidityWindow {
-                                issued_at: Utc::now(),
-                                expires_at: Utc::now()
-                                    + chrono::Duration::seconds(
-                                        state.config.cache.default_ttl_secs as i64,
-                                    ),
-                                monotonic_epoch_lease: req.knowledge_epoch.unwrap_or(1),
-                            },
-                            &state.learning_hmac_secret,
-                        )
-                    });
+                    let cert = match outcome.matched_certificate {
+                        Some(c) => c,
+                        None => {
+                            tracing::warn!(
+                                request_id = %req.request_id.0,
+                                "Semantic cache match lacks a verified ReuseCertificate -> Abstaining to Revalidate"
+                            );
+                            let mut rejected_decision = decision;
+                            rejected_decision.action = DecisionAction::Revalidate;
+                            rejected_decision.reason_code =
+                                "CERTIFICATE_MISSING_ON_SEMANTIC_MATCH".to_string();
+                            return Ok(ResponseEnvelope {
+                                request_id: req.request_id,
+                                tenant_id: req.tenant_id,
+                                application_id: req.application_id,
+                                decision: rejected_decision,
+                                content,
+                                cached: false,
+                                cache_key: outcome.matched_id,
+                                created_at: Utc::now(),
+                                duration_ms,
+                                certificate: None,
+                            });
+                        }
+                    };
 
                     // Runtime proof-carrying admissibility check:
                     let source_epochs: Vec<(uuid::Uuid, u64)> = req
@@ -445,6 +443,11 @@ pub async fn execute_request_inner(
             "Monotonic epoch lease violation detected prior to cache writeback -> Aborting stale cache admission"
         );
     } else {
+        let prompt_risk = sunborn_semantic::DecisionEngine::<
+            std::sync::Arc<dyn sunborn_semantic::EmbeddingProvider>,
+            std::sync::Arc<dyn sunborn_semantic::VectorStore>,
+        >::assess_risk(&req.prompt);
+
         let admission_cert = sunborn_core::ReuseCertificate::new_signed(
             req.tenant_id.clone(),
             req.application_id.clone(),
@@ -458,8 +461,8 @@ pub async fn execute_request_inner(
                 numeric_literal_match: true,
                 entity_drift_detected: false,
                 non_conformity_score: 0.0,
-                calibrated_risk_bound: 0.0,
-                heuristic_risk_score: 0.0,
+                calibrated_risk_bound: 0.25,
+                heuristic_risk_score: prompt_risk,
             },
             sunborn_core::ValidityWindow {
                 issued_at: Utc::now(),
@@ -510,7 +513,7 @@ pub async fn execute_request_inner(
                 application_id: req.application_id.0.clone(),
                 model: req.model.clone(),
                 policy_version: "v1".to_string(),
-                hash: identity.key.clone(),
+                hash: identity.hash.clone(),
                 prompt_canonical: req.prompt.clone(),
                 content: origin_content.clone(),
                 hit_count: 0,
@@ -1317,7 +1320,43 @@ pub async fn trigger_rebuild(
             .map(|exp| (exp - Utc::now()).num_seconds().max(1) as u64)
             .unwrap_or(state.config.cache.default_ttl_secs);
 
-        let entry = CacheEntry::new(&record.key, &record.content, Some(ttl_secs));
+        let prompt_risk = sunborn_semantic::DecisionEngine::<
+            std::sync::Arc<dyn sunborn_semantic::EmbeddingProvider>,
+            std::sync::Arc<dyn sunborn_semantic::VectorStore>,
+        >::assess_risk(&record.prompt_canonical);
+
+        let req_hash = record.hash.split(':').next_back().unwrap_or(&record.hash);
+
+        let restored_cert = sunborn_core::ReuseCertificate::new_signed(
+            TenantId::new(record.tenant_id.clone()),
+            sunborn_core::model::ApplicationId::new(record.application_id.clone()),
+            req_hash,
+            &record.model,
+            record.prompt_canonical.split_whitespace().count() as u32,
+            vec![],
+            sunborn_core::SafetyEvidenceRecord {
+                structural_hash_match: true,
+                negation_polarity_match: true,
+                numeric_literal_match: true,
+                entity_drift_detected: false,
+                non_conformity_score: 0.0,
+                calibrated_risk_bound: 0.25,
+                heuristic_risk_score: prompt_risk,
+            },
+            sunborn_core::ValidityWindow {
+                issued_at: record.created_at,
+                expires_at: record
+                    .expires_at
+                    .unwrap_or_else(|| Utc::now() + chrono::Duration::seconds(ttl_secs as i64)),
+                monotonic_epoch_lease: 1,
+            },
+            &state.learning_hmac_secret,
+        );
+
+        let mut entry = CacheEntry::new(&record.key, &record.content, Some(ttl_secs));
+        if let Ok(cert_val) = serde_json::to_value(&restored_cert) {
+            entry.metadata["certificate"] = cert_val.clone();
+        }
         if state.cache.set(entry).await.is_ok() {
             exact_restored += 1;
         }
@@ -1335,7 +1374,10 @@ pub async fn trigger_rebuild(
                 prompt: record.prompt_canonical,
                 content: record.content,
                 vector: vec,
-                metadata: serde_json::json!({ "model": record.model }),
+                metadata: serde_json::json!({
+                    "model": record.model,
+                    "certificate": serde_json::to_value(&restored_cert).unwrap_or_default(),
+                }),
                 created_at: record.created_at,
             };
             if state.vector_store.insert(ventry).await.is_ok() {

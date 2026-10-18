@@ -201,6 +201,8 @@ try:
 except Exception:
     _embed_model = None
 
+EMBEDDING_BACKEND_NAME = "BAAI/bge-small-en-v1.5 (fastembed)" if _embed_model is not None else "deterministic_subword_384d_hash_vectorizer (fallback, fastembed uninstalled)"
+
 def get_embedding(text: str) -> list[float]:
     """Generates embedding using BAAI/bge-small-en-v1.5 or deterministic n-gram vectorizer fallback."""
     if _embed_model is not None:
@@ -354,6 +356,7 @@ def run_benchmark():
         print(f"[*] Detected Live Sunborn Gateway at {gateway_url}. Measuring empirical network latencies.")
     else:
         print("[*] Running in standalone calibrated evaluation mode.")
+    print(f"[*] Embedding Backend: {EMBEDDING_BACKEND_NAME}")
 
     baselines = {
         "B0_NoCache": {
@@ -514,6 +517,9 @@ def run_benchmark():
             "python_version": platform.python_version(),
             "total_benchmark_queries": total_queries,
             "categories_evaluated": 8,
+            "embedding_backend": EMBEDDING_BACKEND_NAME,
+            "decision_engine": "Sunborn-Semantic DecisionEngine (VerificationCascade + Conformal Risk Bound <= 0.25)",
+            "decision_engine_mode": "live_gateway_rpc" if live_gateway_available else "rust_parity_calibrated_decision_engine",
             "cost_model": {
                 "origin_call_usd": cost_per_origin_call,
                 "cache_lookup_usd": cache_lookup_cost,

@@ -1,10 +1,13 @@
 {
   "metadata": {
-    "evaluation_time_utc": "2026-10-18T05:33:16.387514+00:00",
+    "evaluation_time_utc": "2026-10-18T05:50:18.475276+00:00",
     "platform": "Linux-6.12.0-211.64.1.el10_2.x86_64-x86_64-with-glibc2.39",
     "python_version": "3.13.16",
     "total_benchmark_queries": 124,
     "categories_evaluated": 8,
+    "embedding_backend": "BAAI/bge-small-en-v1.5 (fastembed)",
+    "decision_engine": "Sunborn-Semantic DecisionEngine (VerificationCascade + Conformal Risk Bound <= 0.25)",
+    "decision_engine_mode": "rust_parity_calibrated_decision_engine",
     "cost_model": {
       "origin_call_usd": 0.00625,
       "cache_lookup_usd": 1e-06,

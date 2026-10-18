@@ -1,6 +1,7 @@
 use crate::model::{ExecutionNode, ExecutionPlan, NodeExecutionStatus, PlanEvaluation};
 use crate::signature::ToolSignatureEngine;
 use crate::store::ExecutionCacheStore;
+use chrono::Utc;
 use std::collections::{HashMap, VecDeque};
 use sunborn_core::error::SunbornError;
 use sunborn_core::model::{ApplicationId, TenantId};
@@ -31,12 +32,25 @@ impl ExecutionPlanner {
                 .any(|dep| pending_node_ids.contains(dep));
 
             // Invariant 2: Typed Effect Contract Verification
-            // Side-effecting mutations (payments, writes, destructive actions) are strictly non-reusable.
-            let effect_permits_reuse = match &node.effect {
-                crate::model::ExecutionEffect::PureDeterministic => node.is_deterministic,
-                crate::model::ExecutionEffect::ReadOnlyIdempotent { .. } => true,
-                crate::model::ExecutionEffect::TimeSensitiveNonDeterministic { .. } => true,
-                crate::model::ExecutionEffect::MutatingSideEffecting { .. } => false,
+            // Non-reusable is the strict default.
+            // MutatingSideEffecting (payments, writes, external actions) is NEVER reusable.
+            // PureDeterministic is only reusable if node.is_deterministic == true.
+            // ReadOnlyIdempotent is only reusable if required_state_version > 0.
+            // TimeSensitiveNonDeterministic is only reusable if max_ttl_secs > 0 and within TTL validity window.
+            let (effect_permits_reuse, max_ttl) = match &node.effect {
+                crate::model::ExecutionEffect::PureDeterministic => (node.is_deterministic, None),
+                crate::model::ExecutionEffect::ReadOnlyIdempotent {
+                    required_state_version,
+                    ..
+                } => (*required_state_version > 0, None),
+                crate::model::ExecutionEffect::TimeSensitiveNonDeterministic { max_ttl_secs } => {
+                    if *max_ttl_secs > 0 {
+                        (true, Some(*max_ttl_secs))
+                    } else {
+                        (false, None)
+                    }
+                }
+                crate::model::ExecutionEffect::MutatingSideEffecting { .. } => (false, None),
             };
 
             let can_reuse =
@@ -44,28 +58,59 @@ impl ExecutionPlanner {
 
             if can_reuse {
                 let tool_call = node.tool_call.as_ref().unwrap();
+
+                // Incorporate upstream dependency signatures into context hash for strict causal lineage
+                let mut dep_context_parts = Vec::new();
+                for dep in &node.dependencies {
+                    if let Some(NodeExecutionStatus::Cached { signature, .. }) =
+                        node_statuses.get(dep)
+                    {
+                        dep_context_parts.push(format!("{dep}:{signature}"));
+                    }
+                }
+                let effective_context_hash = if !dep_context_parts.is_empty() {
+                    let mut combined = tool_call.context_hash.clone().unwrap_or_default();
+                    if !combined.is_empty() {
+                        combined.push(';');
+                    }
+                    combined.push_str(&dep_context_parts.join(";"));
+                    Some(combined)
+                } else {
+                    tool_call.context_hash.clone()
+                };
+
                 let signature = ToolSignatureEngine::compute_signature(
                     tenant_id,
                     app_id,
                     &tool_call.tool_name,
                     &tool_version_or_default(&tool_call.tool_version),
                     &tool_call.arguments,
-                    tool_call.context_hash.as_deref(),
+                    effective_context_hash.as_deref(),
                 )?;
 
                 if let Some(cached_result) = store.get(tenant_id, &signature).await? {
-                    let latency_saved = cached_result.execution_latency_ms;
-                    estimated_latency_saved_ms += latency_saved;
-                    reused_node_ids.push(node.id.clone());
-                    node_statuses.insert(
-                        node.id.clone(),
-                        NodeExecutionStatus::Cached {
-                            signature,
-                            output: cached_result.output,
-                            latency_saved_ms: latency_saved,
-                        },
-                    );
-                    continue;
+                    // Check TTL validity for time-sensitive results
+                    let is_valid = if let Some(ttl_secs) = max_ttl {
+                        let age = (Utc::now() - cached_result.created_at).num_seconds();
+                        age >= 0 && (age as u64) <= ttl_secs
+                    } else {
+                        true
+                    };
+
+                    if is_valid {
+                        let latency_saved = cached_result.execution_latency_ms;
+                        estimated_latency_saved_ms += latency_saved;
+                        reused_node_ids.push(node.id.clone());
+                        node_statuses.insert(
+                            node.id.clone(),
+                            NodeExecutionStatus::Cached {
+                                signature,
+                                output: cached_result.output,
+                                latency_saved_ms: latency_saved,
+                            },
+                        );
+                        continue;
+                    }
                 }
             }
 
@@ -417,6 +462,90 @@ mod tests {
         assert!(
             eval.pending_node_ids.contains(&"node_3".to_string()),
             "Downstream descendant of node_2 must be recomputed!"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_time_sensitive_ttl_expiry_aborts_reuse() {
+        let store = MemoryExecutionCacheStore::new();
+        let tenant = TenantId::new("t-ttl");
+        let app = ApplicationId::new("app-ttl");
+
+        let args = serde_json::json!({"market": "BTC-USD"});
+        let sig =
+            ToolSignatureEngine::compute_signature(&tenant, &app, "get_price", "1.0", &args, None)
+                .unwrap();
+
+        // Stale result created 120 seconds ago
+        let stale_result = crate::model::ToolResult {
+            tool_name: "get_price".into(),
+            signature: sig.clone(),
+            output: serde_json::json!({"price": 65000}),
+            is_error: false,
+            execution_latency_ms: 80,
+            created_at: Utc::now() - chrono::Duration::seconds(120),
+        };
+        store.set(&tenant, &sig, &stale_result, None).await.unwrap();
+
+        // Plan with node requiring max_ttl_secs = 30 seconds
+        let mut plan = ExecutionPlan::new();
+        plan.add_node(
+            ExecutionNode::new(
+                "price_node",
+                "Fetch Current Price",
+                vec![],
+                Some(ToolCall {
+                    tool_name: "get_price".into(),
+                    tool_version: "1.0".into(),
+                    arguments: args,
+                    context_hash: None,
+                }),
+                false,
+            )
+            .with_effect(
+                crate::model::ExecutionEffect::TimeSensitiveNonDeterministic { max_ttl_secs: 30 },
+            ),
+        );
+
+        let eval = ExecutionPlanner::plan_reuse(&tenant, &app, &plan, &store)
+            .await
+            .unwrap();
+        assert_eq!(
+            eval.cached_nodes, 0,
+            "Expired time-sensitive result must not be reused"
+        );
+        assert_eq!(eval.pending_node_ids, vec!["price_node"]);
+    }
+
+    #[tokio::test]
+    async fn test_dag_validation_rejects_missing_dep_and_duplicate_nodes() {
+        let tenant = TenantId::new("t-val");
+        let app = ApplicationId::new("app-val");
+        let store = MemoryExecutionCacheStore::new();
+
+        // 1. Missing dependency
+        let mut plan_missing = ExecutionPlan::new();
+        plan_missing.add_node(ExecutionNode::new(
+            "node_b",
+            "Node B",
+            vec!["node_ghost".to_string()], // non-existent node
+            None,
+            true,
+        ));
+        assert!(
+            ExecutionPlanner::plan_reuse(&tenant, &app, &plan_missing, &store)
+                .await
+                .is_err()
+        );
+
+        // 2. Duplicate node IDs
+        let mut plan_dup = ExecutionPlan::new();
+        plan_dup.add_node(ExecutionNode::new("same_id", "Node 1", vec![], None, true));
+        plan_dup.add_node(ExecutionNode::new("same_id", "Node 2", vec![], None, true));
+        assert!(
+            ExecutionPlanner::plan_reuse(&tenant, &app, &plan_dup, &store)
+                .await
+                .is_err()
         );
     }
 }

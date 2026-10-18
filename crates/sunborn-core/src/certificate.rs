@@ -1,10 +1,14 @@
 use chrono::{DateTime, Utc};
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 use uuid::Uuid;
 
 use crate::error::{Result, SunbornError};
 use crate::model::{ApplicationId, TenantId};
+
+type HmacSha256 = Hmac<Sha256>;
 
 /// Snapshot of an authoritative knowledge source dependency at the time of computation
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -34,6 +38,18 @@ pub struct ValidityWindow {
     pub monotonic_epoch_lease: u64,
 }
 
+/// Request context required to authorize reuse of a cached result
+#[derive(Debug, Clone)]
+pub struct ReuseValidationContext<'a> {
+    pub tenant_id: &'a TenantId,
+    pub application_id: &'a ApplicationId,
+    pub model_name: &'a str,
+    pub expected_identity_hash: Option<&'a str>,
+    pub current_time: DateTime<Utc>,
+    pub current_knowledge_epoch: u64,
+    pub current_source_epochs: &'a [(Uuid, u64)],
+}
+
 /// Tamper-evident, machine-verifiable proof of reusable execution state
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReuseCertificate {
@@ -54,7 +70,7 @@ pub struct ReuseCertificate {
 impl ReuseCertificate {
     pub const CURRENT_VERSION: u32 = 1;
 
-    /// Computes canonical Merkle root over all certificate fields
+    /// Computes canonical length-prefixed Merkle root over all certificate fields with domain separation
     #[allow(clippy::too_many_arguments)]
     pub fn compute_merkle_root(
         certificate_id: &Uuid,
@@ -68,38 +84,47 @@ impl ReuseCertificate {
         safety_evidence: &SafetyEvidenceRecord,
         validity_window: &ValidityWindow,
     ) -> String {
-        // Leaf 1: Tenant & Identity Scope
+        // Leaf 1: Tenant & Identity Scope (with domain separation & explicit length prefixes)
         let mut h1 = Sha256::new();
+        h1.update(b"sunborn:cert:v1:leaf1:identity:");
         h1.update(certificate_id.as_bytes());
         h1.update(certificate_version.to_be_bytes());
+        h1.update((tenant_id.0.len() as u32).to_be_bytes());
         h1.update(tenant_id.0.as_bytes());
+        h1.update((application_id.0.len() as u32).to_be_bytes());
         h1.update(application_id.0.as_bytes());
+        h1.update((request_identity_hash.len() as u32).to_be_bytes());
         h1.update(request_identity_hash.as_bytes());
         let leaf1 = h1.finalize();
 
         // Leaf 2: Model & Execution Spec
         let mut h2 = Sha256::new();
+        h2.update(b"sunborn:cert:v1:leaf2:model:");
+        h2.update((model_name.len() as u32).to_be_bytes());
         h2.update(model_name.as_bytes());
         h2.update(prompt_tokens.to_be_bytes());
         let leaf2 = h2.finalize();
 
         // Leaf 3: Knowledge Sources Snapshot
         let mut h3 = Sha256::new();
+        h3.update(b"sunborn:cert:v1:leaf3:sources:");
+        h3.update((source_snapshots.len() as u32).to_be_bytes());
         for s in source_snapshots {
             h3.update(s.source_id.as_bytes());
             h3.update(s.snapshot_epoch.to_be_bytes());
+            h3.update((s.content_hash.len() as u32).to_be_bytes());
             h3.update(s.content_hash.as_bytes());
         }
         let leaf3 = h3.finalize();
 
         // Leaf 4: Safety & Risk Bound Evidence
         let mut h4 = Sha256::new();
-        h4.update([
-            safety_evidence.structural_hash_match as u8,
-            safety_evidence.negation_polarity_match as u8,
-            safety_evidence.numeric_literal_match as u8,
-            safety_evidence.entity_drift_detected as u8,
-        ]);
+        h4.update(b"sunborn:cert:v1:leaf4:safety:");
+        let flags: u8 = (safety_evidence.structural_hash_match as u8)
+            | ((safety_evidence.negation_polarity_match as u8) << 1)
+            | ((safety_evidence.numeric_literal_match as u8) << 2)
+            | ((safety_evidence.entity_drift_detected as u8) << 3);
+        h4.update([flags]);
         h4.update(safety_evidence.non_conformity_score.to_be_bytes());
         h4.update(safety_evidence.calibrated_risk_bound.to_be_bytes());
         h4.update(safety_evidence.heuristic_risk_score.to_be_bytes());
@@ -107,28 +132,41 @@ impl ReuseCertificate {
 
         // Leaf 5: Validity Window
         let mut h5 = Sha256::new();
+        h5.update(b"sunborn:cert:v1:leaf5:validity:");
         h5.update(validity_window.issued_at.timestamp_millis().to_be_bytes());
         h5.update(validity_window.expires_at.timestamp_millis().to_be_bytes());
         h5.update(validity_window.monotonic_epoch_lease.to_be_bytes());
         let leaf5 = h5.finalize();
 
-        // Intermediate Tree Nodes
+        // Intermediate Tree Nodes with domain separation
         let mut node12 = Sha256::new();
+        node12.update(b"sunborn:cert:v1:node:12:");
         node12.update(leaf1);
         node12.update(leaf2);
         let n12 = node12.finalize();
 
         let mut node34 = Sha256::new();
+        node34.update(b"sunborn:cert:v1:node:34:");
         node34.update(leaf3);
         node34.update(leaf4);
         let n34 = node34.finalize();
 
         // Root combining intermediate nodes and leaf5
         let mut root = Sha256::new();
+        root.update(b"sunborn:cert:v1:root:");
         root.update(n12);
         root.update(n34);
         root.update(leaf5);
         hex::encode(root.finalize())
+    }
+
+    /// Computes standard HMAC-SHA-256 signature over the Merkle root
+    pub fn compute_signature(merkle_root: &str, signing_key: &[u8]) -> String {
+        let mut mac =
+            HmacSha256::new_from_slice(signing_key).expect("HMAC can take key of any size");
+        mac.update(b"sunborn:cert:v1:signature:");
+        mac.update(merkle_root.as_bytes());
+        hex::encode(mac.finalize().into_bytes())
     }
 
     /// Creates and signs a new ReuseCertificate
@@ -180,16 +218,8 @@ impl ReuseCertificate {
         }
     }
 
-    pub fn compute_signature(merkle_root: &str, signing_key: &[u8]) -> String {
-        let mut hasher = Sha256::new();
-        hasher.update(signing_key);
-        hasher.update(b"|REUSE_CERT|");
-        hasher.update(merkle_root.as_bytes());
-        hex::encode(hasher.finalize())
-    }
-
-    /// Verifies that the certificate Merkle root matches fields and signature is authentic
-    pub fn verify_certificate_integrity(&self, signing_key: &[u8]) -> Result<bool> {
+    /// Verifies cryptographic integrity of Merkle root and HMAC-SHA-256 signature in constant time
+    pub fn verify_integrity(&self, signing_key: &[u8]) -> Result<()> {
         let expected_root = Self::compute_merkle_root(
             &self.certificate_id,
             self.certificate_version,
@@ -203,20 +233,22 @@ impl ReuseCertificate {
             &self.validity_window,
         );
 
-        if self.merkle_root != expected_root {
+        // Constant-time check for Merkle root
+        if !bool::from(self.merkle_root.as_bytes().ct_eq(expected_root.as_bytes())) {
             return Err(SunbornError::validation_error(
                 "Certificate Merkle root mismatch: content was altered or corrupted",
             ));
         }
 
+        // Standard HMAC-SHA-256 verification in constant time
         let expected_sig = Self::compute_signature(&self.merkle_root, signing_key);
-        if self.signature != expected_sig {
+        if !bool::from(self.signature.as_bytes().ct_eq(expected_sig.as_bytes())) {
             return Err(SunbornError::validation_error(
-                "Certificate cryptographic signature verification failed",
+                "Certificate cryptographic HMAC signature verification failed",
             ));
         }
 
-        Ok(true)
+        Ok(())
     }
 
     /// Evaluates if certificate remains fresh at a given time against authoritative epochs
@@ -244,56 +276,50 @@ impl ReuseCertificate {
         true
     }
 
-    /// Evaluates all end-to-end admissibility conditions for cache reuse:
-    /// 1. Cryptographic integrity of Merkle root over canonical fields
-    /// 2. HMAC signature verification against signing key
-    /// 3. Tenant and Application boundary match (cross-tenant substitution rejection)
-    /// 4. Model compatibility match
-    /// 5. Point-in-time validity window (not expired and not future-dated)
-    /// 6. Monotonic knowledge epoch lease monotonicity (current_epoch <= lease_epoch)
-    /// 7. Source snapshot freshness (no authoritative source mutation)
-    /// 8. Structural and semantic safety evidence conformance
-    #[allow(clippy::too_many_arguments)]
-    pub fn verify_admissibility(
-        &self,
-        signing_key: &[u8],
-        expected_tenant: &TenantId,
-        expected_app: &ApplicationId,
-        expected_model: &str,
-        expected_identity_hash: Option<&str>,
-        current_time: DateTime<Utc>,
-        current_knowledge_epoch: u64,
-        current_source_epochs: &[(Uuid, u64)],
-    ) -> Result<()> {
-        // 1 & 2. Merkle Root & Signature Integrity
-        self.verify_certificate_integrity(signing_key)?;
+    /// Validates all semantic, temporal, and safety invariants authorizing cache reuse
+    pub fn validate_for_reuse(&self, req_ctx: &ReuseValidationContext) -> Result<()> {
+        // 1. Version gate (reject unknown or deprecated certificate versions)
+        if self.certificate_version != Self::CURRENT_VERSION {
+            return Err(SunbornError::validation_error(format!(
+                "Admissibility failed: unsupported certificate version {} (supported: {})",
+                self.certificate_version,
+                Self::CURRENT_VERSION
+            )));
+        }
+
+        // 2. Certificate ID non-nil
+        if self.certificate_id.is_nil() {
+            return Err(SunbornError::validation_error(
+                "Admissibility failed: certificate ID cannot be nil",
+            ));
+        }
 
         // 3. Tenant Boundary Invariant (Strict multi-tenant isolation)
-        if self.tenant_id != *expected_tenant {
+        if self.tenant_id != *req_ctx.tenant_id {
             return Err(SunbornError::forbidden(format!(
                 "Admissibility failed: tenant mismatch (cert tenant: {}, expected: {})",
-                self.tenant_id.0, expected_tenant.0
+                self.tenant_id.0, req_ctx.tenant_id.0
             )));
         }
 
-        // 3b. Application Boundary Invariant
-        if self.application_id != *expected_app {
+        // 4. Application Boundary Invariant
+        if self.application_id != *req_ctx.application_id {
             return Err(SunbornError::forbidden(format!(
                 "Admissibility failed: application mismatch (cert app: {}, expected: {})",
-                self.application_id.0, expected_app.0
+                self.application_id.0, req_ctx.application_id.0
             )));
         }
 
-        // 4. Model Compatibility
-        if self.model_name != expected_model {
+        // 5. Model Compatibility
+        if self.model_name != req_ctx.model_name {
             return Err(SunbornError::validation_error(format!(
                 "Admissibility failed: model mismatch (cert model: {}, expected: {})",
-                self.model_name, expected_model
+                self.model_name, req_ctx.model_name
             )));
         }
 
-        // 4b. Identity Hash Match (enforced when exact matching is evaluated)
-        if let Some(expected_hash) = expected_identity_hash {
+        // 6. Identity Hash Match (enforced when exact matching is evaluated)
+        if let Some(expected_hash) = req_ctx.expected_identity_hash {
             if self.request_identity_hash != expected_hash {
                 return Err(SunbornError::validation_error(
                     "Admissibility failed: request identity canonical hash mismatch",
@@ -301,28 +327,33 @@ impl ReuseCertificate {
             }
         }
 
-        // 5. Validity Window (Lease Expiration & Clock Sanity)
-        if current_time > self.validity_window.expires_at {
+        // 7. Validity Window Sanity & Lease Expiration
+        if self.validity_window.expires_at <= self.validity_window.issued_at {
+            return Err(SunbornError::validation_error(
+                "Admissibility failed: malformed validity window (expires_at <= issued_at)",
+            ));
+        }
+        if req_ctx.current_time > self.validity_window.expires_at {
             return Err(SunbornError::validation_error(
                 "Admissibility failed: certificate validity lease has expired",
             ));
         }
-        if current_time < self.validity_window.issued_at - chrono::Duration::seconds(5) {
+        if req_ctx.current_time < self.validity_window.issued_at - chrono::Duration::seconds(5) {
             return Err(SunbornError::validation_error(
                 "Admissibility failed: certificate issued in the future (clock skew)",
             ));
         }
 
-        // 6. Monotonic Epoch Lease Fence (Prevents stale writeback and read-repair race)
-        if current_knowledge_epoch > self.validity_window.monotonic_epoch_lease {
+        // 8. Monotonic Epoch Lease Fence (Prevents stale writeback and read-repair races)
+        if req_ctx.current_knowledge_epoch > self.validity_window.monotonic_epoch_lease {
             return Err(SunbornError::validation_error(format!(
                 "Admissibility failed: knowledge epoch advanced (current: {}, cert lease: {})",
-                current_knowledge_epoch, self.validity_window.monotonic_epoch_lease
+                req_ctx.current_knowledge_epoch, self.validity_window.monotonic_epoch_lease
             )));
         }
 
-        // 7. Source Version Snapshot Freshness
-        for (source_id, current_epoch) in current_source_epochs {
+        // 9. Source Version Snapshot Freshness
+        for (source_id, current_epoch) in req_ctx.current_source_epochs {
             if let Some(snap) = self
                 .source_snapshots
                 .iter()
@@ -337,7 +368,39 @@ impl ReuseCertificate {
             }
         }
 
-        // 8. Safety Evidence Conformance
+        // 10. Safety Evidence Conformance & Mathematical Bounds
+        if !self.safety_evidence.non_conformity_score.is_finite()
+            || self.safety_evidence.non_conformity_score < 0.0
+        {
+            return Err(SunbornError::validation_error(
+                "Admissibility failed: non-finite or negative non-conformity score",
+            ));
+        }
+        if !self.safety_evidence.calibrated_risk_bound.is_finite()
+            || self.safety_evidence.calibrated_risk_bound < 0.0
+        {
+            return Err(SunbornError::validation_error(
+                "Admissibility failed: non-finite or negative calibrated risk bound",
+            ));
+        }
+        if !self.safety_evidence.heuristic_risk_score.is_finite()
+            || self.safety_evidence.heuristic_risk_score < 0.0
+        {
+            return Err(SunbornError::validation_error(
+                "Admissibility failed: non-finite or negative heuristic risk score",
+            ));
+        }
+
+        // Risk threshold strict bound
+        if self.safety_evidence.non_conformity_score
+            > self.safety_evidence.calibrated_risk_bound + 1e-6
+        {
+            return Err(SunbornError::validation_error(format!(
+                "Admissibility failed: non-conformity score ({}) exceeds calibrated risk bound ({})",
+                self.safety_evidence.non_conformity_score, self.safety_evidence.calibrated_risk_bound
+            )));
+        }
+
         if !self.safety_evidence.structural_hash_match
             || !self.safety_evidence.negation_polarity_match
             || !self.safety_evidence.numeric_literal_match
@@ -349,6 +412,39 @@ impl ReuseCertificate {
         }
 
         Ok(())
+    }
+
+    /// Evaluates both integrity and semantic authorization for cache reuse
+    #[allow(clippy::too_many_arguments)]
+    pub fn verify_admissibility(
+        &self,
+        signing_key: &[u8],
+        expected_tenant: &TenantId,
+        expected_app: &ApplicationId,
+        expected_model: &str,
+        expected_identity_hash: Option<&str>,
+        current_time: DateTime<Utc>,
+        current_knowledge_epoch: u64,
+        current_source_epochs: &[(Uuid, u64)],
+    ) -> Result<()> {
+        self.verify_integrity(signing_key)?;
+
+        let req_ctx = ReuseValidationContext {
+            tenant_id: expected_tenant,
+            application_id: expected_app,
+            model_name: expected_model,
+            expected_identity_hash,
+            current_time,
+            current_knowledge_epoch,
+            current_source_epochs,
+        };
+
+        self.validate_for_reuse(&req_ctx)
+    }
+
+    /// Legacy compatibility alias for verify_integrity
+    pub fn verify_certificate_integrity(&self, signing_key: &[u8]) -> Result<bool> {
+        self.verify_integrity(signing_key).map(|_| true)
     }
 }
 
@@ -381,7 +477,7 @@ mod tests {
                 numeric_literal_match: true,
                 entity_drift_detected: false,
                 non_conformity_score: 0.05,
-                calibrated_risk_bound: 0.01,
+                calibrated_risk_bound: 0.10,
                 heuristic_risk_score: 0.0,
             },
             ValidityWindow {
@@ -393,17 +489,17 @@ mod tests {
         );
 
         // 1. Untampered certificate verifies
-        assert!(cert.verify_certificate_integrity(key).unwrap());
+        assert!(cert.verify_integrity(key).is_ok());
 
         // 2. Tampered field fails Merkle root verification
         let mut tampered = cert.clone();
         tampered.model_name = "gpt-3.5-turbo".to_string();
-        assert!(tampered.verify_certificate_integrity(key).is_err());
+        assert!(tampered.verify_integrity(key).is_err());
 
-        // 3. Forged signature fails signature verification
+        // 3. Forged signature fails HMAC verification
         let mut forged_sig = cert.clone();
         forged_sig.signature = "bad-sig-1234".to_string();
-        assert!(forged_sig.verify_certificate_integrity(key).is_err());
+        assert!(forged_sig.verify_integrity(key).is_err());
 
         // 4. Freshness evaluation
         let now = Utc::now();
@@ -439,7 +535,7 @@ mod tests {
                 numeric_literal_match: true,
                 entity_drift_detected: false,
                 non_conformity_score: 0.02,
-                calibrated_risk_bound: 0.01,
+                calibrated_risk_bound: 0.05,
                 heuristic_risk_score: 0.0,
             },
             ValidityWindow {
@@ -573,5 +669,76 @@ mod tests {
             )
             .unwrap_err();
         assert!(err.to_string().contains("signature verification failed"));
+    }
+
+    #[test]
+    fn test_certificate_rejects_unknown_version_and_non_finite_scores() {
+        let key = b"key-validation-32-bytes-long!!!!";
+        let tenant = TenantId::new("tenant-strict");
+        let app = ApplicationId::new("app-strict");
+
+        let mut cert = ReuseCertificate::new_signed(
+            tenant.clone(),
+            app.clone(),
+            "req-hash-strict",
+            "gpt-4o",
+            100,
+            vec![],
+            SafetyEvidenceRecord {
+                structural_hash_match: true,
+                negation_polarity_match: true,
+                numeric_literal_match: true,
+                entity_drift_detected: false,
+                non_conformity_score: 0.01,
+                calibrated_risk_bound: 0.05,
+                heuristic_risk_score: 0.0,
+            },
+            ValidityWindow {
+                issued_at: Utc::now(),
+                expires_at: Utc::now() + Duration::minutes(10),
+                monotonic_epoch_lease: 1,
+            },
+            key,
+        );
+
+        let ctx = ReuseValidationContext {
+            tenant_id: &tenant,
+            application_id: &app,
+            model_name: "gpt-4o",
+            expected_identity_hash: Some("req-hash-strict"),
+            current_time: Utc::now(),
+            current_knowledge_epoch: 1,
+            current_source_epochs: &[],
+        };
+
+        // Normal succeeds
+        assert!(cert.validate_for_reuse(&ctx).is_ok());
+
+        // Reject unknown version
+        cert.certificate_version = 99;
+        assert!(cert
+            .validate_for_reuse(&ctx)
+            .unwrap_err()
+            .to_string()
+            .contains("unsupported certificate version"));
+        cert.certificate_version = ReuseCertificate::CURRENT_VERSION;
+
+        // Reject non-finite score (NaN)
+        cert.safety_evidence.non_conformity_score = f32::NAN;
+        assert!(cert
+            .validate_for_reuse(&ctx)
+            .unwrap_err()
+            .to_string()
+            .contains("non-finite"));
+        cert.safety_evidence.non_conformity_score = 0.01;
+
+        // Reject score exceeding calibrated risk bound
+        cert.safety_evidence.non_conformity_score = 0.50;
+        cert.safety_evidence.calibrated_risk_bound = 0.10;
+        assert!(cert
+            .validate_for_reuse(&ctx)
+            .unwrap_err()
+            .to_string()
+            .contains("exceeds calibrated risk bound"));
     }
 }
