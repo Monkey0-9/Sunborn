@@ -137,7 +137,7 @@ Phase 27:
 Production readiness.
 
 Phase 28:
-IEEE/ACM publication and artifact release.
+Scientific publication manuscript and empirical artifact release.
 
 ## How to use Linear
 

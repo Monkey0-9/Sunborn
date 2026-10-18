@@ -38,7 +38,7 @@
 | **25** | Capacity Eng | Bounded memory eviction & 24h soak stability | `tests/capacity_soak_test.rs` | **APPROVED** |
 | **26** | Governance & GDPR | Cascade tenant erasure API & lifecycle sweeper | `tests/governance_test.rs` | **APPROVED** |
 | **27** | Production Readiness | Operations runbooks & acceptance records | `docs/runbooks/operations.md` | **APPROVED** |
-| **28** | Research Publication | IEEE/ACM manuscript & reproduction harness | `research/paper/sunborn_ieee.tex` | **APPROVED** |
+| **28** | Research Publication | Scientific preprint manuscript & reproduction harness | `research/paper/sunborn_ieee.tex` | **APPROVED** |
 | **29** | Adaptive Learning & Durability Hardening | Dynamic backend traits, PostgreSQL durability, BFF secret isolation, 5-layer adaptive controller | `crates/sunborn-gateway/src/learning/`, `tests/learning_controller_test.rs`, `frontend/src/app/api/proxy/` | **APPROVED** |
 | **30** | REA Binary Exploit Mitigations & Audit | PIE, Full RELRO, NX Stack, and binary digest evidence verification via REA | `docs/architecture/autonomic_invariance_specification.md` | **APPROVED** |
 

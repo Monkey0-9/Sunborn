@@ -1,11 +1,11 @@
 # Sunborn Research Package & Artifact Evaluation Guide
 
-> **Associated Publication**: *Sunborn: Deterministic Equivalence, Multi-Tier Semantic Caching, and Partial Execution Reuse for Agentic RAG Systems* (IEEE/ACM).
+> **Research Preprint**: *Sunborn: Deterministic Equivalence, Multi-Tier Semantic Caching, and Partial Execution Reuse for Agentic RAG Systems*.
 
 ---
 
 ## 1. Artifact Contents
-* `paper/sunborn_ieee.tex`: Source LaTeX manuscript formatted according to IEEE conference standards.
+* `paper/sunborn_ieee.tex`: Source LaTeX preprint manuscript and empirical evaluation.
 * `reproduce.sh`: Automated end-to-end reproducibility script reproducing all empirical tables and latency metrics.
 * `hypothesis_register.md`: Scientific hypothesis registry tracking controlled ablations against Baselines B0–B6.
 * `../benchmarks/semantic_cache_bench.py`: SemanticCacheBench dataset runner.

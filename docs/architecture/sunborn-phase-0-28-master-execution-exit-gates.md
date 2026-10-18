@@ -146,7 +146,7 @@ Exit: governance evidence complete.
 Final correctness/security/reliability/performance/capacity/observability/migration/rollback/reproducibility certification.
 Exit: release gate passes.
 
-## Phase 28 — IEEE/ACM Research Package
+## Phase 28 — Scientific Research & Reproduction Package
 
 Literature, formal model, methods, benchmark, baselines, results, ablations, security, threats to validity, reproducibility and manuscript/artifact release.
 Exit: every claim maps to evidence.

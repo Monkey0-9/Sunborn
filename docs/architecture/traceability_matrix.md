@@ -27,7 +27,7 @@
 | **FR-017** | Bounded Memory Capacity & Soak Stability | `crates/sunborn-cache/src/memory.rs`<br>`benchmarks/capacity_soak.py` | `capacity_soak_test::test_capacity_bounded_memory_eviction` | **Verified** |
 | **FR-018** | GDPR Article 17 Cascade Erasure & Sweeper | `crates/sunborn-gateway/src/handlers.rs` (`DELETE /v1/tenants/:id`) | `governance_test::test_tenant_cascade_offboarding_zero_lingering_data` | **Verified** |
 | **FR-019** | SRE Operations & Production Acceptance | `docs/runbooks/operations.md`<br>`docs/architecture/release_acceptance_record.md` | Formal release certification sign-off | **Verified** |
-| **FR-020** | IEEE/ACM Scientific Reproducibility Package | `research/paper/sunborn_ieee.tex`<br>`research/reproduce.sh` | Independent reproduction package execution | **Verified** |
+| **FR-020** | Empirical Scientific Reproducibility Package | `research/paper/sunborn_ieee.tex`<br>`research/reproduce.sh` | Independent reproduction package execution | **Verified** |
 | **FR-021** | Tiered L1/L2 Cache & Write-Behind Commit | `crates/sunborn-cache/src/tiered.rs`<br>`crates/sunborn-db/src/write_behind.rs` | `sunborn-cache::tiered::tests::*`<br>`sunborn-db::write_behind::tests::*` | **Verified** |
 | **FR-022** | Micro-Batched Inference Pool | `crates/sunborn-semantic/src/microbatch.rs` | `sunborn-semantic::microbatch::tests::*` | **Verified** |
 | **FR-023** | In-Flight Singleflight SSE Stream Multiplexing | `crates/sunborn-gateway/src/origin/singleflight.rs` | `origin::singleflight::tests::*` | **Verified** |

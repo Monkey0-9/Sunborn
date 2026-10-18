@@ -112,7 +112,7 @@
 
 ---
 
-### PHASE 28 — IEEE/ACM Research Publication Package
+### PHASE 28 — Scientific Research Publication & Artifact Package
 * **Parent**: `WS-12 | Reproducibility, Acceptance & Publication`
 * **Objective**: Package the scientific methodology, empirical evaluation against Baselines B0–B6, and LaTeX manuscript for peer review.
 * **Prerequisites**: Phase 27.

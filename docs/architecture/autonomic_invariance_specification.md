@@ -167,18 +167,18 @@ Deep binary inspection of the compiled native executables was conducted using th
 
 ---
 
-## 5. IEEE/ACM Artifact Evaluation Verification Dossier
+## 5. Scientific Artifact Reproducibility Dossier
 
-This repository fulfills all criteria for the top-tier IEEE/ACM Artifact Evaluation badges:
+This repository provides an automated, self-contained empirical reproduction suite:
 
 ```
   ┌────────────────────────────────────────────────────────┐
-  │   IEEE / ACM ARTIFACT EVALUATION CERTIFICATION MATRIX   │
+  │         ARTIFACT REPRODUCIBILITY EVALUATION            │
   ├────────────────────────────┬───────────────────────────┤
-  │ Artifacts Available        │  PASSED (Public GitHub)   │
-  │ Artifacts Evaluated - Func │  PASSED (All 5 Gates)     │
-  │ Artifacts Evaluated - Reus │  PASSED (Modular Crates)  │
-  │ Results Replicated         │  PASSED (Exact Match)     │
+  │ Artifacts Available        │  VERIFIED (Public Repo)   │
+  │ Functional Execution       │  VERIFIED (All 5 Gates)   │
+  │ Modular Architecture       │  VERIFIED (Rust Crates)   │
+  │ Results Replicated         │  VERIFIED (Deterministic) │
   └────────────────────────────┴───────────────────────────┘
 ```
 

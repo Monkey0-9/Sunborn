@@ -1,7 +1,7 @@
 # Sunborn Scientific Hypothesis Register (Phase 16)
 
 > **Preregistered Research Hypotheses, Falsification Criteria & Evaluation Methodology**  
-> *Target Standard: IEEE/ACM Peer-Reviewed Venue (IEEE ICDE / ACM SIGMOD / USENIX ATC)*
+> *Target Standard: Peer-Reviewed Systems & Data Engineering Venues*
 
 ---
 
