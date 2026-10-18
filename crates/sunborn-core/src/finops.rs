@@ -91,6 +91,37 @@ impl FinOpsEngine {
         let storage_cost = entry_bytes as f64 * Self::RAM_COST_PER_BYTE_HOUR * 24.0; // 24 hour window
         gross_total > (storage_cost + Self::LOCAL_EMBED_COST_PER_CALL)
     }
+
+    /// Pre-registered Net-Utility Optimization Model (Innovation 7):
+    /// U = C_origin_saved + V_latency - C_verification - C_storage - C_invalidation - C_recompute - E[loss]
+    pub fn calculate_net_utility(params: &NetUtilityParameters) -> f64 {
+        let gross_origin_saved = params.c_origin_saved;
+        let latency_value = params.v_latency;
+        let verification_cost = params.c_verification;
+        let storage_cost = params.c_storage;
+        let invalidation_cost = params.c_invalidation;
+        let recompute_cost = params.c_recompute;
+        let expected_loss = params.expected_incorrect_reuse_loss;
+
+        gross_origin_saved + latency_value
+            - verification_cost
+            - storage_cost
+            - invalidation_cost
+            - recompute_cost
+            - expected_loss
+    }
+}
+
+/// Parameters for Net-Utility Optimization with hard correctness constraints
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetUtilityParameters {
+    pub c_origin_saved: f64,
+    pub v_latency: f64,
+    pub c_verification: f64,
+    pub c_storage: f64,
+    pub c_invalidation: f64,
+    pub c_recompute: f64,
+    pub expected_incorrect_reuse_loss: f64,
 }
 
 #[cfg(test)]
@@ -114,6 +145,32 @@ mod tests {
         assert!(
             break_even < 0.10,
             "Break-even hit rate for GPT-4o should be well under 10%"
+        );
+    }
+
+    #[test]
+    fn test_finops_net_utility_calculation_with_hard_loss_penalty() {
+        let params = NetUtilityParameters {
+            c_origin_saved: 0.00625,
+            v_latency: 0.00100,
+            c_verification: 0.00010,
+            c_storage: 0.00001,
+            c_invalidation: 0.00005,
+            c_recompute: 0.0,
+            expected_incorrect_reuse_loss: 0.0,
+        };
+        let utility = FinOpsEngine::calculate_net_utility(&params);
+        assert!(utility > 0.0, "Net utility must be positive when safe");
+
+        // High loss penalty on false hit drives net utility negative
+        let penalized_params = NetUtilityParameters {
+            expected_incorrect_reuse_loss: 0.10,
+            ..params
+        };
+        let penalized_utility = FinOpsEngine::calculate_net_utility(&penalized_params);
+        assert!(
+            penalized_utility < 0.0,
+            "High incorrect-reuse loss must drive utility negative"
         );
     }
 }
