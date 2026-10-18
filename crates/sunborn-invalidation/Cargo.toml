@@ -16,4 +16,6 @@ chrono.workspace = true
 uuid.workspace = true
 tracing.workspace = true
 reqwest.workspace = true
+roaring = "0.10"
+dashmap = "6.1"
 

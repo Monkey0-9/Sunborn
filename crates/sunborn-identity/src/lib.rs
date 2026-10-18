@@ -1,6 +1,7 @@
 pub mod canonical;
 pub mod crypto_shred;
 pub mod identity;
+pub mod privacy;
 
 pub use canonical::{canonicalize_json, canonicalize_text};
 pub use crypto_shred::{
@@ -9,3 +10,4 @@ pub use crypto_shred::{
     VaultTransitKeyProvider, ZeroizingKey,
 };
 pub use identity::{CacheIdentity, IdentityEngine};
+pub use privacy::{PiiTokenizer, PiiVaultSession};

@@ -217,3 +217,97 @@ async fn test_request_validation_bounds() {
 
     assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn test_anthropic_messages_miss_then_exact_hit() {
+    let mut config = AppConfig::default();
+    config.auth.enforce_auth = true;
+    let state = AppState::new(config);
+    let app = create_router(state);
+
+    let messages_payload = json!({
+        "model": "claude-3-5-sonnet-20241022",
+        "system": "You are an enterprise AI assistant.",
+        "messages": [
+            { "role": "user", "content": "Explain causal DAG execution invalidation in enterprise caches." }
+        ],
+        "max_tokens": 1024,
+        "temperature": 0.2
+    });
+    let payload_bytes = serde_json::to_vec(&messages_payload).unwrap();
+
+    // 1. First Call: Cache MISS (Forwarded to Origin)
+    let res1 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/messages")
+                .header("content-type", "application/json")
+                .header("x-api-key", "key-enterprise-fintech")
+                .body(Body::from(payload_bytes.clone()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res1.status(), StatusCode::OK);
+    let body1 = res1.into_body().collect().await.unwrap().to_bytes();
+    let json1: Value = serde_json::from_slice(&body1).unwrap();
+
+    assert_eq!(json1["type"], "message");
+    assert_eq!(json1["role"], "assistant");
+    assert_eq!(json1["model"], "claude-3-5-sonnet-20241022");
+    assert_eq!(json1["sunborn_cached"], false);
+    assert_eq!(json1["sunborn_tier"], "origin");
+    assert!(!json1["content"][0]["text"].as_str().unwrap().is_empty());
+
+    // 2. Second Call: Cache HIT (Exact C1)
+    let res2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/messages")
+                .header("content-type", "application/json")
+                .header("x-api-key", "key-enterprise-fintech")
+                .body(Body::from(payload_bytes))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res2.status(), StatusCode::OK);
+    let body2 = res2.into_body().collect().await.unwrap().to_bytes();
+    let json2: Value = serde_json::from_slice(&body2).unwrap();
+
+    assert_eq!(json2["sunborn_cached"], true, "Second call must be cached");
+    assert_eq!(json2["sunborn_tier"], "c1_exact");
+    assert_eq!(json2["content"][0]["text"], json1["content"][0]["text"]);
+}
+
+#[tokio::test]
+async fn test_anthropic_messages_rejects_empty_messages() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state);
+
+    let empty_payload = json!({
+        "model": "claude-3-5-sonnet-20241022",
+        "messages": []
+    });
+
+    let res = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/messages")
+                .header("content-type", "application/json")
+                .header("x-api-key", "sunborn-dev-key")
+                .body(Body::from(serde_json::to_vec(&empty_payload).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}

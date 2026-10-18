@@ -54,6 +54,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/v1/auth/login", post(handlers::login))
         .route("/v1/requests", post(handlers::execute_request))
         .route("/v1/chat/completions", post(handlers::chat_completions))
+        .route("/v1/messages", post(handlers::anthropic_messages))
         .route("/v1/invalidation", post(handlers::trigger_invalidation))
         .route("/v1/dependencies", post(handlers::record_dependency))
         .route(

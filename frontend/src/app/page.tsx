@@ -24,6 +24,7 @@ import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import { formatNumber, formatCurrency, formatMicroseconds } from "@/lib/utils";
 import { sunbornApi } from "@/lib/api";
+import { PlanetScaleStressSimulator } from "@/components/simulator/stress-simulator";
 
 interface GatewayMetrics {
   totalRequests: number;
@@ -277,6 +278,9 @@ export default function OverviewPage() {
           </CardContent>
         </Card>
       </section>
+ 
+      {/* 260-Engineer Planet-Scale Stress Simulator & Guild Readiness Matrix */}
+      <PlanetScaleStressSimulator />
 
       {/* 4-Tier Reference Architecture Visualizer */}
       <section className="space-y-4">

@@ -13,3 +13,4 @@ hex.workspace = true
 tracing.workspace = true
 aes-gcm = "0.10"
 zeroize = "1.9.1"
+regex = "1.10"
