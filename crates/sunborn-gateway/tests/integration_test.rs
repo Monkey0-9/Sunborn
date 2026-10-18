@@ -686,3 +686,66 @@ async fn test_runtime_reuse_certificate_admissibility_and_rejection() {
         .unwrap()
         .contains("CERTIFICATE_ADMISSIBILITY_REJECTED"));
 }
+
+#[tokio::test]
+async fn test_transactional_freshness_concurrent_invalidation_prevents_stale_writeback() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state.clone());
+
+    state.api_key_registry.register_key(
+        "test-key-freshness",
+        sunborn_core::TenantId::new("tenant-freshness"),
+        sunborn_core::ApplicationId::new("app-freshness"),
+        vec!["*".to_string()],
+        true,
+    );
+
+    let doc_source_id = uuid::Uuid::new_v4();
+
+    // 1. Initial knowledge epoch is bumped to 2 by an invalidation event
+    state.epoch_lease_manager.bump_epoch(doc_source_id).await;
+
+    // 2. A client sends a request whose dependency snapshot claims stale epoch 1
+    let payload_stale_lease = serde_json::json!({
+        "tenant_id": "tenant-freshness",
+        "application_id": "app-freshness",
+        "model": "gpt-4o",
+        "prompt": "What are the latest compliance requirements for GDPR?",
+        "temperature": 0.0,
+        "dependency_snapshots": [
+            {
+                "source_id": doc_source_id,
+                "snapshot_epoch": 1,
+                "content_hash": "stale-content-hash-v1"
+            }
+        ]
+    });
+
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", "test-key-freshness")
+                .body(Body::from(payload_stale_lease.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["decision"]["action"], "origin_execute");
+
+    // 3. Monotonic epoch lease fence aborted writeback -> Cache MUST remain empty for this key!
+    let req_env: RequestEnvelope = serde_json::from_value(payload_stale_lease.clone()).unwrap();
+    let identity = sunborn_identity::IdentityEngine::compute_identity(&req_env);
+    let cache_entry = state.cache.get(&identity.key).await.unwrap();
+    assert!(
+        cache_entry.is_none(),
+        "Epoch lease fence failed: Stale origin response was written to cache despite epoch advancement!"
+    );
+}

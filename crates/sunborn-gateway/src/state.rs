@@ -36,6 +36,7 @@ pub struct AppState {
     pub dependency_graph: Arc<DependencyGraph>,
     pub invalidation_engine:
         Arc<InvalidationEngine<dyn ExactCacheStore, dyn sunborn_semantic::VectorStore>>,
+    pub epoch_lease_manager: Arc<sunborn_invalidation::EpochLeaseManager>,
     pub db: Arc<dyn sunborn_db::DatabaseStore>,
     pub memory_db: Arc<MemoryDatabaseStore>,
     pub postgres_db: Arc<sunborn_db::PostgresDatabaseStore>,
@@ -133,6 +134,7 @@ impl AppState {
             selected_cache.clone(),
             selected_vector.clone(),
         ));
+        let epoch_lease_manager = Arc::new(sunborn_invalidation::EpochLeaseManager::new());
         let execution_store = Arc::new(MemoryExecutionCacheStore::new());
         let shadow_evaluator = Arc::new(ShadowEvaluator::with_embedder(selected_embedder.clone()));
         let radix_router = Arc::new(KvCacheRouter::new(
@@ -211,6 +213,7 @@ impl AppState {
             decision_engine,
             dependency_graph,
             invalidation_engine,
+            epoch_lease_manager,
             db: selected_db,
             memory_db: db,
             postgres_db,

@@ -433,99 +433,112 @@ pub async fn execute_request_inner(
     let origin_result = state.origin_provider.execute(&req).await?;
     let origin_content = origin_result.content;
 
-    // 7. Cache Admission Engine:
-    let admission_cert = sunborn_core::ReuseCertificate::new_signed(
-        req.tenant_id.clone(),
-        req.application_id.clone(),
-        &identity.hash,
-        &req.model,
-        req.prompt.split_whitespace().count() as u32,
-        req.dependency_snapshots.clone(),
-        sunborn_core::SafetyEvidenceRecord {
-            structural_hash_match: true,
-            negation_polarity_match: true,
-            numeric_literal_match: true,
-            entity_drift_detected: false,
-            non_conformity_score: 0.0,
-            calibrated_risk_bound: 0.0,
-            heuristic_risk_score: 0.0,
-        },
-        sunborn_core::ValidityWindow {
-            issued_at: Utc::now(),
-            expires_at: Utc::now()
-                + chrono::Duration::seconds(state.config.cache.default_ttl_secs as i64),
-            monotonic_epoch_lease: req.knowledge_epoch.unwrap_or(1),
-        },
-        &state.learning_hmac_secret,
-    );
-
-    // a) Save in exact cache with embedded certificate metadata
-    let mut entry = CacheEntry::new(
-        &identity.key,
-        &origin_content,
-        Some(state.config.cache.default_ttl_secs),
-    );
-    if let Ok(cert_val) = serde_json::to_value(&admission_cert) {
-        entry.metadata["certificate"] = cert_val;
-    }
-    let _ = state.cache.set(entry).await;
-
-    // b) Admit into semantic vector store
-    if let Ok(vector) = state.selected_embedder.embed(&req.prompt).await {
-        let _ = state
-            .vector_store
-            .insert(VectorEntry {
-                id: identity.key.clone(),
-                tenant_id: req.tenant_id.clone(),
-                application_id: req.application_id.clone(),
-                prompt: req.prompt.clone(),
-                content: origin_content.clone(),
-                vector,
-                metadata: serde_json::json!({
-                    "model": req.model,
-                    "certificate": serde_json::to_value(&admission_cert).unwrap_or_default(),
-                }),
-                created_at: Utc::now(),
-            })
-            .await;
-    }
-
-    // c) Save to authoritative PostgreSQL system of record
-    let db_res = state
-        .db
-        .insert_cache_entry(sunborn_db::models::DurableCacheRecord {
-            key: identity.key.clone(),
-            tenant_id: req.tenant_id.0.clone(),
-            application_id: req.application_id.0.clone(),
-            model: req.model.clone(),
-            policy_version: "v1".to_string(),
-            hash: identity.key.clone(),
-            prompt_canonical: req.prompt.clone(),
-            content: origin_content.clone(),
-            hit_count: 0,
-            created_at: Utc::now(),
-            expires_at: Some(
-                Utc::now() + chrono::Duration::seconds(state.config.cache.default_ttl_secs as i64),
-            ),
-            last_accessed_at: Utc::now(),
-        })
+    // 7. Cache Admission Engine (Transactional Freshness Fence):
+    let is_lease_valid = state
+        .epoch_lease_manager
+        .validate_multi_source_leases(&req.dependency_snapshots)
         .await;
 
-    if let Err(e) = db_res {
-        tracing::error!(
-            key = %identity.key,
-            tenant = %req.tenant_id.0,
-            error = %e,
-            "Authoritative database persistence failed on cache admission"
+    if !is_lease_valid {
+        tracing::warn!(
+            request_id = %req.request_id.0,
+            "Monotonic epoch lease violation detected prior to cache writeback -> Aborting stale cache admission"
         );
-        let is_prod = std::env::var("SUNBORN_ENV")
-            .map(|v| v.to_lowercase() == "production")
-            .unwrap_or(false);
-        if is_prod && state.config.cache.strict_durability {
-            return Err(SunbornError::database(format!(
-                "Strict durability violation: failed to persist authoritative cache entry to database: {e}"
-            ))
-            .into());
+    } else {
+        let admission_cert = sunborn_core::ReuseCertificate::new_signed(
+            req.tenant_id.clone(),
+            req.application_id.clone(),
+            &identity.hash,
+            &req.model,
+            req.prompt.split_whitespace().count() as u32,
+            req.dependency_snapshots.clone(),
+            sunborn_core::SafetyEvidenceRecord {
+                structural_hash_match: true,
+                negation_polarity_match: true,
+                numeric_literal_match: true,
+                entity_drift_detected: false,
+                non_conformity_score: 0.0,
+                calibrated_risk_bound: 0.0,
+                heuristic_risk_score: 0.0,
+            },
+            sunborn_core::ValidityWindow {
+                issued_at: Utc::now(),
+                expires_at: Utc::now()
+                    + chrono::Duration::seconds(state.config.cache.default_ttl_secs as i64),
+                monotonic_epoch_lease: req.knowledge_epoch.unwrap_or(1),
+            },
+            &state.learning_hmac_secret,
+        );
+
+        // a) Save in exact cache with embedded certificate metadata
+        let mut entry = CacheEntry::new(
+            &identity.key,
+            &origin_content,
+            Some(state.config.cache.default_ttl_secs),
+        );
+        if let Ok(cert_val) = serde_json::to_value(&admission_cert) {
+            entry.metadata["certificate"] = cert_val;
+        }
+        let _ = state.cache.set(entry).await;
+
+        // b) Admit into semantic vector store
+        if let Ok(vector) = state.selected_embedder.embed(&req.prompt).await {
+            let _ = state
+                .vector_store
+                .insert(VectorEntry {
+                    id: identity.key.clone(),
+                    tenant_id: req.tenant_id.clone(),
+                    application_id: req.application_id.clone(),
+                    prompt: req.prompt.clone(),
+                    content: origin_content.clone(),
+                    vector,
+                    metadata: serde_json::json!({
+                        "model": req.model,
+                        "certificate": serde_json::to_value(&admission_cert).unwrap_or_default(),
+                    }),
+                    created_at: Utc::now(),
+                })
+                .await;
+        }
+
+        // c) Save to authoritative PostgreSQL system of record
+        let db_res = state
+            .db
+            .insert_cache_entry(sunborn_db::models::DurableCacheRecord {
+                key: identity.key.clone(),
+                tenant_id: req.tenant_id.0.clone(),
+                application_id: req.application_id.0.clone(),
+                model: req.model.clone(),
+                policy_version: "v1".to_string(),
+                hash: identity.key.clone(),
+                prompt_canonical: req.prompt.clone(),
+                content: origin_content.clone(),
+                hit_count: 0,
+                created_at: Utc::now(),
+                expires_at: Some(
+                    Utc::now()
+                        + chrono::Duration::seconds(state.config.cache.default_ttl_secs as i64),
+                ),
+                last_accessed_at: Utc::now(),
+            })
+            .await;
+
+        if let Err(e) = db_res {
+            tracing::error!(
+                key = %identity.key,
+                tenant = %req.tenant_id.0,
+                error = %e,
+                "Authoritative database persistence failed on cache admission"
+            );
+            let is_prod = std::env::var("SUNBORN_ENV")
+                .map(|v| v.to_lowercase() == "production")
+                .unwrap_or(false);
+            if is_prod && state.config.cache.strict_durability {
+                return Err(SunbornError::database(format!(
+                    "Strict durability violation: failed to persist authoritative cache entry to database: {e}"
+                ))
+                .into());
+            }
         }
     }
 
@@ -767,9 +780,15 @@ pub async fn trigger_invalidation(
         .map_err(AppError::from)?
         .unwrap_or(0);
 
+    let bumped_epoch = state
+        .epoch_lease_manager
+        .bump_epoch(payload.source_id)
+        .await;
+
     Ok(Json(json!({
         "status": "processed",
         "source_id": payload.source_id,
+        "bumped_epoch": bumped_epoch,
         "evicted_cache_count": evicted_count
     })))
 }
