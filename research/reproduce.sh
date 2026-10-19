@@ -280,8 +280,43 @@ if missing_ids or unexpected_ids:
     print(f\"FATAL: Query ID set mismatch against expected dataset: missing={sorted(list(missing_ids))}, unexpected={sorted(list(unexpected_ids))}\", file=sys.stderr)
     sys.exit(1)
 
+# Independently recompute empirical metrics directly from raw traces
+derived_b3_tp = sum(1 for t in traces if (t.get('b3_reused') if 'b3_reused' in t else t.get('reused')) and t.get('ground_truth'))
+derived_b3_fp = sum(1 for t in traces if (t.get('b3_reused') if 'b3_reused' in t else t.get('reused')) and not t.get('ground_truth'))
+derived_b3_total = len(traces)
+derived_b3_prec = round((derived_b3_tp / (derived_b3_tp + derived_b3_fp) * 100.0) if (derived_b3_tp + derived_b3_fp) > 0 else 100.0, 2)
+derived_b3_fhr = round((derived_b3_fp / derived_b3_total * 100.0) if derived_b3_total > 0 else 0.0, 2)
+
+derived_b2_tp = sum(1 for t in traces if t.get('b2_reused') and t.get('ground_truth'))
+derived_b2_fp = sum(1 for t in traces if t.get('b2_reused') and not t.get('ground_truth'))
+derived_b2_total = len(traces)
+derived_b2_prec = round((derived_b2_tp / (derived_b2_tp + derived_b2_fp) * 100.0) if (derived_b2_tp + derived_b2_fp) > 0 else 100.0, 2)
+derived_b2_fhr = round((derived_b2_fp / derived_b2_total * 100.0) if derived_b2_total > 0 else 0.0, 2)
+
+cost_model = meta.get('cost_model', {})
+origin_call_usd = float(cost_model.get('origin_call_usd', 0.0))
+cache_lookup_usd = float(cost_model.get('cache_lookup_usd', 0.0))
+b0_cost = derived_b3_total * origin_call_usd
+b3_cost = sum(
+    cache_lookup_usd if (t.get('b3_reused') if 'b3_reused' in t else t.get('reused')) else origin_call_usd
+    for t in traces
+)
+derived_b3_cost_savings = round(max(0.0, (1.0 - (b3_cost / b0_cost)) * 100.0), 2)
+
+manifest_traces = manifest_data.get('raw_execution_traces', [])
+derived_tb3_tp = sum(1 for t in manifest_traces if t.get('b3_reused') and t.get('ground_truth'))
+derived_tb3_fp = sum(1 for t in manifest_traces if t.get('b3_reused') and not t.get('ground_truth'))
+derived_tb3_total = len(manifest_traces)
+derived_tb3_prec = round((derived_tb3_tp / (derived_tb3_tp + derived_tb3_fp) * 100.0) if (derived_tb3_tp + derived_tb3_fp) > 0 else 100.0, 2)
+derived_tb3_fhr = round((derived_tb3_fp / derived_tb3_total * 100.0) if derived_tb3_total > 0 else 0.0, 2)
+
+derived_tb2_tp = sum(1 for t in manifest_traces if t.get('b2_reused') and t.get('ground_truth'))
+derived_tb2_fp = sum(1 for t in manifest_traces if t.get('b2_reused') and not t.get('ground_truth'))
+derived_tb2_total = len(manifest_traces)
+derived_tb2_prec = round((derived_tb2_tp / (derived_tb2_tp + derived_tb2_fp) * 100.0) if (derived_tb2_tp + derived_tb2_fp) > 0 else 100.0, 2)
+derived_tb2_fhr = round((derived_tb2_fp / derived_tb2_total * 100.0) if derived_tb2_total > 0 else 0.0, 2)
+
 # Ensure meaningful semantic reuse (non-degenerate cache)
-derived_b3_tp = sum(1 for t in traces if t.get('reused') and t.get('ground_truth'))
 if derived_b3_tp <= 0:
     print(f\"FATAL: Degenerate cache result: Sunborn B3 produced {derived_b3_tp} true positive reuses (meaningful reuse required)\", file=sys.stderr)
     sys.exit(1)
@@ -319,16 +354,16 @@ attestation_payload = {
         'decision_engine_mode': meta.get('decision_engine_mode', 'rust_parity_calibrated_decision_engine'),
     },
     'empirical_metrics': {
-        'sunborn_b3_false_hits': b3['false_hits'],
-        'sunborn_b3_false_hit_rate_pct': b3['false_hit_rate_pct'],
-        'sunborn_b3_precision_pct': b3['precision_pct'],
-        'sunborn_b3_cost_savings_pct': b3['cost_savings_pct'],
-        'sunborn_b3_temporal_false_hits': t_b3['false_hits'],
-        'sunborn_b3_temporal_precision_pct': t_b3['precision_pct'],
-        'naive_b2_false_hits': b2['false_hits'],
-        'naive_b2_false_hit_rate_pct': b2['false_hit_rate_pct'],
-        'naive_b2_temporal_false_hits': t_b2['false_hits'],
-        'naive_b2_temporal_false_hit_rate_pct': t_b2['false_hit_rate_pct']
+        'sunborn_b3_false_hits': derived_b3_fp,
+        'sunborn_b3_false_hit_rate_pct': derived_b3_fhr,
+        'sunborn_b3_precision_pct': derived_b3_prec,
+        'sunborn_b3_cost_savings_pct': derived_b3_cost_savings,
+        'sunborn_b3_temporal_false_hits': derived_tb3_fp,
+        'sunborn_b3_temporal_precision_pct': derived_tb3_prec,
+        'naive_b2_false_hits': derived_b2_fp,
+        'naive_b2_false_hit_rate_pct': derived_b2_fhr,
+        'naive_b2_temporal_false_hits': derived_tb2_fp,
+        'naive_b2_temporal_false_hit_rate_pct': derived_tb2_fhr
     }
 }
 

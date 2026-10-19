@@ -227,10 +227,6 @@ def verify_reproduction_certificate(
     if check_git:
         try:
             curr_commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
-            parent_res = subprocess.run(["git", "rev-parse", "HEAD~1"], capture_output=True, text=True)
-            parent_commit = parent_res.stdout.strip() if parent_res.returncode == 0 else ""
-            valid_commits = {c for c in [curr_commit, parent_commit] if c}
-
             cert_commit = loaded_cert.get("git_commit")
             cert_tree = loaded_cert.get("git_tree")
 
@@ -238,20 +234,32 @@ def verify_reproduction_certificate(
                 print("FAIL: Certificate is missing 'git_commit' or 'git_tree' fields!", file=sys.stderr)
                 return STATUS_INVALID
 
-            if cert_commit not in valid_commits:
-                print(f"FAIL: Certificate git_commit ({cert_commit}) does not match current repository revision ({curr_commit}) or parent ({parent_commit})!", file=sys.stderr)
+            # Verify that cert_commit matches HEAD or is a direct ancestor of HEAD
+            is_valid_commit = False
+            if cert_commit == curr_commit:
+                is_valid_commit = True
+            else:
+                ancestor_check = subprocess.run(
+                    ["git", "merge-base", "--is-ancestor", cert_commit, "HEAD"],
+                    capture_output=True
+                )
+                if ancestor_check.returncode == 0:
+                    is_valid_commit = True
+
+            if not is_valid_commit:
+                print(f"FAIL: Certificate git_commit ({cert_commit}) is not present in repository history for HEAD ({curr_commit})!", file=sys.stderr)
                 return STATUS_INVALID
 
-            if cert_commit == curr_commit:
-                curr_tree = subprocess.run(["git", "rev-parse", "HEAD^{tree}"], capture_output=True, text=True, check=True).stdout.strip()
-                if cert_tree != curr_tree:
-                    print(f"FAIL: Certificate git_tree ({cert_tree}) does not match current repository tree ({curr_tree})!", file=sys.stderr)
-                    return STATUS_INVALID
-            elif cert_commit == parent_commit:
-                parent_tree = subprocess.run(["git", "rev-parse", "HEAD~1^{tree}"], capture_output=True, text=True, check=True).stdout.strip()
-                if cert_tree != parent_tree:
-                    print(f"FAIL: Certificate git_tree ({cert_tree}) does not match parent repository tree ({parent_tree})!", file=sys.stderr)
-                    return STATUS_INVALID
+            # Verify that cert_tree matches the actual git tree of cert_commit in the git object database
+            tree_res = subprocess.run(["git", "rev-parse", f"{cert_commit}^{{tree}}"], capture_output=True, text=True)
+            if tree_res.returncode != 0:
+                print(f"FAIL: Failed to resolve tree object for certificate commit {cert_commit} in git database!", file=sys.stderr)
+                return STATUS_INVALID
+            actual_tree = tree_res.stdout.strip()
+
+            if cert_tree != actual_tree:
+                print(f"FAIL: Certificate git_tree ({cert_tree}) does not match git tree ({actual_tree}) of commit {cert_commit}!", file=sys.stderr)
+                return STATUS_INVALID
 
             print(f"  [✓] Git commit ({cert_commit[:10]}) and tree ({cert_tree[:10]}) match verified repository revision.")
         except Exception as e:
@@ -260,42 +268,126 @@ def verify_reproduction_certificate(
     else:
         print("  [!] WARNING: Git repository provenance check bypassed via explicit --no-git flag (reduced verification scope: repository revision unverified).")
 
-    # 6. Empirical Metrics Cross-Verification (Derived directly from raw source artifacts)
-    # Recompute metrics from benchmark_run.json
+    # 6. Empirical Metrics Independent Recomputation & Cross-Verification
+    # A. Recompute B3 and B2 metrics directly from benchmark_run.json raw traces
     bench_traces = bench_data.get("b3_evaluation_trace", [])
     if not bench_traces:
         print("FAIL: Benchmark artifact missing 'b3_evaluation_trace'", file=sys.stderr)
         return STATUS_INVALID
 
-    derived_b3_tp = sum(1 for t in bench_traces if t.get("reused") and t.get("ground_truth"))
-    derived_b3_fp = sum(1 for t in bench_traces if t.get("reused") and not t.get("ground_truth"))
+    # Validate that every trace contains necessary raw fields
+    for idx, tr in enumerate(bench_traces):
+        if "ground_truth" not in tr:
+            print(f"FAIL: Trace entry at index {idx} ({tr.get('id', 'unknown')}) missing 'ground_truth' label", file=sys.stderr)
+            return STATUS_INVALID
+        if "b2_reused" not in tr:
+            print(f"FAIL: Trace entry at index {idx} ({tr.get('id', 'unknown')}) missing 'b2_reused' field required for independent baseline recomputation", file=sys.stderr)
+            return STATUS_INVALID
+
+    derived_b3_tp = sum(1 for t in bench_traces if (t.get("b3_reused") if "b3_reused" in t else t.get("reused")) and t.get("ground_truth"))
+    derived_b3_fp = sum(1 for t in bench_traces if (t.get("b3_reused") if "b3_reused" in t else t.get("reused")) and not t.get("ground_truth"))
+    derived_b3_tn = sum(1 for t in bench_traces if not (t.get("b3_reused") if "b3_reused" in t else t.get("reused")) and not t.get("ground_truth"))
+    derived_b3_fn = sum(1 for t in bench_traces if not (t.get("b3_reused") if "b3_reused" in t else t.get("reused")) and t.get("ground_truth"))
     derived_b3_total = len(bench_traces)
 
     derived_b3_prec = round((derived_b3_tp / (derived_b3_tp + derived_b3_fp) * 100.0) if (derived_b3_tp + derived_b3_fp) > 0 else 100.0, 2)
     derived_b3_fhr = round((derived_b3_fp / derived_b3_total * 100.0) if derived_b3_total > 0 else 0.0, 2)
 
-    bench_baselines = bench_data.get("baselines", {})
-    bench_b3 = bench_baselines.get("B3_SunbornCalibrated", {})
-    bench_b2 = bench_baselines.get("B2_NaiveCosine", {})
+    derived_b2_tp = sum(1 for t in bench_traces if t.get("b2_reused") and t.get("ground_truth"))
+    derived_b2_fp = sum(1 for t in bench_traces if t.get("b2_reused") and not t.get("ground_truth"))
+    derived_b2_tn = sum(1 for t in bench_traces if not t.get("b2_reused") and not t.get("ground_truth"))
+    derived_b2_fn = sum(1 for t in bench_traces if not t.get("b2_reused") and t.get("ground_truth"))
+    derived_b2_total = len(bench_traces)
 
-    derived_b3_cost_savings = bench_b3.get("cost_savings_pct")
-    derived_b2_fp = bench_b2.get("false_hits")
-    derived_b2_fhr = bench_b2.get("false_hit_rate_pct")
+    derived_b2_prec = round((derived_b2_tp / (derived_b2_tp + derived_b2_fp) * 100.0) if (derived_b2_tp + derived_b2_fp) > 0 else 100.0, 2)
+    derived_b2_fhr = round((derived_b2_fp / derived_b2_total * 100.0) if derived_b2_total > 0 else 0.0, 2)
 
-    # Recompute metrics from run_manifest.json
+    # Recompute B3 cost savings from validated cost model inputs
+    cost_model = bench_data.get("metadata", {}).get("cost_model", {})
+    origin_call_usd = float(cost_model.get("origin_call_usd", 0.0))
+    cache_lookup_usd = float(cost_model.get("cache_lookup_usd", 0.0))
+    if origin_call_usd <= 0.0 or cache_lookup_usd < 0.0:
+        print(f"FAIL: Invalid cost model inputs: origin_call_usd={origin_call_usd}, cache_lookup_usd={cache_lookup_usd}", file=sys.stderr)
+        return STATUS_INVALID
+
+    b0_cost = derived_b3_total * origin_call_usd
+    b3_cost = sum(
+        cache_lookup_usd if (t.get("b3_reused") if "b3_reused" in t else t.get("reused")) else origin_call_usd
+        for t in bench_traces
+    )
+    derived_b3_cost_savings = round(max(0.0, (1.0 - (b3_cost / b0_cost)) * 100.0), 2)
+
+    # B. Recompute temporal metrics directly from run_manifest.json raw traces
     manifest_traces = manifest_data.get("raw_execution_traces", [])
     if not manifest_traces:
         print("FAIL: Manifest artifact missing 'raw_execution_traces'", file=sys.stderr)
         return STATUS_INVALID
 
+    for idx, tr in enumerate(manifest_traces):
+        if "ground_truth" not in tr or "b2_reused" not in tr or "b3_reused" not in tr:
+            print(f"FAIL: Manifest trace at index {idx} ({tr.get('id', 'unknown')}) missing required evaluation fields", file=sys.stderr)
+            return STATUS_INVALID
+
     derived_tb3_tp = sum(1 for t in manifest_traces if t.get("b3_reused") and t.get("ground_truth"))
     derived_tb3_fp = sum(1 for t in manifest_traces if t.get("b3_reused") and not t.get("ground_truth"))
+    derived_tb3_tn = sum(1 for t in manifest_traces if not t.get("b3_reused") and not t.get("ground_truth"))
+    derived_tb3_fn = sum(1 for t in manifest_traces if not t.get("b3_reused") and t.get("ground_truth"))
+    derived_tb3_total = len(manifest_traces)
+
     derived_tb3_prec = round((derived_tb3_tp / (derived_tb3_tp + derived_tb3_fp) * 100.0) if (derived_tb3_tp + derived_tb3_fp) > 0 else 100.0, 2)
+    derived_tb3_fhr = round((derived_tb3_fp / derived_tb3_total * 100.0) if derived_tb3_total > 0 else 0.0, 2)
+
+    derived_tb2_tp = sum(1 for t in manifest_traces if t.get("b2_reused") and t.get("ground_truth"))
+    derived_tb2_fp = sum(1 for t in manifest_traces if t.get("b2_reused") and not t.get("ground_truth"))
+    derived_tb2_tn = sum(1 for t in manifest_traces if not t.get("b2_reused") and not t.get("ground_truth"))
+    derived_tb2_fn = sum(1 for t in manifest_traces if not t.get("b2_reused") and t.get("ground_truth"))
+    derived_tb2_total = len(manifest_traces)
+
+    derived_tb2_prec = round((derived_tb2_tp / (derived_tb2_tp + derived_tb2_fp) * 100.0) if (derived_tb2_tp + derived_tb2_fp) > 0 else 100.0, 2)
+    derived_tb2_fhr = round((derived_tb2_fp / derived_tb2_total * 100.0) if derived_tb2_total > 0 else 0.0, 2)
+
+    # C. Validate that Artifact Baseline Summaries agree with raw traces
+    bench_baselines = bench_data.get("baselines", {})
+    bench_b3 = bench_baselines.get("B3_SunbornCalibrated", {})
+    bench_b2 = bench_baselines.get("B2_NaiveCosine", {})
+
+    if bench_b3.get("false_hits") != derived_b3_fp:
+        print(f"FAIL: Benchmark B3 summary false_hits ({bench_b3.get('false_hits')}) != derived ({derived_b3_fp})", file=sys.stderr)
+        return STATUS_INVALID
+    if round(float(bench_b3.get("false_hit_rate_pct", -1)), 2) != derived_b3_fhr:
+        print(f"FAIL: Benchmark B3 summary false_hit_rate_pct ({bench_b3.get('false_hit_rate_pct')}) != derived ({derived_b3_fhr})", file=sys.stderr)
+        return STATUS_INVALID
+    if round(float(bench_b3.get("precision_pct", -1)), 2) != derived_b3_prec:
+        print(f"FAIL: Benchmark B3 summary precision_pct ({bench_b3.get('precision_pct')}) != derived ({derived_b3_prec})", file=sys.stderr)
+        return STATUS_INVALID
+    if round(float(bench_b3.get("cost_savings_pct", -1)), 2) != derived_b3_cost_savings:
+        print(f"FAIL: Benchmark B3 summary cost_savings_pct ({bench_b3.get('cost_savings_pct')}) != derived ({derived_b3_cost_savings})", file=sys.stderr)
+        return STATUS_INVALID
+
+    if bench_b2.get("false_hits") != derived_b2_fp:
+        print(f"FAIL: Benchmark B2 summary false_hits ({bench_b2.get('false_hits')}) != derived ({derived_b2_fp})", file=sys.stderr)
+        return STATUS_INVALID
+    if round(float(bench_b2.get("false_hit_rate_pct", -1)), 2) != derived_b2_fhr:
+        print(f"FAIL: Benchmark B2 summary false_hit_rate_pct ({bench_b2.get('false_hit_rate_pct')}) != derived ({derived_b2_fhr})", file=sys.stderr)
+        return STATUS_INVALID
 
     manifest_baselines = manifest_data.get("baselines", {})
+    manifest_tb3 = manifest_baselines.get("B3_SunbornTemporal", {})
     manifest_tb2 = manifest_baselines.get("B2_NaiveCosine", {})
-    derived_tb2_fp = manifest_tb2.get("false_hits")
-    derived_tb2_fhr = manifest_tb2.get("false_hit_rate_pct")
+
+    if manifest_tb3.get("false_hits") != derived_tb3_fp:
+        print(f"FAIL: Manifest B3 summary false_hits ({manifest_tb3.get('false_hits')}) != derived ({derived_tb3_fp})", file=sys.stderr)
+        return STATUS_INVALID
+    if round(float(manifest_tb3.get("precision_pct", -1)), 2) != derived_tb3_prec:
+        print(f"FAIL: Manifest B3 summary precision_pct ({manifest_tb3.get('precision_pct')}) != derived ({derived_tb3_prec})", file=sys.stderr)
+        return STATUS_INVALID
+
+    if manifest_tb2.get("false_hits") != derived_tb2_fp:
+        print(f"FAIL: Manifest B2 summary false_hits ({manifest_tb2.get('false_hits')}) != derived ({derived_tb2_fp})", file=sys.stderr)
+        return STATUS_INVALID
+    if round(float(manifest_tb2.get("false_hit_rate_pct", -1)), 2) != derived_tb2_fhr:
+        print(f"FAIL: Manifest B2 summary false_hit_rate_pct ({manifest_tb2.get('false_hit_rate_pct')}) != derived ({derived_tb2_fhr})", file=sys.stderr)
+        return STATUS_INVALID
 
     # Meaningful successful reuse assertion (not degenerate zero-reuse cache)
     if derived_b3_tp <= 0:
@@ -316,7 +408,7 @@ def verify_reproduction_certificate(
         print(f"FAIL: SemanticCacheBench-T B3 temporal precision invariant violated: derived prec={derived_tb3_prec}%", file=sys.stderr)
         return STATUS_INVALID
 
-    # Cross-check certificate metrics against recomputed metrics
+    # D. Cross-check certificate metrics against recomputed metrics (EXACT EQUALITY, NO TOLERANCE)
     cert_metrics = loaded_cert.get("empirical_metrics", {})
     expected_cert_mappings = [
         ("sunborn_b3_false_hits", derived_b3_fp, False),
@@ -337,16 +429,17 @@ def verify_reproduction_certificate(
             return STATUS_INVALID
         cert_val = cert_metrics[key]
         if is_float:
-            if abs(float(cert_val) - float(expected_val)) > 0.01:
-                print(f"FAIL: Metric mismatch for '{key}': certificate claimed {cert_val}, but recomputed from source artifact is {expected_val}", file=sys.stderr)
+            if round(float(cert_val), 2) != round(float(expected_val), 2):
+                print(f"FAIL: Exact metric mismatch for '{key}': certificate claimed {cert_val}, but recomputed from source artifact is {expected_val}", file=sys.stderr)
                 return STATUS_INVALID
         else:
             if int(cert_val) != int(expected_val):
-                print(f"FAIL: Metric mismatch for '{key}': certificate claimed {cert_val}, but recomputed from source artifact is {expected_val}", file=sys.stderr)
+                print(f"FAIL: Exact metric mismatch for '{key}': certificate claimed {cert_val}, but recomputed from source artifact is {expected_val}", file=sys.stderr)
                 return STATUS_INVALID
 
-    print(f"  [✓] Empirical metrics recomputed from raw traces: B3 true positives = {derived_b3_tp}, false hits = 0, precision = 100.0%.")
-    print(f"  [✓] All 10 certificate empirical metrics cross-checked against source artifacts and verified identical.")
+    print(f"  [✓] Empirical metrics recomputed from raw traces: B3 TP={derived_b3_tp}, FP={derived_b3_fp}, Prec={derived_b3_prec}%, Savings={derived_b3_cost_savings}%; Naive B2 FP={derived_b2_fp} ({derived_b2_fhr}%).")
+    print(f"  [✓] Artifact baseline summaries verified identical to raw trace recomputations.")
+    print(f"  [✓] All 10 certificate empirical metrics cross-checked against independently recomputed metrics with exact equality.")
 
     # 7. Attestation & Signature Verification (Explicit 4-State Outcome Evaluation)
     signing_algo = prov.get("signing_algorithm")

@@ -28,7 +28,8 @@ before(async () => {
   nextProcess = spawn('npx', ['next', 'start', '-p', `${TEST_PORT}`], {
     cwd: frontendDir,
     env: { ...process.env, PORT: `${TEST_PORT}`, NODE_ENV: 'production' },
-    stdio: 'pipe',
+    stdio: 'ignore',
+    detached: true,
   });
 
   // Wait for health check
@@ -89,8 +90,14 @@ after(async () => {
   if (browser) {
     await browser.close().catch(() => {});
   }
-  if (nextProcess) {
-    nextProcess.kill('SIGTERM');
+  if (nextProcess && nextProcess.pid) {
+    try {
+      process.kill(-nextProcess.pid, 'SIGKILL');
+    } catch {
+      try {
+        nextProcess.kill('SIGKILL');
+      } catch {}
+    }
   }
 });
 

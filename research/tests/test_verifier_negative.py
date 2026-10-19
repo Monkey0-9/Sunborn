@@ -357,6 +357,96 @@ class NegativeVerifierTests(unittest.TestCase):
             check_git=True,
             require_live=True,
         )
+    def test_tampered_b2_summary_in_benchmark_is_strictly_rejected(self):
+        with open(self.bench_copy, "r", encoding="utf-8") as f:
+            bench_data = json.load(f)
+
+        # Tamper B2 summary false_hits to 0 while raw traces still contain 60 false hits
+        bench_data["baselines"]["B2_NaiveCosine"]["false_hits"] = 0
+        self._sync_cert_hashes(bench_data=bench_data)
+
+        outcome = verify_reproduction_certificate(
+            cert_path=self.cert_copy,
+            bench_path=self.bench_copy,
+            manifest_path=self.manifest_copy,
+            check_git=True,
+            require_live=True,
+        )
+        self.assertEqual(outcome, STATUS_INVALID)
+
+    def test_tampered_temporal_b2_summary_in_manifest_is_strictly_rejected(self):
+        with open(self.manifest_copy, "r", encoding="utf-8") as f:
+            manifest_data = json.load(f)
+
+        # Tamper temporal B2 summary false_hits to 0 while raw execution traces still contain 12 false hits
+        manifest_data["baselines"]["B2_NaiveCosine"]["false_hits"] = 0
+        self._sync_cert_hashes(manifest_data=manifest_data)
+
+        outcome = verify_reproduction_certificate(
+            cert_path=self.cert_copy,
+            bench_path=self.bench_copy,
+            manifest_path=self.manifest_copy,
+            check_git=True,
+            require_live=True,
+        )
+        self.assertEqual(outcome, STATUS_INVALID)
+
+    def test_tampered_cost_savings_in_summary_is_strictly_rejected(self):
+        with open(self.bench_copy, "r", encoding="utf-8") as f:
+            bench_data = json.load(f)
+
+        # Tamper B3 summary cost_savings_pct to 99.9 while raw traces and cost inputs produce 12.09
+        bench_data["baselines"]["B3_SunbornCalibrated"]["cost_savings_pct"] = 99.9
+        self._sync_cert_hashes(bench_data=bench_data)
+
+        outcome = verify_reproduction_certificate(
+            cert_path=self.cert_copy,
+            bench_path=self.bench_copy,
+            manifest_path=self.manifest_copy,
+            check_git=True,
+            require_live=True,
+        )
+        self.assertEqual(outcome, STATUS_INVALID)
+
+    def test_missing_b2_reused_in_trace_is_strictly_rejected(self):
+        with open(self.bench_copy, "r", encoding="utf-8") as f:
+            bench_data = json.load(f)
+
+        # Delete b2_reused field from first trace
+        bench_data["b3_evaluation_trace"][0].pop("b2_reused", None)
+        self._sync_cert_hashes(bench_data=bench_data)
+
+        outcome = verify_reproduction_certificate(
+            cert_path=self.cert_copy,
+            bench_path=self.bench_copy,
+            manifest_path=self.manifest_copy,
+            check_git=True,
+            require_live=True,
+        )
+        self.assertEqual(outcome, STATUS_INVALID)
+
+    def test_subtle_float_metric_mismatch_is_strictly_rejected(self):
+        with open(self.cert_copy, "r", encoding="utf-8") as f:
+            cert = json.load(f)
+
+        # Mutate cost savings by only 0.01 (12.09 -> 12.10) to prove zero-tolerance exact equality
+        cert["empirical_metrics"]["sunborn_b3_cost_savings_pct"] = 12.10
+        cert.pop("attestation", None)
+        canonical_bytes = json.dumps(cert, sort_keys=True).encode("utf-8")
+        cert["attestation"] = {
+            "canonical_manifest_digest": hashlib.sha256(canonical_bytes).hexdigest(),
+            "hmac_sha256_signature": None,
+        }
+        with open(self.cert_copy, "w", encoding="utf-8") as f:
+            json.dump(cert, f, indent=2)
+
+        outcome = verify_reproduction_certificate(
+            cert_path=self.cert_copy,
+            bench_path=self.bench_copy,
+            manifest_path=self.manifest_copy,
+            check_git=True,
+            require_live=True,
+        )
         self.assertEqual(outcome, STATUS_INVALID)
 
 if __name__ == "__main__":
