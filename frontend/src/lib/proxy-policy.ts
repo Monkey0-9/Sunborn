@@ -22,14 +22,40 @@ export const PRIVILEGED_ADMIN_PREFIXES = [
   "v1/lifecycle/sweep",
 ];
 
-export function isPrivilegedRoute(normalizedPath: string): boolean {
+/**
+ * Normalizes request paths, collapsing duplicate slashes, resolving . and ..,
+ * and preventing path traversal bypasses.
+ */
+export function normalizePath(rawPath: string): string {
+  let decoded = rawPath;
+  try {
+    decoded = decodeURIComponent(rawPath);
+  } catch {
+    // Keep raw decoded if percent-decoding throws
+  }
+  const segments = decoded.replace(/\/+/g, "/").split("/");
+  const resolved: string[] = [];
+  for (const seg of segments) {
+    if (!seg || seg === ".") continue;
+    if (seg === "..") {
+      resolved.pop();
+    } else {
+      resolved.push(seg);
+    }
+  }
+  return resolved.join("/");
+}
+
+export function isPrivilegedRoute(path: string): boolean {
+  const normalized = normalizePath(path);
   return PRIVILEGED_ADMIN_PREFIXES.some(
-    (prefix) => normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`)
+    (prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`)
   );
 }
 
-export function isPublicRoute(normalizedPath: string): boolean {
-  return PUBLIC_ROUTES.has(normalizedPath);
+export function isPublicRoute(path: string): boolean {
+  const normalized = normalizePath(path);
+  return PUBLIC_ROUTES.has(normalized);
 }
 
 export type AuthDecision =
@@ -43,19 +69,84 @@ export function evaluateProxySecurity(params: {
   origin?: string | null;
   host?: string | null;
   telemetryKey?: string | null;
+  isCookieAuthenticated?: boolean;
 }): AuthDecision {
-  const { method, normalizedPath, clientCredential, origin, host, telemetryKey } = params;
+  const {
+    method,
+    normalizedPath: rawPath,
+    clientCredential,
+    origin,
+    host,
+    telemetryKey,
+    isCookieAuthenticated = false,
+  } = params;
 
-  // 1. CSRF validation for mutating browser requests
-  if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
-    if (origin && host) {
+  const normalizedPath = normalizePath(rawPath);
+  const isMutating = ["POST", "PUT", "PATCH", "DELETE"].includes(method.toUpperCase());
+
+  // 1. CSRF validation for mutating requests
+  if (isMutating) {
+    // If request uses ambient cookie authentication, Origin and Host are MANDATORY
+    if (isCookieAuthenticated) {
+      if (!host) {
+        return {
+          allowed: false,
+          status: 400,
+          error: "MISSING_HOST_HEADER",
+          detail: "Mutating cookie-authenticated requests require an explicit Host header.",
+        };
+      }
+      if (!origin) {
+        return {
+          allowed: false,
+          status: 403,
+          error: "CSRF_MISSING_ORIGIN",
+          detail: "Cross-site request forgery protection requires a valid Origin header for state-mutating requests with cookie authentication.",
+        };
+      }
+    }
+
+    if (origin) {
+      if (!host) {
+        return {
+          allowed: false,
+          status: 400,
+          error: "MISSING_HOST_HEADER",
+          detail: "Request specifying an Origin header must also include a Host header.",
+        };
+      }
+
       try {
         const originUrl = new URL(origin);
-        if (
-          originUrl.host !== host &&
-          !originUrl.host.includes("localhost") &&
-          !originUrl.host.includes("127.0.0.1")
-        ) {
+
+        // Disallow dangerous or unexpected protocols
+        if (!["http:", "https:"].includes(originUrl.protocol)) {
+          return {
+            allowed: false,
+            status: 403,
+            error: "UNSAFE_ORIGIN_PROTOCOL",
+            detail: `Unsafe origin protocol '${originUrl.protocol}'. Only HTTP/HTTPS origins are permitted.`,
+          };
+        }
+
+        // Exact origin match against host
+        const isExactHostMatch = originUrl.host === host;
+
+        // Exact localhost / loopback matching (rejects evil-localhost.com, localhost.attacker.com)
+        const hostNameOnly = host.split(":")[0];
+        const isLocalHost =
+          hostNameOnly === "localhost" ||
+          hostNameOnly === "127.0.0.1" ||
+          hostNameOnly === "[::1]";
+
+        const isLocalOrigin =
+          originUrl.hostname === "localhost" ||
+          originUrl.hostname === "127.0.0.1" ||
+          originUrl.hostname === "[::1]";
+
+        const isPermittedLocalDev = isLocalHost && isLocalOrigin;
+
+        if (!isExactHostMatch && !isPermittedLocalDev) {
           return {
             allowed: false,
             status: 403,

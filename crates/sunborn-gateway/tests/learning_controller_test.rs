@@ -1125,7 +1125,7 @@ async fn test_live_policy_driven_decision_engine_dynamic_threshold_evaluation() 
         "tenant-policy-test",
         "app-default",
         "gpt-4o",
-        "Explain the fundamentals of quantum computing architectures",
+        "Describe the fundamentals of quantum computing algorithms",
     );
     let v_perm = state
         .selected_embedder

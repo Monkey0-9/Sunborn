@@ -1,10 +1,10 @@
 {
   "evaluation": "Sunborn Empirical Scientific Reproduction",
   "status": "PASSED",
-  "git_commit": "83c26b5c63980217df02fbad90eeeaec01be39d8",
+  "git_commit": "b7ef82f271e2a12fc1cc6d0a308d76efb0d276bd",
   "git_branch": "main",
-  "git_tree": "ca5c21b3757f5e0aa71dcf361266b8372574e317",
-  "timestamp_utc": "2026-10-19T09:51:54.962416+00:00",
+  "git_tree": "e117770fbe0774e9aee553309da7b984476e8780",
+  "timestamp_utc": "2026-10-19T12:25:45.716749+00:00",
   "environment": {
     "os": "Linux",
     "release": "6.12.0-211.64.1.el10_2.x86_64",
@@ -14,18 +14,18 @@
     "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)"
   },
   "provenance": {
-    "benchmark_run_sha256": "5491f7fbf661e1c0d1b3c5df3379b998e9397a47fb9db24d5cfcc5915b299eb1",
-    "run_manifest_sha256": "03eefbc5efb10c1c262d82cf7603ebfcae51576491680f4d7a4101388de46041",
+    "benchmark_run_sha256": "35ba0af193c80e116894c142ef522e773fb63fdb06f999fad0fc1d9160c466e6",
+    "run_manifest_sha256": "482b8c3d5fd4e584e1018acdf261d65558d5fe512d5b40b2312ea1a4fbf10942",
     "embedding_backend": "BAAI/bge-small-en-v1.5 (fastembed)",
     "decision_engine": "Sunborn-Semantic DecisionEngine (VerificationCascade + Conformal Risk Bound <= 0.25)",
-    "decision_engine_mode": "rust_parity_calibrated_decision_engine",
+    "decision_engine_mode": "live_gateway_rpc",
     "signing_algorithm": "HMAC-SHA-256"
   },
   "empirical_metrics": {
     "sunborn_b3_false_hits": 0,
     "sunborn_b3_false_hit_rate_pct": 0.0,
     "sunborn_b3_precision_pct": 100.0,
-    "sunborn_b3_cost_savings_pct": 23.38,
+    "sunborn_b3_cost_savings_pct": 12.09,
     "sunborn_b3_temporal_false_hits": 0,
     "sunborn_b3_temporal_precision_pct": 100.0,
     "naive_b2_false_hits": 60,
@@ -34,7 +34,7 @@
     "naive_b2_temporal_false_hit_rate_pct": 63.16
   },
   "attestation": {
-    "canonical_manifest_digest": "a9d87bfa9c05d2c067702ee717793bbe3e7ca97894bb908a210495be67da45c4",
-    "hmac_sha256_signature": "c883cd6f0679037ce5340249d54ac52292676642aa49a4045572b47475f7e8c9"
+    "canonical_manifest_digest": "a50bfc7d56fc835819fe602b9b49ae44688a722d68eb2b02c4e3ecf5643e18e2",
+    "hmac_sha256_signature": "fbb702b2bb7cac57fc8171587e93beec0a59463eb188175b9051a87752f48019"
   }
 }

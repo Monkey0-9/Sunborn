@@ -159,7 +159,7 @@ export default function OverviewPage() {
           </h1>
           <p className="text-base sm:text-lg text-slate-400 leading-relaxed max-w-3xl">
             Sunborn decouples AI inference latency, token expenditure, and origin failure risks
-            through multi-tier execution reuse. Empirically demonstrated <strong className="text-slate-200">0.0% false-hit rate</strong> on the frozen SemanticCacheBench suite (95% Wilson CI: [0.0%, 3.0%]), sub-120 µs exact match microbenchmark latency, and instant <strong className="text-slate-200">O(1) cryptographic shredding</strong> under GDPR Article 17.
+            through multi-tier execution reuse. Empirically evaluated on the frozen SemanticCacheBench suite (120+ queries across 8 categories, 0.0% observed false-hit rate, 95% Wilson CI: [0.0%, 3.0%]), with single-flight mutex coalescing and cryptographic tenant key zeroization under GDPR Article 17.
           </p>
         </div>
 
@@ -466,8 +466,8 @@ export default function OverviewPage() {
                   <span className="text-slate-300">N=10,000 Key Eradication Runs</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Guaranteed RPO:</span>
-                  <span className="text-amber-300 font-semibold">Instant Invalidation</span>
+                  <span className="text-slate-500">Key Erasure RPO:</span>
+                  <span className="text-amber-300 font-semibold">TDEK Zeroization (Local Store)</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Status:</span>
@@ -476,6 +476,10 @@ export default function OverviewPage() {
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        <div className="p-3.5 rounded-xl border border-white/[0.08] bg-slate-900/40 text-xs text-slate-400 leading-relaxed">
+          <strong className="text-slate-300">Methodological Note & Empirical Boundaries:</strong> The benchmark’s observed 0.0% false-hit rate on frozen evaluation datasets indicates zero observed classification errors under the test distribution, but does not guarantee a zero production error rate across open-domain queries. Similarly, cryptographic key zeroization immediately revokes decryption capability for stored ciphertext, but relies on authoritative key provider durability and does not instantaneously erase volatile unencrypted runtime memory or separate cold backups.
         </div>
       </section>
  
@@ -506,11 +510,11 @@ export default function OverviewPage() {
             <span className="text-[10px] font-mono text-cyan-400 font-bold">TIER 0 / TIER 1</span>
             <h3 className="text-base font-bold text-white mt-1">Exact Match Hot Path</h3>
             <p className="text-xs text-slate-400 mt-2 font-mono leading-relaxed">
-              In-Memory W-TinyLFU + DragonflyDB (Redis RESP). Sub-120 µs exact lookup with single-flight mutex coalescing.
+              In-Memory W-TinyLFU + DragonflyDB (Redis RESP). Single-flight mutex coalescing with sub-millisecond RAM lookup.
             </p>
             <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between text-xs font-mono">
-              <span className="text-slate-500">P99 Latency:</span>
-              <span className="text-cyan-300 font-bold">91–124 µs</span>
+              <span className="text-slate-500">Lookup Latency:</span>
+              <span className="text-cyan-300 font-bold">Sub-ms RAM (Live: Not measured)</span>
             </div>
           </div>
 
@@ -524,8 +528,8 @@ export default function OverviewPage() {
               Qdrant Vector Store with micro-batched FastEmbed. Negation trap and numeric inversion guardrails eliminate drift.
             </p>
             <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between text-xs font-mono">
-              <span className="text-slate-500">False-Hit Rate:</span>
-              <span className="text-violet-300 font-bold">0.0% (α≤0.001)</span>
+              <span className="text-slate-500">Benchmark Rate:</span>
+              <span className="text-violet-300 font-bold">0.0% observed (α≤0.001)</span>
             </div>
           </div>
 

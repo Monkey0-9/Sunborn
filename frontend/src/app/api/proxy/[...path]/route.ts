@@ -30,6 +30,8 @@ async function handleProxy(req: NextRequest, context: RouteContext) {
     (apiKeyHeader ? `Bearer ${apiKeyHeader}` : null) ||
     (sessionCookie ? `Bearer ${sessionCookie}` : null);
 
+  const isCookieAuthenticated = !authHeader && !apiKeyHeader && !!sessionCookie;
+
   const securityDecision = evaluateProxySecurity({
     method: req.method,
     normalizedPath,
@@ -37,6 +39,7 @@ async function handleProxy(req: NextRequest, context: RouteContext) {
     origin: req.headers.get("origin"),
     host: req.headers.get("host"),
     telemetryKey: process.env.SUNBORN_READ_ONLY_TOKEN,
+    isCookieAuthenticated,
   });
 
   if (!securityDecision.allowed) {

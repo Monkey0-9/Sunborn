@@ -1,10 +1,10 @@
 {
   "metadata": {
     "evaluation_suite": "SemanticCacheBench (v1.0 Frozen Suite)",
-    "provenance_type": "FROZEN_OFFLINE_BENCHMARK_EVALUATION",
-    "evidence_scope": "Offline experimental benchmark on frozen test suite (SemanticCacheBench v1.0). Demonstrates calibrated decision engine properties; does NOT represent unmonitored live production traffic or guaranteed zero false-hit rate across open-domain production workloads without runtime calibration.",
-    "evaluation_time_utc": "2026-10-19T09:51:53.980155+00:00",
-    "git_commit": "83c26b5c63980217df02fbad90eeeaec01be39d8",
+    "provenance_type": "LIVE_GATEWAY_DECISION_PATH",
+    "evidence_scope": "Evaluates calibrated decision engine properties; does NOT represent unmonitored live production traffic or guaranteed zero false-hit rate across open-domain production workloads without runtime calibration.",
+    "evaluation_time_utc": "2026-10-19T12:25:44.727887+00:00",
+    "git_commit": "b7ef82f271e2a12fc1cc6d0a308d76efb0d276bd",
     "platform": "Linux-6.12.0-211.64.1.el10_2.x86_64-x86_64-with-glibc2.39",
     "python_version": "3.13.16",
     "total_benchmark_queries": 124,
@@ -12,10 +12,18 @@
     "dataset_sha256": "61a0794c51d312d441bbeaf5ea8e3b9d1958186307606fa177093cc90bce534b",
     "embedding_backend": "BAAI/bge-small-en-v1.5 (fastembed)",
     "decision_engine": "Sunborn-Semantic DecisionEngine (VerificationCascade + Conformal Risk Bound <= 0.25)",
-    "decision_engine_mode": "rust_parity_calibrated_decision_engine",
+    "decision_engine_mode": "live_gateway_rpc",
+    "measured_live_gateway_telemetry": {
+      "live_gateway_connected": true,
+      "requests_endpoint": "http://127.0.0.1:8080/v1/requests",
+      "p50_latency_ms": 1.639,
+      "p90_latency_ms": 2.351,
+      "p99_latency_ms": 5.141,
+      "mean_latency_ms": 1.793
+    },
     "cost_model": {
       "model_type": "SYNTHETIC_COST_ESTIMATION",
-      "cost_model_notes": "Modeled assuming standard GPT-4o input/output token pricing ($0.00625 per origin call equivalent). Modeled savings are algorithmic estimates under this fixed pricing schedule, NOT independently audited commercial cloud provider invoices or customer telemetry.",
+      "cost_model_notes": "Modeled assuming standard GPT-4o input/output token pricing ($0.00625 per origin call equivalent). Modeled savings are algorithmic estimates under this fixed pricing schedule, NOT independently audited commercial cloud provider invoices or customer telemetry. Keep simulated cost strictly separate from measured HTTP gateway latencies.",
       "origin_call_usd": 0.00625,
       "cache_lookup_usd": 1e-06,
       "origin_latency_ms": 450.0
@@ -120,11 +128,11 @@
     },
     "B3_SunbornCalibrated": {
       "name": "Sunborn Multi-Tier Calibrated Engine",
-      "hits": 29,
-      "hit_rate_pct": 23.39,
+      "hits": 15,
+      "hit_rate_pct": 12.1,
       "hit_rate_ci_95": [
-        16.81,
-        31.57
+        7.47,
+        19.0
       ],
       "false_hits": 0,
       "false_hit_rate_pct": 0.0,
@@ -134,21 +142,1263 @@
       ],
       "precision_pct": 100.0,
       "precision_ci_95": [
-        88.3,
+        79.61,
         100.0
       ],
-      "recall_pct": 72.5,
+      "recall_pct": 37.5,
       "recall_ci_95": [
-        57.17,
-        83.89
+        24.22,
+        52.97
       ],
-      "avg_latency_ms": 345.9,
-      "total_cost_usd": 0.593779,
-      "cost_savings_pct": 23.38,
-      "tp": 29,
+      "avg_latency_ms": 1.79,
+      "total_cost_usd": 0.681265,
+      "cost_savings_pct": 12.09,
+      "tp": 15,
       "fp": 0,
       "tn": 84,
-      "fn": 11
+      "fn": 25
     }
-  }
+  },
+  "b3_evaluation_trace": [
+    {
+      "id": "WS-001",
+      "category": "whitespace",
+      "reused": true,
+      "action": "safe_hit",
+      "reason_code": "EXACT_CANONICAL_MATCH",
+      "has_certificate": true,
+      "measured_latency_ms": 2.984,
+      "ground_truth": true
+    },
+    {
+      "id": "WS-002",
+      "category": "whitespace",
+      "reused": true,
+      "action": "safe_hit",
+      "reason_code": "EXACT_CANONICAL_MATCH",
+      "has_certificate": true,
+      "measured_latency_ms": 1.773,
+      "ground_truth": true
+    },
+    {
+      "id": "WS-003",
+      "category": "whitespace",
+      "reused": true,
+      "action": "safe_hit",
+      "reason_code": "EXACT_CANONICAL_MATCH",
+      "has_certificate": true,
+      "measured_latency_ms": 0.977,
+      "ground_truth": true
+    },
+    {
+      "id": "WS-004",
+      "category": "whitespace",
+      "reused": true,
+      "action": "safe_hit",
+      "reason_code": "EXACT_CANONICAL_MATCH",
+      "has_certificate": true,
+      "measured_latency_ms": 1.187,
+      "ground_truth": true
+    },
+    {
+      "id": "WS-005",
+      "category": "whitespace",
+      "reused": true,
+      "action": "safe_hit",
+      "reason_code": "SEMANTIC_SIMILARITY_MATCH",
+      "has_certificate": true,
+      "measured_latency_ms": 1.104,
+      "ground_truth": true
+    },
+    {
+      "id": "WS-006",
+      "category": "whitespace",
+      "reused": true,
+      "action": "safe_hit",
+      "reason_code": "EXACT_CANONICAL_MATCH",
+      "has_certificate": true,
+      "measured_latency_ms": 1.211,
+      "ground_truth": true
+    },
+    {
+      "id": "WS-007",
+      "category": "whitespace",
+      "reused": true,
+      "action": "safe_hit",
+      "reason_code": "EXACT_CANONICAL_MATCH",
+      "has_certificate": true,
+      "measured_latency_ms": 1.045,
+      "ground_truth": true
+    },
+    {
+      "id": "WS-008",
+      "category": "whitespace",
+      "reused": true,
+      "action": "safe_hit",
+      "reason_code": "EXACT_CANONICAL_MATCH",
+      "has_certificate": true,
+      "measured_latency_ms": 1.053,
+      "ground_truth": true
+    },
+    {
+      "id": "WS-009",
+      "category": "whitespace",
+      "reused": true,
+      "action": "safe_hit",
+      "reason_code": "EXACT_CANONICAL_MATCH",
+      "has_certificate": true,
+      "measured_latency_ms": 1.24,
+      "ground_truth": true
+    },
+    {
+      "id": "WS-010",
+      "category": "whitespace",
+      "reused": true,
+      "action": "safe_hit",
+      "reason_code": "EXACT_CANONICAL_MATCH",
+      "has_certificate": true,
+      "measured_latency_ms": 1.867,
+      "ground_truth": true
+    },
+    {
+      "id": "WS-011",
+      "category": "whitespace",
+      "reused": true,
+      "action": "safe_hit",
+      "reason_code": "EXACT_CANONICAL_MATCH",
+      "has_certificate": true,
+      "measured_latency_ms": 1.107,
+      "ground_truth": true
+    },
+    {
+      "id": "WS-012",
+      "category": "whitespace",
+      "reused": true,
+      "action": "safe_hit",
+      "reason_code": "SEMANTIC_SIMILARITY_MATCH",
+      "has_certificate": true,
+      "measured_latency_ms": 1.887,
+      "ground_truth": true
+    },
+    {
+      "id": "WS-013",
+      "category": "whitespace",
+      "reused": true,
+      "action": "safe_hit",
+      "reason_code": "EXACT_CANONICAL_MATCH",
+      "has_certificate": true,
+      "measured_latency_ms": 1.294,
+      "ground_truth": true
+    },
+    {
+      "id": "WS-014",
+      "category": "whitespace",
+      "reused": true,
+      "action": "safe_hit",
+      "reason_code": "EXACT_CANONICAL_MATCH",
+      "has_certificate": true,
+      "measured_latency_ms": 1.042,
+      "ground_truth": true
+    },
+    {
+      "id": "WS-015",
+      "category": "whitespace",
+      "reused": true,
+      "action": "safe_hit",
+      "reason_code": "EXACT_CANONICAL_MATCH",
+      "has_certificate": true,
+      "measured_latency_ms": 1.336,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-001",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.55,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-002",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.264,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-003",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.694,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-004",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.628,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-005",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.34,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-006",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.945,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-007",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.902,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-008",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 5.961,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-009",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.549,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-010",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.116,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-011",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.096,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-012",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.043,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-013",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.469,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-014",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.847,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-015",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 0.97,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-016",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.074,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-017",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.121,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-018",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.117,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-019",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.418,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-020",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.875,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-021",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.41,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-022",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 2.177,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-023",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 2.178,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-024",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 2.732,
+      "ground_truth": true
+    },
+    {
+      "id": "SP-025",
+      "category": "paraphrase",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.404,
+      "ground_truth": true
+    },
+    {
+      "id": "NEG-001",
+      "category": "negation_trap",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.588,
+      "ground_truth": false
+    },
+    {
+      "id": "NEG-002",
+      "category": "negation_trap",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.615,
+      "ground_truth": false
+    },
+    {
+      "id": "NEG-003",
+      "category": "negation_trap",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.296,
+      "ground_truth": false
+    },
+    {
+      "id": "NEG-004",
+      "category": "negation_trap",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 2.705,
+      "ground_truth": false
+    },
+    {
+      "id": "NEG-005",
+      "category": "negation_trap",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 5.141,
+      "ground_truth": false
+    },
+    {
+      "id": "NEG-006",
+      "category": "negation_trap",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.628,
+      "ground_truth": false
+    },
+    {
+      "id": "NEG-007",
+      "category": "negation_trap",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.63,
+      "ground_truth": false
+    },
+    {
+      "id": "NEG-008",
+      "category": "negation_trap",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.47,
+      "ground_truth": false
+    },
+    {
+      "id": "NEG-009",
+      "category": "negation_trap",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.639,
+      "ground_truth": false
+    },
+    {
+      "id": "NEG-010",
+      "category": "negation_trap",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 2.11,
+      "ground_truth": false
+    },
+    {
+      "id": "NEG-011",
+      "category": "negation_trap",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.72,
+      "ground_truth": false
+    },
+    {
+      "id": "NEG-012",
+      "category": "negation_trap",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 2.79,
+      "ground_truth": false
+    },
+    {
+      "id": "NEG-013",
+      "category": "negation_trap",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 2.347,
+      "ground_truth": false
+    },
+    {
+      "id": "NEG-014",
+      "category": "negation_trap",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.702,
+      "ground_truth": false
+    },
+    {
+      "id": "NEG-015",
+      "category": "negation_trap",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.89,
+      "ground_truth": false
+    },
+    {
+      "id": "SEC-001",
+      "category": "destructive_injection",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 2.066,
+      "ground_truth": false
+    },
+    {
+      "id": "SEC-002",
+      "category": "destructive_injection",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.476,
+      "ground_truth": false
+    },
+    {
+      "id": "SEC-003",
+      "category": "destructive_injection",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.497,
+      "ground_truth": false
+    },
+    {
+      "id": "SEC-004",
+      "category": "destructive_injection",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 4.121,
+      "ground_truth": false
+    },
+    {
+      "id": "SEC-005",
+      "category": "destructive_injection",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.482,
+      "ground_truth": false
+    },
+    {
+      "id": "SEC-006",
+      "category": "destructive_injection",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.594,
+      "ground_truth": false
+    },
+    {
+      "id": "SEC-007",
+      "category": "destructive_injection",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.874,
+      "ground_truth": false
+    },
+    {
+      "id": "SEC-008",
+      "category": "destructive_injection",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.674,
+      "ground_truth": false
+    },
+    {
+      "id": "SEC-009",
+      "category": "destructive_injection",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.443,
+      "ground_truth": false
+    },
+    {
+      "id": "SEC-010",
+      "category": "destructive_injection",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.501,
+      "ground_truth": false
+    },
+    {
+      "id": "SEC-011",
+      "category": "destructive_injection",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.4,
+      "ground_truth": false
+    },
+    {
+      "id": "SEC-012",
+      "category": "destructive_injection",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.727,
+      "ground_truth": false
+    },
+    {
+      "id": "SEC-013",
+      "category": "destructive_injection",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.281,
+      "ground_truth": false
+    },
+    {
+      "id": "SEC-014",
+      "category": "destructive_injection",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.278,
+      "ground_truth": false
+    },
+    {
+      "id": "SEC-015",
+      "category": "destructive_injection",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.276,
+      "ground_truth": false
+    },
+    {
+      "id": "ENT-001",
+      "category": "entity_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.342,
+      "ground_truth": false
+    },
+    {
+      "id": "ENT-002",
+      "category": "entity_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 2.35,
+      "ground_truth": false
+    },
+    {
+      "id": "ENT-003",
+      "category": "entity_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.778,
+      "ground_truth": false
+    },
+    {
+      "id": "ENT-004",
+      "category": "entity_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 2.351,
+      "ground_truth": false
+    },
+    {
+      "id": "ENT-005",
+      "category": "entity_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.947,
+      "ground_truth": false
+    },
+    {
+      "id": "ENT-006",
+      "category": "entity_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.674,
+      "ground_truth": false
+    },
+    {
+      "id": "ENT-007",
+      "category": "entity_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.811,
+      "ground_truth": false
+    },
+    {
+      "id": "ENT-008",
+      "category": "entity_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.371,
+      "ground_truth": false
+    },
+    {
+      "id": "ENT-009",
+      "category": "entity_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.237,
+      "ground_truth": false
+    },
+    {
+      "id": "ENT-010",
+      "category": "entity_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.239,
+      "ground_truth": false
+    },
+    {
+      "id": "ENT-011",
+      "category": "entity_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.172,
+      "ground_truth": false
+    },
+    {
+      "id": "ENT-012",
+      "category": "entity_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.869,
+      "ground_truth": false
+    },
+    {
+      "id": "ENT-013",
+      "category": "entity_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 4.949,
+      "ground_truth": false
+    },
+    {
+      "id": "ENT-014",
+      "category": "entity_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.463,
+      "ground_truth": false
+    },
+    {
+      "id": "ENT-015",
+      "category": "entity_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.345,
+      "ground_truth": false
+    },
+    {
+      "id": "NUM-001",
+      "category": "numeric_range",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.764,
+      "ground_truth": false
+    },
+    {
+      "id": "NUM-002",
+      "category": "numeric_range",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.703,
+      "ground_truth": false
+    },
+    {
+      "id": "NUM-003",
+      "category": "numeric_range",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 2.84,
+      "ground_truth": false
+    },
+    {
+      "id": "NUM-004",
+      "category": "numeric_range",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.93,
+      "ground_truth": false
+    },
+    {
+      "id": "NUM-005",
+      "category": "numeric_range",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.729,
+      "ground_truth": false
+    },
+    {
+      "id": "NUM-006",
+      "category": "numeric_range",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.907,
+      "ground_truth": false
+    },
+    {
+      "id": "NUM-007",
+      "category": "numeric_range",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.762,
+      "ground_truth": false
+    },
+    {
+      "id": "NUM-008",
+      "category": "numeric_range",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 2.032,
+      "ground_truth": false
+    },
+    {
+      "id": "NUM-009",
+      "category": "numeric_range",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.552,
+      "ground_truth": false
+    },
+    {
+      "id": "NUM-010",
+      "category": "numeric_range",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.738,
+      "ground_truth": false
+    },
+    {
+      "id": "NUM-011",
+      "category": "numeric_range",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.718,
+      "ground_truth": false
+    },
+    {
+      "id": "NUM-012",
+      "category": "numeric_range",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.705,
+      "ground_truth": false
+    },
+    {
+      "id": "TMP-001",
+      "category": "temporal_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.734,
+      "ground_truth": false
+    },
+    {
+      "id": "TMP-002",
+      "category": "temporal_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.587,
+      "ground_truth": false
+    },
+    {
+      "id": "TMP-003",
+      "category": "temporal_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.37,
+      "ground_truth": false
+    },
+    {
+      "id": "TMP-004",
+      "category": "temporal_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.667,
+      "ground_truth": false
+    },
+    {
+      "id": "TMP-005",
+      "category": "temporal_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.458,
+      "ground_truth": false
+    },
+    {
+      "id": "TMP-006",
+      "category": "temporal_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 2.093,
+      "ground_truth": false
+    },
+    {
+      "id": "TMP-007",
+      "category": "temporal_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 2.404,
+      "ground_truth": false
+    },
+    {
+      "id": "TMP-008",
+      "category": "temporal_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.442,
+      "ground_truth": false
+    },
+    {
+      "id": "TMP-009",
+      "category": "temporal_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.964,
+      "ground_truth": false
+    },
+    {
+      "id": "TMP-010",
+      "category": "temporal_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 2.309,
+      "ground_truth": false
+    },
+    {
+      "id": "TMP-011",
+      "category": "temporal_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.891,
+      "ground_truth": false
+    },
+    {
+      "id": "TMP-012",
+      "category": "temporal_shift",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.306,
+      "ground_truth": false
+    },
+    {
+      "id": "DIS-001",
+      "category": "unrelated",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.477,
+      "ground_truth": false
+    },
+    {
+      "id": "DIS-002",
+      "category": "unrelated",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.158,
+      "ground_truth": false
+    },
+    {
+      "id": "DIS-003",
+      "category": "unrelated",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.775,
+      "ground_truth": false
+    },
+    {
+      "id": "DIS-004",
+      "category": "unrelated",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.056,
+      "ground_truth": false
+    },
+    {
+      "id": "DIS-005",
+      "category": "unrelated",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 5.077,
+      "ground_truth": false
+    },
+    {
+      "id": "DIS-006",
+      "category": "unrelated",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.89,
+      "ground_truth": false
+    },
+    {
+      "id": "DIS-007",
+      "category": "unrelated",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 2.33,
+      "ground_truth": false
+    },
+    {
+      "id": "DIS-008",
+      "category": "unrelated",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 2.456,
+      "ground_truth": false
+    },
+    {
+      "id": "DIS-009",
+      "category": "unrelated",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.908,
+      "ground_truth": false
+    },
+    {
+      "id": "DIS-010",
+      "category": "unrelated",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.613,
+      "ground_truth": false
+    },
+    {
+      "id": "DIS-011",
+      "category": "unrelated",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.979,
+      "ground_truth": false
+    },
+    {
+      "id": "DIS-012",
+      "category": "unrelated",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.93,
+      "ground_truth": false
+    },
+    {
+      "id": "DIS-013",
+      "category": "unrelated",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.594,
+      "ground_truth": false
+    },
+    {
+      "id": "DIS-014",
+      "category": "unrelated",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 1.576,
+      "ground_truth": false
+    },
+    {
+      "id": "DIS-015",
+      "category": "unrelated",
+      "reused": false,
+      "action": "origin_execute",
+      "reason_code": "NO_CACHE_ENTRY_FOUND",
+      "has_certificate": false,
+      "measured_latency_ms": 2.106,
+      "ground_truth": false
+    }
+  ]
 }

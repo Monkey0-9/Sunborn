@@ -1011,8 +1011,13 @@ pub async fn record_dependency(
 
 pub async fn get_cache(
     State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
     Path(key): Path<String>,
 ) -> Result<Json<CacheEntry>, AppError> {
+    sec_ctx
+        .require_admin()
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
     match state.cache.get(&key).await {
         Ok(Some(entry)) => Ok(Json(entry)),
         Ok(None) => Err(SunbornError::new(

@@ -304,3 +304,68 @@ The engineering team concurs with the auditor: **Enterprise release remains NO-G
 | **Track 4** | **Frontend** | Replaced misleading live performance claims with truthful "Not measured" telemetry and distinct frozen benchmark tracks; implemented 6 Playwright browser E2E workflows verifying all 8 views and error states. |
 | **Track 5** | **Testing & Research** | Generated frozen benchmark provenance with dataset SHA-256 fingerprints; reported all metrics with 95% Wilson confidence intervals; strictly demarcated synthetic cost models from live telemetry; verified automated reproducibility script (`research/reproduce.sh`). |
 
+---
+
+## 10. Re-Audit Verification Matrix & Technical Remediation (October 19, 2026)
+
+Following independent verification on GitHub repository `Monkey0-9/Sunborn`, the following 6 deliverables have been resolved and verified:
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                RE-AUDIT VERIFICATION MATRIX                                     │
+├──────────────────────────────────┬──────────┬────────────────────────────────────────────────────┤
+│ Deliverable                      │ Status   │ Verified Source & Mechanism                        │
+├──────────────────────────────────┼──────────┼────────────────────────────────────────────────────┤
+│ 1. Homepage Guarantees & Scope   │ RESOLVED │ frontend/src/app/page.tsx: Removed unqualified     │
+│    Demarcation (P0)              │          │ claims (sub-120µs, 0.0% absolute guarantee, O(1)   │
+│                                  │          │ shredding). Added empirical bounds & CI [0.0, 3.0%]│
+├──────────────────────────────────┼──────────┼────────────────────────────────────────────────────┤
+│ 2. Certificate Validation        │ RESOLVED │ crates/sunborn-core/src/certificate.rs:            │
+│    Completeness Enforcement (P0) │          │ validate_for_reuse() enforces dependency           │
+│                                  │          │ completeness; rejects missing/duplicate snapshots. │
+│                                  │          │ Integration tests in reuse_certificate_path_test.rs│
+├──────────────────────────────────┼──────────┼────────────────────────────────────────────────────┤
+│ 3. Benchmark Real Gateway        │ RESOLVED │ benchmarks/semantic_cache_bench.py: B3 drives real │
+│    Decision Path Execution (P0)  │          │ gateway /v1/requests. Decision made by Rust engine │
+│                                  │          │ (VerificationCascade). Ground truth evaluated post │
+│                                  │          │ decision. Live gateway latencies recorded.         │
+├──────────────────────────────────┼──────────┼────────────────────────────────────────────────────┤
+│ 4. Frontend Authorization &      │ RESOLVED │ handlers.rs: get_cache + all 13 admin routes check │
+│    CSRF Hardening (P0)           │          │ sec_ctx.require_admin(). proxy-policy.ts: normalize│
+│                                  │          │ paths, exact hostname matching, reject missing     │
+│                                  │          │ Origin/Host on cookie mutations.                   │
+├──────────────────────────────────┼──────────┼────────────────────────────────────────────────────┤
+│ 5. Durability & State Contract   │ RESOLVED │ Tripartite state contract: Postgres WAL durable,   │
+│    (P1)                          │          │ Qdrant/radix rebuildable, L1/locks ephemeral.      │
+│                                  │          │ Production fail-closed without durable backend.    │
+├──────────────────────────────────┼──────────┼────────────────────────────────────────────────────┤
+│ 6. CI Workflow & Playwright E2E  │ RESOLVED │ .github/workflows/ci.yml: Installs Playwright      │
+│    Verification Integration      │          │ Chromium, runs 24 frontend tests + Rust workspace +│
+│                                  │          │ research reproducibility script.                   │
+└──────────────────────────────────┴──────────┴────────────────────────────────────────────────────┘
+```
+
+### 10.1 Authoritative State & Durability Contract (P1)
+The Sunborn gateway enforces an explicit tripartite storage and recovery contract:
+
+1. **Category 1: Authoritative Durable State (System of Record)**
+   - **Storage**: PostgreSQL with Write-Ahead Logging (WAL) and synchronous commit.
+   - **Entities**: Cache identity records, cryptographic Merkle audit logs, tenant policies, and transactional outbox events.
+   - **Encryption Key Source**: Authoritative master KEK sourced from external KMS / HSM (`SUNBORN_MASTER_KEK` / `SUNBORN_LEARNING_HMAC_SECRET`).
+   - **Recovery Guarantee**: RPO = 0 on committed database transactions. On gateway restart or multi-instance failover, state is restored from PostgreSQL.
+
+2. **Category 2: Rebuildable Auxiliary Index State**
+   - **Storage**: Qdrant HNSW vector index, Radix trie KV-cache routing tables, and dependency graphs.
+   - **Recovery Guarantee**: Rebuildable from the authoritative PostgreSQL WAL via `apps/sunborn-rebuild`. If an index node crashes, the gateway marks vector search degraded and falls back to exact canonical cache lookup or origin execution.
+
+3. **Category 3: Intentionally Ephemeral Hot-Path State**
+   - **Storage**: L1 process-local `MemoryExactCache` (W-TinyLFU eviction, byte-bounded budget), singleflight in-flight deduplication locks, vector clocks.
+   - **Durability Contract**: Explicitly ephemeral. Zero durability is claimed for L1 hot cache entries. On process crash or container termination, L1 is cleared and re-warmed organically from L2 (DragonflyDB) or L3 (PostgreSQL).
+
+### 10.2 Production Readiness Verification
+In production mode (`SUNBORN_ENV=production` or `ENVIRONMENT=prod`), the gateway executes `AppState::verify_production_readiness()` at startup:
+- Fails closed if DragonflyDB, PostgreSQL, or Qdrant are unreachable.
+- Fails closed if default development credentials, mock origins, or deterministic fallback embedders are configured.
+- Fails closed if `SUNBORN_LEARNING_HMAC_SECRET` is missing or set to insecure development placeholders.
+
+

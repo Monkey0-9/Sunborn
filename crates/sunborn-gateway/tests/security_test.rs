@@ -577,6 +577,96 @@ async fn test_non_admin_forbidden_on_all_destructive_endpoints() {
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+    // 10. GET /v1/caches/:key (Admin required for cache key introspection)
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/v1/caches/some_cache_key")
+                .header("x-api-key", non_admin_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+    // 11. POST /v1/learning/canary (Admin required for policy canary)
+    let canary_body = serde_json::json!({
+        "candidate_policy": {
+            "policy_id": "pol-v2",
+            "version": 2,
+            "weights": {
+                "min_similarity_threshold": 0.88,
+                "max_risk_threshold": 0.25,
+                "conformal_alpha": 0.01,
+                "prefetch_confidence_threshold": 0.60,
+                "eviction_staleness_weight": 0.40,
+                "eviction_cost_weight": 0.60
+            },
+            "created_at": chrono::Utc::now(),
+            "evaluation_report": {
+                "total_samples": 100,
+                "training_samples": 80,
+                "held_out_samples": 20,
+                "training_false_hit_rate": 0.0,
+                "held_out_false_hit_rate": 0.0,
+                "held_out_abstention_rate": 0.05,
+                "estimated_cost_reduction_pct": 50.0,
+                "is_statistically_sound": true
+            },
+            "is_promoted": false
+        },
+        "canary_percentage": 10
+    });
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/learning/canary")
+                .header("content-type", "application/json")
+                .header("x-api-key", non_admin_key)
+                .body(Body::from(serde_json::to_vec(&canary_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+    // 12. POST /v1/learning/promote (Admin required for policy promotion)
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/learning/promote")
+                .header("x-api-key", non_admin_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+
+    // 13. POST /v1/learning/rollback (Admin required for policy rollback)
+    let rollback_body = serde_json::json!({ "reason": "test non-admin rollback attempt" });
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/learning/rollback")
+                .header("content-type", "application/json")
+                .header("x-api-key", non_admin_key)
+                .body(Body::from(serde_json::to_vec(&rollback_body).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
 }
 
 #[tokio::test]

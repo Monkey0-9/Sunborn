@@ -261,15 +261,18 @@ impl ReuseCertificate {
             return false;
         }
 
+        if self.source_snapshots.len() != current_source_epochs.len() {
+            return false;
+        }
+
         for (source_id, current_epoch) in current_source_epochs {
-            if let Some(snap) = self
+            match self
                 .source_snapshots
                 .iter()
                 .find(|s| s.source_id == *source_id)
             {
-                if snap.snapshot_epoch != *current_epoch {
-                    return false;
-                }
+                Some(snap) if snap.snapshot_epoch == *current_epoch => {}
+                _ => return false,
             }
         }
 
@@ -352,19 +355,66 @@ impl ReuseCertificate {
             )));
         }
 
-        // 9. Source Version Snapshot Freshness
+        // 9. Source Version Snapshot Completeness, Freshness, and Inconsistency Detection
+        // (a) Reject duplicate snapshots in the certificate
+        let mut seen_cert_sources = std::collections::HashSet::new();
+        for snap in &self.source_snapshots {
+            if !seen_cert_sources.insert(snap.source_id) {
+                return Err(SunbornError::validation_error(format!(
+                    "Admissibility failed: duplicate source snapshot in certificate for source {}",
+                    snap.source_id
+                )));
+            }
+        }
+
+        // (b) Reject duplicate dependencies in request context
+        let mut seen_req_sources = std::collections::HashSet::new();
+        for (source_id, _) in req_ctx.current_source_epochs {
+            if !seen_req_sources.insert(*source_id) {
+                return Err(SunbornError::validation_error(format!(
+                    "Admissibility failed: duplicate source dependency in request context for source {}",
+                    source_id
+                )));
+            }
+        }
+
+        // (c) Dependency completeness: every authoritative source dependency required by current request
+        // MUST have a corresponding snapshot in the certificate
         for (source_id, current_epoch) in req_ctx.current_source_epochs {
-            if let Some(snap) = self
+            match self
                 .source_snapshots
                 .iter()
                 .find(|s| s.source_id == *source_id)
             {
-                if snap.snapshot_epoch != *current_epoch {
+                None => {
                     return Err(SunbornError::validation_error(format!(
-                        "Admissibility failed: source dependency {} epoch mutated (cert: {}, current: {})",
-                        source_id, snap.snapshot_epoch, current_epoch
+                        "Admissibility failed: missing certificate snapshot for required source dependency {}",
+                        source_id
                     )));
                 }
+                Some(snap) => {
+                    if snap.snapshot_epoch != *current_epoch {
+                        return Err(SunbornError::validation_error(format!(
+                            "Admissibility failed: source dependency {} epoch mutated (cert: {}, current: {})",
+                            source_id, snap.snapshot_epoch, current_epoch
+                        )));
+                    }
+                }
+            }
+        }
+
+        // (d) Snapshot consistency: certificate cannot contain orphaned or extra dependencies
+        // not present in the authoritative request dependency graph
+        for snap in &self.source_snapshots {
+            if !req_ctx
+                .current_source_epochs
+                .iter()
+                .any(|(id, _)| *id == snap.source_id)
+            {
+                return Err(SunbornError::validation_error(format!(
+                    "Admissibility failed: certificate contains snapshot for source {} not in current dependency graph",
+                    snap.source_id
+                )));
             }
         }
 
@@ -740,5 +790,113 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("exceeds calibrated risk bound"));
+    }
+
+    #[test]
+    fn test_certificate_source_dependency_completeness_and_rejections() {
+        let key = b"key-source-deps-32-bytes-long!!!";
+        let tenant = TenantId::new("tenant-deps");
+        let app = ApplicationId::new("app-deps");
+        let doc_1 = Uuid::new_v4();
+        let doc_2 = Uuid::new_v4();
+
+        let cert = ReuseCertificate::new_signed(
+            tenant.clone(),
+            app.clone(),
+            "req-hash-deps",
+            "gpt-4o",
+            100,
+            vec![SourceVersionSnapshot {
+                source_id: doc_1,
+                snapshot_epoch: 1,
+                content_hash: "hash-doc-1".to_string(),
+            }],
+            SafetyEvidenceRecord {
+                structural_hash_match: true,
+                negation_polarity_match: true,
+                numeric_literal_match: true,
+                entity_drift_detected: false,
+                non_conformity_score: 0.01,
+                calibrated_risk_bound: 0.05,
+                heuristic_risk_score: 0.0,
+            },
+            ValidityWindow {
+                issued_at: Utc::now(),
+                expires_at: Utc::now() + Duration::minutes(10),
+                monotonic_epoch_lease: 1,
+            },
+            key,
+        );
+
+        let now = Utc::now();
+
+        // 1. Success when dependencies match exactly
+        let valid_ctx = ReuseValidationContext {
+            tenant_id: &tenant,
+            application_id: &app,
+            model_name: "gpt-4o",
+            expected_identity_hash: Some("req-hash-deps"),
+            current_time: now,
+            current_knowledge_epoch: 1,
+            current_source_epochs: &[(doc_1, 1)],
+        };
+        assert!(cert.validate_for_reuse(&valid_ctx).is_ok());
+
+        // 2. Reject when request requires doc_2 but certificate omitted doc_2
+        let missing_dep_ctx = ReuseValidationContext {
+            tenant_id: &tenant,
+            application_id: &app,
+            model_name: "gpt-4o",
+            expected_identity_hash: Some("req-hash-deps"),
+            current_time: now,
+            current_knowledge_epoch: 1,
+            current_source_epochs: &[(doc_1, 1), (doc_2, 1)],
+        };
+        let err = cert.validate_for_reuse(&missing_dep_ctx).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("missing certificate snapshot for required source dependency"));
+
+        // 3. Reject when certificate contains extra snapshot not in request dependencies
+        let empty_dep_ctx = ReuseValidationContext {
+            tenant_id: &tenant,
+            application_id: &app,
+            model_name: "gpt-4o",
+            expected_identity_hash: Some("req-hash-deps"),
+            current_time: now,
+            current_knowledge_epoch: 1,
+            current_source_epochs: &[],
+        };
+        let err = cert.validate_for_reuse(&empty_dep_ctx).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("certificate contains snapshot for source"));
+
+        // 4. Reject duplicate dependencies in request context
+        let duplicate_req_ctx = ReuseValidationContext {
+            tenant_id: &tenant,
+            application_id: &app,
+            model_name: "gpt-4o",
+            expected_identity_hash: Some("req-hash-deps"),
+            current_time: now,
+            current_knowledge_epoch: 1,
+            current_source_epochs: &[(doc_1, 1), (doc_1, 1)],
+        };
+        let err = cert.validate_for_reuse(&duplicate_req_ctx).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("duplicate source dependency in request context"));
+
+        // 5. Reject duplicate snapshots in certificate
+        let mut duplicate_cert = cert.clone();
+        duplicate_cert.source_snapshots.push(SourceVersionSnapshot {
+            source_id: doc_1,
+            snapshot_epoch: 1,
+            content_hash: "hash-doc-1".to_string(),
+        });
+        let err = duplicate_cert.validate_for_reuse(&valid_ctx).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("duplicate source snapshot in certificate"));
     }
 }

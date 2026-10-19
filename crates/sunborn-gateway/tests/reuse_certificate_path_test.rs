@@ -415,3 +415,183 @@ async fn test_reuse_certificate_expired_validity_window_abstains_to_revalidate()
         .reason_code
         .contains("CERTIFICATE_ADMISSIBILITY_REJECTED"));
 }
+
+#[tokio::test]
+async fn test_reuse_certificate_omitted_dependency_snapshot_abstains_to_revalidate() {
+    let mut config = AppConfig::default();
+    config.cache.exact_cache_enabled = true;
+    let state = AppState::new(config);
+    let app = create_router(state.clone());
+
+    let doc_id_1 = uuid::Uuid::new_v4();
+    let doc_id_2 = uuid::Uuid::new_v4();
+
+    // 1. Initial request with authoritative dependency doc_id_1 only
+    let mut req1 = RequestEnvelope::new(
+        "enterprise-fintech",
+        "default-app",
+        "gpt-4o",
+        "Calculate capital adequacy ratio based on risk-weighted assets",
+    );
+    req1.dependency_snapshots = vec![sunborn_core::SourceVersionSnapshot {
+        source_id: doc_id_1,
+        snapshot_epoch: 1,
+        content_hash: "hash-doc-1-v1".to_string(),
+    }];
+
+    let resp1 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", "key-enterprise-fintech")
+                .body(Body::from(serde_json::to_vec(&req1).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp1.status(), StatusCode::OK);
+    let body1 = resp1.into_body().collect().await.unwrap().to_bytes();
+    let res_env1: ResponseEnvelope = serde_json::from_slice(&body1).unwrap();
+    assert!(!res_env1.cached);
+    assert_eq!(res_env1.decision.action, DecisionAction::OriginExecute);
+
+    // 2. Second request: Current authoritative graph now requires doc_id_1 AND doc_id_2,
+    // but the cached certificate only attested to doc_id_1 (omitted doc_id_2)
+    let mut req2 = req1.clone();
+    req2.dependency_snapshots = vec![
+        sunborn_core::SourceVersionSnapshot {
+            source_id: doc_id_1,
+            snapshot_epoch: 1,
+            content_hash: "hash-doc-1-v1".to_string(),
+        },
+        sunborn_core::SourceVersionSnapshot {
+            source_id: doc_id_2,
+            snapshot_epoch: 1,
+            content_hash: "hash-doc-2-v1".to_string(),
+        },
+    ];
+
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", "key-enterprise-fintech")
+                .body(Body::from(serde_json::to_vec(&req2).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp2.status(), StatusCode::OK);
+    let body2 = resp2.into_body().collect().await.unwrap().to_bytes();
+    let res_env2: ResponseEnvelope = serde_json::from_slice(&body2).unwrap();
+
+    // Must strictly reject reuse because certificate omitted required dependency doc_id_2
+    assert!(
+        !res_env2.cached,
+        "Cache reuse must be rejected when certificate omits a required source dependency"
+    );
+    assert_eq!(res_env2.decision.action, DecisionAction::Revalidate);
+    assert!(
+        res_env2
+            .decision
+            .reason_code
+            .contains("CERTIFICATE_ADMISSIBILITY_REJECTED"),
+        "Reason code must state certificate admissibility rejection, got: {}",
+        res_env2.decision.reason_code
+    );
+    assert!(
+        res_env2
+            .decision
+            .reason_code
+            .contains("missing certificate snapshot for required source dependency"),
+        "Must specify missing certificate snapshot for dependency, got: {}",
+        res_env2.decision.reason_code
+    );
+}
+
+#[tokio::test]
+async fn test_reuse_certificate_duplicate_dependency_in_request_rejected() {
+    let mut config = AppConfig::default();
+    config.cache.exact_cache_enabled = true;
+    let state = AppState::new(config);
+    let app = create_router(state.clone());
+
+    let doc_id = uuid::Uuid::new_v4();
+
+    // Initial request admitted
+    let mut req1 = RequestEnvelope::new(
+        "enterprise-fintech",
+        "default-app",
+        "gpt-4o",
+        "Explain Basel III leverage ratio requirements",
+    );
+    req1.dependency_snapshots = vec![sunborn_core::SourceVersionSnapshot {
+        source_id: doc_id,
+        snapshot_epoch: 1,
+        content_hash: "hash-doc-base".to_string(),
+    }];
+
+    let resp1 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", "key-enterprise-fintech")
+                .body(Body::from(serde_json::to_vec(&req1).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp1.status(), StatusCode::OK);
+
+    // Second request with duplicate dependency entries
+    let mut req2 = req1.clone();
+    req2.dependency_snapshots = vec![
+        sunborn_core::SourceVersionSnapshot {
+            source_id: doc_id,
+            snapshot_epoch: 1,
+            content_hash: "hash-doc-base".to_string(),
+        },
+        sunborn_core::SourceVersionSnapshot {
+            source_id: doc_id,
+            snapshot_epoch: 1,
+            content_hash: "hash-doc-base".to_string(),
+        },
+    ];
+
+    let resp2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", "key-enterprise-fintech")
+                .body(Body::from(serde_json::to_vec(&req2).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp2.status(), StatusCode::OK);
+    let body2 = resp2.into_body().collect().await.unwrap().to_bytes();
+    let res_env2: ResponseEnvelope = serde_json::from_slice(&body2).unwrap();
+
+    assert!(!res_env2.cached);
+    assert_eq!(res_env2.decision.action, DecisionAction::Revalidate);
+    assert!(res_env2
+        .decision
+        .reason_code
+        .contains("duplicate source dependency in request context"));
+}

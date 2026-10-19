@@ -94,9 +94,29 @@ CERTIFICATE_ARTIFACT="research/results/reproduction_certificate.json"
 # Remove any stale results before running to guarantee fresh execution evidence
 rm -f "${BENCHMARK_ARTIFACT}" "${MANIFEST_ARTIFACT}" "${CERTIFICATE_ARTIFACT}"
 
+# Ensure live gateway is available for benchmark evaluation
+SPAWNED_GATEWAY_PID=""
+if ! curl -s http://127.0.0.1:8080/health >/dev/null 2>&1; then
+    echo "[*] Launching Sunborn Gateway daemon for live HTTP benchmark evaluation..."
+    cargo build --bin sunborn-gateway
+    ./target/debug/sunborn-gateway >/dev/null 2>&1 &
+    SPAWNED_GATEWAY_PID=$!
+    for i in {1..30}; do
+        if curl -s http://127.0.0.1:8080/health >/dev/null 2>&1; then
+            echo "[*] Live gateway ready at http://127.0.0.1:8080"
+            break
+        fi
+        sleep 0.1
+    done
+fi
+
 ${PYTHON_BIN} benchmarks/semantic_cache_bench.py
 ${PYTHON_BIN} benchmarks/capacity_soak.py
 ${PYTHON_BIN} benchmarks/semantic_cache_bench_t.py
+
+if [[ -n "${SPAWNED_GATEWAY_PID}" ]]; then
+    kill "${SPAWNED_GATEWAY_PID}" 2>/dev/null || true
+fi
 
 if [[ ! -f "${BENCHMARK_ARTIFACT}" ]]; then
     echo "ERROR: Benchmark artifact was not generated at ${BENCHMARK_ARTIFACT}" >&2

@@ -184,3 +184,108 @@ test("BFF Security: Authenticated requests to protected endpoints are granted", 
   });
   assert.equal(decision.allowed, true);
 });
+
+test("BFF Security: Malformed or non-HTTP origins are strictly rejected", () => {
+  // Malformed URL
+  const malformed = evaluateProxySecurity({
+    method: "POST",
+    normalizedPath: "v1/chat/completions",
+    clientCredential: "Bearer user-token",
+    origin: "not a valid url",
+    host: "localhost:3000",
+  });
+  assert.equal(malformed.allowed, false);
+  assert.equal(malformed.status, 400);
+  assert.equal(malformed.error, "INVALID_ORIGIN_HEADER");
+
+  // Unsafe javascript: protocol
+  const jsOrigin = evaluateProxySecurity({
+    method: "POST",
+    normalizedPath: "v1/chat/completions",
+    clientCredential: "Bearer user-token",
+    origin: "javascript:void(0)",
+    host: "localhost:3000",
+  });
+  assert.equal(jsOrigin.allowed, false);
+  assert.equal(jsOrigin.status, 403);
+  assert.equal(jsOrigin.error, "UNSAFE_ORIGIN_PROTOCOL");
+});
+
+test("BFF Security: Substring-based hostname bypass attempts are strictly rejected", () => {
+  const evilHosts = [
+    "http://evil-localhost.com:3000",
+    "http://localhost.attacker.com",
+    "http://127.0.0.1.attacker.io",
+    "https://fake-localhost.net",
+  ];
+
+  for (const evilOrigin of evilHosts) {
+    const decision = evaluateProxySecurity({
+      method: "POST",
+      normalizedPath: "v1/chat/completions",
+      clientCredential: "Bearer user-token",
+      origin: evilOrigin,
+      host: "sunborn.production.internal",
+    });
+    assert.equal(
+      decision.allowed,
+      false,
+      `Origin '${evilOrigin}' containing 'localhost' substring must be rejected`
+    );
+    assert.equal(decision.status, 403);
+    assert.equal(decision.error, "CSRF_ORIGIN_MISMATCH");
+  }
+});
+
+test("BFF Security: Missing Origin or Host on cookie-authenticated mutations is strictly rejected", () => {
+  // Missing Origin on cookie-authenticated mutation
+  const missingOrigin = evaluateProxySecurity({
+    method: "POST",
+    normalizedPath: "v1/chat/completions",
+    clientCredential: "Bearer session-token",
+    isCookieAuthenticated: true,
+    origin: null,
+    host: "localhost:3000",
+  });
+  assert.equal(missingOrigin.allowed, false);
+  assert.equal(missingOrigin.status, 403);
+  assert.equal(missingOrigin.error, "CSRF_MISSING_ORIGIN");
+
+  // Missing Host on cookie-authenticated mutation
+  const missingHost = evaluateProxySecurity({
+    method: "POST",
+    normalizedPath: "v1/chat/completions",
+    clientCredential: "Bearer session-token",
+    isCookieAuthenticated: true,
+    origin: "http://localhost:3000",
+    host: null,
+  });
+  assert.equal(missingHost.allowed, false);
+  assert.equal(missingHost.status, 400);
+  assert.equal(missingHost.error, "MISSING_HOST_HEADER");
+});
+
+test("BFF Security: Path normalization prevents traversal bypasses of privileged routes", () => {
+  const traversalAttempts = [
+    "v1//tenants",
+    "v1/caches/../tenants",
+    "v1/./governance/shred",
+    "v1/nonexistent/../governance/shred",
+    "v1/tenants/..//tenants",
+  ];
+
+  for (const rawPath of traversalAttempts) {
+    const decision = evaluateProxySecurity({
+      method: "POST",
+      normalizedPath: rawPath,
+      clientCredential: null,
+    });
+    assert.equal(
+      decision.allowed,
+      false,
+      `Normalized path from '${rawPath}' must detect privileged target and reject anonymous access`
+    );
+    assert.equal(decision.status, 401);
+    assert.equal(decision.error, "UNAUTHORIZED");
+  }
+});
