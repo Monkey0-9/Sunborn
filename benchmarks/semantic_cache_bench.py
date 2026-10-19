@@ -361,6 +361,17 @@ def run_benchmark():
     except Exception:
         live_gateway_available = False
 
+    require_live = (
+        "--require-live" in sys.argv
+        or os.environ.get("SUNBORN_REQUIRE_LIVE", "").lower() in ("1", "true", "yes")
+    )
+    if require_live and not live_gateway_available:
+        raise RuntimeError(
+            f"FATAL: Live gateway is strictly required (--require-live / SUNBORN_REQUIRE_LIVE=1), "
+            f"but health endpoint {health_url} was unreachable. "
+            f"Offline simulation is prohibited when live gateway execution evidence is required."
+        )
+
     if live_gateway_available:
         print(f"[*] Detected Live Sunborn Gateway at {gateway_base_url}. Driving real Rust decision engine over HTTP.")
     else:

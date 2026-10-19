@@ -73,13 +73,19 @@ The automated reproduction script executes five rigorous sequential validation g
    * Runs `security_test`, `chaos_test`, `governance_test`, `disaster_recovery_test`, `simulation_test`, `learning_controller_test`, `production_startup_test`, and `adversarial_security_test`.
    * Confirms zero cross-tenant leakage, fail-closed production startup, and 100% index rebuild from PostgreSQL durable records.
 
-5. **Gate 5: SemanticCacheBench, SemanticCacheBench-T & Signed Provenance**
-   * Runs `benchmarks/semantic_cache_bench.py`: Evaluates 124 static queries across 8 semantic categories.
+5. **Gate 5: Live Gateway SemanticCacheBench, SemanticCacheBench-T & Cryptographic Provenance**
+   * Starts Sunborn Gateway daemon at `http://127.0.0.1:8080` with strict 5.0s health-check deadline (fails closed on timeout).
+   * Runs `benchmarks/semantic_cache_bench.py --require-live`: Dispatches all 124 static queries across 8 semantic categories over live HTTP RPC to the gateway (`provenance_type: "LIVE_GATEWAY_DECISION_PATH"`, all traces with `execution_mode: "live_gateway_rpc"`).
    * Runs `benchmarks/capacity_soak.py`: 11,000 requests processed under Zipfian distribution with zero memory leaks and atomic TDEK zeroization ($42\,\mu\text{s}$).
    * Runs `benchmarks/semantic_cache_bench_t.py`: Evaluates stateful temporal mutations across 6 sequential phases.
-   * Computes SHA-256 hashes of `benchmark_run.json` and `run_manifest.json`.
-   * Generates `research/results/reproduction_certificate.json` (authenticated with HMAC-SHA-256 when `SUNBORN_ATTESTATION_KEY` is configured, or honest `LOCAL_DEVELOPMENT_INTEGRITY_CHECK` unauthenticated canonical digest when omitted).
-   * Independently verifies the certificate, artifact digests, and git provenance using `research/verify_certificate.py`.
+   * Runs negative verification test suite `research/tests/test_verifier_negative.py`: Formally proves that offline simulation artifacts, incomplete traces, duplicate query IDs, and unauthenticated keys are strictly rejected under the live gate.
+   * Computes canonical SHA-256 digests and hashes of `benchmark_run.json` and `run_manifest.json`.
+   * Generates `research/results/reproduction_certificate.json` (signed HMAC-SHA-256 when `SUNBORN_ATTESTATION_KEY` is set, or honest `LOCAL_DEVELOPMENT_INTEGRITY_CHECK` unauthenticated canonical digest when omitted).
+   * Independently verifies the certificate and artifacts using `research/verify_certificate.py` with explicit 4-state outcomes:
+     - `AUTHENTICATED`: Cryptographic HMAC-SHA-256 signature verified against trusted secret key.
+     - `INTEGRITY_VERIFIED_UNAUTHENTICATED`: Canonical manifest digest and artifact hashes verified; no signature claimed.
+     - `AUTHENTICATION_UNVERIFIED`: Signature present in certificate, but no trusted verification key supplied in environment (exit code 2).
+     - `INVALID`: Any digest mismatch, missing file, incorrect git tree, trace irregularity, or `--require-auth` failure (exit code 1).
 
 ---
 

@@ -15,6 +15,14 @@ GIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
 GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 START_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+SPAWNED_GATEWAY_PID=""
+cleanup() {
+    if [[ -n "${SPAWNED_GATEWAY_PID}" ]]; then
+        kill "${SPAWNED_GATEWAY_PID}" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT INT TERM
+
 echo "========================================================================"
 echo "Sunborn Internal Empirical Reproducibility Suite"
 echo "Git Commit  : ${GIT_SHA} (${GIT_BRANCH})"
@@ -96,26 +104,39 @@ rm -f "${BENCHMARK_ARTIFACT}" "${MANIFEST_ARTIFACT}" "${CERTIFICATE_ARTIFACT}"
 
 # Ensure live gateway is available for benchmark evaluation
 SPAWNED_GATEWAY_PID=""
-if ! curl -s http://127.0.0.1:8080/health >/dev/null 2>&1; then
+GATEWAY_HEALTHY=0
+if curl -s http://127.0.0.1:8080/health >/dev/null 2>&1; then
+    echo "[*] Sunborn Gateway already active and healthy at http://127.0.0.1:8080"
+    GATEWAY_HEALTHY=1
+else
     echo "[*] Launching Sunborn Gateway daemon for live HTTP benchmark evaluation..."
     cargo build --bin sunborn-gateway
     ./target/debug/sunborn-gateway >/dev/null 2>&1 &
     SPAWNED_GATEWAY_PID=$!
-    for i in {1..30}; do
+    for i in {1..50}; do
         if curl -s http://127.0.0.1:8080/health >/dev/null 2>&1; then
-            echo "[*] Live gateway ready at http://127.0.0.1:8080"
+            GATEWAY_HEALTHY=1
+            echo "[*] Live gateway ready at http://127.0.0.1:8080 (startup verified in ${i}00ms)"
             break
         fi
         sleep 0.1
     done
 fi
 
-${PYTHON_BIN} benchmarks/semantic_cache_bench.py
+if [[ "${GATEWAY_HEALTHY}" -ne 1 ]]; then
+    echo "FATAL: Sunborn Gateway failed to become healthy at http://127.0.0.1:8080 within startup deadline (5.0s)." >&2
+    exit 1
+fi
+
+echo "[*] Executing SemanticCacheBench with --require-live..."
+export SUNBORN_REQUIRE_LIVE=1
+${PYTHON_BIN} benchmarks/semantic_cache_bench.py --require-live
 ${PYTHON_BIN} benchmarks/capacity_soak.py
 ${PYTHON_BIN} benchmarks/semantic_cache_bench_t.py
 
 if [[ -n "${SPAWNED_GATEWAY_PID}" ]]; then
     kill "${SPAWNED_GATEWAY_PID}" 2>/dev/null || true
+    SPAWNED_GATEWAY_PID=""
 fi
 
 if [[ ! -f "${BENCHMARK_ARTIFACT}" ]]; then
@@ -205,6 +226,32 @@ if bench_meta.get('git_commit') != '${GIT_SHA}' or bench_meta.get('git_tree') !=
     print(f\"FATAL: Benchmark artifact revision ({bench_meta.get('git_commit')}, {bench_meta.get('git_tree')}) does not match current git repository (${GIT_SHA}, {git_tree})\", file=sys.stderr)
     sys.exit(1)
 
+# Enforce strict live gateway evidence contract
+prov_type = bench_meta.get('provenance_type')
+if prov_type != 'LIVE_GATEWAY_DECISION_PATH':
+    print(f\"FATAL: Benchmark artifact provenance_type '{prov_type}' != 'LIVE_GATEWAY_DECISION_PATH' (offline simulation does not satisfy live evidence gate)\", file=sys.stderr)
+    sys.exit(1)
+
+traces = bench_data.get('b3_evaluation_trace', [])
+if len(traces) != 124:
+    print(f\"FATAL: Benchmark evaluation trace count {len(traces)} != expected suite size 124\", file=sys.stderr)
+    sys.exit(1)
+
+seen_ids = set()
+for idx, tr in enumerate(traces):
+    qid = tr.get('id')
+    if not qid:
+        print(f\"FATAL: Trace entry {idx} is missing 'id'\", file=sys.stderr)
+        sys.exit(1)
+    if qid in seen_ids:
+        print(f\"FATAL: Duplicate query ID '{qid}' found in evaluation trace\", file=sys.stderr)
+        sys.exit(1)
+    seen_ids.add(qid)
+    mode = tr.get('execution_mode')
+    if mode != 'live_gateway_rpc':
+        print(f\"FATAL: Trace query '{qid}' execution_mode '{mode}' != 'live_gateway_rpc'\", file=sys.stderr)
+        sys.exit(1)
+
 secret_key = os.environ.get('SUNBORN_ATTESTATION_KEY') or os.environ.get('SUNBORN_REPRODUCTION_SECRET')
 if secret_key:
     attestation_type = 'PRODUCTION_INDEPENDENT_ATTESTATION'
@@ -270,6 +317,9 @@ with open('${CERTIFICATE_ARTIFACT}', 'w') as f_cert:
 
 print(f\"  Certificate Generated    : ${CERTIFICATE_ARTIFACT} ({attestation_type})\")
 "
+
+echo "[*] Executing negative verification test suite (proving offline & invalid rejection)..."
+${PYTHON_BIN} -m unittest research/tests/test_verifier_negative.py
 
 echo "[*] Executing independent certificate and artifact verification..."
 ${PYTHON_BIN} research/verify_certificate.py \

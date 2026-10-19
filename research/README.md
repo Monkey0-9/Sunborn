@@ -6,13 +6,14 @@
 
 ## 1. Artifact Contents
 * `paper/sunborn_ieee.tex`: Source LaTeX preprint manuscript and empirical evaluation.
-* `reproduce.sh`: Automated 5-gate end-to-end reproducibility script reproducing all empirical tables, latency metrics, and cryptographic attestation certificates.
+* `reproduce.sh`: Automated 5-gate end-to-end reproducibility script reproducing all empirical tables, latency metrics, live gateway RPC traces, and cryptographic attestation certificates.
 * `hypothesis_register.md`: Scientific hypothesis registry tracking controlled ablations against Baselines B0–B6.
-* `results/benchmark_run.json`: Empirical results for SemanticCacheBench (124 queries across 8 categories).
+* `results/benchmark_run.json`: Empirical results for SemanticCacheBench (124 queries across 8 categories, executed via live gateway RPC).
 * `results/run_manifest.json`: Immutable execution manifest for SemanticCacheBench-T (19 stateful temporal mutation scenarios).
 * `results/reproduction_certificate.json`: Signed cryptographic attestation certificate verifying benchmark provenance (HMAC-SHA-256 or unauthenticated local development integrity check).
-* `verify_certificate.py`: Independent certificate and artifact provenance verifier.
-* `../benchmarks/semantic_cache_bench.py`: SemanticCacheBench dataset runner.
+* `verify_certificate.py`: Independent certificate and artifact provenance verifier with explicit 4-state outcome semantics.
+* `tests/test_verifier_negative.py`: Negative verification test suite proving strict rejection of offline artifacts, corrupted traces, and mismatched keys.
+* `../benchmarks/semantic_cache_bench.py`: SemanticCacheBench dataset runner (supports strict live gateway RPC via `--require-live` and developer offline simulation via `--allow-offline`).
 * `../benchmarks/temporal_bench.py`: SemanticCacheBench-T stateful temporal mutation runner.
 * `../benchmarks/capacity_soak.py`: 3-stage continuous capacity and memory stability simulator.
 
@@ -26,8 +27,14 @@ To execute the one-command reproduction suite:
 
 Expected Outcome:
 * **[1/5] Compilation & Linter Hygiene**: 100% clean build, zero compiler warnings, zero Clippy warnings (`-D warnings`).
-* **[2/5] Core Invariants & Unit Verification**: 100% pass across all 9 workspace crates.
-* **[3/5] Integration & Lifecycle Contract**: All multi-tier lifecycle endpoints and DAG reuse flows verified.
+* **[2/5] Core Invariants & Unit Verification**: 100% pass across all 9 workspace crates, Python SDK (`test_sunborn_agent.py`), and Frontend BFF test suites.
+* **[3/5] In-Process Engine vs. Cluster Latency Separation**: Gateway latency SLO verified ($P99 < 5{,}000\,\mu\text{s}$).
+* **[4/5] Security, Chaos, Governance & Disaster Recovery**: Zero cross-tenant leakage, fail-closed production startup, and 100% index rebuild from PostgreSQL durable records.
+* **[5/5] Live Gateway SemanticCacheBench, SemanticCacheBench-T & Cryptographic Verification**:
+  - Live Sunborn Gateway daemon started at `http://127.0.0.1:8080` with a strict 5.0s health-check deadline (fails closed if unhealthy).
+  - All 124 benchmark queries dispatched over live HTTP RPC to the gateway (`execution_mode: "live_gateway_rpc"`, `provenance_type: "LIVE_GATEWAY_DECISION_PATH"`).
+  - Negative test suite (`research/tests/test_verifier_negative.py`) executed, proving that offline simulation artifacts and corrupted traces fail the live evidence gate.
+  - Independent certificate verification (`research/verify_certificate.py`) evaluated under explicit 4-state outcomes (`AUTHENTICATED`, `INTEGRITY_VERIFIED_UNAUTHENTICATED`, `AUTHENTICATION_UNVERIFIED`, or `INVALID`).
 ---
 
 ## 3. Scientific Evidence Bounds & Production Telemetry Demarcation
