@@ -228,3 +228,79 @@ docker compose -f deploy/docker-compose.yml up -d
 
 ### 8.3 Operational Release Recommendation
 The engineering team concurs with the auditor: **Enterprise release remains NO-GO for sensitive production pending the sequential verification and Team P independent sign-off of Gates G1 through G10.**
+
+---
+
+## 9. Remediation of Auditor Preliminary Source-Level Audit Findings
+
+### 9.1 Finding 1 — Homepage Truthful Performance Evidence & Telemetry Separation
+- **Severity**: High (Evidence & Product-Trust)
+- **Status**: **RESOLVED**
+- **Changes**:
+  1. Updated [`frontend/src/app/page.tsx`](file:///home/unknownuser/Sunbron/frontend/src/app/page.tsx): Completely restructured metrics into two visually distinct tracks:
+     - **Track 1: Live Production Telemetry (Gateway Cluster)**: Reads live counters from `/v1/finops/report`. When latency histograms are not scraped from Prometheus, the card truthfully displays **`Not measured`** with the badge `Not measured (Requires Prometheus)`. Substituted labels like "Sub-millisecond" removed.
+     - **Track 2: Frozen Scientific Evaluation Results (SemanticCacheBench v1.0)**: Explicitly identifies source (`research/results/benchmark_run.json`), frozen sample size ($N = 124$ queries across 8 categories), and two-sided 95% Wilson confidence intervals: Conformal Precision $100.0\%$ ($[88.3\%, 100.0\%]$), Observed False-Hit Rate $0.0\%$ ($[0.0\%, 3.0\%]$), Modeled Token Savings $23.38\%$, and GDPR Shredding Latency $42.1$ µs.
+  2. Verified via Playwright Chromium E2E workflow tests (`npm test` in `frontend/`).
+
+### 9.2 Finding 2 — Production Configuration Matrix & Strict Integration Verification
+- **Severity**: Critical Release Blocker
+- **Status**: **RESOLVED**
+- **Changes**:
+  1. Added active store introspection methods on `AppState` in [`crates/sunborn-gateway/src/state.rs`](file:///home/unknownuser/Sunbron/crates/sunborn-gateway/src/state.rs) (`is_dragonfly_cache_active()`, `is_postgres_db_active()`, `is_qdrant_vector_active()`, `is_mock_origin()`, `is_deterministic_embedder()`).
+  2. Hardened `verify_production_readiness()`: strictly rejects any in-memory store fallback when `SUNBORN_ENV=production`.
+  3. Added 7 new configuration matrix and failure tests in [`crates/sunborn-gateway/tests/production_startup_test.rs`](file:///home/unknownuser/Sunbron/crates/sunborn-gateway/tests/production_startup_test.rs):
+     - `test_configuration_matrix_adapter_selection_dev_and_prod`: asserts in-memory adapters select in dev, and real stores select in prod.
+     - `test_production_startup_failure_when_dragonfly_unavailable`: asserts fail-closed termination when cache is offline.
+     - `test_production_startup_failure_when_postgres_unavailable`: asserts fail-closed termination when database is offline.
+     - `test_production_startup_failure_when_qdrant_unavailable`: asserts fail-closed termination when vector index is offline.
+     - `test_production_startup_failure_when_origin_unavailable`: asserts fail-closed termination when origin LLM is unreachable.
+     - `test_production_startup_failure_when_embedder_unavailable`: asserts fail-closed termination when embedder is offline.
+     - `test_service_backed_connectivity_verification_succeeds`: asserts all store verifications pass when external services are live.
+  4. Verified all 13 production startup tests pass (`cargo test --test production_startup_test`).
+
+### 9.3 Finding 3 — Frontend Verification via Browser-Based End-to-End Testing
+- **Severity**: High (Verification Gap)
+- **Status**: **RESOLVED**
+- **Changes**:
+  1. Installed Playwright and configured headless Chromium integration.
+  2. Created comprehensive browser-based E2E test suite in [`frontend/tests/e2e_browser_workflows.test.mjs`](file:///home/unknownuser/Sunbron/frontend/tests/e2e_browser_workflows.test.mjs) covering all 6 critical user workflows:
+     - **Workflow 1 (Onboarding & Gateway Connectivity Lifecycle)**: Tests initial load, truthful "Not measured" badge, offline indicator, and dynamic transition to `GATEWAY CONNECTED` upon mock telemetry fetch.
+     - **Workflow 2 (Cache Exploration & Request Resolution)**: Tests 10-D envelope submission on `/explorer`, response rendering, `CACHE HIT` badge, exact tier, and token savings calculation.
+     - **Workflow 3 (Execution DAG Inspection & Attestation)**: Tests DAG visualizer on `/execution`, tool purity contracts, Merkle attestation proof verification, and Markov speculative prefetching.
+     - **Workflow 4 (Security Events & Firewall)**: Tests adversarial prompt injection simulator on `/security`, OWASP-LLM-01 detection, and zero-trust invariant display.
+     - **Workflow 5 (Governance Operations & GDPR Shredding)**: Tests GDPR Article 17 crypto-shredding on `/governance`, verified multi-store erasure confirmation, and microsecond latency reporting.
+     - **Workflow 6 (Resilient Error Recovery)**: Tests 503 gateway pool exhaustion graceful banner on `/explorer`, 500 KMS key error banner on `/governance`, and uninterrupted navigation recovery.
+  3. Verified all 20 frontend tests pass cleanly (`npm test`).
+
+### 9.4 Finding 4 — Research Results vs. Production Evidence Demarcation
+- **Severity**: Critical for Research Claims & Release Decisions
+- **Status**: **RESOLVED**
+- **Changes**:
+  1. Enhanced [`benchmarks/semantic_cache_bench.py`](file:///home/unknownuser/Sunbron/benchmarks/semantic_cache_bench.py) and [`benchmarks/semantic_cache_bench_t.py`](file:///home/unknownuser/Sunbron/benchmarks/semantic_cache_bench_t.py):
+     - Added `provenance_type: "FROZEN_OFFLINE_BENCHMARK_EVALUATION"`.
+     - Attached dataset SHA-256 fingerprint (`61a0794c51d312d441bbeaf5ea8e3b9d1958186307606fa177093cc90bce534b` for 124 queries).
+     - Explicitly demarcated cost model as `SYNTHETIC_COST_ESTIMATION` based on GPT-4o rates ($0.00625 per origin call equivalent). Documented that modeled savings are algorithmic estimates, not commercial cloud provider invoices.
+  2. Regenerated empirical research artifacts [`research/results/benchmark_run.json`](file:///home/unknownuser/Sunbron/research/results/benchmark_run.json) and [`research/results/run_manifest.json`](file:///home/unknownuser/Sunbron/research/results/run_manifest.json).
+  3. Updated [`research/README.md`](file:///home/unknownuser/Sunbron/research/README.md) and [`docs/architecture/performance_benchmark_report.md`](file:///home/unknownuser/Sunbron/docs/architecture/performance_benchmark_report.md) with explicit evidence bounds and provenance statements.
+
+### 9.5 Certificate Validation Tracing on Actual Execution Reuse Path
+- **Priority**: Immediate Audit Recommendation
+- **Status**: **RESOLVED**
+- **Changes**:
+  1. Implemented integration test suite [`crates/sunborn-gateway/tests/reuse_certificate_path_test.rs`](file:///home/unknownuser/Sunbron/crates/sunborn-gateway/tests/reuse_certificate_path_test.rs) with 5 end-to-end tests:
+     - `test_reuse_certificate_authenticated_and_validated_on_reuse_path`: verifies valid signature and Merkle root allows execution reuse.
+     - `test_reuse_certificate_tampered_signature_abstains_to_revalidate`: verifies tampered cryptographic signature forces abstention and origin re-execution.
+     - `test_reuse_certificate_tampered_merkle_root_abstains_to_revalidate`: verifies tampered Merkle root forces abstention.
+     - `test_reuse_certificate_epoch_advance_abstains_to_revalidate`: verifies epoch advance past lease forces abstention.
+     - `test_reuse_certificate_expired_validity_window_abstains_to_revalidate`: verifies timestamp expiration forces abstention.
+  2. All 5 tests pass (`cargo test --test reuse_certificate_path_test`).
+
+### 9.6 Progress Across the 5 Audit Tracks (Section 10)
+| Track | Domain | Verified Deliverables & Audit Status |
+| :--- | :--- | :--- |
+| **Track 1** | **Backend & Gateway** | Traced request lifecycle; verified fail-closed production adapter selection; verified cryptographic certificate validation and tamper rejection on actual reuse path. |
+| **Track 2** | **Database & Distributed Systems** | Verified Non-Accelerator PostgreSQL WAL authority; verified multi-store invalidation across Redis/Dragonfly and Qdrant; verified atomic $O(1)$ TDEK crypto-shredding under GDPR Article 17. |
+| **Track 3** | **REST APIs & Security** | Verified 12 privileged administrative endpoints reject anonymous callers with 401; verified timing-safe API key comparison; verified CSRF origin checking; verified zero browser secret exposure. |
+| **Track 4** | **Frontend** | Replaced misleading live performance claims with truthful "Not measured" telemetry and distinct frozen benchmark tracks; implemented 6 Playwright browser E2E workflows verifying all 8 views and error states. |
+| **Track 5** | **Testing & Research** | Generated frozen benchmark provenance with dataset SHA-256 fingerprints; reported all metrics with 95% Wilson confidence intervals; strictly demarcated synthetic cost models from live telemetry; verified automated reproducibility script (`research/reproduce.sh`). |
+

@@ -240,6 +240,40 @@ impl AppState {
         }
     }
 
+    /// Returns true if DragonflyCacheStore is actively wired into the exact cache path.
+    pub fn is_dragonfly_cache_active(&self) -> bool {
+        Arc::ptr_eq(
+            &self.cache,
+            &(self.dragonfly_cache.clone() as Arc<dyn ExactCacheStore>),
+        )
+    }
+
+    /// Returns true if PostgresDatabaseStore is actively wired into the persistence path.
+    pub fn is_postgres_db_active(&self) -> bool {
+        Arc::ptr_eq(
+            &self.db,
+            &(self.postgres_db.clone() as Arc<dyn sunborn_db::DatabaseStore>),
+        )
+    }
+
+    /// Returns true if QdrantVectorStore is actively wired into the semantic vector path.
+    pub fn is_qdrant_vector_active(&self) -> bool {
+        Arc::ptr_eq(
+            &self.vector_store,
+            &(self.qdrant_store.clone() as Arc<dyn sunborn_semantic::VectorStore>),
+        )
+    }
+
+    /// Returns true if the origin provider is a mock provider.
+    pub fn is_mock_origin(&self) -> bool {
+        self.origin_provider.is_mock()
+    }
+
+    /// Returns true if the embedding provider is a deterministic mock.
+    pub fn is_deterministic_embedder(&self) -> bool {
+        self.selected_embedder.is_deterministic()
+    }
+
     /// Verifies production infrastructure readiness and fail-closed durability contracts.
     /// In production (`SUNBORN_ENV=production`), active network connectivity to PostgreSQL,
     /// DragonflyDB, and Qdrant must succeed before the gateway can start serving traffic.
@@ -261,17 +295,18 @@ impl AppState {
 
         // 1. Production environment strictness: disallow ephemeral in-memory stores, insecure secrets, and mock providers
         if is_prod {
-            if !cache_backend.eq_ignore_ascii_case("dragonfly") {
+            if !cache_backend.eq_ignore_ascii_case("dragonfly") || !self.is_dragonfly_cache_active()
+            {
                 return Err(sunborn_core::SunbornError::configuration_error(
                     "Production environment SUNBORN_ENV=production forbids ephemeral in-memory cache backend. Set SUNBORN_CACHE_BACKEND=dragonfly.",
                 ));
             }
-            if !db_backend.eq_ignore_ascii_case("postgres") {
+            if !db_backend.eq_ignore_ascii_case("postgres") || !self.is_postgres_db_active() {
                 return Err(sunborn_core::SunbornError::configuration_error(
                     "Production environment SUNBORN_ENV=production forbids ephemeral in-memory database backend. Set SUNBORN_DB_BACKEND=postgres.",
                 ));
             }
-            if !vector_backend.eq_ignore_ascii_case("qdrant") {
+            if !vector_backend.eq_ignore_ascii_case("qdrant") || !self.is_qdrant_vector_active() {
                 return Err(sunborn_core::SunbornError::configuration_error(
                     "Production environment SUNBORN_ENV=production forbids ephemeral in-memory vector backend. Set SUNBORN_VECTOR_BACKEND=qdrant.",
                 ));

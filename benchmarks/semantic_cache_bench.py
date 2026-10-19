@@ -16,6 +16,7 @@ import re
 import json
 import time
 import math
+import hashlib
 import platform
 import statistics
 from datetime import datetime, timezone
@@ -510,17 +511,27 @@ def run_benchmark():
     total_queries = len(BENCHMARK_SUITE)
     b0_cost = baselines["B0_NoCache"]["cost"]
 
+    dataset_fingerprint = hashlib.sha256(json.dumps(BENCHMARK_SUITE, sort_keys=True).encode("utf-8")).hexdigest()
+    git_commit_sha = os.popen("git rev-parse HEAD 2>/dev/null || echo unknown").read().strip()
+
     report_data = {
         "metadata": {
+            "evaluation_suite": "SemanticCacheBench (v1.0 Frozen Suite)",
+            "provenance_type": "FROZEN_OFFLINE_BENCHMARK_EVALUATION",
+            "evidence_scope": "Offline experimental benchmark on frozen test suite (SemanticCacheBench v1.0). Demonstrates calibrated decision engine properties; does NOT represent unmonitored live production traffic or guaranteed zero false-hit rate across open-domain production workloads without runtime calibration.",
             "evaluation_time_utc": datetime.now(timezone.utc).isoformat(),
+            "git_commit": git_commit_sha,
             "platform": platform.platform(),
             "python_version": platform.python_version(),
             "total_benchmark_queries": total_queries,
             "categories_evaluated": 8,
+            "dataset_sha256": dataset_fingerprint,
             "embedding_backend": EMBEDDING_BACKEND_NAME,
             "decision_engine": "Sunborn-Semantic DecisionEngine (VerificationCascade + Conformal Risk Bound <= 0.25)",
             "decision_engine_mode": "live_gateway_rpc" if live_gateway_available else "rust_parity_calibrated_decision_engine",
             "cost_model": {
+                "model_type": "SYNTHETIC_COST_ESTIMATION",
+                "cost_model_notes": "Modeled assuming standard GPT-4o input/output token pricing ($0.00625 per origin call equivalent). Modeled savings are algorithmic estimates under this fixed pricing schedule, NOT independently audited commercial cloud provider invoices or customer telemetry.",
                 "origin_call_usd": cost_per_origin_call,
                 "cache_lookup_usd": cache_lookup_cost,
                 "origin_latency_ms": origin_latency_ms,

@@ -1,14 +1,21 @@
 {
   "metadata": {
-    "evaluation_time_utc": "2026-10-18T06:59:07.139447+00:00",
+    "evaluation_suite": "SemanticCacheBench (v1.0 Frozen Suite)",
+    "provenance_type": "FROZEN_OFFLINE_BENCHMARK_EVALUATION",
+    "evidence_scope": "Offline experimental benchmark on frozen test suite (SemanticCacheBench v1.0). Demonstrates calibrated decision engine properties; does NOT represent unmonitored live production traffic or guaranteed zero false-hit rate across open-domain production workloads without runtime calibration.",
+    "evaluation_time_utc": "2026-10-19T09:51:53.980155+00:00",
+    "git_commit": "83c26b5c63980217df02fbad90eeeaec01be39d8",
     "platform": "Linux-6.12.0-211.64.1.el10_2.x86_64-x86_64-with-glibc2.39",
     "python_version": "3.13.16",
     "total_benchmark_queries": 124,
     "categories_evaluated": 8,
+    "dataset_sha256": "61a0794c51d312d441bbeaf5ea8e3b9d1958186307606fa177093cc90bce534b",
     "embedding_backend": "BAAI/bge-small-en-v1.5 (fastembed)",
     "decision_engine": "Sunborn-Semantic DecisionEngine (VerificationCascade + Conformal Risk Bound <= 0.25)",
     "decision_engine_mode": "rust_parity_calibrated_decision_engine",
     "cost_model": {
+      "model_type": "SYNTHETIC_COST_ESTIMATION",
+      "cost_model_notes": "Modeled assuming standard GPT-4o input/output token pricing ($0.00625 per origin call equivalent). Modeled savings are algorithmic estimates under this fixed pricing schedule, NOT independently audited commercial cloud provider invoices or customer telemetry.",
       "origin_call_usd": 0.00625,
       "cache_lookup_usd": 1e-06,
       "origin_latency_ms": 450.0

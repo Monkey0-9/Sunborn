@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   Sparkles,
   RefreshCw,
+  Clock,
 } from "lucide-react";
 import { CanvasManifold } from "@/components/ui/canvas-manifold";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -158,8 +159,7 @@ export default function OverviewPage() {
           </h1>
           <p className="text-base sm:text-lg text-slate-400 leading-relaxed max-w-3xl">
             Sunborn decouples AI inference latency, token expenditure, and origin failure risks
-            through multi-tier execution reuse. Guaranteed <strong className="text-slate-200">0.0% false-hit rate</strong> via
-            conformal risk calibration, sub-120 µs exact match latency, and instant <strong className="text-slate-200">O(1) cryptographic shredding</strong> under GDPR Article 17.
+            through multi-tier execution reuse. Empirically demonstrated <strong className="text-slate-200">0.0% false-hit rate</strong> on the frozen SemanticCacheBench suite (95% Wilson CI: [0.0%, 3.0%]), sub-120 µs exact match microbenchmark latency, and instant <strong className="text-slate-200">O(1) cryptographic shredding</strong> under GDPR Article 17.
           </p>
         </div>
 
@@ -211,72 +211,272 @@ export default function OverviewPage() {
         />
       </section>
 
-      {/* Key Metric Gauges */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card glow="cyan">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">Hot Path Latency (P99)</CardTitle>
-            <Zap className="w-4 h-4 text-cyan-400" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold font-mono text-white tracking-tight">
-              {metrics.p99LatencyUs !== null
-                ? formatMicroseconds(metrics.p99LatencyUs)
-                : metrics.totalRequests > 0
-                ? "Sub-millisecond"
-                : "—"}
-            </div>
-            <p className="text-xs font-mono text-slate-400 mt-1 flex items-center gap-1">
-              <span>{metrics.totalRequests > 0 ? "Measured via benchmark" : "Awaiting live traffic"}</span>
-            </p>
-          </CardContent>
-        </Card>
+      {/* Track 1: Live Gateway Telemetry */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
+            <h2 className="text-base font-bold text-white tracking-tight">
+              Live Production Telemetry (Gateway Cluster)
+            </h2>
+          </div>
+          <Badge variant="emerald" dot>
+            SOURCE: GATEWAY /V1/FINOPS/REPORT
+          </Badge>
+        </div>
+        <p className="text-xs text-slate-400 font-mono">
+          Dynamic runtime measurements emitted by active gateway ingress workers.
+        </p>
 
-        <Card glow="emerald">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">Conformal Precision</CardTitle>
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold font-mono text-white tracking-tight">
-              100.0%
-            </div>
-            <p className="text-xs font-mono text-emerald-400 mt-1 flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>0.0% false-hit rate (α ≤ 0.001)</span>
-            </p>
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
+          <Card glow="cyan">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-slate-400">Live Ingress Queries</CardTitle>
+              <Zap className="w-4 h-4 text-cyan-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold font-mono text-white tracking-tight">
+                {metrics.totalRequests > 0 ? formatNumber(metrics.totalRequests) : "0"}
+              </div>
+              <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Source:</span>
+                  <span className="text-slate-300">Gateway Ingress Counter</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Period:</span>
+                  <span className="text-slate-300">Process Lifetime</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Status:</span>
+                  <span className="text-emerald-400 font-semibold">Live Telemetry</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card glow="violet">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">Avoided Token Spend</CardTitle>
-            <TrendingUp className="w-4 h-4 text-violet-400" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold font-mono text-white tracking-tight">
-              {formatCurrency(metrics.avoidedCostUsd)}
-            </div>
-            <p className="text-xs font-mono text-violet-400 mt-1">
-              <span>{metrics.hitRatio}% hit ratio across {formatNumber(metrics.totalRequests)} queries</span>
-            </p>
-          </CardContent>
-        </Card>
+          <Card glow="emerald">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-slate-400">Live Cache Hit Ratio</CardTitle>
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold font-mono text-white tracking-tight">
+                {metrics.totalRequests > 0 ? `${metrics.hitRatio}%` : "—"}
+              </div>
+              <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Source:</span>
+                  <span className="text-slate-300">Atomic Hit Counters (C0–C2)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Hits / Reused:</span>
+                  <span className="text-slate-300">{formatNumber(metrics.cachedEntries)} hits</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Status:</span>
+                  <span className="text-emerald-400 font-semibold">Live Telemetry</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card glow="amber">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">GDPR Shredding Latency</CardTitle>
-            <Lock className="w-4 h-4 text-amber-400" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold font-mono text-white tracking-tight">
-              42.1 µs
-            </div>
-            <p className="text-xs font-mono text-amber-400 mt-1">
-              <span>Atomic AES-256-GCM zeroization</span>
-            </p>
-          </CardContent>
-        </Card>
+          <Card glow="violet">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-slate-400">Hot Path Latency (P99)</CardTitle>
+              <Clock className="w-4 h-4 text-violet-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold font-mono text-white tracking-tight">
+                {metrics.p99LatencyUs !== null
+                  ? formatMicroseconds(metrics.p99LatencyUs)
+                  : "Not measured"}
+              </div>
+              <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Source:</span>
+                  <span className="text-slate-300">Ingress Latency Histogram</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Measurement:</span>
+                  <span className="text-slate-300">Live Rolling Window</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Status:</span>
+                  <span className={metrics.p99LatencyUs !== null ? "text-emerald-400 font-semibold" : "text-amber-400 font-semibold"}>
+                    {metrics.p99LatencyUs !== null ? "Live Measured" : "Not measured (Requires Prometheus)"}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card glow="amber">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-slate-400">Avoided Token Spend</CardTitle>
+              <TrendingUp className="w-4 h-4 text-amber-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold font-mono text-white tracking-tight">
+                {formatCurrency(metrics.avoidedCostUsd)}
+              </div>
+              <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Source:</span>
+                  <span className="text-slate-300">FinOps Telemetry Engine</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Pricing Model:</span>
+                  <span className="text-slate-300">Modeled (GPT-4o rates)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Status:</span>
+                  <span className="text-violet-400 font-semibold">Modeled from Live Tokens</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      {/* Track 2: Frozen Scientific Benchmark Results */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-cyan-400" />
+            <h2 className="text-base font-bold text-white tracking-tight">
+              Frozen Scientific Evaluation Results (SemanticCacheBench v1.0)
+            </h2>
+          </div>
+          <Badge variant="cyan" dot>
+            SOURCE: RESEARCH/RESULTS/BENCHMARK_RUN.JSON
+          </Badge>
+        </div>
+        <p className="text-xs text-slate-400 font-mono">
+          Empirical measurements on frozen benchmark dataset with two-sided 95% Wilson score confidence intervals.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
+          <Card glow="cyan">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-slate-400">Conformal Precision</CardTitle>
+              <ShieldCheck className="w-4 h-4 text-cyan-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold font-mono text-white tracking-tight">
+                100.0%
+              </div>
+              <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Source:</span>
+                  <span className="text-slate-300">SemanticCacheBench B3</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Sample Size:</span>
+                  <span className="text-slate-300">N=124 queries (8 categories)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">95% Wilson CI:</span>
+                  <span className="text-cyan-300 font-semibold">[88.3%, 100.0%]</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Status:</span>
+                  <span className="text-cyan-400 font-semibold">Verified Benchmark</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card glow="emerald">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-slate-400">Observed False-Hit Rate</CardTitle>
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold font-mono text-white tracking-tight">
+                0.0%
+              </div>
+              <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Source:</span>
+                  <span className="text-slate-300">Verification Cascade (α ≤ 0.001)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Sample Size:</span>
+                  <span className="text-slate-300">N=124 queries</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">95% Wilson CI:</span>
+                  <span className="text-emerald-300 font-semibold">[0.0%, 3.0%]</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Status:</span>
+                  <span className="text-emerald-400 font-semibold">Verified Benchmark</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card glow="violet">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-slate-400">Benchmark Token Savings</CardTitle>
+              <TrendingUp className="w-4 h-4 text-violet-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold font-mono text-white tracking-tight">
+                23.38%
+              </div>
+              <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Source:</span>
+                  <span className="text-slate-300">B3 vs B0 No-Cache Baseline</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Pricing Basis:</span>
+                  <span className="text-slate-300">Synthetic ($2.50/$10 per M tok)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Sample Size:</span>
+                  <span className="text-slate-300">N=124 queries</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Status:</span>
+                  <span className="text-violet-400 font-semibold">Modeled Benchmark Savings</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card glow="amber">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-slate-400">GDPR Shredding Latency</CardTitle>
+              <Lock className="w-4 h-4 text-amber-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold font-mono text-white tracking-tight">
+                42.1 µs
+              </div>
+              <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Source:</span>
+                  <span className="text-slate-300">Local AEAD TDEK Zeroization</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Sample Iterations:</span>
+                  <span className="text-slate-300">N=10,000 Key Eradication Runs</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Guaranteed RPO:</span>
+                  <span className="text-amber-300 font-semibold">Instant Invalidation</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Status:</span>
+                  <span className="text-amber-400 font-semibold">Measured Microbenchmark</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </section>
  
       {/* 260-Engineer Planet-Scale Stress Simulator & Guild Readiness Matrix */}

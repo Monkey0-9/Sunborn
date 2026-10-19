@@ -65,11 +65,15 @@ jobs:
         working-directory: frontend
         run: npm ci --audit=false
 
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
       - name: Type Check Frontend
         working-directory: frontend
         run: npx tsc --noEmit
 
-      - name: Run BFF Security Tests
+      - name: Run BFF Security and E2E Browser Tests
         working-directory: frontend
         run: npm test
 

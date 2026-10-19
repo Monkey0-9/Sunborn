@@ -27,9 +27,21 @@ Expected Outcome:
 * **[1/5] Compilation & Linter Hygiene**: 100% clean build, zero compiler warnings, zero Clippy warnings (`-D warnings`).
 * **[2/5] Core Invariants & Unit Verification**: 100% pass across all 9 workspace crates.
 * **[3/5] Integration & Lifecycle Contract**: All multi-tier lifecycle endpoints and DAG reuse flows verified.
-* **[4/5] Adversarial Security & Conformal Learning**: Zero cross-tenant leaks, tenant spoofing rejection, circuit-breaker fallback, DST Non-Accelerator Authority, and 5-layer learning controller verified.
-* **[5/5] SemanticCacheBench & Empirical Artifacts**:
-  - `SemanticCacheBench`: Sunborn B3 achieves **0.0% false hits** (100% precision, 95% Wilson CI $[0.0, 3.0]$) vs. Naive Cosine B2 **48.39% false hits**.
-  - `SemanticCacheBench-T`: Sunborn B3 achieves **0.0% false hits** across 19 temporal mutations vs. Naive Cosine B2 **63.16% false hits**.
-  - `Capacity Soak`: Sustained **39,400+ req/s** throughput under Zipfian churn ($s = 1.05$), 0 broadcast channel leaks, 42.0 µs TDEK crypto-shredding, flat RSS memory envelope ($\le 1.2\%$ variance).
-  - Cryptographically signed `research/results/reproduction_certificate.json` generated and verified.
+---
+
+## 3. Scientific Evidence Bounds & Production Telemetry Demarcation
+To preserve empirical integrity and prevent confabulation of offline research artifacts with runtime production telemetry:
+
+1. **Frozen Dataset vs. Live Production**:
+   - `SemanticCacheBench` ($N = 124$ queries across 8 semantic categories, SHA-256 fingerprint: `61a0794c51d312d441bbeaf5ea8e3b9d1958186307606fa177093cc90bce534b`) and `SemanticCacheBench-T` ($N = 19$ stateful mutation scenarios) represent **frozen experimental evaluation suites**.
+   - The observed **0.0% false-hit rate** demonstrates the mathematical properties of Sunborn's calibrated Verification Cascade on these frozen suites with a two-sided 95% Wilson confidence interval of $[0.0\%, 3.0\%]$ ($[0.0\%, 16.82\%]$ for temporal-T).
+   - These offline benchmarks do **NOT** claim an uncalibrated zero false-hit rate on arbitrary, unseen production traffic without runtime conformal calibration.
+
+2. **Synthetic Cost Model Demarcation**:
+   - The reported token cost savings ($23.38\%$ in SemanticCacheBench, $10.52\%$ in SemanticCacheBench-T) are computed using an **explicit synthetic cost estimation model** assuming standard GPT-4o pricing schedule ($0.00625 USD per origin call equivalent, $0.000001 USD per cache lookup).
+   - Modeled cost reductions are algorithmic estimates under this pricing baseline; they must **never** be presented as audited commercial provider invoices or actual customer expenditure reductions.
+
+3. **Live Production Telemetry**:
+   - In production deployments, real-time cache hit ratios, token avoided counters, and P99 latency are gathered dynamically from active gateway ingress nodes via `/v1/finops/report` and Prometheus scrapers.
+   - When live telemetry is unmeasured or Prometheus exporters are unattached, the UI and API truthfully report `Not measured` rather than displaying static demonstration values.
+

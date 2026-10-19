@@ -600,6 +600,8 @@ def run_temporal_benchmark():
     report_data = {
         "metadata": {
             "evaluation_suite": "SemanticCacheBench-T (Temporal & Stateful)",
+            "provenance_type": "FROZEN_OFFLINE_BENCHMARK_EVALUATION",
+            "evidence_scope": "Stateful temporal mutation benchmark across 6 sequential phases. Evaluates causal leases and verification cascade under simulated mutations; does NOT represent uncalibrated live production streams.",
             "evaluation_time_utc": datetime.now(timezone.utc).isoformat(),
             "platform": platform.platform(),
             "python_version": platform.python_version(),
@@ -616,6 +618,13 @@ def run_temporal_benchmark():
                 "Phase6_AdversarialTraps"
             ],
             "dataset_sha256": hashlib.sha256(json.dumps(TEMPORAL_BENCHMARK_SCENARIOS, sort_keys=True).encode()).hexdigest(),
+            "cost_model": {
+                "model_type": "SYNTHETIC_COST_ESTIMATION",
+                "cost_model_notes": "Modeled assuming standard GPT-4o input/output token pricing ($0.00625 per origin call equivalent). Modeled savings are algorithmic estimates under this fixed pricing schedule, NOT independently audited commercial cloud provider invoices or customer telemetry.",
+                "origin_call_usd": cost_origin,
+                "cache_lookup_usd": cost_cache,
+                "origin_latency_ms": lat_origin,
+            }
         },
         "baselines": {},
         "raw_execution_traces": raw_traces,
