@@ -34,10 +34,12 @@ Expected Outcome:
   - Live Sunborn Gateway daemon started at `http://127.0.0.1:8080` with a strict 5.0s health-check deadline (fails closed if unhealthy).
   - All 124 benchmark queries dispatched over live HTTP RPC to the gateway (`execution_mode: "live_gateway_rpc"`, `provenance_type: "LIVE_GATEWAY_DECISION_PATH"`).
   - Exact query completeness enforced: observed query IDs must match the expected 124-query dataset set (zero missing, unexpected, or duplicate IDs).
+  - Canonical dataset contract verification: each evaluation trace's category and ground-truth label are AST-extracted and asserted against the canonical versioned dataset.
   - Meaningful semantic reuse enforced: requires true positive reuses > 0 (prevents degenerate zero-reuse cache pass).
   - Fail-closed Git provenance: any repository revision or tree mismatch immediately returns `INVALID` (explicit `--no-git` flags reduced verification scope).
-  - Metrics cross-verification: all 10 certificate empirical metrics recomputed directly from raw source artifacts (`benchmark_run.json` and `run_manifest.json`) and verified identical.
-  - Negative test suite (`research/tests/test_verifier_negative.py`, 11 tests) executed, proving that offline simulation artifacts, corrupted traces, arbitrary ID replacements, metric mismatches, and tampered Git hashes are strictly rejected.
+  - Comprehensive baseline summary derivation: all 12 baseline summary fields (`tp`, `fp`, `tn`, `fn`, `hits`, `hit_rate_pct`, `false_hits`, `false_hit_rate_pct`, `precision_pct`, `recall_pct`, `total_cost_usd`, `cost_savings_pct`) across both B3 and B2 in `benchmark_run.json` and temporal B3 and B2 in `run_manifest.json` are recomputed from raw traces and cost models, asserting exact equality (Naive B2 precision is verified as 40.00% [$40/(40+60)$] and false-hit rate as 48.39% [$60/124$]).
+  - Metrics cross-verification: all 10 certificate empirical metrics recomputed directly from raw source artifacts (`benchmark_run.json` and `run_manifest.json`) and verified identical with zero-tolerance exact equality.
+  - Negative test suite (`research/tests/test_verifier_negative.py`, 23 tests) executed, proving that offline simulation artifacts, corrupted traces, arbitrary ID replacements, ground-truth label tampering, category tampering, baseline summary mutations, metric mismatches, and tampered Git hashes are strictly rejected.
   - Independent certificate verification (`research/verify_certificate.py`) evaluated under explicit 4-state outcomes (`AUTHENTICATED`, `INTEGRITY_VERIFIED_UNAUTHENTICATED`, `AUTHENTICATION_UNVERIFIED`, or `INVALID`).
 ---
 

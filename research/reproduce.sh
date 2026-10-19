@@ -256,9 +256,9 @@ for idx, tr in enumerate(traces):
         print(f\"FATAL: Trace query '{qid}' execution_mode '{mode}' != 'live_gateway_rpc'\", file=sys.stderr)
         sys.exit(1)
 
-# Derive expected IDs from versioned dataset and verify exact set equality
+# Derive canonical metadata contracts from versioned dataset and verify exact set equality
 import ast
-expected_ids = set()
+canonical_contracts = {}
 with open('benchmarks/semantic_cache_bench.py', 'r', encoding='utf-8') as f_ds:
     tree_ds = ast.parse(f_ds.read())
 for node in tree_ds.body:
@@ -266,55 +266,109 @@ for node in tree_ds.body:
         for target in node.targets:
             if isinstance(target, ast.Name) and target.id == 'BENCHMARK_SUITE':
                 for elt in node.value.elts:
+                    qid, cat, eq = None, None, None
                     for k, v in zip(elt.keys, elt.values):
-                        if isinstance(k, ast.Constant) and k.value == 'id':
-                            expected_ids.add(v.value)
+                        if isinstance(k, ast.Constant):
+                            if k.value == 'id' and isinstance(v, ast.Constant):
+                                qid = v.value
+                            elif k.value == 'category' and isinstance(v, ast.Constant):
+                                cat = v.value
+                            elif k.value == 'equivalent' and isinstance(v, ast.Constant):
+                                eq = v.value
+                    if qid:
+                        canonical_contracts[qid] = {'category': cat, 'ground_truth': bool(eq)}
 
-if len(expected_ids) != 124:
-    print(f\"FATAL: Expected dataset size is {len(expected_ids)}, expected 124\", file=sys.stderr)
+if len(canonical_contracts) != 124:
+    print(f\"FATAL: Expected dataset size is {len(canonical_contracts)}, expected 124\", file=sys.stderr)
     sys.exit(1)
 
+expected_ids = set(canonical_contracts.keys())
 missing_ids = expected_ids - seen_ids
 unexpected_ids = seen_ids - expected_ids
 if missing_ids or unexpected_ids:
     print(f\"FATAL: Query ID set mismatch against expected dataset: missing={sorted(list(missing_ids))}, unexpected={sorted(list(unexpected_ids))}\", file=sys.stderr)
     sys.exit(1)
 
-# Independently recompute empirical metrics directly from raw traces
-derived_b3_tp = sum(1 for t in traces if (t.get('b3_reused') if 'b3_reused' in t else t.get('reused')) and t.get('ground_truth'))
-derived_b3_fp = sum(1 for t in traces if (t.get('b3_reused') if 'b3_reused' in t else t.get('reused')) and not t.get('ground_truth'))
-derived_b3_total = len(traces)
-derived_b3_prec = round((derived_b3_tp / (derived_b3_tp + derived_b3_fp) * 100.0) if (derived_b3_tp + derived_b3_fp) > 0 else 100.0, 2)
-derived_b3_fhr = round((derived_b3_fp / derived_b3_total * 100.0) if derived_b3_total > 0 else 0.0, 2)
+# Verify canonical dataset metadata contracts per trace
+for tr in traces:
+    qid = tr['id']
+    canon = canonical_contracts[qid]
+    if tr.get('category') != canon['category']:
+        print(f\"FATAL: Trace query '{qid}' category '{tr.get('category')}' != canonical '{canon['category']}'\", file=sys.stderr)
+        sys.exit(1)
+    if tr.get('ground_truth') != canon['ground_truth']:
+        print(f\"FATAL: Trace query '{qid}' ground_truth '{tr.get('ground_truth')}' != canonical '{canon['ground_truth']}'\", file=sys.stderr)
+        sys.exit(1)
 
-derived_b2_tp = sum(1 for t in traces if t.get('b2_reused') and t.get('ground_truth'))
-derived_b2_fp = sum(1 for t in traces if t.get('b2_reused') and not t.get('ground_truth'))
-derived_b2_total = len(traces)
-derived_b2_prec = round((derived_b2_tp / (derived_b2_tp + derived_b2_fp) * 100.0) if (derived_b2_tp + derived_b2_fp) > 0 else 100.0, 2)
-derived_b2_fhr = round((derived_b2_fp / derived_b2_total * 100.0) if derived_b2_total > 0 else 0.0, 2)
-
+# Independently derive and cross-verify all 12 baseline summary fields
 cost_model = meta.get('cost_model', {})
 origin_call_usd = float(cost_model.get('origin_call_usd', 0.0))
 cache_lookup_usd = float(cost_model.get('cache_lookup_usd', 0.0))
-b0_cost = derived_b3_total * origin_call_usd
-b3_cost = sum(
-    cache_lookup_usd if (t.get('b3_reused') if 'b3_reused' in t else t.get('reused')) else origin_call_usd
-    for t in traces
-)
-derived_b3_cost_savings = round(max(0.0, (1.0 - (b3_cost / b0_cost)) * 100.0), 2)
+
+def verify_and_derive_summary(bname, summary, trs, reused_fn, c_orig, c_cache, label):
+    tot = len(trs)
+    tp = sum(1 for t in trs if reused_fn(t) and t.get('ground_truth'))
+    fp = sum(1 for t in trs if reused_fn(t) and not t.get('ground_truth'))
+    tn = sum(1 for t in trs if not reused_fn(t) and not t.get('ground_truth'))
+    fn = sum(1 for t in trs if not reused_fn(t) and t.get('ground_truth'))
+    hits = tp + fp
+    false_hits = fp
+    hit_rate_pct = round((hits / tot * 100.0) if tot > 0 else 0.0, 2)
+    false_hit_rate_pct = round((fp / tot * 100.0) if tot > 0 else 0.0, 2)
+    precision_pct = round((tp / (tp + fp) * 100.0) if (tp + fp) > 0 else 100.0, 2)
+    recall_pct = round((tp / (tp + fn) * 100.0) if (tp + fn) > 0 else 0.0, 2)
+    b0_cost = tot * c_orig
+    total_cost_usd = round(hits * c_cache + (tot - hits) * c_orig, 6)
+    cost_savings_pct = round(max(0.0, (1.0 - (total_cost_usd / b0_cost)) * 100.0) if b0_cost > 0 else 0.0, 2)
+
+    derived = {
+        'tp': tp, 'fp': fp, 'tn': tn, 'fn': fn,
+        'hits': hits, 'hit_rate_pct': hit_rate_pct,
+        'false_hits': false_hits, 'false_hit_rate_pct': false_hit_rate_pct,
+        'precision_pct': precision_pct, 'recall_pct': recall_pct,
+        'total_cost_usd': total_cost_usd, 'cost_savings_pct': cost_savings_pct
+    }
+    for field, exp_val in derived.items():
+        if field not in summary:
+            print(f\"FATAL: {label} baseline '{bname}' missing field '{field}'\", file=sys.stderr)
+            sys.exit(1)
+        act_val = summary[field]
+        if isinstance(exp_val, float):
+            if round(float(act_val), 2) != round(float(exp_val), 2):
+                print(f\"FATAL: {label} baseline '{bname}' field '{field}' ({act_val}) != derived ({exp_val})\", file=sys.stderr)
+                sys.exit(1)
+        else:
+            if int(act_val) != int(exp_val):
+                print(f\"FATAL: {label} baseline '{bname}' field '{field}' ({act_val}) != derived ({exp_val})\", file=sys.stderr)
+                sys.exit(1)
+    return derived
+
+derived_b3 = verify_and_derive_summary('B3_SunbornCalibrated', b3, traces, lambda t: (t.get('b3_reused') if 'b3_reused' in t else t.get('reused')), origin_call_usd, cache_lookup_usd, 'Benchmark')
+derived_b2 = verify_and_derive_summary('B2_NaiveCosine', b2, traces, lambda t: t.get('b2_reused'), origin_call_usd, cache_lookup_usd, 'Benchmark')
 
 manifest_traces = manifest_data.get('raw_execution_traces', [])
-derived_tb3_tp = sum(1 for t in manifest_traces if t.get('b3_reused') and t.get('ground_truth'))
-derived_tb3_fp = sum(1 for t in manifest_traces if t.get('b3_reused') and not t.get('ground_truth'))
-derived_tb3_total = len(manifest_traces)
-derived_tb3_prec = round((derived_tb3_tp / (derived_tb3_tp + derived_tb3_fp) * 100.0) if (derived_tb3_tp + derived_tb3_fp) > 0 else 100.0, 2)
-derived_tb3_fhr = round((derived_tb3_fp / derived_tb3_total * 100.0) if derived_tb3_total > 0 else 0.0, 2)
+t_cost_model = manifest_data.get('metadata', {}).get('cost_model', {})
+t_origin_usd = float(t_cost_model.get('origin_call_usd', 0.0))
+t_cache_usd = float(t_cost_model.get('cache_lookup_usd', 0.0))
 
-derived_tb2_tp = sum(1 for t in manifest_traces if t.get('b2_reused') and t.get('ground_truth'))
-derived_tb2_fp = sum(1 for t in manifest_traces if t.get('b2_reused') and not t.get('ground_truth'))
-derived_tb2_total = len(manifest_traces)
-derived_tb2_prec = round((derived_tb2_tp / (derived_tb2_tp + derived_tb2_fp) * 100.0) if (derived_tb2_tp + derived_tb2_fp) > 0 else 100.0, 2)
-derived_tb2_fhr = round((derived_tb2_fp / derived_tb2_total * 100.0) if derived_tb2_total > 0 else 0.0, 2)
+derived_tb3 = verify_and_derive_summary('B3_SunbornTemporal', t_b3, manifest_traces, lambda t: t.get('b3_reused'), t_origin_usd, t_cache_usd, 'Manifest')
+derived_tb2 = verify_and_derive_summary('B2_NaiveCosine', t_b2, manifest_traces, lambda t: t.get('b2_reused'), t_origin_usd, t_cache_usd, 'Manifest')
+
+# Extract key scalar metrics for certificate generation
+derived_b3_tp = derived_b3['tp']
+derived_b3_fp = derived_b3['fp']
+derived_b3_prec = derived_b3['precision_pct']
+derived_b3_fhr = derived_b3['false_hit_rate_pct']
+derived_b3_cost_savings = derived_b3['cost_savings_pct']
+
+derived_b2_fp = derived_b2['fp']
+derived_b2_fhr = derived_b2['false_hit_rate_pct']
+
+derived_tb3_fp = derived_tb3['fp']
+derived_tb3_prec = derived_tb3['precision_pct']
+
+derived_tb2_fp = derived_tb2['fp']
+derived_tb2_fhr = derived_tb2['false_hit_rate_pct']
 
 # Ensure meaningful semantic reuse (non-degenerate cache)
 if derived_b3_tp <= 0:

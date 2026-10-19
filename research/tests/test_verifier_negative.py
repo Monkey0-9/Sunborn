@@ -449,5 +449,125 @@ class NegativeVerifierTests(unittest.TestCase):
         )
         self.assertEqual(outcome, STATUS_INVALID)
 
+    def test_trace_ground_truth_label_tampering_against_canonical_dataset_is_strictly_rejected(self):
+        with open(self.bench_copy, "r", encoding="utf-8") as f:
+            bench_data = json.load(f)
+
+        # Invert canonical ground_truth label on an existing valid query ID (WS-001)
+        # Even if ID remains present and unique, AST canonical contract check MUST catch and reject label tampering
+        bench_data["b3_evaluation_trace"][0]["ground_truth"] = not bench_data["b3_evaluation_trace"][0]["ground_truth"]
+        self._sync_cert_hashes(bench_data=bench_data)
+
+        outcome = verify_reproduction_certificate(
+            cert_path=self.cert_copy,
+            bench_path=self.bench_copy,
+            manifest_path=self.manifest_copy,
+            check_git=True,
+            require_live=True,
+        )
+        self.assertEqual(outcome, STATUS_INVALID)
+
+    def test_trace_category_tampering_against_canonical_dataset_is_strictly_rejected(self):
+        with open(self.bench_copy, "r", encoding="utf-8") as f:
+            bench_data = json.load(f)
+
+        # Mutate canonical category from "whitespace" to "tampered_category"
+        bench_data["b3_evaluation_trace"][0]["category"] = "tampered_category"
+        self._sync_cert_hashes(bench_data=bench_data)
+
+        outcome = verify_reproduction_certificate(
+            cert_path=self.cert_copy,
+            bench_path=self.bench_copy,
+            manifest_path=self.manifest_copy,
+            check_git=True,
+            require_live=True,
+        )
+        self.assertEqual(outcome, STATUS_INVALID)
+
+    def test_tampered_b2_precision_summary_is_strictly_rejected(self):
+        with open(self.bench_copy, "r", encoding="utf-8") as f:
+            bench_data = json.load(f)
+
+        # Mutate Naive B2 precision summary from 40.00% to 99.00%
+        bench_data["baselines"]["B2_NaiveCosine"]["precision_pct"] = 99.00
+        self._sync_cert_hashes(bench_data=bench_data)
+
+        outcome = verify_reproduction_certificate(
+            cert_path=self.cert_copy,
+            bench_path=self.bench_copy,
+            manifest_path=self.manifest_copy,
+            check_git=True,
+            require_live=True,
+        )
+        self.assertEqual(outcome, STATUS_INVALID)
+
+    def test_tampered_b3_recall_summary_is_strictly_rejected(self):
+        with open(self.bench_copy, "r", encoding="utf-8") as f:
+            bench_data = json.load(f)
+
+        # Mutate B3 recall summary from 37.50% to 99.00%
+        bench_data["baselines"]["B3_SunbornCalibrated"]["recall_pct"] = 99.00
+        self._sync_cert_hashes(bench_data=bench_data)
+
+        outcome = verify_reproduction_certificate(
+            cert_path=self.cert_copy,
+            bench_path=self.bench_copy,
+            manifest_path=self.manifest_copy,
+            check_git=True,
+            require_live=True,
+        )
+        self.assertEqual(outcome, STATUS_INVALID)
+
+    def test_tampered_b2_tp_count_is_strictly_rejected(self):
+        with open(self.bench_copy, "r", encoding="utf-8") as f:
+            bench_data = json.load(f)
+
+        # Mutate B2 true positive count from 40 to 99
+        bench_data["baselines"]["B2_NaiveCosine"]["tp"] = 99
+        self._sync_cert_hashes(bench_data=bench_data)
+
+        outcome = verify_reproduction_certificate(
+            cert_path=self.cert_copy,
+            bench_path=self.bench_copy,
+            manifest_path=self.manifest_copy,
+            check_git=True,
+            require_live=True,
+        )
+        self.assertEqual(outcome, STATUS_INVALID)
+
+    def test_tampered_temporal_b3_recall_summary_is_strictly_rejected(self):
+        with open(self.manifest_copy, "r", encoding="utf-8") as f:
+            manifest_data = json.load(f)
+
+        # Mutate Temporal B3 recall summary from 33.33% to 90.00%
+        manifest_data["baselines"]["B3_SunbornTemporal"]["recall_pct"] = 90.00
+        self._sync_cert_hashes(manifest_data=manifest_data)
+
+        outcome = verify_reproduction_certificate(
+            cert_path=self.cert_copy,
+            bench_path=self.bench_copy,
+            manifest_path=self.manifest_copy,
+            check_git=True,
+            require_live=True,
+        )
+        self.assertEqual(outcome, STATUS_INVALID)
+
+    def test_tampered_temporal_b2_precision_summary_is_strictly_rejected(self):
+        with open(self.manifest_copy, "r", encoding="utf-8") as f:
+            manifest_data = json.load(f)
+
+        # Mutate Temporal B2 precision summary from 33.33% to 95.00%
+        manifest_data["baselines"]["B2_NaiveCosine"]["precision_pct"] = 95.00
+        self._sync_cert_hashes(manifest_data=manifest_data)
+
+        outcome = verify_reproduction_certificate(
+            cert_path=self.cert_copy,
+            bench_path=self.bench_copy,
+            manifest_path=self.manifest_copy,
+            check_git=True,
+            require_live=True,
+        )
+        self.assertEqual(outcome, STATUS_INVALID)
+
 if __name__ == "__main__":
     unittest.main()

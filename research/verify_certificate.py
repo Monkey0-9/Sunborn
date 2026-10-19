@@ -32,8 +32,8 @@ STATUS_INVALID = "INVALID"
 
 EXPECTED_BENCHMARK_SUITE_SIZE = 124
 
-def get_expected_query_ids(dataset_path: str = None) -> set[str]:
-    """Derives the expected query ID set from the versioned benchmark dataset."""
+def get_canonical_benchmark_metadata(dataset_path: str = None) -> dict[str, dict]:
+    """Derives canonical per-query metadata (id, category, ground_truth) from the versioned benchmark dataset."""
     if dataset_path is None:
         dataset_path = os.path.abspath(
             os.path.join(os.path.dirname(__file__), "..", "benchmarks", "semantic_cache_bench.py")
@@ -45,20 +45,30 @@ def get_expected_query_ids(dataset_path: str = None) -> set[str]:
             import ast
             with open(dataset_path, "r", encoding="utf-8") as f:
                 tree = ast.parse(f.read())
+            contracts = {}
             for node in tree.body:
                 if isinstance(node, ast.Assign):
                     for target in node.targets:
                         if isinstance(target, ast.Name) and target.id == "BENCHMARK_SUITE":
-                            ids = set()
                             if isinstance(node.value, ast.List):
                                 for elt in node.value.elts:
                                     if isinstance(elt, ast.Dict):
+                                        qid, cat, eq = None, None, None
                                         for k, v in zip(elt.keys, elt.values):
-                                            if isinstance(k, ast.Constant) and k.value == "id":
-                                                if isinstance(v, ast.Constant):
-                                                    ids.add(v.value)
-                            if ids:
-                                return ids
+                                            if isinstance(k, ast.Constant):
+                                                if k.value == "id" and isinstance(v, ast.Constant):
+                                                    qid = v.value
+                                                elif k.value == "category" and isinstance(v, ast.Constant):
+                                                    cat = v.value
+                                                elif k.value == "equivalent" and isinstance(v, ast.Constant):
+                                                    eq = v.value
+                                        if qid:
+                                            contracts[qid] = {
+                                                "category": cat,
+                                                "ground_truth": bool(eq)
+                                            }
+            if contracts:
+                return contracts
         except Exception:
             pass
 
@@ -66,9 +76,75 @@ def get_expected_query_ids(dataset_path: str = None) -> set[str]:
     try:
         sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
         from benchmarks.semantic_cache_bench import BENCHMARK_SUITE
-        return {item["id"] for item in BENCHMARK_SUITE}
+        return {
+            item["id"]: {
+                "category": item["category"],
+                "ground_truth": bool(item["equivalent"])
+            }
+            for item in BENCHMARK_SUITE
+        }
     except Exception as e:
-        raise RuntimeError(f"Could not derive expected query IDs from dataset at {dataset_path}: {e}")
+        raise RuntimeError(f"Could not derive canonical metadata from dataset at {dataset_path}: {e}")
+
+def get_expected_query_ids(dataset_path: str = None) -> set[str]:
+    """Derives the expected query ID set from the versioned benchmark dataset."""
+    return set(get_canonical_benchmark_metadata(dataset_path).keys())
+
+def recompute_and_verify_baseline_summary(
+    baseline_name: str,
+    summary_dict: dict,
+    traces: list[dict],
+    reused_predicate,
+    origin_call_usd: float,
+    cache_lookup_usd: float,
+    artifact_label: str
+) -> dict:
+    """Independently derives all 12 baseline summary fields and asserts exact equality against artifact summaries."""
+    total = len(traces)
+    tp = sum(1 for t in traces if reused_predicate(t) and t.get("ground_truth"))
+    fp = sum(1 for t in traces if reused_predicate(t) and not t.get("ground_truth"))
+    tn = sum(1 for t in traces if not reused_predicate(t) and not t.get("ground_truth"))
+    fn = sum(1 for t in traces if not reused_predicate(t) and t.get("ground_truth"))
+    hits = tp + fp
+    false_hits = fp
+    hit_rate_pct = round((hits / total * 100.0) if total > 0 else 0.0, 2)
+    false_hit_rate_pct = round((fp / total * 100.0) if total > 0 else 0.0, 2)
+    precision_pct = round((tp / (tp + fp) * 100.0) if (tp + fp) > 0 else 100.0, 2)
+    recall_pct = round((tp / (tp + fn) * 100.0) if (tp + fn) > 0 else 0.0, 2)
+    b0_cost = total * origin_call_usd
+    total_cost_usd = round(hits * cache_lookup_usd + (total - hits) * origin_call_usd, 6)
+    cost_savings_pct = round(max(0.0, (1.0 - (total_cost_usd / b0_cost)) * 100.0) if b0_cost > 0 else 0.0, 2)
+
+    derived = {
+        "tp": tp,
+        "fp": fp,
+        "tn": tn,
+        "fn": fn,
+        "hits": hits,
+        "hit_rate_pct": hit_rate_pct,
+        "false_hits": false_hits,
+        "false_hit_rate_pct": false_hit_rate_pct,
+        "precision_pct": precision_pct,
+        "recall_pct": recall_pct,
+        "total_cost_usd": total_cost_usd,
+        "cost_savings_pct": cost_savings_pct,
+    }
+
+    for field, expected_val in derived.items():
+        if field not in summary_dict:
+            print(f"FAIL: {artifact_label} baseline '{baseline_name}' summary missing required field '{field}'", file=sys.stderr)
+            return None
+        actual_val = summary_dict[field]
+        if isinstance(expected_val, float):
+            if round(float(actual_val), 2) != round(float(expected_val), 2):
+                print(f"FAIL: {artifact_label} baseline '{baseline_name}' summary field '{field}' ({actual_val}) != derived from raw traces ({expected_val})", file=sys.stderr)
+                return None
+        else:
+            if int(actual_val) != int(expected_val):
+                print(f"FAIL: {artifact_label} baseline '{baseline_name}' summary field '{field}' ({actual_val}) != derived from raw traces ({expected_val})", file=sys.stderr)
+                return None
+
+    return derived
 
 def verify_reproduction_certificate(
     cert_path: str,
@@ -169,7 +245,8 @@ def verify_reproduction_certificate(
             )
             return STATUS_INVALID
 
-        expected_ids = get_expected_query_ids(dataset_path)
+        canonical_metadata = get_canonical_benchmark_metadata(dataset_path)
+        expected_ids = set(canonical_metadata.keys())
         if len(expected_ids) != EXPECTED_BENCHMARK_SUITE_SIZE:
             print(
                 f"FAIL: Versioned benchmark dataset defines {len(expected_ids)} queries, expected {EXPECTED_BENCHMARK_SUITE_SIZE}",
@@ -205,6 +282,21 @@ def verify_reproduction_certificate(
                 )
                 return STATUS_INVALID
 
+            if qid in canonical_metadata:
+                canon_item = canonical_metadata[qid]
+                if tr.get("category") != canon_item["category"]:
+                    print(
+                        f"FAIL: Query '{qid}' category '{tr.get('category')}' does not match canonical dataset category '{canon_item['category']}'",
+                        file=sys.stderr
+                    )
+                    return STATUS_INVALID
+                if tr.get("ground_truth") != canon_item["ground_truth"]:
+                    print(
+                        f"FAIL: Query '{qid}' ground_truth '{tr.get('ground_truth')}' does not match canonical dataset ground_truth '{canon_item['ground_truth']}'",
+                        file=sys.stderr
+                    )
+                    return STATUS_INVALID
+
         if duplicate_ids:
             print(f"FAIL: Duplicate query IDs found in evaluation trace: {sorted(duplicate_ids)}", file=sys.stderr)
             return STATUS_INVALID
@@ -221,6 +313,7 @@ def verify_reproduction_certificate(
             return STATUS_INVALID
 
         print(f"  [✓] Query completeness verified: exact 124-query ID set matches versioned dataset (zero missing, unexpected, or duplicate IDs).")
+        print(f"  [✓] Canonical dataset metadata verified: all 124 traces match category and ground_truth contracts.")
         print(f"  [✓] Live gateway decision path verified: all 124 queries executed via live_gateway_rpc.")
 
     # 5. Git provenance checks
@@ -269,55 +362,70 @@ def verify_reproduction_certificate(
         print("  [!] WARNING: Git repository provenance check bypassed via explicit --no-git flag (reduced verification scope: repository revision unverified).")
 
     # 6. Empirical Metrics Independent Recomputation & Cross-Verification
-    # A. Recompute B3 and B2 metrics directly from benchmark_run.json raw traces
+    # A. Validate raw traces against canonical dataset contracts
+    canonical_metadata = get_canonical_benchmark_metadata(dataset_path)
     bench_traces = bench_data.get("b3_evaluation_trace", [])
     if not bench_traces:
         print("FAIL: Benchmark artifact missing 'b3_evaluation_trace'", file=sys.stderr)
         return STATUS_INVALID
 
-    # Validate that every trace contains necessary raw fields
+    # Validate that every trace matches canonical contracts and contains necessary raw fields
     for idx, tr in enumerate(bench_traces):
-        if "ground_truth" not in tr:
-            print(f"FAIL: Trace entry at index {idx} ({tr.get('id', 'unknown')}) missing 'ground_truth' label", file=sys.stderr)
+        qid = tr.get("id")
+        if not qid or qid not in canonical_metadata:
+            print(f"FAIL: Trace entry at index {idx} ({qid}) is missing or not in canonical benchmark dataset", file=sys.stderr)
+            return STATUS_INVALID
+        canon_item = canonical_metadata[qid]
+        if tr.get("category") != canon_item["category"]:
+            print(f"FAIL: Trace query '{qid}' category '{tr.get('category')}' does not match canonical dataset category '{canon_item['category']}'", file=sys.stderr)
+            return STATUS_INVALID
+        if tr.get("ground_truth") != canon_item["ground_truth"]:
+            print(f"FAIL: Trace query '{qid}' ground_truth '{tr.get('ground_truth')}' does not match canonical dataset ground_truth '{canon_item['ground_truth']}'", file=sys.stderr)
             return STATUS_INVALID
         if "b2_reused" not in tr:
-            print(f"FAIL: Trace entry at index {idx} ({tr.get('id', 'unknown')}) missing 'b2_reused' field required for independent baseline recomputation", file=sys.stderr)
+            print(f"FAIL: Trace entry at index {idx} ({qid}) missing 'b2_reused' field required for independent baseline recomputation", file=sys.stderr)
             return STATUS_INVALID
 
-    derived_b3_tp = sum(1 for t in bench_traces if (t.get("b3_reused") if "b3_reused" in t else t.get("reused")) and t.get("ground_truth"))
-    derived_b3_fp = sum(1 for t in bench_traces if (t.get("b3_reused") if "b3_reused" in t else t.get("reused")) and not t.get("ground_truth"))
-    derived_b3_tn = sum(1 for t in bench_traces if not (t.get("b3_reused") if "b3_reused" in t else t.get("reused")) and not t.get("ground_truth"))
-    derived_b3_fn = sum(1 for t in bench_traces if not (t.get("b3_reused") if "b3_reused" in t else t.get("reused")) and t.get("ground_truth"))
-    derived_b3_total = len(bench_traces)
-
-    derived_b3_prec = round((derived_b3_tp / (derived_b3_tp + derived_b3_fp) * 100.0) if (derived_b3_tp + derived_b3_fp) > 0 else 100.0, 2)
-    derived_b3_fhr = round((derived_b3_fp / derived_b3_total * 100.0) if derived_b3_total > 0 else 0.0, 2)
-
-    derived_b2_tp = sum(1 for t in bench_traces if t.get("b2_reused") and t.get("ground_truth"))
-    derived_b2_fp = sum(1 for t in bench_traces if t.get("b2_reused") and not t.get("ground_truth"))
-    derived_b2_tn = sum(1 for t in bench_traces if not t.get("b2_reused") and not t.get("ground_truth"))
-    derived_b2_fn = sum(1 for t in bench_traces if not t.get("b2_reused") and t.get("ground_truth"))
-    derived_b2_total = len(bench_traces)
-
-    derived_b2_prec = round((derived_b2_tp / (derived_b2_tp + derived_b2_fp) * 100.0) if (derived_b2_tp + derived_b2_fp) > 0 else 100.0, 2)
-    derived_b2_fhr = round((derived_b2_fp / derived_b2_total * 100.0) if derived_b2_total > 0 else 0.0, 2)
-
-    # Recompute B3 cost savings from validated cost model inputs
     cost_model = bench_data.get("metadata", {}).get("cost_model", {})
     origin_call_usd = float(cost_model.get("origin_call_usd", 0.0))
     cache_lookup_usd = float(cost_model.get("cache_lookup_usd", 0.0))
     if origin_call_usd <= 0.0 or cache_lookup_usd < 0.0:
-        print(f"FAIL: Invalid cost model inputs: origin_call_usd={origin_call_usd}, cache_lookup_usd={cache_lookup_usd}", file=sys.stderr)
+        print(f"FAIL: Invalid cost model inputs in benchmark artifact: origin_call_usd={origin_call_usd}, cache_lookup_usd={cache_lookup_usd}", file=sys.stderr)
         return STATUS_INVALID
 
-    b0_cost = derived_b3_total * origin_call_usd
-    b3_cost = sum(
-        cache_lookup_usd if (t.get("b3_reused") if "b3_reused" in t else t.get("reused")) else origin_call_usd
-        for t in bench_traces
-    )
-    derived_b3_cost_savings = round(max(0.0, (1.0 - (b3_cost / b0_cost)) * 100.0), 2)
+    # B. Derive and verify all 12 baseline summary fields for B3 and B2 in benchmark_run.json
+    bench_baselines = bench_data.get("baselines", {})
+    bench_b3_summary = bench_baselines.get("B3_SunbornCalibrated")
+    bench_b2_summary = bench_baselines.get("B2_NaiveCosine")
+    if not bench_b3_summary or not bench_b2_summary:
+        print("FAIL: Benchmark artifact missing required baseline summaries for B3 or B2", file=sys.stderr)
+        return STATUS_INVALID
 
-    # B. Recompute temporal metrics directly from run_manifest.json raw traces
+    derived_b3 = recompute_and_verify_baseline_summary(
+        "B3_SunbornCalibrated",
+        bench_b3_summary,
+        bench_traces,
+        lambda t: (t.get("b3_reused") if "b3_reused" in t else t.get("reused")),
+        origin_call_usd,
+        cache_lookup_usd,
+        "Benchmark"
+    )
+    if derived_b3 is None:
+        return STATUS_INVALID
+
+    derived_b2 = recompute_and_verify_baseline_summary(
+        "B2_NaiveCosine",
+        bench_b2_summary,
+        bench_traces,
+        lambda t: t.get("b2_reused"),
+        origin_call_usd,
+        cache_lookup_usd,
+        "Benchmark"
+    )
+    if derived_b2 is None:
+        return STATUS_INVALID
+
+    # C. Recompute and verify all 12 baseline summary fields for temporal B3 and B2 in run_manifest.json
     manifest_traces = manifest_data.get("raw_execution_traces", [])
     if not manifest_traces:
         print("FAIL: Manifest artifact missing 'raw_execution_traces'", file=sys.stderr)
@@ -328,99 +436,76 @@ def verify_reproduction_certificate(
             print(f"FAIL: Manifest trace at index {idx} ({tr.get('id', 'unknown')}) missing required evaluation fields", file=sys.stderr)
             return STATUS_INVALID
 
-    derived_tb3_tp = sum(1 for t in manifest_traces if t.get("b3_reused") and t.get("ground_truth"))
-    derived_tb3_fp = sum(1 for t in manifest_traces if t.get("b3_reused") and not t.get("ground_truth"))
-    derived_tb3_tn = sum(1 for t in manifest_traces if not t.get("b3_reused") and not t.get("ground_truth"))
-    derived_tb3_fn = sum(1 for t in manifest_traces if not t.get("b3_reused") and t.get("ground_truth"))
-    derived_tb3_total = len(manifest_traces)
-
-    derived_tb3_prec = round((derived_tb3_tp / (derived_tb3_tp + derived_tb3_fp) * 100.0) if (derived_tb3_tp + derived_tb3_fp) > 0 else 100.0, 2)
-    derived_tb3_fhr = round((derived_tb3_fp / derived_tb3_total * 100.0) if derived_tb3_total > 0 else 0.0, 2)
-
-    derived_tb2_tp = sum(1 for t in manifest_traces if t.get("b2_reused") and t.get("ground_truth"))
-    derived_tb2_fp = sum(1 for t in manifest_traces if t.get("b2_reused") and not t.get("ground_truth"))
-    derived_tb2_tn = sum(1 for t in manifest_traces if not t.get("b2_reused") and not t.get("ground_truth"))
-    derived_tb2_fn = sum(1 for t in manifest_traces if not t.get("b2_reused") and t.get("ground_truth"))
-    derived_tb2_total = len(manifest_traces)
-
-    derived_tb2_prec = round((derived_tb2_tp / (derived_tb2_tp + derived_tb2_fp) * 100.0) if (derived_tb2_tp + derived_tb2_fp) > 0 else 100.0, 2)
-    derived_tb2_fhr = round((derived_tb2_fp / derived_tb2_total * 100.0) if derived_tb2_total > 0 else 0.0, 2)
-
-    # C. Validate that Artifact Baseline Summaries agree with raw traces
-    bench_baselines = bench_data.get("baselines", {})
-    bench_b3 = bench_baselines.get("B3_SunbornCalibrated", {})
-    bench_b2 = bench_baselines.get("B2_NaiveCosine", {})
-
-    if bench_b3.get("false_hits") != derived_b3_fp:
-        print(f"FAIL: Benchmark B3 summary false_hits ({bench_b3.get('false_hits')}) != derived ({derived_b3_fp})", file=sys.stderr)
-        return STATUS_INVALID
-    if round(float(bench_b3.get("false_hit_rate_pct", -1)), 2) != derived_b3_fhr:
-        print(f"FAIL: Benchmark B3 summary false_hit_rate_pct ({bench_b3.get('false_hit_rate_pct')}) != derived ({derived_b3_fhr})", file=sys.stderr)
-        return STATUS_INVALID
-    if round(float(bench_b3.get("precision_pct", -1)), 2) != derived_b3_prec:
-        print(f"FAIL: Benchmark B3 summary precision_pct ({bench_b3.get('precision_pct')}) != derived ({derived_b3_prec})", file=sys.stderr)
-        return STATUS_INVALID
-    if round(float(bench_b3.get("cost_savings_pct", -1)), 2) != derived_b3_cost_savings:
-        print(f"FAIL: Benchmark B3 summary cost_savings_pct ({bench_b3.get('cost_savings_pct')}) != derived ({derived_b3_cost_savings})", file=sys.stderr)
-        return STATUS_INVALID
-
-    if bench_b2.get("false_hits") != derived_b2_fp:
-        print(f"FAIL: Benchmark B2 summary false_hits ({bench_b2.get('false_hits')}) != derived ({derived_b2_fp})", file=sys.stderr)
-        return STATUS_INVALID
-    if round(float(bench_b2.get("false_hit_rate_pct", -1)), 2) != derived_b2_fhr:
-        print(f"FAIL: Benchmark B2 summary false_hit_rate_pct ({bench_b2.get('false_hit_rate_pct')}) != derived ({derived_b2_fhr})", file=sys.stderr)
+    manifest_cost_model = manifest_data.get("metadata", {}).get("cost_model", {})
+    t_origin_usd = float(manifest_cost_model.get("origin_call_usd", 0.0))
+    t_cache_usd = float(manifest_cost_model.get("cache_lookup_usd", 0.0))
+    if t_origin_usd <= 0.0 or t_cache_usd < 0.0:
+        print(f"FAIL: Invalid cost model inputs in manifest artifact: origin_call_usd={t_origin_usd}, cache_lookup_usd={t_cache_usd}", file=sys.stderr)
         return STATUS_INVALID
 
     manifest_baselines = manifest_data.get("baselines", {})
-    manifest_tb3 = manifest_baselines.get("B3_SunbornTemporal", {})
-    manifest_tb2 = manifest_baselines.get("B2_NaiveCosine", {})
-
-    if manifest_tb3.get("false_hits") != derived_tb3_fp:
-        print(f"FAIL: Manifest B3 summary false_hits ({manifest_tb3.get('false_hits')}) != derived ({derived_tb3_fp})", file=sys.stderr)
-        return STATUS_INVALID
-    if round(float(manifest_tb3.get("precision_pct", -1)), 2) != derived_tb3_prec:
-        print(f"FAIL: Manifest B3 summary precision_pct ({manifest_tb3.get('precision_pct')}) != derived ({derived_tb3_prec})", file=sys.stderr)
+    manifest_b3_summary = manifest_baselines.get("B3_SunbornTemporal")
+    manifest_b2_summary = manifest_baselines.get("B2_NaiveCosine")
+    if not manifest_b3_summary or not manifest_b2_summary:
+        print("FAIL: Manifest artifact missing required baseline summaries for B3 or B2", file=sys.stderr)
         return STATUS_INVALID
 
-    if manifest_tb2.get("false_hits") != derived_tb2_fp:
-        print(f"FAIL: Manifest B2 summary false_hits ({manifest_tb2.get('false_hits')}) != derived ({derived_tb2_fp})", file=sys.stderr)
+    derived_tb3 = recompute_and_verify_baseline_summary(
+        "B3_SunbornTemporal",
+        manifest_b3_summary,
+        manifest_traces,
+        lambda t: t.get("b3_reused"),
+        t_origin_usd,
+        t_cache_usd,
+        "Manifest"
+    )
+    if derived_tb3 is None:
         return STATUS_INVALID
-    if round(float(manifest_tb2.get("false_hit_rate_pct", -1)), 2) != derived_tb2_fhr:
-        print(f"FAIL: Manifest B2 summary false_hit_rate_pct ({manifest_tb2.get('false_hit_rate_pct')}) != derived ({derived_tb2_fhr})", file=sys.stderr)
+
+    derived_tb2 = recompute_and_verify_baseline_summary(
+        "B2_NaiveCosine",
+        manifest_b2_summary,
+        manifest_traces,
+        lambda t: t.get("b2_reused"),
+        t_origin_usd,
+        t_cache_usd,
+        "Manifest"
+    )
+    if derived_tb2 is None:
         return STATUS_INVALID
 
     # Meaningful successful reuse assertion (not degenerate zero-reuse cache)
-    if derived_b3_tp <= 0:
-        print(f"FAIL: Degenerate cache result: Sunborn B3 produced 0 successful reuses (true positives = {derived_b3_tp}). Meaningful semantic reuse must be demonstrated.", file=sys.stderr)
+    if derived_b3["tp"] <= 0:
+        print(f"FAIL: Degenerate cache result: Sunborn B3 produced 0 successful reuses (true positives = {derived_b3['tp']}). Meaningful semantic reuse must be demonstrated.", file=sys.stderr)
         return STATUS_INVALID
 
     # Correctness Invariants: Zero false hits and 100% precision
-    if derived_b3_fp != 0 or derived_b3_fhr != 0.0:
-        print(f"FAIL: SemanticCacheBench B3 false-hit invariant violated: derived fp={derived_b3_fp}, rate={derived_b3_fhr}%", file=sys.stderr)
+    if derived_b3["fp"] != 0 or derived_b3["false_hit_rate_pct"] != 0.0:
+        print(f"FAIL: SemanticCacheBench B3 false-hit invariant violated: derived fp={derived_b3['fp']}, rate={derived_b3['false_hit_rate_pct']}%", file=sys.stderr)
         return STATUS_INVALID
-    if derived_b3_prec != 100.0:
-        print(f"FAIL: SemanticCacheBench B3 precision invariant violated: derived prec={derived_b3_prec}%", file=sys.stderr)
+    if derived_b3["precision_pct"] != 100.0:
+        print(f"FAIL: SemanticCacheBench B3 precision invariant violated: derived prec={derived_b3['precision_pct']}%", file=sys.stderr)
         return STATUS_INVALID
-    if derived_tb3_fp != 0:
-        print(f"FAIL: SemanticCacheBench-T B3 temporal false-hit invariant violated: derived fp={derived_tb3_fp}", file=sys.stderr)
+    if derived_tb3["fp"] != 0:
+        print(f"FAIL: SemanticCacheBench-T B3 temporal false-hit invariant violated: derived fp={derived_tb3['fp']}", file=sys.stderr)
         return STATUS_INVALID
-    if derived_tb3_prec != 100.0:
-        print(f"FAIL: SemanticCacheBench-T B3 temporal precision invariant violated: derived prec={derived_tb3_prec}%", file=sys.stderr)
+    if derived_tb3["precision_pct"] != 100.0:
+        print(f"FAIL: SemanticCacheBench-T B3 temporal precision invariant violated: derived prec={derived_tb3['precision_pct']}%", file=sys.stderr)
         return STATUS_INVALID
 
     # D. Cross-check certificate metrics against recomputed metrics (EXACT EQUALITY, NO TOLERANCE)
     cert_metrics = loaded_cert.get("empirical_metrics", {})
     expected_cert_mappings = [
-        ("sunborn_b3_false_hits", derived_b3_fp, False),
-        ("sunborn_b3_false_hit_rate_pct", derived_b3_fhr, True),
-        ("sunborn_b3_precision_pct", derived_b3_prec, True),
-        ("sunborn_b3_cost_savings_pct", derived_b3_cost_savings, True),
-        ("sunborn_b3_temporal_false_hits", derived_tb3_fp, False),
-        ("sunborn_b3_temporal_precision_pct", derived_tb3_prec, True),
-        ("naive_b2_false_hits", derived_b2_fp, False),
-        ("naive_b2_false_hit_rate_pct", derived_b2_fhr, True),
-        ("naive_b2_temporal_false_hits", derived_tb2_fp, False),
-        ("naive_b2_temporal_false_hit_rate_pct", derived_tb2_fhr, True),
+        ("sunborn_b3_false_hits", derived_b3["fp"], False),
+        ("sunborn_b3_false_hit_rate_pct", derived_b3["false_hit_rate_pct"], True),
+        ("sunborn_b3_precision_pct", derived_b3["precision_pct"], True),
+        ("sunborn_b3_cost_savings_pct", derived_b3["cost_savings_pct"], True),
+        ("sunborn_b3_temporal_false_hits", derived_tb3["fp"], False),
+        ("sunborn_b3_temporal_precision_pct", derived_tb3["precision_pct"], True),
+        ("naive_b2_false_hits", derived_b2["fp"], False),
+        ("naive_b2_false_hit_rate_pct", derived_b2["false_hit_rate_pct"], True),
+        ("naive_b2_temporal_false_hits", derived_tb2["fp"], False),
+        ("naive_b2_temporal_false_hit_rate_pct", derived_tb2["false_hit_rate_pct"], True),
     ]
 
     for key, expected_val, is_float in expected_cert_mappings:
@@ -437,9 +522,9 @@ def verify_reproduction_certificate(
                 print(f"FAIL: Exact metric mismatch for '{key}': certificate claimed {cert_val}, but recomputed from source artifact is {expected_val}", file=sys.stderr)
                 return STATUS_INVALID
 
-    print(f"  [✓] Empirical metrics recomputed from raw traces: B3 TP={derived_b3_tp}, FP={derived_b3_fp}, Prec={derived_b3_prec}%, Savings={derived_b3_cost_savings}%; Naive B2 FP={derived_b2_fp} ({derived_b2_fhr}%).")
-    print(f"  [✓] Artifact baseline summaries verified identical to raw trace recomputations.")
-    print(f"  [✓] All 10 certificate empirical metrics cross-checked against independently recomputed metrics with exact equality.")
+    print(f"  [✓] Empirical metrics recomputed from raw traces: B3 TP={derived_b3['tp']}, FP={derived_b3['fp']}, Prec={derived_b3['precision_pct']}%, Savings={derived_b3['cost_savings_pct']}%; Naive B2 Precision={derived_b2['precision_pct']}%, FalseHits={derived_b2['fp']} ({derived_b2['false_hit_rate_pct']}%).")
+    print(f"  [✓] All 12 baseline summary fields verified across B3 and B2 in benchmark_run.json and temporal B3 and B2 in run_manifest.json.")
+    print(f"  [✓] All 10 certificate empirical metrics cross-checked against independently recomputed metrics with zero-tolerance exact equality.")
 
     # 7. Attestation & Signature Verification (Explicit 4-State Outcome Evaluation)
     signing_algo = prov.get("signing_algorithm")

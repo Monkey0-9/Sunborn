@@ -79,10 +79,11 @@ The automated reproduction script executes five rigorous sequential validation g
    * Enforces exact query completeness: matches observed trace IDs with the versioned benchmark dataset (zero missing, unexpected, or duplicated IDs).
    * Enforces non-zero true positive reuse ($TP \ge 15$, preventing degenerate zero-reuse passes).
    * Enforces fail-closed Git provenance verification (any repository commit or tree mismatch fails closed as `INVALID`; explicit `--no-git` flags reduced scope).
-   * Recomputes and cross-checks all 10 certificate empirical metrics directly from the raw source artifacts (`benchmark_run.json` and `run_manifest.json`), requiring bit-for-bit consistency.
+   * Enforces canonical dataset contracts (AST-extracted category and ground_truth per query) and comprehensive 12-field baseline summary derivation across B3 and B2 in `benchmark_run.json` and temporal B3 and B2 in `run_manifest.json` (Naive B2 precision is 40.00% and false-hit rate is 48.39%).
+   * Recomputes and cross-checks all 10 certificate empirical metrics directly from the raw source artifacts (`benchmark_run.json` and `run_manifest.json`), requiring zero-tolerance exact equality.
    * Runs `benchmarks/capacity_soak.py`: 11,000 requests processed under Zipfian distribution with zero memory leaks and atomic TDEK zeroization ($42\,\mu\text{s}$).
    * Runs `benchmarks/semantic_cache_bench_t.py`: Evaluates stateful temporal mutations across 6 sequential phases.
-   * Runs negative verification test suite `research/tests/test_verifier_negative.py` (11 tests): Formally proves that offline simulation artifacts, incomplete traces, duplicate query IDs, arbitrary ID substitutions, Git hash mismatches, and unauthenticated keys are strictly rejected under the live gate.
+   * Runs negative verification test suite `research/tests/test_verifier_negative.py` (23 tests): Formally proves that offline simulation artifacts, incomplete traces, duplicate query IDs, arbitrary ID substitutions, ground-truth label tampering, category tampering, baseline summary mutations, Git hash mismatches, and unauthenticated keys are strictly rejected under the live gate.
    * Computes canonical SHA-256 digests and hashes of `benchmark_run.json` and `run_manifest.json`.
    * Generates `research/results/reproduction_certificate.json` (signed HMAC-SHA-256 when `SUNBORN_ATTESTATION_KEY` is set, or honest `LOCAL_DEVELOPMENT_INTEGRITY_CHECK` unauthenticated canonical digest when omitted).
    * Independently verifies the certificate and artifacts using `research/verify_certificate.py` with explicit 4-state outcomes:
