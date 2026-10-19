@@ -44,6 +44,10 @@ echo "[2/5] Running Core System Verification Test Suites..."
 cargo test --workspace --all-targets
 python3 -m unittest sdk/python/test_sunborn_agent.py
 if command -v npm >/dev/null 2>&1; then
+    if [[ ! -f frontend/.next/BUILD_ID ]]; then
+        echo "[*] Compiling Next.js production bundle for frontend test runner..."
+        npm run build --prefix frontend
+    fi
     npm test --prefix frontend
 fi
 echo "==> All unit, integration, and contract tests PASSED."

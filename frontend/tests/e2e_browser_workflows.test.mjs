@@ -1,6 +1,7 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import { spawn, execSync } from 'node:child_process';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +18,12 @@ let nextProcess = null;
 let browser = null;
 
 before(async () => {
+  // Ensure Next.js production build exists
+  const buildIdPath = path.join(frontendDir, '.next', 'BUILD_ID');
+  if (!fs.existsSync(buildIdPath)) {
+    execSync('npx next build', { cwd: frontendDir, stdio: 'ignore' });
+  }
+
   // Start Next.js in production mode
   nextProcess = spawn('npx', ['next', 'start', '-p', `${TEST_PORT}`], {
     cwd: frontendDir,
