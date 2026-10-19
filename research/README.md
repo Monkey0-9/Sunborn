@@ -33,7 +33,11 @@ Expected Outcome:
 * **[5/5] Live Gateway SemanticCacheBench, SemanticCacheBench-T & Cryptographic Verification**:
   - Live Sunborn Gateway daemon started at `http://127.0.0.1:8080` with a strict 5.0s health-check deadline (fails closed if unhealthy).
   - All 124 benchmark queries dispatched over live HTTP RPC to the gateway (`execution_mode: "live_gateway_rpc"`, `provenance_type: "LIVE_GATEWAY_DECISION_PATH"`).
-  - Negative test suite (`research/tests/test_verifier_negative.py`) executed, proving that offline simulation artifacts and corrupted traces fail the live evidence gate.
+  - Exact query completeness enforced: observed query IDs must match the expected 124-query dataset set (zero missing, unexpected, or duplicate IDs).
+  - Meaningful semantic reuse enforced: requires true positive reuses > 0 (prevents degenerate zero-reuse cache pass).
+  - Fail-closed Git provenance: any repository revision or tree mismatch immediately returns `INVALID` (explicit `--no-git` flags reduced verification scope).
+  - Metrics cross-verification: all 10 certificate empirical metrics recomputed directly from raw source artifacts (`benchmark_run.json` and `run_manifest.json`) and verified identical.
+  - Negative test suite (`research/tests/test_verifier_negative.py`, 11 tests) executed, proving that offline simulation artifacts, corrupted traces, arbitrary ID replacements, metric mismatches, and tampered Git hashes are strictly rejected.
   - Independent certificate verification (`research/verify_certificate.py`) evaluated under explicit 4-state outcomes (`AUTHENTICATED`, `INTEGRITY_VERIFIED_UNAUTHENTICATED`, `AUTHENTICATION_UNVERIFIED`, or `INVALID`).
 ---
 

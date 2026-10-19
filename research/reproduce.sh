@@ -252,6 +252,36 @@ for idx, tr in enumerate(traces):
         print(f\"FATAL: Trace query '{qid}' execution_mode '{mode}' != 'live_gateway_rpc'\", file=sys.stderr)
         sys.exit(1)
 
+# Derive expected IDs from versioned dataset and verify exact set equality
+import ast
+expected_ids = set()
+with open('benchmarks/semantic_cache_bench.py', 'r', encoding='utf-8') as f_ds:
+    tree_ds = ast.parse(f_ds.read())
+for node in tree_ds.body:
+    if isinstance(node, ast.Assign):
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == 'BENCHMARK_SUITE':
+                for elt in node.value.elts:
+                    for k, v in zip(elt.keys, elt.values):
+                        if isinstance(k, ast.Constant) and k.value == 'id':
+                            expected_ids.add(v.value)
+
+if len(expected_ids) != 124:
+    print(f\"FATAL: Expected dataset size is {len(expected_ids)}, expected 124\", file=sys.stderr)
+    sys.exit(1)
+
+missing_ids = expected_ids - seen_ids
+unexpected_ids = seen_ids - expected_ids
+if missing_ids or unexpected_ids:
+    print(f\"FATAL: Query ID set mismatch against expected dataset: missing={sorted(list(missing_ids))}, unexpected={sorted(list(unexpected_ids))}\", file=sys.stderr)
+    sys.exit(1)
+
+# Ensure meaningful semantic reuse (non-degenerate cache)
+derived_b3_tp = sum(1 for t in traces if t.get('reused') and t.get('ground_truth'))
+if derived_b3_tp <= 0:
+    print(f\"FATAL: Degenerate cache result: Sunborn B3 produced {derived_b3_tp} true positive reuses (meaningful reuse required)\", file=sys.stderr)
+    sys.exit(1)
+
 secret_key = os.environ.get('SUNBORN_ATTESTATION_KEY') or os.environ.get('SUNBORN_REPRODUCTION_SECRET')
 if secret_key:
     attestation_type = 'PRODUCTION_INDEPENDENT_ATTESTATION'

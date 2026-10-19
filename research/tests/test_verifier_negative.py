@@ -247,5 +247,117 @@ class NegativeVerifierTests(unittest.TestCase):
             else:
                 os.environ.pop("SUNBORN_REPRODUCTION_SECRET", None)
 
+    def test_arbitrary_unique_id_replacing_expected_id_is_strictly_rejected(self):
+        with open(self.bench_copy, "r", encoding="utf-8") as f:
+            bench_data = json.load(f)
+
+        # Replace valid expected ID "WS-001" with arbitrary unique ID "ARBITRARY-CUSTOM-UNIQUE-ID-999"
+        # Notice: trace count remains 124, and all IDs remain unique, but the ID set does not match the dataset
+        bench_data["b3_evaluation_trace"][0]["id"] = "ARBITRARY-CUSTOM-UNIQUE-ID-999"
+        self._sync_cert_hashes(bench_data=bench_data)
+
+        outcome = verify_reproduction_certificate(
+            cert_path=self.cert_copy,
+            bench_path=self.bench_copy,
+            manifest_path=self.manifest_copy,
+            check_git=True,
+            require_live=True,
+        )
+        self.assertEqual(outcome, STATUS_INVALID)
+
+    def test_git_provenance_failure_fails_closed(self):
+        with open(self.cert_copy, "r", encoding="utf-8") as f:
+            cert = json.load(f)
+
+        # Tamper certificate git_commit to non-existent commit
+        cert["git_commit"] = "0000000000000000000000000000000000000000"
+        cert.pop("attestation", None)
+        canonical_bytes = json.dumps(cert, sort_keys=True).encode("utf-8")
+        cert["attestation"] = {
+            "canonical_manifest_digest": hashlib.sha256(canonical_bytes).hexdigest(),
+            "hmac_sha256_signature": None,
+        }
+        with open(self.cert_copy, "w", encoding="utf-8") as f:
+            json.dump(cert, f, indent=2)
+
+        # Case 1: check_git=True MUST fail closed as STATUS_INVALID
+        outcome_strict = verify_reproduction_certificate(
+            cert_path=self.cert_copy,
+            bench_path=self.bench_copy,
+            manifest_path=self.manifest_copy,
+            check_git=True,
+            require_live=True,
+        )
+        self.assertEqual(outcome_strict, STATUS_INVALID)
+
+        # Case 2: check_git=False (explicit --no-git) bypasses revision validation
+        outcome_nogit = verify_reproduction_certificate(
+            cert_path=self.cert_copy,
+            bench_path=self.bench_copy,
+            manifest_path=self.manifest_copy,
+            check_git=False,
+            require_live=True,
+        )
+        self.assertEqual(outcome_nogit, STATUS_INTEGRITY_VERIFIED_UNAUTHENTICATED)
+
+    def test_metric_mismatch_between_certificate_and_source_artifact_is_strictly_rejected(self):
+        with open(self.cert_copy, "r", encoding="utf-8") as f:
+            cert = json.load(f)
+
+        # Tamper certificate metric to contradict raw artifact
+        cert["empirical_metrics"]["naive_b2_false_hits"] = 999
+        cert.pop("attestation", None)
+        canonical_bytes = json.dumps(cert, sort_keys=True).encode("utf-8")
+        cert["attestation"] = {
+            "canonical_manifest_digest": hashlib.sha256(canonical_bytes).hexdigest(),
+            "hmac_sha256_signature": None,
+        }
+        with open(self.cert_copy, "w", encoding="utf-8") as f:
+            json.dump(cert, f, indent=2)
+
+        outcome = verify_reproduction_certificate(
+            cert_path=self.cert_copy,
+            bench_path=self.bench_copy,
+            manifest_path=self.manifest_copy,
+            check_git=True,
+            require_live=True,
+        )
+        self.assertEqual(outcome, STATUS_INVALID)
+
+    def test_raw_trace_false_hit_violation_is_strictly_rejected(self):
+        with open(self.bench_copy, "r", encoding="utf-8") as f:
+            bench_data = json.load(f)
+
+        # Corrupt ground truth of a reused query to turn it into a false hit
+        bench_data["b3_evaluation_trace"][0]["ground_truth"] = False
+        self._sync_cert_hashes(bench_data=bench_data)
+
+        outcome = verify_reproduction_certificate(
+            cert_path=self.cert_copy,
+            bench_path=self.bench_copy,
+            manifest_path=self.manifest_copy,
+            check_git=True,
+            require_live=True,
+        )
+        self.assertEqual(outcome, STATUS_INVALID)
+
+    def test_degenerate_zero_reuse_cache_is_strictly_rejected(self):
+        with open(self.bench_copy, "r", encoding="utf-8") as f:
+            bench_data = json.load(f)
+
+        # Mutate all queries to reused=False (degenerate zero-reuse cache)
+        for tr in bench_data["b3_evaluation_trace"]:
+            tr["reused"] = False
+        self._sync_cert_hashes(bench_data=bench_data)
+
+        outcome = verify_reproduction_certificate(
+            cert_path=self.cert_copy,
+            bench_path=self.bench_copy,
+            manifest_path=self.manifest_copy,
+            check_git=True,
+            require_live=True,
+        )
+        self.assertEqual(outcome, STATUS_INVALID)
+
 if __name__ == "__main__":
     unittest.main()

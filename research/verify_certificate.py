@@ -32,10 +32,49 @@ STATUS_INVALID = "INVALID"
 
 EXPECTED_BENCHMARK_SUITE_SIZE = 124
 
+def get_expected_query_ids(dataset_path: str = None) -> set[str]:
+    """Derives the expected query ID set from the versioned benchmark dataset."""
+    if dataset_path is None:
+        dataset_path = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "benchmarks", "semantic_cache_bench.py")
+        )
+
+    # 1. Deterministic AST extraction (dependency-free, fast, no external libraries)
+    if os.path.exists(dataset_path):
+        try:
+            import ast
+            with open(dataset_path, "r", encoding="utf-8") as f:
+                tree = ast.parse(f.read())
+            for node in tree.body:
+                if isinstance(node, ast.Assign):
+                    for target in node.targets:
+                        if isinstance(target, ast.Name) and target.id == "BENCHMARK_SUITE":
+                            ids = set()
+                            if isinstance(node.value, ast.List):
+                                for elt in node.value.elts:
+                                    if isinstance(elt, ast.Dict):
+                                        for k, v in zip(elt.keys, elt.values):
+                                            if isinstance(k, ast.Constant) and k.value == "id":
+                                                if isinstance(v, ast.Constant):
+                                                    ids.add(v.value)
+                            if ids:
+                                return ids
+        except Exception:
+            pass
+
+    # 2. Module import fallback
+    try:
+        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+        from benchmarks.semantic_cache_bench import BENCHMARK_SUITE
+        return {item["id"] for item in BENCHMARK_SUITE}
+    except Exception as e:
+        raise RuntimeError(f"Could not derive expected query IDs from dataset at {dataset_path}: {e}")
+
 def verify_reproduction_certificate(
     cert_path: str,
     bench_path: str,
     manifest_path: str,
+    dataset_path: str = None,
     check_git: bool = True,
     require_live: bool = True,
     require_auth: bool = False,
@@ -118,7 +157,7 @@ def verify_reproduction_certificate(
         return STATUS_INVALID
     print(f"  [✓] Run manifest artifact SHA-256 matches provenance: {actual_manifest_sha[:16]}...")
 
-    # 4. Strict Live Gateway Evidence Gate
+    # 4. Strict Live Gateway Evidence Gate & Query Completeness
     if require_live:
         bench_meta = bench_data.get("metadata", {})
         prov_type = bench_meta.get("provenance_type")
@@ -126,6 +165,14 @@ def verify_reproduction_certificate(
             print(
                 f"FAIL: Strict live evidence required, but benchmark provenance_type is '{prov_type}' "
                 f"(must be 'LIVE_GATEWAY_DECISION_PATH'). Offline simulation does not satisfy live evidence gate.",
+                file=sys.stderr
+            )
+            return STATUS_INVALID
+
+        expected_ids = get_expected_query_ids(dataset_path)
+        if len(expected_ids) != EXPECTED_BENCHMARK_SUITE_SIZE:
+            print(
+                f"FAIL: Versioned benchmark dataset defines {len(expected_ids)} queries, expected {EXPECTED_BENCHMARK_SUITE_SIZE}",
                 file=sys.stderr
             )
             return STATUS_INVALID
@@ -139,14 +186,14 @@ def verify_reproduction_certificate(
             return STATUS_INVALID
 
         seen_ids = set()
+        duplicate_ids = []
         for idx, tr in enumerate(traces):
             qid = tr.get("id")
             if not qid:
                 print(f"FAIL: Trace entry at index {idx} is missing 'id'", file=sys.stderr)
                 return STATUS_INVALID
             if qid in seen_ids:
-                print(f"FAIL: Duplicate query ID '{qid}' found in evaluation trace", file=sys.stderr)
-                return STATUS_INVALID
+                duplicate_ids.append(qid)
             seen_ids.add(qid)
 
             mode = tr.get("execution_mode")
@@ -158,7 +205,23 @@ def verify_reproduction_certificate(
                 )
                 return STATUS_INVALID
 
-        print(f"  [✓] Live gateway decision path verified: {len(seen_ids)}/{EXPECTED_BENCHMARK_SUITE_SIZE} unique queries executed via live_gateway_rpc.")
+        if duplicate_ids:
+            print(f"FAIL: Duplicate query IDs found in evaluation trace: {sorted(duplicate_ids)}", file=sys.stderr)
+            return STATUS_INVALID
+
+        missing_ids = expected_ids - seen_ids
+        unexpected_ids = seen_ids - expected_ids
+        if missing_ids or unexpected_ids:
+            print(
+                f"FAIL: Query ID mismatch against expected versioned benchmark dataset!\n"
+                f"  Missing IDs ({len(missing_ids)}): {sorted(list(missing_ids))[:10]}\n"
+                f"  Unexpected IDs ({len(unexpected_ids)}): {sorted(list(unexpected_ids))[:10]}",
+                file=sys.stderr
+            )
+            return STATUS_INVALID
+
+        print(f"  [✓] Query completeness verified: exact 124-query ID set matches versioned dataset (zero missing, unexpected, or duplicate IDs).")
+        print(f"  [✓] Live gateway decision path verified: all 124 queries executed via live_gateway_rpc.")
 
     # 5. Git provenance checks
     if check_git:
@@ -170,6 +233,10 @@ def verify_reproduction_certificate(
 
             cert_commit = loaded_cert.get("git_commit")
             cert_tree = loaded_cert.get("git_tree")
+
+            if not cert_commit or not cert_tree:
+                print("FAIL: Certificate is missing 'git_commit' or 'git_tree' fields!", file=sys.stderr)
+                return STATUS_INVALID
 
             if cert_commit not in valid_commits:
                 print(f"FAIL: Certificate git_commit ({cert_commit}) does not match current repository revision ({curr_commit}) or parent ({parent_commit})!", file=sys.stderr)
@@ -188,23 +255,98 @@ def verify_reproduction_certificate(
 
             print(f"  [✓] Git commit ({cert_commit[:10]}) and tree ({cert_tree[:10]}) match verified repository revision.")
         except Exception as e:
-            print(f"  [!] Git check skipped or encountered error: {e}")
+            print(f"FAIL: Git provenance verification failed closed: {e}", file=sys.stderr)
+            return STATUS_INVALID
+    else:
+        print("  [!] WARNING: Git repository provenance check bypassed via explicit --no-git flag (reduced verification scope: repository revision unverified).")
 
-    # 6. Empirical metrics invariant checks
-    metrics = loaded_cert.get("empirical_metrics", {})
-    if metrics.get("sunborn_b3_false_hits") != 0 or metrics.get("sunborn_b3_false_hit_rate_pct") != 0.0:
-        print(f"FAIL: SemanticCacheBench B3 false-hit invariant violated: {metrics.get('sunborn_b3_false_hits')}", file=sys.stderr)
+    # 6. Empirical Metrics Cross-Verification (Derived directly from raw source artifacts)
+    # Recompute metrics from benchmark_run.json
+    bench_traces = bench_data.get("b3_evaluation_trace", [])
+    if not bench_traces:
+        print("FAIL: Benchmark artifact missing 'b3_evaluation_trace'", file=sys.stderr)
         return STATUS_INVALID
-    if metrics.get("sunborn_b3_precision_pct") != 100.0:
-        print(f"FAIL: SemanticCacheBench B3 precision must be 100.0%: {metrics.get('sunborn_b3_precision_pct')}", file=sys.stderr)
+
+    derived_b3_tp = sum(1 for t in bench_traces if t.get("reused") and t.get("ground_truth"))
+    derived_b3_fp = sum(1 for t in bench_traces if t.get("reused") and not t.get("ground_truth"))
+    derived_b3_total = len(bench_traces)
+
+    derived_b3_prec = round((derived_b3_tp / (derived_b3_tp + derived_b3_fp) * 100.0) if (derived_b3_tp + derived_b3_fp) > 0 else 100.0, 2)
+    derived_b3_fhr = round((derived_b3_fp / derived_b3_total * 100.0) if derived_b3_total > 0 else 0.0, 2)
+
+    bench_baselines = bench_data.get("baselines", {})
+    bench_b3 = bench_baselines.get("B3_SunbornCalibrated", {})
+    bench_b2 = bench_baselines.get("B2_NaiveCosine", {})
+
+    derived_b3_cost_savings = bench_b3.get("cost_savings_pct")
+    derived_b2_fp = bench_b2.get("false_hits")
+    derived_b2_fhr = bench_b2.get("false_hit_rate_pct")
+
+    # Recompute metrics from run_manifest.json
+    manifest_traces = manifest_data.get("raw_execution_traces", [])
+    if not manifest_traces:
+        print("FAIL: Manifest artifact missing 'raw_execution_traces'", file=sys.stderr)
         return STATUS_INVALID
-    if metrics.get("sunborn_b3_temporal_false_hits") != 0:
-        print(f"FAIL: SemanticCacheBench-T B3 false-hit invariant violated: {metrics.get('sunborn_b3_temporal_false_hits')}", file=sys.stderr)
+
+    derived_tb3_tp = sum(1 for t in manifest_traces if t.get("b3_reused") and t.get("ground_truth"))
+    derived_tb3_fp = sum(1 for t in manifest_traces if t.get("b3_reused") and not t.get("ground_truth"))
+    derived_tb3_prec = round((derived_tb3_tp / (derived_tb3_tp + derived_tb3_fp) * 100.0) if (derived_tb3_tp + derived_tb3_fp) > 0 else 100.0, 2)
+
+    manifest_baselines = manifest_data.get("baselines", {})
+    manifest_tb2 = manifest_baselines.get("B2_NaiveCosine", {})
+    derived_tb2_fp = manifest_tb2.get("false_hits")
+    derived_tb2_fhr = manifest_tb2.get("false_hit_rate_pct")
+
+    # Meaningful successful reuse assertion (not degenerate zero-reuse cache)
+    if derived_b3_tp <= 0:
+        print(f"FAIL: Degenerate cache result: Sunborn B3 produced 0 successful reuses (true positives = {derived_b3_tp}). Meaningful semantic reuse must be demonstrated.", file=sys.stderr)
         return STATUS_INVALID
-    if metrics.get("sunborn_b3_temporal_precision_pct") != 100.0:
-        print(f"FAIL: SemanticCacheBench-T B3 precision must be 100.0%: {metrics.get('sunborn_b3_temporal_precision_pct')}", file=sys.stderr)
+
+    # Correctness Invariants: Zero false hits and 100% precision
+    if derived_b3_fp != 0 or derived_b3_fhr != 0.0:
+        print(f"FAIL: SemanticCacheBench B3 false-hit invariant violated: derived fp={derived_b3_fp}, rate={derived_b3_fhr}%", file=sys.stderr)
         return STATUS_INVALID
-    print("  [✓] Empirical correctness invariants verified (0 false hits, 100.0% precision).")
+    if derived_b3_prec != 100.0:
+        print(f"FAIL: SemanticCacheBench B3 precision invariant violated: derived prec={derived_b3_prec}%", file=sys.stderr)
+        return STATUS_INVALID
+    if derived_tb3_fp != 0:
+        print(f"FAIL: SemanticCacheBench-T B3 temporal false-hit invariant violated: derived fp={derived_tb3_fp}", file=sys.stderr)
+        return STATUS_INVALID
+    if derived_tb3_prec != 100.0:
+        print(f"FAIL: SemanticCacheBench-T B3 temporal precision invariant violated: derived prec={derived_tb3_prec}%", file=sys.stderr)
+        return STATUS_INVALID
+
+    # Cross-check certificate metrics against recomputed metrics
+    cert_metrics = loaded_cert.get("empirical_metrics", {})
+    expected_cert_mappings = [
+        ("sunborn_b3_false_hits", derived_b3_fp, False),
+        ("sunborn_b3_false_hit_rate_pct", derived_b3_fhr, True),
+        ("sunborn_b3_precision_pct", derived_b3_prec, True),
+        ("sunborn_b3_cost_savings_pct", derived_b3_cost_savings, True),
+        ("sunborn_b3_temporal_false_hits", derived_tb3_fp, False),
+        ("sunborn_b3_temporal_precision_pct", derived_tb3_prec, True),
+        ("naive_b2_false_hits", derived_b2_fp, False),
+        ("naive_b2_false_hit_rate_pct", derived_b2_fhr, True),
+        ("naive_b2_temporal_false_hits", derived_tb2_fp, False),
+        ("naive_b2_temporal_false_hit_rate_pct", derived_tb2_fhr, True),
+    ]
+
+    for key, expected_val, is_float in expected_cert_mappings:
+        if key not in cert_metrics:
+            print(f"FAIL: Certificate is missing empirical metric '{key}'", file=sys.stderr)
+            return STATUS_INVALID
+        cert_val = cert_metrics[key]
+        if is_float:
+            if abs(float(cert_val) - float(expected_val)) > 0.01:
+                print(f"FAIL: Metric mismatch for '{key}': certificate claimed {cert_val}, but recomputed from source artifact is {expected_val}", file=sys.stderr)
+                return STATUS_INVALID
+        else:
+            if int(cert_val) != int(expected_val):
+                print(f"FAIL: Metric mismatch for '{key}': certificate claimed {cert_val}, but recomputed from source artifact is {expected_val}", file=sys.stderr)
+                return STATUS_INVALID
+
+    print(f"  [✓] Empirical metrics recomputed from raw traces: B3 true positives = {derived_b3_tp}, false hits = 0, precision = 100.0%.")
+    print(f"  [✓] All 10 certificate empirical metrics cross-checked against source artifacts and verified identical.")
 
     # 7. Attestation & Signature Verification (Explicit 4-State Outcome Evaluation)
     signing_algo = prov.get("signing_algorithm")
@@ -255,6 +397,7 @@ def main():
     parser.add_argument("--certificate", default="research/results/reproduction_certificate.json", help="Path to certificate")
     parser.add_argument("--benchmark", default="research/results/benchmark_run.json", help="Path to benchmark run artifact")
     parser.add_argument("--manifest", default="research/results/run_manifest.json", help="Path to temporal manifest artifact")
+    parser.add_argument("--dataset", default=None, help="Path to versioned benchmark dataset script/source")
     parser.add_argument("--no-git", action="store_true", help="Skip git repository matching")
     parser.add_argument("--allow-offline", action="store_true", help="Allow offline simulation benchmark artifact (disables strict live gateway requirement)")
     parser.add_argument("--require-auth", action="store_true", help="Require independently authenticated HMAC signature with valid trusted key")
@@ -264,6 +407,7 @@ def main():
         cert_path=args.certificate,
         bench_path=args.benchmark,
         manifest_path=args.manifest,
+        dataset_path=args.dataset,
         check_git=not args.no_git,
         require_live=not args.allow_offline,
         require_auth=args.require_auth,
