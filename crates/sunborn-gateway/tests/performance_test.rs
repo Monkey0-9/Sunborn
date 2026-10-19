@@ -31,7 +31,47 @@ async fn test_gateway_throughput_and_p99_latency() {
     );
     let req_bytes = serde_json::to_vec(&req_payload).unwrap();
 
-    // 1. Warmup request to populate cache
+    // 1. Stage 1: In-Process CPU Engine Overhead (Zero-Network L1 Baseline)
+    let entry = sunborn_cache::CacheEntry::new(
+        "perf-l1-key",
+        "Benchmark prompt for high-throughput exact cache validation",
+        Some(3600),
+    );
+    state.cache.set(entry).await.unwrap();
+
+    let l1_iterations = 10000;
+    let mut l1_latencies_us = Vec::with_capacity(l1_iterations);
+    let l1_start = Instant::now();
+    for _ in 0..l1_iterations {
+        let t0 = Instant::now();
+        let val = state.cache.get("perf-l1-key").await.unwrap();
+        assert!(val.is_some());
+        l1_latencies_us.push(t0.elapsed().as_micros() as u64);
+    }
+    let l1_elapsed = l1_start.elapsed();
+    let l1_rps = (l1_iterations as f64) / l1_elapsed.as_secs_f64();
+    l1_latencies_us.sort_unstable();
+    let l1_p50 = l1_latencies_us[l1_iterations * 50 / 100];
+    let l1_p95 = l1_latencies_us[l1_iterations * 95 / 100];
+    let l1_p99 = l1_latencies_us[l1_iterations * 99 / 100];
+
+    println!(
+        "\n--- [Table I] In-Process CPU Engine Overhead (Zero-Network L1 Baseline) ---\n\
+         Throughput:     {:.1} req/sec\n\
+         Latency P50:    {} µs ({:.3} ms)\n\
+         Latency P95:    {} µs ({:.3} ms)\n\
+         Latency P99:    {} µs ({:.3} ms)\n\
+         --------------------------------------------------------------------------",
+        l1_rps,
+        l1_p50,
+        l1_p50 as f64 / 1000.0,
+        l1_p95,
+        l1_p95 as f64 / 1000.0,
+        l1_p99,
+        l1_p99 as f64 / 1000.0
+    );
+
+    // 2. Warmup request to populate cache
     let warmup_res = app
         .clone()
         .oneshot(
@@ -51,7 +91,7 @@ async fn test_gateway_throughput_and_p99_latency() {
     let resp: ResponseEnvelope = serde_json::from_slice(&body).unwrap();
     assert!(!resp.cached);
 
-    // 2. High-throughput loop: 5,000 in-memory requests
+    // 3. Stage 2: Full Axum Gateway Stack (Auth, Routing, JCS Canonicalization, Cache)
     let iterations = 5000;
     let mut latencies_us = Vec::with_capacity(iterations);
 
@@ -84,14 +124,14 @@ async fn test_gateway_throughput_and_p99_latency() {
     let p99_us = latencies_us[iterations * 99 / 100];
 
     println!(
-        "\n--- Sunborn Gateway Performance Benchmark Results ---\n\
+        "\n--- [Table II] Full Axum Gateway Stack (Auth, Routing, JCS Canonicalization, Cache) ---\n\
          Total Requests: {}\n\
          Total Elapsed:  {:.2?}\n\
          Throughput:     {:.1} req/sec\n\
          Latency P50:    {} µs ({:.3} ms)\n\
          Latency P95:    {} µs ({:.3} ms)\n\
          Latency P99:    {} µs ({:.3} ms)\n\
-         ------------------------------------------------------",
+         --------------------------------------------------------------------------------------",
         iterations,
         total_elapsed,
         throughput_rps,

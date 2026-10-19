@@ -73,13 +73,16 @@ jobs:
         working-directory: frontend
         run: npx tsc --noEmit
 
-      - name: Run BFF Security and E2E Browser Tests
-        working-directory: frontend
-        run: npm test
-
       - name: Build Frontend Application
         working-directory: frontend
         run: npm run build
+
+      - name: Run BFF Security and E2E Browser Tests
+        working-directory: frontend
+        env:
+          CI: "true"
+          STRICT_E2E: "true"
+        run: npm test
 
   research-reproducibility:
     name: IEEE/ACM Scientific Reproducibility Gate

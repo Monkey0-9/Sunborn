@@ -463,6 +463,7 @@ def run_benchmark():
         has_certificate = False
 
         if live_gateway_available:
+            case_execution_mode = "live_gateway_rpc"
             try:
                 import urllib.request
                 app_id = f"bench-{bench_run_id}-{item['id']}"
@@ -512,25 +513,13 @@ def run_benchmark():
                     reason_code = str(decision_rec.get("reason_code", "unknown"))
                     has_certificate = resp_json.get("certificate") is not None
             except Exception as e:
-                # Fallback to algorithmic simulation if connection was interrupted
-                if is_exact:
-                    reused_b3 = True
-                    hit_lat_b3 = exact_cache_latency_ms
-                    actual_action = "safe_hit"
-                    reason_code = "EXACT_CANONICAL_MATCH"
-                elif (
-                    sim >= 0.85
-                    and item_risk <= 0.25
-                    and not has_numeric_or_unit_drift(q_base, q_test)
-                    and not has_negation_or_antonym_inversion(q_base, q_test)
-                    and not has_temporal_drift(q_base, q_test)
-                    and not has_entity_or_keyword_divergence(q_base, q_test)
-                ):
-                    reused_b3 = True
-                    hit_lat_b3 = semantic_cache_latency_ms
-                    actual_action = "safe_hit"
-                    reason_code = "SEMANTIC_SIMILARITY_MATCH"
+                # Fail-closed: Never silently fall back to simulated decisions during live gateway benchmarks
+                raise RuntimeError(
+                    f"Live gateway benchmark request failed for query {item['id']} ({e}). "
+                    f"Live benchmark runs must fail closed rather than silently mixing simulated decisions into empirical live results."
+                ) from e
         else:
+            case_execution_mode = "offline_calibrated_simulation"
             # Standalone calibrated fallback
             if is_exact:
                 reused_b3 = True
@@ -553,6 +542,7 @@ def run_benchmark():
         b3_evaluation_trace.append({
             "id": item["id"],
             "category": item["category"],
+            "execution_mode": case_execution_mode,
             "reused": reused_b3,
             "action": actual_action,
             "reason_code": reason_code,
@@ -584,6 +574,9 @@ def run_benchmark():
 
     dataset_fingerprint = hashlib.sha256(json.dumps(BENCHMARK_SUITE, sort_keys=True).encode("utf-8")).hexdigest()
     git_commit_sha = os.popen("git rev-parse HEAD 2>/dev/null || echo unknown").read().strip()
+    git_tree_sha = os.popen("git rev-parse HEAD^{tree} 2>/dev/null || echo unknown").read().strip()
+    with open(__file__, "rb") as f_bench:
+        benchmark_code_sha = hashlib.sha256(f_bench.read()).hexdigest()
 
     report_data = {
         "metadata": {
@@ -592,6 +585,9 @@ def run_benchmark():
             "evidence_scope": "Evaluates calibrated decision engine properties; does NOT represent unmonitored live production traffic or guaranteed zero false-hit rate across open-domain production workloads without runtime calibration.",
             "evaluation_time_utc": datetime.now(timezone.utc).isoformat(),
             "git_commit": git_commit_sha,
+            "git_tree": git_tree_sha,
+            "benchmark_code_sha256": benchmark_code_sha,
+            "benchmark_code_version": "1.0.0",
             "platform": platform.platform(),
             "python_version": platform.python_version(),
             "total_benchmark_queries": total_queries,
@@ -603,6 +599,11 @@ def run_benchmark():
             "measured_live_gateway_telemetry": {
                 "live_gateway_connected": live_gateway_available,
                 "requests_endpoint": requests_url if live_gateway_available else None,
+                "latency_measurement_scope": "Client-Side HTTP Loopback RPC (Python urllib socket roundtrip + JSON serde overhead). Gateway internal processing SLO (< 5.0ms P99) is measured in cargo test --test performance_test.",
+                "client_rpc_p50_latency_ms": round(sorted(b3["latencies"])[len(b3["latencies"]) // 2], 3) if live_gateway_available and b3["latencies"] else None,
+                "client_rpc_p90_latency_ms": round(sorted(b3["latencies"])[int(len(b3["latencies"]) * 0.9)], 3) if live_gateway_available and b3["latencies"] else None,
+                "client_rpc_p99_latency_ms": round(sorted(b3["latencies"])[int(len(b3["latencies"]) * 0.99)], 3) if live_gateway_available and b3["latencies"] else None,
+                "client_rpc_mean_latency_ms": round(statistics.mean(b3["latencies"]), 3) if live_gateway_available and b3["latencies"] else None,
                 "p50_latency_ms": round(sorted(b3["latencies"])[len(b3["latencies"]) // 2], 3) if live_gateway_available and b3["latencies"] else None,
                 "p90_latency_ms": round(sorted(b3["latencies"])[int(len(b3["latencies"]) * 0.9)], 3) if live_gateway_available and b3["latencies"] else None,
                 "p99_latency_ms": round(sorted(b3["latencies"])[int(len(b3["latencies"]) * 0.99)], 3) if live_gateway_available and b3["latencies"] else None,

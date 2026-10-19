@@ -10,7 +10,8 @@
 * `hypothesis_register.md`: Scientific hypothesis registry tracking controlled ablations against Baselines B0–B6.
 * `results/benchmark_run.json`: Empirical results for SemanticCacheBench (124 queries across 8 categories).
 * `results/run_manifest.json`: Immutable execution manifest for SemanticCacheBench-T (19 stateful temporal mutation scenarios).
-* `results/reproduction_certificate.json`: HMAC-SHA-256 signed cryptographic attestation certificate verifying benchmark provenance.
+* `results/reproduction_certificate.json`: Signed cryptographic attestation certificate verifying benchmark provenance (HMAC-SHA-256 or unauthenticated local development integrity check).
+* `verify_certificate.py`: Independent certificate and artifact provenance verifier.
 * `../benchmarks/semantic_cache_bench.py`: SemanticCacheBench dataset runner.
 * `../benchmarks/temporal_bench.py`: SemanticCacheBench-T stateful temporal mutation runner.
 * `../benchmarks/capacity_soak.py`: 3-stage continuous capacity and memory stability simulator.

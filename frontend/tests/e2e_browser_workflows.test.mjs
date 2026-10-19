@@ -59,9 +59,24 @@ before(async () => {
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
   } catch (err) {
-    console.warn('Chromium launch failed or browser not installed:', err.message);
+    if (process.env.CI === 'true' || process.env.STRICT_E2E === 'true' || process.env.STRICT_E2E === '1') {
+      assert.fail(`Fatal E2E error: Chromium failed to launch in CI / STRICT_E2E mode: ${err.message}`);
+    } else {
+      console.warn('Chromium launch failed or browser not installed:', err.message);
+    }
   }
 });
+
+function requireBrowser(t) {
+  if (!browser) {
+    if (process.env.CI === 'true' || process.env.STRICT_E2E === 'true' || process.env.STRICT_E2E === '1') {
+      assert.fail('Fatal E2E error: Chromium browser is strictly required in CI / STRICT_E2E mode but was not available');
+    }
+    t.skip('Skipping: Chromium browser is not installed in this environment');
+    return false;
+  }
+  return true;
+}
 
 after(async () => {
   if (browser) {
@@ -73,10 +88,7 @@ after(async () => {
 });
 
 test('E2E Workflow 1: Onboarding & Gateway Connectivity Lifecycle', async (t) => {
-  if (!browser) {
-    t.skip('Skipping: Chromium browser is not installed in this environment');
-    return;
-  }
+  if (!requireBrowser(t)) return;
   const context = await browser.newContext();
   const page = await context.newPage();
 
@@ -158,10 +170,7 @@ test('E2E Workflow 1: Onboarding & Gateway Connectivity Lifecycle', async (t) =>
 });
 
 test('E2E Workflow 2: Cache Exploration & Multi-Tier Resolution', async (t) => {
-  if (!browser) {
-    t.skip('Skipping: Chromium browser is not installed in this environment');
-    return;
-  }
+  if (!requireBrowser(t)) return;
   const context = await browser.newContext();
   const page = await context.newPage();
 
@@ -224,10 +233,7 @@ test('E2E Workflow 2: Cache Exploration & Multi-Tier Resolution', async (t) => {
 });
 
 test('E2E Workflow 3: Execution DAG Inspection & Merkle Proof Attestation', async (t) => {
-  if (!browser) {
-    t.skip('Skipping: Chromium browser is not installed in this environment');
-    return;
-  }
+  if (!requireBrowser(t)) return;
   const context = await browser.newContext();
   const page = await context.newPage();
 
@@ -317,10 +323,7 @@ test('E2E Workflow 3: Execution DAG Inspection & Merkle Proof Attestation', asyn
 });
 
 test('E2E Workflow 4: Security Firewall & Adversarial Injection Defense', async (t) => {
-  if (!browser) {
-    t.skip('Skipping: Chromium browser is not installed in this environment');
-    return;
-  }
+  if (!requireBrowser(t)) return;
   const context = await browser.newContext();
   const page = await context.newPage();
 
@@ -365,10 +368,7 @@ test('E2E Workflow 4: Security Firewall & Adversarial Injection Defense', async 
 });
 
 test('E2E Workflow 5: Governance Operations & GDPR Cryptographic Shredding', async (t) => {
-  if (!browser) {
-    t.skip('Skipping: Chromium browser is not installed in this environment');
-    return;
-  }
+  if (!requireBrowser(t)) return;
   const context = await browser.newContext();
   const page = await context.newPage();
 
@@ -425,10 +425,7 @@ test('E2E Workflow 5: Governance Operations & GDPR Cryptographic Shredding', asy
 });
 
 test('E2E Workflow 6: Resilient Error Handling & Gateway Offline Recovery', async (t) => {
-  if (!browser) {
-    t.skip('Skipping: Chromium browser is not installed in this environment');
-    return;
-  }
+  if (!requireBrowser(t)) return;
   const context = await browser.newContext();
   const page = await context.newPage();
 

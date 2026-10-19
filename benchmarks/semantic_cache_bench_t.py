@@ -597,6 +597,11 @@ def run_temporal_benchmark():
     b0_cost = baselines["B0_NoCache"]["cost"]
 
     # Manifest report data
+    git_commit_sha = os.popen("git rev-parse HEAD 2>/dev/null || echo unknown").read().strip()
+    git_tree_sha = os.popen("git rev-parse HEAD^{tree} 2>/dev/null || echo unknown").read().strip()
+    with open(__file__, "rb") as f_bench:
+        benchmark_code_sha = hashlib.sha256(f_bench.read()).hexdigest()
+
     report_data = {
         "metadata": {
             "evaluation_suite": "SemanticCacheBench-T (Temporal & Stateful)",
@@ -605,7 +610,10 @@ def run_temporal_benchmark():
             "evaluation_time_utc": datetime.now(timezone.utc).isoformat(),
             "platform": platform.platform(),
             "python_version": platform.python_version(),
-            "git_commit": os.popen("git rev-parse HEAD 2>/dev/null || echo unknown").read().strip(),
+            "git_commit": git_commit_sha,
+            "git_tree": git_tree_sha,
+            "benchmark_code_sha256": benchmark_code_sha,
+            "benchmark_code_version": "1.0.0",
             "embedding_backend": EMBEDDING_BACKEND_NAME,
             "decision_engine": "Sunborn-Semantic DecisionEngine (VerificationCascade + Causal Leases + Conformal Risk Bound <= 0.25)",
             "total_temporal_scenarios": total_scenarios,

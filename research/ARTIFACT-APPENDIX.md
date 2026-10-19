@@ -78,8 +78,8 @@ The automated reproduction script executes five rigorous sequential validation g
    * Runs `benchmarks/capacity_soak.py`: 11,000 requests processed under Zipfian distribution with zero memory leaks and atomic TDEK zeroization ($42\,\mu\text{s}$).
    * Runs `benchmarks/semantic_cache_bench_t.py`: Evaluates stateful temporal mutations across 6 sequential phases.
    * Computes SHA-256 hashes of `benchmark_run.json` and `run_manifest.json`.
-   * Signs the canonical manifest using HMAC-SHA-256 and writes `research/results/reproduction_certificate.json`.
-   * Re-evaluates signature validity in constant time.
+   * Generates `research/results/reproduction_certificate.json` (authenticated with HMAC-SHA-256 when `SUNBORN_ATTESTATION_KEY` is configured, or honest `LOCAL_DEVELOPMENT_INTEGRITY_CHECK` unauthenticated canonical digest when omitted).
+   * Independently verifies the certificate, artifact digests, and git provenance using `research/verify_certificate.py`.
 
 ---
 

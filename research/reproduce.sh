@@ -47,13 +47,13 @@ cargo test --test performance_test -- --nocapture | tee "${PERF_LOG}"
 echo "------------------------------------------------------------------------"
 echo "Empirical Latency Decomposition (ACM/IEEE Discipline):"
 echo "  [Table I]  In-Process CPU Engine Overhead (Zero-Network L1 Baseline):"
-echo "             P50: 61 µs | P95: 73 µs | P99: 88 µs | Throughput: 15,428 req/s"
+grep -A 5 "\[Table I\]" "${PERF_LOG}" | grep -E "Throughput|Latency P50|Latency P95|Latency P99" | sed 's/^/             /' || true
 echo "  [Table II] Full Axum Gateway Stack (Auth, Routing, JCS Canonicalization, Cache):"
-grep -E "Throughput|Latency P50|Latency P95|Latency P99" "${PERF_LOG}" | sed 's/^/             /' || true
+grep -A 8 "\[Table II\]" "${PERF_LOG}" | grep -E "Throughput|Latency P50|Latency P95|Latency P99" | sed 's/^/             /' || true
 echo "------------------------------------------------------------------------"
 
 # Strict numerical assertion on gateway latency SLO (< 5.0ms P99)
-GATEWAY_P99_US=$(grep -oE "Latency P99:\s+[0-9]+" "${PERF_LOG}" | awk '{print $3}' || echo "0")
+GATEWAY_P99_US=$(grep -A 8 "\[Table II\]" "${PERF_LOG}" | grep -oE "Latency P99:\s+[0-9]+" | awk '{print $3}' || echo "0")
 rm -f "${PERF_LOG}"
 
 if [[ -z "${GATEWAY_P99_US}" || "${GATEWAY_P99_US}" -eq 0 ]]; then
@@ -199,6 +199,20 @@ if t_b3['precision_pct'] != 100.0:
 if b2['false_hits'] <= 0 or t_b2['false_hits'] <= 0:
     print(f\"WARNING: Baseline B2 expected false hits on adversarial/temporal traps\", file=sys.stderr)
 
+# Enforce Git revision matching
+bench_meta = bench_data.get('metadata', {})
+if bench_meta.get('git_commit') != '${GIT_SHA}' or bench_meta.get('git_tree') != git_tree:
+    print(f\"FATAL: Benchmark artifact revision ({bench_meta.get('git_commit')}, {bench_meta.get('git_tree')}) does not match current git repository (${GIT_SHA}, {git_tree})\", file=sys.stderr)
+    sys.exit(1)
+
+secret_key = os.environ.get('SUNBORN_ATTESTATION_KEY') or os.environ.get('SUNBORN_REPRODUCTION_SECRET')
+if secret_key:
+    attestation_type = 'PRODUCTION_INDEPENDENT_ATTESTATION'
+    signing_algo = 'HMAC-SHA-256'
+else:
+    attestation_type = 'LOCAL_DEVELOPMENT_INTEGRITY_CHECK'
+    signing_algo = 'NONE_UNAUTHENTICATED_LOCAL_DIGEST'
+
 attestation_payload = {
     'evaluation': 'Sunborn Empirical Scientific Reproduction',
     'status': 'PASSED',
@@ -215,12 +229,13 @@ attestation_payload = {
         'cargo': cargo_ver
     },
     'provenance': {
+        'attestation_type': attestation_type,
+        'signing_algorithm': signing_algo,
         'benchmark_run_sha256': bench_sha,
         'run_manifest_sha256': manifest_sha,
         'embedding_backend': meta.get('embedding_backend', 'N/A'),
         'decision_engine': meta.get('decision_engine', 'N/A'),
         'decision_engine_mode': meta.get('decision_engine_mode', 'rust_parity_calibrated_decision_engine'),
-        'signing_algorithm': 'HMAC-SHA-256'
     },
     'empirical_metrics': {
         'sunborn_b3_false_hits': b3['false_hits'],
@@ -238,8 +253,11 @@ attestation_payload = {
 
 canonical_bytes = json.dumps(attestation_payload, sort_keys=True).encode('utf-8')
 canonical_digest = hashlib.sha256(canonical_bytes).hexdigest()
-secret = os.environ.get('SUNBORN_REPRODUCTION_SECRET', 'sunborn_reproduction_canonical_attestation_key_2026').encode('utf-8')
-sig = hmac.new(secret, canonical_bytes, hashlib.sha256).hexdigest()
+
+if secret_key:
+    sig = hmac.new(secret_key.encode('utf-8'), canonical_bytes, hashlib.sha256).hexdigest()
+else:
+    sig = None
 
 certificate = dict(attestation_payload)
 certificate['attestation'] = {
@@ -250,41 +268,14 @@ certificate['attestation'] = {
 with open('${CERTIFICATE_ARTIFACT}', 'w') as f_cert:
     json.dump(certificate, f_cert, indent=2)
 
-# Independent Cryptographic Verification of Generated Attestation Certificate
-with open('${CERTIFICATE_ARTIFACT}', 'r') as f_in:
-    loaded_cert = json.load(f_in)
-
-att = loaded_cert.pop('attestation', None)
-if not att or 'hmac_sha256_signature' not in att:
-    print('FATAL: Certificate attestation signature missing', file=sys.stderr)
-    sys.exit(1)
-
-verify_bytes = json.dumps(loaded_cert, sort_keys=True).encode('utf-8')
-verify_digest = hashlib.sha256(verify_bytes).hexdigest()
-expected_sig = hmac.new(secret, verify_bytes, hashlib.sha256).hexdigest()
-
-if not hmac.compare_digest(att['hmac_sha256_signature'], expected_sig):
-    print('FATAL: Attestation HMAC-SHA-256 signature verification failed', file=sys.stderr)
-    sys.exit(1)
-
-if not hmac.compare_digest(att['canonical_manifest_digest'], verify_digest):
-    print('FATAL: Attestation canonical digest mismatch', file=sys.stderr)
-    sys.exit(1)
-
-with open('${BENCHMARK_ARTIFACT}', 'rb') as f_b:
-    if hashlib.sha256(f_b.read()).hexdigest() != loaded_cert['provenance']['benchmark_run_sha256']:
-        print('FATAL: Benchmark run hash mismatch against certificate provenance', file=sys.stderr)
-        sys.exit(1)
-
-with open('${MANIFEST_ARTIFACT}', 'rb') as f_m:
-    if hashlib.sha256(f_m.read()).hexdigest() != loaded_cert['provenance']['run_manifest_sha256']:
-        print('FATAL: Run manifest hash mismatch against certificate provenance', file=sys.stderr)
-        sys.exit(1)
-
-print('  Verification Assertions  : PASSED (B3 zero false hits & 100% precision verified on static & temporal benchmarks)')
-print('  Attestation Signature    : VALID (HMAC-SHA-256 cryptographic provenance verified in constant time)')
-print(f\"  Certificate Generated    : ${CERTIFICATE_ARTIFACT}\")
+print(f\"  Certificate Generated    : ${CERTIFICATE_ARTIFACT} ({attestation_type})\")
 "
+
+echo "[*] Executing independent certificate and artifact verification..."
+${PYTHON_BIN} research/verify_certificate.py \
+    --certificate "${CERTIFICATE_ARTIFACT}" \
+    --benchmark "${BENCHMARK_ARTIFACT}" \
+    --manifest "${MANIFEST_ARTIFACT}"
 echo "------------------------------------------------------------------------"
 echo "==> SemanticCacheBench, SemanticCacheBench-T & Capacity Soak verification completed successfully."
 
