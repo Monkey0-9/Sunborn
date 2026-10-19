@@ -25,7 +25,8 @@ before(async () => {
   }
 
   // Start Next.js in production mode
-  nextProcess = spawn('npx', ['next', 'start', '-p', `${TEST_PORT}`], {
+  const nextBin = path.join(frontendDir, 'node_modules', '.bin', 'next');
+  nextProcess = spawn(nextBin, ['start', '-p', `${TEST_PORT}`], {
     cwd: frontendDir,
     env: { ...process.env, PORT: `${TEST_PORT}`, NODE_ENV: 'production' },
     stdio: 'ignore',
