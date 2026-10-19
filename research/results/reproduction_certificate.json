@@ -1,0 +1,41 @@
+{
+  "evaluation": "Sunborn Empirical Scientific Reproduction",
+  "status": "PASSED",
+  "git_commit": "2e6f453e1a1d31951f7b96689a9dd7250c68d002",
+  "git_branch": "main",
+  "git_tree": "0da182f389587abc3d514304a1c629ca5461b4df",
+  "timestamp_utc": "2026-10-19T12:56:21.739455+00:00",
+  "environment": {
+    "os": "Linux",
+    "release": "6.12.0-211.64.1.el10_2.x86_64",
+    "arch": "x86_64",
+    "python": "3.13.16",
+    "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
+    "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)"
+  },
+  "provenance": {
+    "attestation_type": "LOCAL_DEVELOPMENT_INTEGRITY_CHECK",
+    "signing_algorithm": "NONE_UNAUTHENTICATED_LOCAL_DIGEST",
+    "benchmark_run_sha256": "ea8cdfa44cc00c9aa54848850da4182def58ebd3140fce2a1a765abf3eccf0e5",
+    "run_manifest_sha256": "3d031fe8e0f5bb4e16c00e38ee977e62b98a06f92f607f316dcc084dcc1f0f36",
+    "embedding_backend": "BAAI/bge-small-en-v1.5 (fastembed)",
+    "decision_engine": "Sunborn-Semantic DecisionEngine (VerificationCascade + Conformal Risk Bound <= 0.25)",
+    "decision_engine_mode": "live_gateway_rpc"
+  },
+  "empirical_metrics": {
+    "sunborn_b3_false_hits": 0,
+    "sunborn_b3_false_hit_rate_pct": 0.0,
+    "sunborn_b3_precision_pct": 100.0,
+    "sunborn_b3_cost_savings_pct": 12.09,
+    "sunborn_b3_temporal_false_hits": 0,
+    "sunborn_b3_temporal_precision_pct": 100.0,
+    "naive_b2_false_hits": 60,
+    "naive_b2_false_hit_rate_pct": 48.39,
+    "naive_b2_temporal_false_hits": 12,
+    "naive_b2_temporal_false_hit_rate_pct": 63.16
+  },
+  "attestation": {
+    "canonical_manifest_digest": "f335070fee37c3a7c34a9aa2af12f203fe1d34ccf63b95fe068f22bde4a5b253",
+    "hmac_sha256_signature": null
+  }
+}

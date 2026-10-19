@@ -3,9 +3,9 @@
     "evaluation_suite": "SemanticCacheBench (v1.0 Frozen Suite)",
     "provenance_type": "LIVE_GATEWAY_DECISION_PATH",
     "evidence_scope": "Evaluates calibrated decision engine properties; does NOT represent unmonitored live production traffic or guaranteed zero false-hit rate across open-domain production workloads without runtime calibration.",
-    "evaluation_time_utc": "2026-10-19T12:55:24.390149+00:00",
-    "git_commit": "6dcbdd6455f3e07546f3ea461c12e73f7c408d96",
-    "git_tree": "af934c9d875db89e675108d69f266e06d8f8e91c",
+    "evaluation_time_utc": "2026-10-19T12:56:20.706704+00:00",
+    "git_commit": "2e6f453e1a1d31951f7b96689a9dd7250c68d002",
+    "git_tree": "0da182f389587abc3d514304a1c629ca5461b4df",
     "benchmark_code_sha256": "ff2115480fb2f889e7236abc578e58d786c7f5970b1d03f15bccd6fc60271da0",
     "benchmark_code_version": "1.0.0",
     "platform": "Linux-6.12.0-211.64.1.el10_2.x86_64-x86_64-with-glibc2.39",
@@ -20,14 +20,14 @@
       "live_gateway_connected": true,
       "requests_endpoint": "http://127.0.0.1:8080/v1/requests",
       "latency_measurement_scope": "Client-Side HTTP Loopback RPC (Python urllib socket roundtrip + JSON serde overhead). Gateway internal processing SLO (< 5.0ms P99) is measured in cargo test --test performance_test.",
-      "client_rpc_p50_latency_ms": 1.094,
-      "client_rpc_p90_latency_ms": 1.289,
-      "client_rpc_p99_latency_ms": 2.639,
-      "client_rpc_mean_latency_ms": 1.157,
-      "p50_latency_ms": 1.094,
-      "p90_latency_ms": 1.289,
-      "p99_latency_ms": 2.639,
-      "mean_latency_ms": 1.157
+      "client_rpc_p50_latency_ms": 1.091,
+      "client_rpc_p90_latency_ms": 1.408,
+      "client_rpc_p99_latency_ms": 2.402,
+      "client_rpc_mean_latency_ms": 1.151,
+      "p50_latency_ms": 1.091,
+      "p90_latency_ms": 1.408,
+      "p99_latency_ms": 2.402,
+      "mean_latency_ms": 1.151
     },
     "cost_model": {
       "model_type": "SYNTHETIC_COST_ESTIMATION",
@@ -158,7 +158,7 @@
         24.22,
         52.97
       ],
-      "avg_latency_ms": 1.16,
+      "avg_latency_ms": 1.15,
       "total_cost_usd": 0.681265,
       "cost_savings_pct": 12.09,
       "tp": 15,
@@ -176,7 +176,7 @@
       "action": "safe_hit",
       "reason_code": "EXACT_CANONICAL_MATCH",
       "has_certificate": true,
-      "measured_latency_ms": 1.327,
+      "measured_latency_ms": 1.09,
       "ground_truth": true
     },
     {
@@ -187,7 +187,7 @@
       "action": "safe_hit",
       "reason_code": "EXACT_CANONICAL_MATCH",
       "has_certificate": true,
-      "measured_latency_ms": 1.121,
+      "measured_latency_ms": 1.017,
       "ground_truth": true
     },
     {
@@ -198,7 +198,7 @@
       "action": "safe_hit",
       "reason_code": "EXACT_CANONICAL_MATCH",
       "has_certificate": true,
-      "measured_latency_ms": 1.006,
+      "measured_latency_ms": 1.076,
       "ground_truth": true
     },
     {
@@ -220,7 +220,7 @@
       "action": "safe_hit",
       "reason_code": "SEMANTIC_SIMILARITY_MATCH",
       "has_certificate": true,
-      "measured_latency_ms": 1.194,
+      "measured_latency_ms": 1.19,
       "ground_truth": true
     },
     {
@@ -231,7 +231,7 @@
       "action": "safe_hit",
       "reason_code": "EXACT_CANONICAL_MATCH",
       "has_certificate": true,
-      "measured_latency_ms": 1.108,
+      "measured_latency_ms": 0.958,
       "ground_truth": true
     },
     {
@@ -242,7 +242,7 @@
       "action": "safe_hit",
       "reason_code": "EXACT_CANONICAL_MATCH",
       "has_certificate": true,
-      "measured_latency_ms": 0.956,
+      "measured_latency_ms": 0.954,
       "ground_truth": true
     },
     {
@@ -253,7 +253,7 @@
       "action": "safe_hit",
       "reason_code": "EXACT_CANONICAL_MATCH",
       "has_certificate": true,
-      "measured_latency_ms": 0.992,
+      "measured_latency_ms": 1.014,
       "ground_truth": true
     },
     {
@@ -264,7 +264,7 @@
       "action": "safe_hit",
       "reason_code": "EXACT_CANONICAL_MATCH",
       "has_certificate": true,
-      "measured_latency_ms": 0.935,
+      "measured_latency_ms": 0.966,
       "ground_truth": true
     },
     {
@@ -275,7 +275,7 @@
       "action": "safe_hit",
       "reason_code": "EXACT_CANONICAL_MATCH",
       "has_certificate": true,
-      "measured_latency_ms": 1.291,
+      "measured_latency_ms": 0.961,
       "ground_truth": true
     },
     {
@@ -286,7 +286,7 @@
       "action": "safe_hit",
       "reason_code": "EXACT_CANONICAL_MATCH",
       "has_certificate": true,
-      "measured_latency_ms": 1.281,
+      "measured_latency_ms": 0.962,
       "ground_truth": true
     },
     {
@@ -297,7 +297,7 @@
       "action": "safe_hit",
       "reason_code": "SEMANTIC_SIMILARITY_MATCH",
       "has_certificate": true,
-      "measured_latency_ms": 1.033,
+      "measured_latency_ms": 1.082,
       "ground_truth": true
     },
     {
@@ -308,7 +308,7 @@
       "action": "safe_hit",
       "reason_code": "EXACT_CANONICAL_MATCH",
       "has_certificate": true,
-      "measured_latency_ms": 0.971,
+      "measured_latency_ms": 0.904,
       "ground_truth": true
     },
     {
@@ -319,7 +319,7 @@
       "action": "safe_hit",
       "reason_code": "EXACT_CANONICAL_MATCH",
       "has_certificate": true,
-      "measured_latency_ms": 0.913,
+      "measured_latency_ms": 0.837,
       "ground_truth": true
     },
     {
@@ -330,7 +330,7 @@
       "action": "safe_hit",
       "reason_code": "EXACT_CANONICAL_MATCH",
       "has_certificate": true,
-      "measured_latency_ms": 0.924,
+      "measured_latency_ms": 0.913,
       "ground_truth": true
     },
     {
@@ -341,7 +341,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.978,
+      "measured_latency_ms": 0.974,
       "ground_truth": true
     },
     {
@@ -352,7 +352,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.0,
+      "measured_latency_ms": 0.989,
       "ground_truth": true
     },
     {
@@ -363,7 +363,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.012,
+      "measured_latency_ms": 1.024,
       "ground_truth": true
     },
     {
@@ -374,7 +374,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.978,
+      "measured_latency_ms": 1.001,
       "ground_truth": true
     },
     {
@@ -385,7 +385,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.961,
+      "measured_latency_ms": 1.011,
       "ground_truth": true
     },
     {
@@ -396,7 +396,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.013,
+      "measured_latency_ms": 1.677,
       "ground_truth": true
     },
     {
@@ -407,7 +407,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.013,
+      "measured_latency_ms": 1.052,
       "ground_truth": true
     },
     {
@@ -418,7 +418,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.055,
+      "measured_latency_ms": 0.986,
       "ground_truth": true
     },
     {
@@ -429,7 +429,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.234,
+      "measured_latency_ms": 0.961,
       "ground_truth": true
     },
     {
@@ -440,7 +440,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.931,
+      "measured_latency_ms": 0.996,
       "ground_truth": true
     },
     {
@@ -451,7 +451,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.988,
+      "measured_latency_ms": 0.934,
       "ground_truth": true
     },
     {
@@ -462,7 +462,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.906,
+      "measured_latency_ms": 0.938,
       "ground_truth": true
     },
     {
@@ -473,7 +473,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.944,
+      "measured_latency_ms": 1.228,
       "ground_truth": true
     },
     {
@@ -484,7 +484,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.03,
+      "measured_latency_ms": 0.975,
       "ground_truth": true
     },
     {
@@ -495,7 +495,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.121,
+      "measured_latency_ms": 0.965,
       "ground_truth": true
     },
     {
@@ -506,7 +506,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.972,
+      "measured_latency_ms": 0.957,
       "ground_truth": true
     },
     {
@@ -517,7 +517,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.106,
+      "measured_latency_ms": 0.969,
       "ground_truth": true
     },
     {
@@ -528,7 +528,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.008,
+      "measured_latency_ms": 1.127,
       "ground_truth": true
     },
     {
@@ -539,7 +539,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.975,
+      "measured_latency_ms": 1.026,
       "ground_truth": true
     },
     {
@@ -550,7 +550,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.021,
+      "measured_latency_ms": 1.031,
       "ground_truth": true
     },
     {
@@ -561,7 +561,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.125,
+      "measured_latency_ms": 1.107,
       "ground_truth": true
     },
     {
@@ -572,7 +572,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.207,
+      "measured_latency_ms": 1.053,
       "ground_truth": true
     },
     {
@@ -583,7 +583,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.008,
+      "measured_latency_ms": 0.961,
       "ground_truth": true
     },
     {
@@ -594,7 +594,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.95,
+      "measured_latency_ms": 0.963,
       "ground_truth": true
     },
     {
@@ -605,7 +605,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.934,
+      "measured_latency_ms": 1.238,
       "ground_truth": true
     },
     {
@@ -616,7 +616,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.939,
+      "measured_latency_ms": 0.961,
       "ground_truth": false
     },
     {
@@ -627,7 +627,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.464,
+      "measured_latency_ms": 1.216,
       "ground_truth": false
     },
     {
@@ -638,7 +638,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.042,
+      "measured_latency_ms": 1.176,
       "ground_truth": false
     },
     {
@@ -649,7 +649,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.126,
+      "measured_latency_ms": 1.244,
       "ground_truth": false
     },
     {
@@ -660,7 +660,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 2.187,
+      "measured_latency_ms": 1.055,
       "ground_truth": false
     },
     {
@@ -671,7 +671,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.204,
+      "measured_latency_ms": 1.219,
       "ground_truth": false
     },
     {
@@ -682,7 +682,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.039,
+      "measured_latency_ms": 1.128,
       "ground_truth": false
     },
     {
@@ -693,7 +693,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.15,
+      "measured_latency_ms": 0.994,
       "ground_truth": false
     },
     {
@@ -704,7 +704,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.256,
+      "measured_latency_ms": 1.217,
       "ground_truth": false
     },
     {
@@ -715,7 +715,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.174,
+      "measured_latency_ms": 1.343,
       "ground_truth": false
     },
     {
@@ -726,7 +726,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.289,
+      "measured_latency_ms": 1.168,
       "ground_truth": false
     },
     {
@@ -737,7 +737,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.281,
+      "measured_latency_ms": 1.012,
       "ground_truth": false
     },
     {
@@ -748,7 +748,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.255,
+      "measured_latency_ms": 1.115,
       "ground_truth": false
     },
     {
@@ -759,7 +759,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.104,
+      "measured_latency_ms": 1.117,
       "ground_truth": false
     },
     {
@@ -770,7 +770,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.159,
+      "measured_latency_ms": 2.156,
       "ground_truth": false
     },
     {
@@ -781,7 +781,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.272,
+      "measured_latency_ms": 1.015,
       "ground_truth": false
     },
     {
@@ -792,7 +792,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.981,
+      "measured_latency_ms": 1.096,
       "ground_truth": false
     },
     {
@@ -803,7 +803,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.91,
+      "measured_latency_ms": 0.928,
       "ground_truth": false
     },
     {
@@ -814,7 +814,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.975,
+      "measured_latency_ms": 0.956,
       "ground_truth": false
     },
     {
@@ -825,7 +825,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.024,
+      "measured_latency_ms": 0.987,
       "ground_truth": false
     },
     {
@@ -836,7 +836,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.055,
+      "measured_latency_ms": 1.083,
       "ground_truth": false
     },
     {
@@ -847,7 +847,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.996,
+      "measured_latency_ms": 1.494,
       "ground_truth": false
     },
     {
@@ -858,7 +858,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.992,
+      "measured_latency_ms": 0.982,
       "ground_truth": false
     },
     {
@@ -869,7 +869,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.205,
+      "measured_latency_ms": 1.067,
       "ground_truth": false
     },
     {
@@ -880,7 +880,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.091,
+      "measured_latency_ms": 0.914,
       "ground_truth": false
     },
     {
@@ -891,7 +891,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.976,
+      "measured_latency_ms": 0.935,
       "ground_truth": false
     },
     {
@@ -902,7 +902,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.013,
+      "measured_latency_ms": 1.322,
       "ground_truth": false
     },
     {
@@ -913,7 +913,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.014,
+      "measured_latency_ms": 1.115,
       "ground_truth": false
     },
     {
@@ -924,7 +924,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.049,
+      "measured_latency_ms": 1.376,
       "ground_truth": false
     },
     {
@@ -935,7 +935,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.098,
+      "measured_latency_ms": 1.157,
       "ground_truth": false
     },
     {
@@ -946,7 +946,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.177,
+      "measured_latency_ms": 1.086,
       "ground_truth": false
     },
     {
@@ -957,7 +957,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.094,
+      "measured_latency_ms": 1.16,
       "ground_truth": false
     },
     {
@@ -968,7 +968,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.121,
+      "measured_latency_ms": 1.22,
       "ground_truth": false
     },
     {
@@ -979,7 +979,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.128,
+      "measured_latency_ms": 1.333,
       "ground_truth": false
     },
     {
@@ -990,7 +990,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.101,
+      "measured_latency_ms": 1.131,
       "ground_truth": false
     },
     {
@@ -1001,7 +1001,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.168,
+      "measured_latency_ms": 1.408,
       "ground_truth": false
     },
     {
@@ -1012,7 +1012,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.15,
+      "measured_latency_ms": 1.101,
       "ground_truth": false
     },
     {
@@ -1023,7 +1023,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 2.639,
+      "measured_latency_ms": 1.331,
       "ground_truth": false
     },
     {
@@ -1034,7 +1034,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.092,
+      "measured_latency_ms": 1.101,
       "ground_truth": false
     },
     {
@@ -1045,7 +1045,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.999,
+      "measured_latency_ms": 1.104,
       "ground_truth": false
     },
     {
@@ -1056,7 +1056,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.934,
+      "measured_latency_ms": 0.98,
       "ground_truth": false
     },
     {
@@ -1067,7 +1067,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.149,
+      "measured_latency_ms": 1.42,
       "ground_truth": false
     },
     {
@@ -1078,7 +1078,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.094,
+      "measured_latency_ms": 1.417,
       "ground_truth": false
     },
     {
@@ -1089,7 +1089,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.09,
+      "measured_latency_ms": 1.041,
       "ground_truth": false
     },
     {
@@ -1100,7 +1100,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.058,
+      "measured_latency_ms": 1.065,
       "ground_truth": false
     },
     {
@@ -1111,7 +1111,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.104,
+      "measured_latency_ms": 1.0,
       "ground_truth": false
     },
     {
@@ -1122,7 +1122,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 3.786,
+      "measured_latency_ms": 1.103,
       "ground_truth": false
     },
     {
@@ -1133,7 +1133,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.185,
+      "measured_latency_ms": 2.402,
       "ground_truth": false
     },
     {
@@ -1144,7 +1144,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.155,
+      "measured_latency_ms": 1.102,
       "ground_truth": false
     },
     {
@@ -1155,7 +1155,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.094,
+      "measured_latency_ms": 1.214,
       "ground_truth": false
     },
     {
@@ -1166,7 +1166,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.092,
+      "measured_latency_ms": 1.091,
       "ground_truth": false
     },
     {
@@ -1177,7 +1177,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.822,
+      "measured_latency_ms": 1.188,
       "ground_truth": false
     },
     {
@@ -1188,7 +1188,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.229,
+      "measured_latency_ms": 1.076,
       "ground_truth": false
     },
     {
@@ -1199,7 +1199,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.1,
+      "measured_latency_ms": 1.149,
       "ground_truth": false
     },
     {
@@ -1210,7 +1210,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.198,
+      "measured_latency_ms": 1.504,
       "ground_truth": false
     },
     {
@@ -1221,7 +1221,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.263,
+      "measured_latency_ms": 1.156,
       "ground_truth": false
     },
     {
@@ -1232,7 +1232,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.191,
+      "measured_latency_ms": 2.974,
       "ground_truth": false
     },
     {
@@ -1243,7 +1243,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.201,
+      "measured_latency_ms": 1.137,
       "ground_truth": false
     },
     {
@@ -1254,7 +1254,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.125,
+      "measured_latency_ms": 1.108,
       "ground_truth": false
     },
     {
@@ -1265,7 +1265,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.232,
+      "measured_latency_ms": 1.201,
       "ground_truth": false
     },
     {
@@ -1276,7 +1276,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 2.113,
+      "measured_latency_ms": 1.207,
       "ground_truth": false
     },
     {
@@ -1287,7 +1287,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.117,
+      "measured_latency_ms": 1.552,
       "ground_truth": false
     },
     {
@@ -1298,7 +1298,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.17,
+      "measured_latency_ms": 1.37,
       "ground_truth": false
     },
     {
@@ -1309,7 +1309,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.093,
+      "measured_latency_ms": 1.65,
       "ground_truth": false
     },
     {
@@ -1320,7 +1320,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.138,
+      "measured_latency_ms": 1.157,
       "ground_truth": false
     },
     {
@@ -1331,7 +1331,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.108,
+      "measured_latency_ms": 1.277,
       "ground_truth": false
     },
     {
@@ -1342,7 +1342,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.183,
+      "measured_latency_ms": 1.274,
       "ground_truth": false
     },
     {
@@ -1353,7 +1353,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.211,
+      "measured_latency_ms": 1.207,
       "ground_truth": false
     },
     {
@@ -1364,7 +1364,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.128,
+      "measured_latency_ms": 1.526,
       "ground_truth": false
     },
     {
@@ -1375,7 +1375,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.289,
+      "measured_latency_ms": 1.021,
       "ground_truth": false
     },
     {
@@ -1386,7 +1386,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 0.95,
+      "measured_latency_ms": 1.179,
       "ground_truth": false
     },
     {
@@ -1397,7 +1397,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.099,
+      "measured_latency_ms": 1.093,
       "ground_truth": false
     },
     {
@@ -1408,7 +1408,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.027,
+      "measured_latency_ms": 1.073,
       "ground_truth": false
     },
     {
@@ -1419,7 +1419,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.036,
+      "measured_latency_ms": 1.008,
       "ground_truth": false
     },
     {
@@ -1430,7 +1430,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.107,
+      "measured_latency_ms": 1.004,
       "ground_truth": false
     },
     {
@@ -1441,7 +1441,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.423,
+      "measured_latency_ms": 0.991,
       "ground_truth": false
     },
     {
@@ -1452,7 +1452,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.039,
+      "measured_latency_ms": 1.029,
       "ground_truth": false
     },
     {
@@ -1463,7 +1463,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.018,
+      "measured_latency_ms": 1.322,
       "ground_truth": false
     },
     {
@@ -1474,7 +1474,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.058,
+      "measured_latency_ms": 1.034,
       "ground_truth": false
     },
     {
@@ -1485,7 +1485,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.39,
+      "measured_latency_ms": 1.431,
       "ground_truth": false
     },
     {
@@ -1496,7 +1496,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.094,
+      "measured_latency_ms": 0.986,
       "ground_truth": false
     },
     {
@@ -1507,7 +1507,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.021,
+      "measured_latency_ms": 1.019,
       "ground_truth": false
     },
     {
@@ -1518,7 +1518,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.052,
+      "measured_latency_ms": 1.11,
       "ground_truth": false
     },
     {
@@ -1529,7 +1529,7 @@
       "action": "origin_execute",
       "reason_code": "NO_CACHE_ENTRY_FOUND",
       "has_certificate": false,
-      "measured_latency_ms": 1.03,
+      "measured_latency_ms": 1.334,
       "ground_truth": false
     }
   ]
