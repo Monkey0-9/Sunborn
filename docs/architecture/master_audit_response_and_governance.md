@@ -413,12 +413,53 @@ Following comprehensive independent re-audit of repository `Monkey0-9/Sunborn` o
 │      │                                │          │ Semgrep SAST, frontend audit, secret scanning.      │
 ├──────┼────────────────────────────────┼──────────┼─────────────────────────────────────────────────────┤
 │ P1.3 │ Extended adversarial and RBAC  │ RESOLVED │ crates/sunborn-gateway/tests/adversarial_security_  │
-│      │ security test suite            │          │ test.rs: 16 automated tests covering non-admin RBAC │
-│      │                                │          │ denial, header DoS, BIDI overrides, crypto shred.   │
+│      │ security test suite            │          │ test.rs: 18 automated tests covering non-admin RBAC │
+│      │                                │          │ denial, real HTTP 64KB DoS, BIDI, crypto shred.     │
 └──────┴────────────────────────────────┴──────────┴─────────────────────────────────────────────────────┘
 ```
 
 ### 11.1 Production Go Verdict
 All release blockers have transitioned from **NO-GO** to **GO-FOR-RELEASE (v0.1.0-rc1)** for managed enterprise deployment with external secret management. All claims in repository documentation match reproducible artifacts and automated test runs.
+
+---
+
+## 12. Master Completion Audit & Institutional Readiness Plan Reconciliation
+
+### 12.1 Authoritative Commit Attribution & Institutional Audit Rule
+The engineering governance record formally adopts the auditor's commit attribution correction:
+- **Commit `60887ab97483972094c407876ecf609a4cb8866a`**: Adds the comprehensive ecosystem reference manual (`ECOSYSTEM_REFERENCE.md`).
+- **Commit `36b8c2cf2da13e949b5d5c2e8b7378984b35f8bf`**: Records the updated empirical research result artifacts (`benchmark_run.json`, `reproduction_certificate.json`, `run_manifest.json`).
+
+> **Mandatory Institutional Audit Rule**:  
+> *Do not mark an item complete merely because a report says it was implemented. Require the implementation, tests, commit, and verification result to strictly agree.*
+
+### 12.2 Resolution of Discrepancies Between Matrix and Main Revision
+| ID | Area | Finding / Discrepancy | Resolved Implementation & Verifiable Proof |
+|:---|:---|:---|:---|
+| **P0** | **Gateway Shutdown & Request Tracing** | Gateway lacked SIGTERM draining and active `x-request-id` middleware in router stack. | Added SIGTERM/SIGINT handler with `SUNBORN_SHUTDOWN_DRAIN_TIMEOUT_SECS` (default 15s) in `main.rs`. Implemented `request_id_middleware` in `middleware/trace.rs` attaching `x-request-id` to tracing spans and response headers. Verified by `tests/request_tracing_test.rs`. |
+| **P1** | **OpenAPI 3.1 Specification** | No `openapi.yaml` at root; incomplete OpenAPI spec paths. | Created root symlink `openapi.yaml -> docs/api/openapi.yaml`. Documented all 41 routes with tags, schemas, and ProblemDetails error contracts. Added CI drift check in `scripts/check_openapi_drift.py`. |
+| **P1** | **Packaged Python SDK** | Missing `pyproject.toml` and package metadata in repo tree. | Converted `sdk/python` to PEP 517/621 package with `pyproject.toml`, `README.md`, typed interfaces (`py.typed`), exception hierarchy, and context managers. Added clean-environment wheel build & install test in `scripts/test_python_sdk.sh`. |
+| **P1** | **Helm Schema & PodDisruptionBudget** | Missing `pdb.yaml` and `values.schema.json` in Helm chart. | Added `templates/pdb.yaml`, `values.schema.json`, `terminationGracePeriodSeconds: 30`, and `RollingUpdate` zero-downtime deployment strategy. Verified with `helm lint` and `helm template` in CI. |
+
+### 12.3 Production Execution, Durable State & Tenant Isolation
+1. **Fail-Closed Storage Adapters**: When `SUNBORN_ENV=production` or `SUNBORN_CACHE_STRICT=true` / `SUNBORN_VECTOR_STRICT=true`, in-memory fallbacks are rejected at initialization, failing closed.
+2. **Route-by-Route Authorization Matrix**: Complete matrix published at `docs/security/authorization_matrix.md`. Verified that non-admin tenants cannot access any administrative or destructive routes.
+3. **Real TCP HTTP Stack Verification**: Added explicit tests in `crates/sunborn-gateway/tests/adversarial_security_test.rs`:
+   - `test_adversarial_oversized_64kb_header_dos_real_http_stack`: Verifies that a 64 KB header over TCP is rejected with HTTP 431 Request Header Fields Too Large without process crash or memory corruption.
+   - `test_adversarial_non_admin_privilege_escalation_denial_real_http_stack`: Verifies that non-admin callers attempting administrative/destructive operations over real HTTP receive 403 Forbidden.
+4. **Semantic-Cache Correctness & Safety**: Enforces structural negation, numeric, entity, and temporal guardrails, conformal confidence thresholds, counterfactual shadow evaluation, and a global emergency kill switch (`DECISION_CACHE_ENABLED=false`).
+
+### 12.4 Empirical Research & Benchmark Assessment
+- **Reproduction Certificate Classification**: Explicitly classified as `INTEGRITY_VERIFIED_UNAUTHENTICATED`. This proves internal consistency and tamper detection across local evidence files; it does not claim cryptographic third-party notary attestation.
+- **Modeled Savings vs Real Billing**: The reported 12.09% token savings for Sunborn B3 is a synthetic token-accounting model, not actual provider invoices.
+- **Sample Size Boundaries**: Reported zero false hits across N=124 and N=19 are subject to statistical confidence bounds (95% Wilson upper bound ~3% on N=124, ~16.82% on N=19).
+
+### 12.5 Master 5-Gate Completion Roadmap
+- **Gate 1 (Trust, Correctness & Blockers - P0)**: Discrepancies closed, fail-closed production backends, real HTTP stack adversarial tests passing.
+- **Gate 2 (Contracts, Packaging & Deployment - P1)**: Validated OpenAPI 3.1 contract drift gate, packaged Python SDK with wheel install verification, Helm PDB and JSON Schema.
+- **Gate 3 (Reliability, Scale & Recovery - P1)**: Live HTTP capacity soak harness, sub-5ms P99 latency, automated WAL replay disaster recovery.
+- **Gate 4 (Independent Scientific & Security Validation - P1)**: 5 reproducibility gates confirmed, honest certificate disclosure, adversarial security test suite.
+- **Gate 5 (Institutional Product Maturity - P2)**: Versioning policy, operator runbooks, route-by-route authorization matrix, and verified clean CI pipeline.
+
 
 

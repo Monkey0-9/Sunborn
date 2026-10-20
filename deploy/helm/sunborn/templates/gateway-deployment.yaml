@@ -9,6 +9,11 @@ spec:
   {{- if not .Values.gateway.autoscaling.enabled }}
   replicas: {{ .Values.gateway.replicaCount }}
   {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       {{- include "sunborn.selectorLabels" . | nindent 6 }}
@@ -19,6 +24,7 @@ spec:
         {{- include "sunborn.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: gateway
     spec:
+      terminationGracePeriodSeconds: {{ .Values.gateway.terminationGracePeriodSeconds | default 30 }}
       {{- with .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

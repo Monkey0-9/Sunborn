@@ -51,6 +51,10 @@ class SunbornClient:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """Closes any underlying client connections and cleans up resources."""
         pass
 
     def _post(

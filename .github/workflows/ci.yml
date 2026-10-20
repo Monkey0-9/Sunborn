@@ -115,6 +115,24 @@ jobs:
       - name: Execute Full Reproducibility Verification Suite
         run: bash research/reproduce.sh
 
+  contract-and-sdk-verification:
+    name: OpenAPI 3.1 & Python SDK Packaging Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install UV
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+      - name: Verify OpenAPI 3.1 Specification Drift
+        run: python3 scripts/check_openapi_drift.py
+      - name: Verify Python SDK Package & Clean Installation
+        run: bash scripts/test_python_sdk.sh
+
   helm-and-manifest-verification:
     name: Helm & Deployment Manifest Verification Gate
     runs-on: ubuntu-latest

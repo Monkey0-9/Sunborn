@@ -994,8 +994,13 @@ pub struct DependencyRecordRequest {
 
 pub async fn record_dependency(
     State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
     Json(payload): Json<DependencyRecordRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    sec_ctx
+        .require_admin()
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
     state
         .dependency_graph
         .record_dependency(payload.source_id, &payload.cache_key)
@@ -1052,8 +1057,24 @@ pub struct ExecutionPlanRequest {
 
 pub async fn plan_execution(
     State(state): State<AppState>,
-    Json(payload): Json<ExecutionPlanRequest>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    Json(mut payload): Json<ExecutionPlanRequest>,
 ) -> Result<Json<sunborn_execution::PlanEvaluation>, AppError> {
+    if !sec_ctx.is_authenticated {
+        return Err(SunbornError::unauthorized("Authentication required").into());
+    }
+    if !sec_ctx.is_admin {
+        if payload.tenant_id.is_empty() {
+            payload.tenant_id = sec_ctx.tenant_id.0.clone();
+        } else if payload.tenant_id != sec_ctx.tenant_id.0 {
+            return Err(SunbornError::forbidden(format!(
+                "Tenant mismatch: authenticated as '{}', cannot access '{}'",
+                sec_ctx.tenant_id.0, payload.tenant_id
+            ))
+            .into());
+        }
+    }
+
     let tenant = TenantId::new(payload.tenant_id);
     let app = sunborn_core::model::ApplicationId::new(payload.application_id);
     let eval = sunborn_execution::ExecutionPlanner::plan_reuse(
@@ -1084,8 +1105,24 @@ pub struct RecordToolResultRequest {
 
 pub async fn record_tool_result(
     State(state): State<AppState>,
-    Json(payload): Json<RecordToolResultRequest>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    Json(mut payload): Json<RecordToolResultRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    if !sec_ctx.is_authenticated {
+        return Err(SunbornError::unauthorized("Authentication required").into());
+    }
+    if !sec_ctx.is_admin {
+        if payload.tenant_id.is_empty() {
+            payload.tenant_id = sec_ctx.tenant_id.0.clone();
+        } else if payload.tenant_id != sec_ctx.tenant_id.0 {
+            return Err(SunbornError::forbidden(format!(
+                "Tenant mismatch: authenticated as '{}', cannot access '{}'",
+                sec_ctx.tenant_id.0, payload.tenant_id
+            ))
+            .into());
+        }
+    }
+
     let tenant = TenantId::new(payload.tenant_id);
     let app = sunborn_core::model::ApplicationId::new(payload.application_id);
     let sig = sunborn_execution::ToolSignatureEngine::compute_signature(
@@ -1156,8 +1193,24 @@ pub async fn evict_execution(
 
 pub async fn shadow_evaluate(
     State(state): State<AppState>,
-    Json(payload): Json<crate::shadow::ShadowEvaluationRequest>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    Json(mut payload): Json<crate::shadow::ShadowEvaluationRequest>,
 ) -> Result<Json<crate::shadow::ShadowEvaluationResult>, AppError> {
+    if !sec_ctx.is_authenticated {
+        return Err(SunbornError::unauthorized("Authentication required").into());
+    }
+    if !sec_ctx.is_admin {
+        if payload.tenant_id.0.is_empty() {
+            payload.tenant_id = sec_ctx.tenant_id.clone();
+        } else if payload.tenant_id.0 != sec_ctx.tenant_id.0 {
+            return Err(SunbornError::forbidden(format!(
+                "Tenant mismatch: authenticated as '{}', cannot access '{}'",
+                sec_ctx.tenant_id.0, payload.tenant_id.0
+            ))
+            .into());
+        }
+    }
+
     let result = state
         .shadow_evaluator
         .evaluate_drift(&payload, &state.cache, &state.vector_store)

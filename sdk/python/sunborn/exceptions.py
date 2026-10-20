@@ -62,6 +62,16 @@ class SunbornServerError(SunbornError):
     pass
 
 
+# Ergonomic and standard exception aliases
+AuthenticationError = SunbornAuthError
+ForbiddenError = SunbornForbiddenError
+NotFoundError = SunbornNotFoundError
+RateLimitError = SunbornRateLimitError
+BadRequestError = SunbornValidationError
+ServerError = SunbornServerError
+ConfigurationError = SunbornValidationError
+
+
 def raise_for_status(status_code: int, response_text: str, problem_details: dict[str, Any] | None = None):
     """Maps HTTP status codes to typed Sunborn SDK exceptions."""
     details = problem_details or {}

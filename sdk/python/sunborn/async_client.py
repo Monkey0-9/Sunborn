@@ -35,7 +35,15 @@ class AsyncSunbornClient:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        pass
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        """Asynchronously cleans up client resources."""
+        self.close()
+
+    def close(self) -> None:
+        """Synchronously cleans up client resources."""
+        self._sync_client.close()
 
     @property
     def base_url(self) -> str:

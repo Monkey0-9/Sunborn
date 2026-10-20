@@ -25,20 +25,25 @@ npm test --prefix frontend
 echo "[3/7] Building Frontend Production Bundle..."
 npm run build --prefix frontend
 
-echo "[4/7] Running Python SDK Test Suites..."
+echo "[4/8] Running Python SDK Packaging & Clean Installation Verification..."
+bash scripts/test_python_sdk.sh
 PYTHONPATH=sdk/python python3 -m unittest sdk/python/test_sunborn_agent.py
 PYTHONPATH=sdk/python python3 -m unittest sdk/python/tests/test_sdk_package.py
 
-echo "[5/7] Running Helm Chart Lint & Schema Validation..."
-helm lint deploy/helm/sunborn
+echo "[5/8] Validating OpenAPI 3.1 Specification Drift..."
+python3 scripts/check_openapi_drift.py
 
-echo "[6/7] Running Multi-Container Live Stack Pre-Flight..."
+echo "[6/8] Running Helm Chart Lint & Schema Validation..."
+helm lint deploy/helm/sunborn
+helm template sunborn deploy/helm/sunborn --set secrets.existingSecret=sunborn-custom-secret > /dev/null
+
+echo "[7/8] Running Multi-Container Live Stack Pre-Flight..."
 bash deploy/verify_live_stack.sh
 
-echo "[7/7] Verifying Research Reproducibility Gates..."
+echo "[8/8] Verifying Research Reproducibility Gates..."
 bash research/reproduce.sh
 
 echo ""
 echo "========================================================================"
-echo "ALL 7 MASTER VERIFICATION PHASES PASSED WITH ZERO ERRORS"
+echo "ALL 8 MASTER VERIFICATION PHASES PASSED WITH ZERO ERRORS"
 echo "========================================================================"

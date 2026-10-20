@@ -8,11 +8,10 @@ version = "0.1.0rc1"
 description = "Enterprise semantic caching and execution reuse SDK for AI and agentic workflows"
 readme = "README.md"
 authors = [{ name = "Sunborn Team", email = "engineering@sunborn.ai" }]
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",

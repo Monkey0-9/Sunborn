@@ -21,3 +21,6 @@ data/
 system_inventory.md
 .serena/
 research/results/capacity_soak_report.json
+*.egg-info/
+dist/
+.venv/

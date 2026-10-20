@@ -95,11 +95,48 @@ async fn main() -> anyhow::Result<()> {
     let listener = TcpListener::bind(addr).await?;
     tracing::info!("Gateway listening on http://{}", addr);
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
-    tracing::info!("Sunborn Gateway shutdown complete.");
+    tokio::spawn(async move {
+        shutdown_signal().await;
+        let _ = shutdown_tx.send(());
+    });
+
+    let shutdown_waiter = async {
+        let _ = shutdown_rx.await;
+    };
+
+    let drain_timeout_secs = std::env::var("SUNBORN_SHUTDOWN_DRAIN_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(15);
+
+    let (done_tx, done_rx) = tokio::sync::oneshot::channel::<()>();
+
+    let server = axum::serve(listener, app).with_graceful_shutdown(async move {
+        shutdown_waiter.await;
+        tracing::info!(
+            drain_timeout_secs = drain_timeout_secs,
+            "Entering graceful drain period (deadline: {}s). Stopping new connections...",
+            drain_timeout_secs
+        );
+        tokio::spawn(async move {
+            tokio::select! {
+                _ = tokio::time::sleep(std::time::Duration::from_secs(drain_timeout_secs)) => {
+                    tracing::warn!(
+                        timeout_secs = drain_timeout_secs,
+                        "Shutdown drain deadline reached; terminating server process"
+                    );
+                    std::process::exit(0);
+                }
+                _ = done_rx => {}
+            }
+        });
+    });
+
+    server.await?;
+    let _ = done_tx.send(());
+    tracing::info!("Sunborn Gateway shutdown complete: all in-flight connections drained cleanly.");
 
     Ok(())
 }

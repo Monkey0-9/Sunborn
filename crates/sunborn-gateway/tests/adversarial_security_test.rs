@@ -665,7 +665,12 @@ async fn test_adversarial_malformed_auth_headers_and_oversized_keys() {
         )
         .await
         .unwrap();
-    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    assert!(
+        res.status() == StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE
+            || res.status() == StatusCode::UNAUTHORIZED,
+        "Oversized key must be rejected by header limits (431) or auth (401), got: {}",
+        res.status()
+    );
 }
 
 #[tokio::test]
@@ -772,4 +777,197 @@ async fn test_adversarial_crypto_shred_post_condition_enforcement() {
         enc_after.is_err(),
         "Shredded tenant encryption must fail because DEK was permanently zeroized"
     );
+}
+
+#[tokio::test]
+async fn test_adversarial_oversized_64kb_header_dos_real_http_stack() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::{TcpListener, TcpStream};
+
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state);
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    let server_handle = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    // 1. Send explicit 64 KB oversized header directly over real TCP stream
+    let mut stream = TcpStream::connect(addr).await.unwrap();
+    let massive_val = "A".repeat(65536);
+    let raw_payload = format!(
+        "GET /health HTTP/1.1\r\nHost: {}\r\nX-Oversized-Probe: {}\r\n\r\n",
+        addr, massive_val
+    );
+
+    stream.write_all(raw_payload.as_bytes()).await.unwrap();
+
+    let mut buf = vec![0u8; 4096];
+    let n = stream.read(&mut buf).await.unwrap_or(0);
+    let resp = String::from_utf8_lossy(&buf[..n]);
+
+    // Hyper / Axum rejects oversized headers with 431 Request Header Fields Too Large or 400 Bad Request
+    assert!(
+        resp.contains("431") || resp.contains("400") || n == 0,
+        "HTTP server must reject 64 KB header without panic or memory corruption, got: {}",
+        resp
+    );
+
+    // 2. Verify server remains healthy, alive, and responsive to valid traffic over real HTTP
+    let client = reqwest::Client::new();
+    let health_res = client
+        .get(format!("http://{}/health", addr))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        health_res.status(),
+        reqwest::StatusCode::OK,
+        "Server must remain fully operational following 64 KB header DoS probe"
+    );
+
+    server_handle.abort();
+}
+
+#[tokio::test]
+async fn test_adversarial_non_admin_privilege_escalation_denial_real_http_stack() {
+    use tokio::net::TcpListener;
+
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state.clone());
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    let server_handle = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let client = reqwest::Client::new();
+    let non_admin_key = "test-key-alpha";
+
+    // 1. Real HTTP stack: POST /v1/governance/provision (administrative)
+    let res = client
+        .post(format!("http://{}/v1/governance/provision", addr))
+        .header("x-api-key", non_admin_key)
+        .json(&serde_json::json!({ "tenant_id": "unauthorized-tenant" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "Non-admin caller over real HTTP must be denied provisioning"
+    );
+
+    // 2. Real HTTP stack: POST /v1/governance/shred (destructive)
+    let res = client
+        .post(format!("http://{}/v1/governance/shred", addr))
+        .header("x-api-key", non_admin_key)
+        .json(&serde_json::json!({ "tenant_id": "victim-tenant" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "Non-admin caller over real HTTP must be denied cryptographic shredding"
+    );
+
+    // 3. Real HTTP stack: POST /v1/chaos/trip (administrative)
+    let res = client
+        .post(format!("http://{}/v1/chaos/trip", addr))
+        .header("x-api-key", non_admin_key)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "Non-admin caller over real HTTP must be denied chaos trip"
+    );
+
+    // 4. Real HTTP stack: POST /v1/rebuild (administrative)
+    let res = client
+        .post(format!("http://{}/v1/rebuild", addr))
+        .header("x-api-key", non_admin_key)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "Non-admin caller over real HTTP must be denied rebuild"
+    );
+
+    // 5. Real HTTP stack: DELETE /v1/caches/test_key (destructive)
+    let res = client
+        .delete(format!("http://{}/v1/caches/test_key", addr))
+        .header("x-api-key", non_admin_key)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "Non-admin caller over real HTTP must be denied cache deletion"
+    );
+
+    // 6. Real HTTP stack: GET /v1/caches/test_key (administrative)
+    let res = client
+        .get(format!("http://{}/v1/caches/test_key", addr))
+        .header("x-api-key", non_admin_key)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "Non-admin caller over real HTTP must be denied direct cache key inspection"
+    );
+
+    // 7. Real HTTP stack: Cross-tenant execution planning spoofing denial
+    let res = client
+        .post(format!("http://{}/v1/execution/plan", addr))
+        .header("x-api-key", non_admin_key)
+        .json(&serde_json::json!({
+            "tenant_id": "tenant-beta",
+            "application_id": "app-default",
+            "plan": {
+                "nodes": [],
+                "edges": []
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "Cross-tenant execution plan request must be rejected with 403"
+    );
+
+    // 8. Real HTTP stack: Cross-tenant shadow evaluation denial
+    let res = client
+        .post(format!("http://{}/v1/shadow/evaluate", addr))
+        .header("x-api-key", non_admin_key)
+        .json(&serde_json::json!({
+            "tenant_id": "tenant-beta",
+            "application_id": "app-default",
+            "cache_key": "some-key",
+            "cached_content": "val",
+            "origin_content": "val2"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        reqwest::StatusCode::FORBIDDEN,
+        "Cross-tenant shadow evaluation request must be rejected with 403"
+    );
+
+    server_handle.abort();
 }

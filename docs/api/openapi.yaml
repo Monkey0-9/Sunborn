@@ -444,3 +444,636 @@ paths:
       responses:
         '200':
           description: FinOps report generated
+
+  /v1/invalidation:
+    post:
+      summary: Trigger Invalidation Event
+      description: Evicts dependent cache entries and advances epoch watermark across the invalidation DAG.
+      tags:
+        - Invalidation
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - source_id
+                - source_type
+              properties:
+                source_id:
+                  type: string
+                  format: uuid
+                  example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+                source_type:
+                  type: string
+                  example: "postgres.public.documents"
+                tenant_id:
+                  type: string
+                  nullable: true
+                  example: "tenant-enterprise-alpha"
+      responses:
+        '200':
+          description: Invalidation processed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "processed"
+                  source_id:
+                    type: string
+                    format: uuid
+                  bumped_epoch:
+                    type: integer
+                  bumped_watermark:
+                    type: integer
+                  evicted_cache_count:
+                    type: integer
+        '400':
+          description: Malformed invalidation payload
+        '401':
+          description: Unauthorized
+        '403':
+          description: Administrative privileges required
+
+  /v1/dependencies:
+    post:
+      summary: Record Cache Dependency Lineage
+      description: Links an external source record ID to a specific cache entry in the dependency graph.
+      tags:
+        - Invalidation
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - source_id
+                - cache_key
+              properties:
+                source_id:
+                  type: string
+                  format: uuid
+                cache_key:
+                  type: string
+      responses:
+        '200':
+          description: Dependency lineage successfully recorded
+        '401':
+          description: Unauthorized
+        '403':
+          description: Administrative privileges required
+
+  /v1/execution/plan:
+    post:
+      summary: Evaluate Subgraph Execution Reuse
+      description: Computes Merkle AST signatures for tool and agent subgraphs to plan safe reuse of intermediate nodes.
+      tags:
+        - Execution
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tenant_id
+                - application_id
+                - plan
+              properties:
+                tenant_id:
+                  type: string
+                application_id:
+                  type: string
+                plan:
+                  type: object
+      responses:
+        '200':
+          description: Execution plan evaluation outcome
+        '401':
+          description: Unauthorized
+        '403':
+          description: Tenant boundary violation
+
+  /v1/execution/results:
+    post:
+      summary: Record Intermediate Tool Result
+      description: Caches deterministic tool result under tenant and tool signature with TTL bounding.
+      tags:
+        - Execution
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tenant_id
+                - application_id
+                - tool_name
+                - tool_arguments
+                - tool_result
+              properties:
+                tenant_id:
+                  type: string
+                application_id:
+                  type: string
+                tool_name:
+                  type: string
+                tool_arguments:
+                  type: object
+                tool_result:
+                  type: string
+                ttl_secs:
+                  type: integer
+      responses:
+        '200':
+          description: Tool result cached
+        '401':
+          description: Unauthorized
+        '403':
+          description: Tenant boundary violation
+
+  /v1/execution/evict:
+    post:
+      summary: Evict Tool Execution Cache
+      description: Evicts cached tool results by tool name or specific execution signature.
+      tags:
+        - Execution
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tenant_id
+              properties:
+                tenant_id:
+                  type: string
+                signature:
+                  type: string
+                  nullable: true
+                tool_name:
+                  type: string
+                  nullable: true
+      responses:
+        '200':
+          description: Tool cache entries evicted
+        '401':
+          description: Unauthorized
+        '403':
+          description: Tenant boundary violation
+
+  /v1/shadow/evaluate:
+    post:
+      summary: Evaluate Semantic Cache Drift
+      description: Performs counterfactual shadow evaluation against origin model output; evicts entry if drift exceeds threshold.
+      tags:
+        - Semantic Cache
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tenant_id
+                - application_id
+                - cache_key
+                - cached_content
+                - origin_content
+              properties:
+                tenant_id:
+                  type: string
+                application_id:
+                  type: string
+                cache_key:
+                  type: string
+                cached_content:
+                  type: string
+                origin_content:
+                  type: string
+                similarity_threshold:
+                  type: number
+                  format: float
+      responses:
+        '200':
+          description: Drift evaluation complete
+        '401':
+          description: Unauthorized
+        '403':
+          description: Tenant boundary violation
+
+  /v1/chaos/status:
+    get:
+      summary: Get Circuit Breaker & Chaos State
+      description: Returns active synthetic faults and circuit breaker operational status.
+      tags:
+        - Chaos & Resilience
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Circuit breaker status
+        '401':
+          description: Unauthorized
+
+  /v1/chaos/trip:
+    post:
+      summary: Synthetically Trip Circuit Breaker
+      description: Administrative fault injection forcing gateway fallback mode.
+      tags:
+        - Chaos & Resilience
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Circuit breaker tripped
+        '401':
+          description: Unauthorized
+        '403':
+          description: Administrative privileges required
+
+  /v1/chaos/reset:
+    post:
+      summary: Reset Circuit Breaker
+      description: Restores normal cache operation following chaos testing or recovery.
+      tags:
+        - Chaos & Resilience
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Circuit breaker reset to closed state
+        '401':
+          description: Unauthorized
+        '403':
+          description: Administrative privileges required
+
+  /v1/rebuild:
+    post:
+      summary: Initiate Cache Rebuild & Compaction
+      description: Asynchronously rebuilds semantic vector indices and reconciles tiered storage.
+      tags:
+        - Operations
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Rebuild task initiated
+        '401':
+          description: Unauthorized
+        '403':
+          description: Administrative privileges required
+
+  /v1/tenants/{id}:
+    delete:
+      summary: Purge Tenant Metadata & State
+      description: Permanently removes tenant credentials and operational references.
+      tags:
+        - Governance
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tenant deleted
+        '401':
+          description: Unauthorized
+        '403':
+          description: Administrative privileges required
+
+  /v1/speculative/predict:
+    post:
+      summary: Speculative Prefix Prediction
+      description: Evaluates candidate continuation tokens and primes worker KV cache.
+      tags:
+        - Routing
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Speculative prediction generated
+        '401':
+          description: Unauthorized
+
+  /v1/cluster/status:
+    get:
+      summary: Cluster Status
+      description: Exports node status, epoch leases, and cluster replication health.
+      tags:
+        - Cluster
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Cluster status report
+        '401':
+          description: Unauthorized
+
+  /v1/cluster/sync/status:
+    get:
+      summary: Cluster Synchronization Status
+      description: Exports vector clocks, replication lag, and outbox synchronization state.
+      tags:
+        - Cluster
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Cluster synchronization report
+        '401':
+          description: Unauthorized
+
+  /v1/autonomic/incidents:
+    get:
+      summary: Autonomic Incident Log
+      description: Returns log of automated failovers, threshold adjustments, and self-healing actions.
+      tags:
+        - Autonomic
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Autonomic incidents list
+        '401':
+          description: Unauthorized
+
+  /v1/autonomic/status:
+    get:
+      summary: Autonomic Controller Status
+      description: Current health status of autonomic control loops and anomaly detectors.
+      tags:
+        - Autonomic
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Autonomic controller health
+        '401':
+          description: Unauthorized
+
+  /v1/routing/radix/inspect:
+    get:
+      summary: Inspect Radix Prefix Tree
+      description: Administrative view of active prompt prefixes, token breakpoints, and worker affinities.
+      tags:
+        - Routing
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Radix tree structure
+        '401':
+          description: Unauthorized
+        '403':
+          description: Administrative privileges required
+
+  /v1/routing/radix/route:
+    post:
+      summary: Compute Prompt Routing Affinity
+      description: Matches prompt against worker KV cache prefix tree for optimal cache affinity.
+      tags:
+        - Routing
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Affinity routing decision
+        '401':
+          description: Unauthorized
+
+  /v1/lifecycle/sweep:
+    post:
+      summary: Trigger Storage Lifecycle Sweep
+      description: Executes TTL sweeps, tombstone compactions, and outbox retention cleanup.
+      tags:
+        - Operations
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Lifecycle sweep completed
+        '401':
+          description: Unauthorized
+        '403':
+          description: Administrative privileges required
+
+  /v1/security/evaluate:
+    post:
+      summary: Scan Prompt for Security Risks
+      description: Evaluates structural prompt injection, adversarial tokens, and PII exposure risks.
+      tags:
+        - Security
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Security risk evaluation
+        '401':
+          description: Unauthorized
+
+  /v1/security/audit:
+    get:
+      summary: Retrieve Security Audit Trail
+      description: Exports tamper-evident security audit events and access violations.
+      tags:
+        - Security
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Security audit log
+        '401':
+          description: Unauthorized
+        '403':
+          description: Administrative privileges required
+
+  /v1/learning/policies:
+    get:
+      summary: List Conformal Learning Policies
+      description: Returns all registered adaptive similarity and risk control policies.
+      tags:
+        - Learning
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of learning policies
+        '401':
+          description: Unauthorized
+
+  /v1/learning/evaluate:
+    post:
+      summary: Dynamic Threshold Evaluation
+      description: Calculates conformal similarity threshold given query context and historical risk.
+      tags:
+        - Learning
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Dynamic threshold evaluated
+        '401':
+          description: Unauthorized
+
+  /v1/learning/calibrate:
+    post:
+      summary: Offline Calibration on Splits
+      description: Runs non-exchangeable conformal calibration against held-out feedback dataset.
+      tags:
+        - Learning
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Calibration run complete
+        '401':
+          description: Unauthorized
+        '403':
+          description: Administrative privileges required
+
+  /v1/learning/canary:
+    post:
+      summary: Canary Rollout of Policy
+      description: Begins progressive traffic shifting to newly calibrated policy.
+      tags:
+        - Learning
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Canary rollout started
+        '401':
+          description: Unauthorized
+        '403':
+          description: Administrative privileges required
+
+  /v1/learning/promote:
+    post:
+      summary: Promote Policy to Active Baseline
+      description: Promotes verified canary policy to 100% production traffic.
+      tags:
+        - Learning
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Policy promoted
+        '401':
+          description: Unauthorized
+        '403':
+          description: Administrative privileges required
+
+  /v1/learning/rollback:
+    post:
+      summary: Emergency Rollback of Active Policy
+      description: Immediately reverts to previous verified baseline policy upon safety trigger.
+      tags:
+        - Learning
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Policy rolled back
+        '401':
+          description: Unauthorized
+        '403':
+          description: Administrative privileges required

@@ -183,11 +183,19 @@ impl QdrantVectorStore {
             .connect_timeout(std::time::Duration::from_secs(2))
             .build()
             .unwrap_or_default();
+        let is_prod = std::env::var("SUNBORN_ENV")
+            .or_else(|_| std::env::var("ENVIRONMENT"))
+            .map(|v| {
+                let v = v.to_lowercase();
+                v == "production" || v == "prod"
+            })
+            .unwrap_or(false);
         let strict = match sunborn_core::config::parse_bool_env("SUNBORN_VECTOR_STRICT", false) {
             Ok(v) => {
-                v || std::env::var("SUNBORN_VECTOR_BACKEND")
-                    .map(|b| b.to_lowercase() == "qdrant")
-                    .unwrap_or(false)
+                v || is_prod
+                    || std::env::var("SUNBORN_VECTOR_BACKEND")
+                        .map(|b| b.to_lowercase() == "qdrant")
+                        .unwrap_or(false)
             }
             Err(_) => true, // Invalid config fails closed to strict mode
         };
