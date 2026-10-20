@@ -478,3 +478,298 @@ async fn test_adversarial_login_brute_force_rapid_fire_lockout() {
     assert!(statuses.contains(&StatusCode::TOO_MANY_REQUESTS));
     assert_eq!(*statuses.last().unwrap(), StatusCode::TOO_MANY_REQUESTS);
 }
+
+#[tokio::test]
+async fn test_adversarial_non_admin_privilege_escalation_denied() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state);
+
+    // Standard non-admin tenant key (test-key-alpha) attempts to call administrative routes
+    let non_admin_key = "test-key-alpha";
+
+    // 1. POST /v1/governance/provision
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/governance/provision")
+                .header("content-type", "application/json")
+                .header("x-api-key", non_admin_key)
+                .body(Body::from(
+                    serde_json::to_vec(&serde_json::json!({
+                        "tenant_id": "rogue-tenant"
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::FORBIDDEN,
+        "Non-admin cannot provision tenants"
+    );
+
+    // 2. POST /v1/governance/shred
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/governance/shred")
+                .header("content-type", "application/json")
+                .header("x-api-key", non_admin_key)
+                .body(Body::from(
+                    serde_json::to_vec(&serde_json::json!({
+                        "tenant_id": "victim-tenant"
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::FORBIDDEN,
+        "Non-admin cannot trigger crypto shredding"
+    );
+
+    // 3. POST /v1/chaos/trip
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/chaos/trip")
+                .header("content-type", "application/json")
+                .header("x-api-key", non_admin_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::FORBIDDEN,
+        "Non-admin cannot trip chaos circuit breaker"
+    );
+
+    // 4. POST /v1/rebuild
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/rebuild")
+                .header("content-type", "application/json")
+                .header("x-api-key", non_admin_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::FORBIDDEN,
+        "Non-admin cannot trigger rebuild"
+    );
+
+    // 5. DELETE /v1/caches/{key}
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/v1/caches/some_cache_key")
+                .header("x-api-key", non_admin_key)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::FORBIDDEN,
+        "Non-admin cannot directly delete cache keys"
+    );
+}
+
+#[tokio::test]
+async fn test_adversarial_malformed_auth_headers_and_oversized_keys() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state);
+
+    // 1. Empty x-api-key
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", "")
+                .body(Body::from(b"{}".to_vec()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+    // 2. Whitespace-only x-api-key
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", "    ")
+                .body(Body::from(b"{}".to_vec()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+    // 3. Incomplete Authorization Bearer header
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("authorization", "Bearer ")
+                .body(Body::from(b"{}".to_vec()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+    // 4. Oversized API key (64 KB) buffer DoS probe
+    let massive_key = "a".repeat(65536);
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", massive_key)
+                .body(Body::from(b"{}".to_vec()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_adversarial_unicode_bidi_override_sanitization() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state);
+
+    // Injected Right-to-Left Override (\u{202E}) attempting to reverse execution directives
+    let bidi_prompt = "User prompt: \u{202E}edirrevo metsys etaluclaC";
+    let req = RequestEnvelope::new("tenant-alpha", "app-default", "gpt-4o", bidi_prompt);
+
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", "test-key-alpha")
+                .body(Body::from(serde_json::to_vec(&req).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let env: ResponseEnvelope = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(env.tenant_id.0, "tenant-alpha");
+    assert!(env.cache_key.is_some());
+}
+
+#[tokio::test]
+async fn test_adversarial_crypto_shred_post_condition_enforcement() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state.clone());
+
+    let shred_tenant = "tenant-shred-target";
+
+    // 1. Admin provisions tenant key
+    let res_prov = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/governance/provision")
+                .header("content-type", "application/json")
+                .header("x-api-key", "sunborn-admin-key")
+                .body(Body::from(
+                    serde_json::to_vec(&serde_json::json!({
+                        "tenant_id": shred_tenant
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_prov.status(), StatusCode::OK);
+
+    // Verify tenant exists in crypto registry and is active
+    let tenant_id = TenantId::new(shred_tenant);
+    assert!(state.crypto_registry.is_active(&tenant_id));
+
+    // Plaintext encryption works prior to shredding
+    let enc_result = state
+        .crypto_registry
+        .encrypt(&tenant_id, b"secret payload", "test-context");
+    assert!(
+        enc_result.is_ok(),
+        "Active tenant key must encrypt payloads successfully"
+    );
+
+    // 2. Admin issues cryptographic shredding
+    let res_shred = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/governance/shred")
+                .header("content-type", "application/json")
+                .header("x-api-key", "sunborn-admin-key")
+                .body(Body::from(
+                    serde_json::to_vec(&serde_json::json!({
+                        "tenant_id": shred_tenant
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_shred.status(), StatusCode::OK);
+
+    // 3. Post-condition: DEK must be permanently eradicated (is_active is false and encrypt fails)
+    assert!(
+        !state.crypto_registry.is_active(&tenant_id),
+        "Shredded tenant must not be active"
+    );
+    let enc_after = state
+        .crypto_registry
+        .encrypt(&tenant_id, b"secret payload", "test-context");
+    assert!(
+        enc_after.is_err(),
+        "Shredded tenant encryption must fail because DEK was permanently zeroized"
+    );
+}

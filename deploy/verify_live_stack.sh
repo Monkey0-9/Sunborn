@@ -12,7 +12,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 echo "=== Sunborn Platform: Live Stack Pre-Flight Verification ==="
 
 # 1. Verify Docker Compose Configuration Syntax
-echo "[1/6] Validating deploy/docker-compose.yml syntax..."
+echo "[1/6] Validating deploy/docker-compose.yml and docker-compose.prod.yml syntax..."
 python3 -c "
 import yaml
 with open('${SCRIPT_DIR}/docker-compose.yml') as f:
@@ -36,6 +36,17 @@ assert 'healthcheck' in services['gateway'], 'gateway must have native healthche
 assert 'healthcheck' in services['frontend'], 'frontend must have healthcheck'
 assert services['frontend']['depends_on']['gateway']['condition'] == 'service_healthy', 'frontend must depend on healthy gateway'
 print('  ✓ Gateway & frontend healthchecks and dependency sequencing verified')
+
+# Validate production compose fail-closed contract
+with open('${SCRIPT_DIR}/docker-compose.prod.yml') as f:
+    prod_config = yaml.safe_load(f)
+prod_services = prod_config.get('services', {})
+for s in ['gateway', 'postgres', 'dragonfly', 'qdrant']:
+    assert s in prod_services, f'Missing production service: {s}'
+for name, s in prod_services.items():
+    for p in s.get('ports', []):
+        assert p.startswith('127.0.0.1:'), f'Prod security violation: {name} binds {p}'
+print('  ✓ Production Compose configuration strictly bound to 127.0.0.1 with required backends')
 "
 
 # 2. Verify Backend Dockerfile Non-Root and Security Compliance
