@@ -1,0 +1,446 @@
+openapi: 3.1.0
+info:
+  title: Sunborn Enterprise AI Gateway & Autonomic Cache
+  description: >
+    Production-grade distributed semantic execution gateway, multi-tier autonomic cache,
+    and GDPR-compliant cryptographic execution-reuse platform for LLM and agentic workflows.
+  version: 0.1.0-rc1
+  contact:
+    name: Sunborn Engineering Team
+    url: https://github.com/Monkey0-9/Sunborn
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: http://127.0.0.1:8080
+    description: Local Gateway Instance
+  - url: https://gateway.sunborn.internal
+    description: Enterprise Production Gateway
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: Sunborn API key (or Sunborn Admin key for privileged operations)
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Bearer token format for API keys
+
+  schemas:
+    TenantId:
+      type: string
+      example: "tenant-enterprise-alpha"
+    ApplicationId:
+      type: string
+      example: "app-customer-support"
+
+    ProblemDetails:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+      properties:
+        type:
+          type: string
+          format: uri
+          example: "https://sunborn.ai/errors/unauthorized"
+        title:
+          type: string
+          example: "Unauthorized"
+        status:
+          type: integer
+          example: 401
+        detail:
+          type: string
+          example: "Invalid or unregistered API key"
+        instance:
+          type: string
+          example: "/v1/requests"
+
+    RequestEnvelope:
+      type: object
+      required:
+        - tenant_id
+        - application_id
+        - model
+        - prompt
+      properties:
+        request_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        tenant_id:
+          $ref: '#/components/schemas/TenantId'
+        application_id:
+          $ref: '#/components/schemas/ApplicationId'
+        model:
+          type: string
+          example: "gpt-4o"
+        prompt:
+          type: string
+          example: "Summarize the Q3 financial earnings report."
+        temperature:
+          type: number
+          format: float
+          default: 0.0
+          example: 0.0
+        max_tokens:
+          type: integer
+          nullable: true
+          example: 1024
+        system_fingerprint:
+          type: string
+          nullable: true
+        tools:
+          type: array
+          items:
+            type: object
+        response_format:
+          type: object
+          nullable: true
+
+    ResponseEnvelope:
+      type: object
+      required:
+        - request_id
+        - tenant_id
+        - content
+        - tier
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        tenant_id:
+          $ref: '#/components/schemas/TenantId'
+        content:
+          type: string
+        cache_key:
+          type: string
+          nullable: true
+        tier:
+          type: string
+          enum: [exact, semantic, execution, origin_fresh, fallback]
+        tokens_avoided:
+          type: integer
+        cost_savings_usd:
+          type: number
+        latency_micros:
+          type: integer
+        conformal_confidence:
+          type: number
+          nullable: true
+
+    ProvisionTenantRequest:
+      type: object
+      required:
+        - tenant_id
+      properties:
+        tenant_id:
+          type: string
+          example: "tenant-corp-42"
+
+    ShredTenantRequest:
+      type: object
+      required:
+        - tenant_id
+      properties:
+        tenant_id:
+          type: string
+          example: "tenant-corp-42"
+
+    LearningFeedbackRequest:
+      type: object
+      required:
+        - event_id
+        - tenant_id
+        - cache_key
+        - verified_outcome
+        - signature
+      properties:
+        event_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+        cache_key:
+          type: string
+        verified_outcome:
+          type: string
+          enum: [positive, negative, rejected_hallucination]
+        signature:
+          type: string
+          description: RFC 2104 HMAC-SHA256 signature calculated over payload attributes
+
+security:
+  - ApiKeyAuth: []
+  - BearerAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Liveness Probe
+      description: Returns 200 OK if the gateway process is running.
+      security: []
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+
+  /ready:
+    get:
+      summary: Readiness Probe
+      description: Verifies connectivity to PostgreSQL, DragonflyDB, Qdrant, and configured AI origin providers.
+      security: []
+      responses:
+        '200':
+          description: All critical backend components connected and healthy
+        '503':
+          description: One or more backend components are degraded or unreachable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "degraded"
+                  components:
+                    type: object
+
+  /metrics:
+    get:
+      summary: Operational Prometheus Metrics
+      description: Internal scraping endpoint exporting atomic counters for cache hits, misses, and requests.
+      security: []
+      responses:
+        '200':
+          description: Prometheus metrics in text/plain format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /v1/auth/login:
+    post:
+      summary: Client Authentication & Token Issue
+      description: Authenticates client credentials and returns session tokens with rate-limiting protection.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - client_id
+                - client_secret
+              properties:
+                client_id:
+                  type: string
+                client_secret:
+                  type: string
+      responses:
+        '200':
+          description: Authentication successful
+        '401':
+          description: Invalid client credentials
+        '429':
+          description: Too many failed login attempts; IP temporarily locked out
+
+  /v1/requests:
+    post:
+      summary: Semantic AI Request Execution
+      description: Primary gateway hot path. Resolves exact cache, semantic reuse, or delegates to origin with singleflight coalescing.
+      parameters:
+        - in: header
+          name: x-request-id
+          schema:
+            type: string
+          description: Optional client-side distributed tracing request ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestEnvelope'
+      responses:
+        '200':
+          description: Request executed successfully
+          headers:
+            x-request-id:
+              schema:
+                type: string
+              description: Injected distributed tracing correlation ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseEnvelope'
+        '400':
+          description: Invalid envelope payload or boundary constraint violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Missing or unauthorized API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          description: Tenant rate limit exceeded
+
+  /v1/chat/completions:
+    post:
+      summary: OpenAI Compatible Chat Completions
+      description: Drop-in proxy for standard OpenAI completions requests with transparent semantic caching.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Chat completion response or server-sent event stream
+
+  /v1/messages:
+    post:
+      summary: Anthropic Compatible Messages
+      description: Drop-in proxy for Anthropic Claude messages API with transparent prompt caching.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Anthropic messages response or stream
+
+  /v1/caches/{key}:
+    get:
+      summary: Retrieve Raw Cache Entry
+      description: Administrative endpoint to inspect raw cached entry details.
+      parameters:
+        - in: path
+          name: key
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cache entry retrieved
+        '403':
+          description: Administrative privileges required
+        '404':
+          description: Cache entry not found
+    delete:
+      summary: Invalidate Cache Entry
+      description: Administrative endpoint to explicitly purge a cache key.
+      parameters:
+        - in: path
+          name: key
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cache entry deleted
+        '403':
+          description: Administrative privileges required
+
+  /v1/governance/provision:
+    post:
+      summary: Provision Tenant Encryption Keys
+      description: Generates and wraps an isolated tenant data encryption key (TDEK).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisionTenantRequest'
+      responses:
+        '200':
+          description: Tenant provisioned successfully
+        '403':
+          description: Administrative privileges required
+
+  /v1/governance/shred:
+    post:
+      summary: GDPR Article 17 Cryptographic Shredding
+      description: Irrevocably zeroes and purges the tenant encryption key in O(1) time (<50µs), rendering all tenant data permanently undecryptable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShredTenantRequest'
+      responses:
+        '200':
+          description: Cryptographic shredding complete
+        '403':
+          description: Administrative privileges required
+
+  /v1/governance/attest:
+    post:
+      summary: Merkle Inclusion Attestation
+      description: Generates RFC 6962 cryptographic Merkle inclusion audit proof.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Attestation proof generated
+
+  /v1/governance/verify-proof:
+    post:
+      summary: Verify Merkle Proof
+      description: Validates an inclusion proof against the known root hash.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Proof verification outcome
+
+  /v1/learning/feedback:
+    post:
+      summary: Ingest Feedback for Adaptive Learning
+      description: Ingests authenticated outcome feedback to update conformal risk estimators.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LearningFeedbackRequest'
+      responses:
+        '200':
+          description: Feedback recorded and incorporated into calibration queue
+
+  /v1/finops/report:
+    get:
+      summary: FinOps Telemetry & Economic Report
+      description: Exports real-time economic analytics including tokens avoided, gross costs, net utility, and cache ROI.
+      responses:
+        '200':
+          description: FinOps report generated

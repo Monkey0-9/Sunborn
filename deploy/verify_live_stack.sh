@@ -74,6 +74,7 @@ print(f'  ✓ Helm Chart: {chart[\"name\"]} v{chart[\"version\"]} (appVersion: {
 with open('${SCRIPT_DIR}/helm/sunborn/values.yaml') as f:
     vals = yaml.safe_load(f)
 assert vals['gateway']['replicaCount'] >= 2
+assert vals['gateway']['podDisruptionBudget']['enabled'] is True
 assert vals['frontend']['enabled'] is True
 assert vals['networkPolicy']['enabled'] is True
 assert vals['gateway']['securityContext']['runAsUser'] == 65532
@@ -81,7 +82,7 @@ assert vals['frontend']['securityContext']['runAsUser'] == 1001
 assert vals['env']['SUNBORN_CACHE_BACKEND'] == 'dragonfly'
 assert vals['env']['SUNBORN_DB_BACKEND'] == 'postgres'
 assert vals['env']['SUNBORN_VECTOR_BACKEND'] == 'qdrant'
-print('  ✓ Helm values validated (HA replicas, NetworkPolicy, Ingress, SecurityContext, Envs)')
+print('  ✓ Helm values validated (HA replicas, PDB, NetworkPolicy, Ingress, SecurityContext, Envs)')
 "
 
 # 5. Verify Kustomize GitOps Manifest

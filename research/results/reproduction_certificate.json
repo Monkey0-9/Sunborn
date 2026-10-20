@@ -1,10 +1,10 @@
 {
   "evaluation": "Sunborn Empirical Scientific Reproduction",
   "status": "PASSED",
-  "git_commit": "77085332ab05c10257484ad96fac2e140ba1f554",
+  "git_commit": "86460868f407708d98ddfeec043e18d660c54794",
   "git_branch": "main",
-  "git_tree": "4093b98f7ed5bfe3f224a847a092508726efb3e4",
-  "timestamp_utc": "2026-10-20T14:54:14.721442+00:00",
+  "git_tree": "2289e9ab57d31c2f070bd9ef9ecb61a4fd98cee9",
+  "timestamp_utc": "2026-10-20T15:15:35.614925+00:00",
   "environment": {
     "os": "Linux",
     "release": "6.12.0-211.64.1.el10_2.x86_64",
@@ -16,8 +16,8 @@
   "provenance": {
     "attestation_type": "LOCAL_DEVELOPMENT_INTEGRITY_CHECK",
     "signing_algorithm": "NONE_UNAUTHENTICATED_LOCAL_DIGEST",
-    "benchmark_run_sha256": "39dd54baab64dd36b544ab2795f62bed9d9104eb89095b2311baeb418fdbf316",
-    "run_manifest_sha256": "c50ad98ebe8a1e4902921f4e42776eb5882235a9effba4e8b7259e87d02c71f2",
+    "benchmark_run_sha256": "bc23742088546546d71f21aad5b0fee10fa43b556922330e61531f4f0c6f468e",
+    "run_manifest_sha256": "29f5e9da8552bf1dd69ea6b0760ea9be80c48270a9aae74b170d586ea747036c",
     "embedding_backend": "BAAI/bge-small-en-v1.5 (fastembed)",
     "decision_engine": "Sunborn-Semantic DecisionEngine (VerificationCascade + Conformal Risk Bound <= 0.25)",
     "decision_engine_mode": "live_gateway_rpc"
@@ -35,7 +35,7 @@
     "naive_b2_temporal_false_hit_rate_pct": 63.16
   },
   "attestation": {
-    "canonical_manifest_digest": "c16268d0cea117fffc801b58bdf5af6cc192a0684a6d70a50968c07cb7892cb1",
+    "canonical_manifest_digest": "909039410ca87cbd5e5625041096e4e1c02c065d5f729752261f21f9fe549657",
     "hmac_sha256_signature": null
   }
 }

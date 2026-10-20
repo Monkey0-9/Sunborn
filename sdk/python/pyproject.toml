@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sunborn"
+version = "0.1.0rc1"
+description = "Enterprise semantic caching and execution reuse SDK for AI and agentic workflows"
+readme = "README.md"
+authors = [{ name = "Sunborn Team", email = "engineering@sunborn.ai" }]
+license = { text = "Apache-2.0" }
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+keywords = ["ai", "llm", "semantic-cache", "rag", "agent", "execution-reuse"]
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.25.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "ruff>=0.1.0",
+    "mypy>=1.5.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Monkey0-9/Sunborn"
+Documentation = "https://github.com/Monkey0-9/Sunborn#readme"
+Repository = "https://github.com/Monkey0-9/Sunborn.git"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sunborn*"]
+
+[tool.setuptools.package-data]
+sunborn = ["py.typed"]

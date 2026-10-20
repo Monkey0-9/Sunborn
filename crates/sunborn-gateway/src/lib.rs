@@ -45,6 +45,7 @@ pub fn create_router(state: AppState) -> Router {
             HeaderName::from_static("x-api-key"),
             HeaderName::from_static("x-tenant-id"),
             HeaderName::from_static("x-application-id"),
+            HeaderName::from_static("x-request-id"),
         ]);
 
     Router::new()
@@ -129,6 +130,9 @@ pub fn create_router(state: AppState) -> Router {
             post(handlers::rollback_learning_policy),
         )
         .layer(axum::middleware::from_fn(middleware::auth::auth_middleware))
+        .layer(axum::middleware::from_fn(
+            middleware::trace::request_id_middleware,
+        ))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state)

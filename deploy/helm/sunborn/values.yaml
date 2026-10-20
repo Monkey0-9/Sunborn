@@ -31,6 +31,10 @@ gateway:
     targetCPUUtilizationPercentage: 75
     targetMemoryUtilizationPercentage: 80
 
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
   securityContext:
     runAsNonRoot: true
     runAsUser: 65532
