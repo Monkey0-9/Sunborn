@@ -55,10 +55,24 @@ Sunborn prevents this through a multi-tier, formally bounded pipeline:
 * **Adaptive Autonomic Control**: Closed-loop self-learning controller with HMAC authentication, poison defense, held-out calibration, and zero-downtime canary promotion.
 
 **Empirical Research Benchmarks (verifiable via `bash research/reproduce.sh`)**:
-* **Sunborn False-Hit Rate**: **0.0%** (100% precision, 95% Wilson CI $[0.0, 3.0]$) vs. Naive Cosine **48.39%** (60 false hits on traps).
+* **Sunborn False-Hit Rate**: **0.0%** (100.0% precision, 95% Wilson CI $[0.0, 3.0]$) vs. Naive Cosine **48.39%** (60 false hits on adversarial/semantic traps across 124 benchmark queries).
 * **Temporal Mutation Safety (SemanticCacheBench-T)**: **0.0%** false hits across 19 stateful mutation scenarios vs. Naive Cosine **63.16%** false hits.
-* **Net Cost Reduction**: **23.38%** verified net token cost savings.
-* **Sustained Soak Throughput**: **39,400+ req/s** with flat RSS memory variation ($\le 1.2\%$).
+* **Modeled Token Cost Reduction**: **12.09%** modeled net token cost savings for B3 on the 124-query evaluation suite under a standard GPT-4o synthetic pricing schedule ($0.00625 USD per origin call equivalent; see Claim-to-Evidence Register and `research/results/benchmark_run.json`).
+* **Measured Gateway Performance**: In-process engine throughput **> 25,000 req/s** (Table I P99 **88 µs**; full Axum HTTP stack Table II P99 **240 µs** loopback; client HTTP RPC P99 **3.87 ms**), verified via `cargo test --test performance_test` and `benchmarks/capacity_soak.py` with bounded memory RSS.
+
+### 1.1 Claim-to-Evidence Register
+
+To eliminate ambiguity between modeled projections and independently measured telemetry, every quantitative metric in Sunborn is mapped to a versioned artifact and explicit operational scope:
+
+| Headline Claim | Quantitative Metric | Verification Artifact | Scope / Workload | Sample Size / Denominator | Confidence Interval / Bounds | Limitations & Methodological Notes |
+|---|---|---|---|---|---|---|
+| **Calibrated Zero False-Hit Rate** | **0.0%** (100.0% precision) | [`research/results/benchmark_run.json`](research/results/benchmark_run.json) | 8 trap categories (negation, numeric, PII, temporal, schema) | $N = 124$ labeled queries | 95% Wilson CI: $[0.0\%, 3.0\%]$ | Evaluated on frozen suite; production deployment requires ongoing runtime conformal calibration. |
+| **Temporal Mutation Invariance** | **0.0%** false hits | [`research/results/run_manifest.json`](research/results/run_manifest.json) | Stateful RAG updates & document revision shifts | $N = 19$ temporal scenarios | 95% Wilson CI: $[0.0\%, 16.8\%]$ | Verified against stateful vector clock and lease epoch invalidations. |
+| **Modeled Token Cost Savings** | **12.09%** net modeled savings | [`research/results/benchmark_run.json`](research/results/benchmark_run.json) | Multi-tier calibrated cache (B3) | 124 evaluation queries | Model schedule: $0.00625/call, $1e-6/cache lookup | Synthetic pricing model; not an audited commercial cloud invoice. |
+| **In-Process Engine Latency** | P99: **88 µs** (Table I) | `cargo test --test performance_test` | Zero-network L1 cache lookup | 10,000 in-memory requests | P50: 38 µs, P95: 64 µs, P99: 88 µs | In-process microbenchmark excluding network socket transport and serialization. |
+| **Full-Stack Loopback Latency** | P99: **240 µs** (Table II) | `cargo test --test performance_test` | Full Axum HTTP stack (JCS canonicalization, routing, cache) | 5,000 HTTP loopback requests | P50: 120 µs, P95: 195 µs, P99: 240 µs | Localhost loopback network; does not include wide-area WAN latency. |
+| **Client HTTP RPC Latency** | P50: **1.09 ms**, P99: **3.87 ms** | [`research/results/benchmark_run.json`](research/results/benchmark_run.json) | Python client to live gateway daemon | 124 end-to-end queries | Mean: 1.21 ms, P99: 3.87 ms | Client-side round-trip RPC latency including Python JSON serde. |
+| **Cryptographic Shredding Latency** | Average: **3.2 µs** (P99: **4.4 µs**) | [`research/results/capacity_soak_report.json`](research/results/capacity_soak_report.json) | Live TDEK zeroization via `/v1/governance/shred` under traffic | 5 tenants under concurrent load | SLO: < 1,000 µs (1.0 ms) | Microsecond atomic memory zeroization and multi-store record deletion. |
 
 ---
 
@@ -419,10 +433,10 @@ Sunborn Proof-Carrying Te | 10.5% [2.9,31.4]    |  0.0% [0.0,16.8]        |  100
 ```
 
 ### 8.3 Capacity Soak & Memory Stability Verification
-* **Sustained Zipfian Churn**: Benchmarked via `benchmarks/capacity_soak.py` achieving **39,400+ req/s** throughput under high skew ($s=1.05$) with bounded FinOps GDSF byte capacity.
-* **Singleflight Burst Coalescing**: 50 concurrent bursts with 20 identical callers spawned 50 leaders and attached 950 followers, leaving **0 orphaned or leaked broadcast channels** upon completion.
-* **GDPR Article 17 Crypto-Shredding**: Verified in `crates/sunborn-gateway/tests/governance_test.rs`, measuring atomic AES-256-GCM TDEK zeroization latency at an average of **$42.0\ \mu\text{s}$** (P99: **$42.1\ \mu\text{s}$**).
-* **Process Memory RSS Envelope**: RSS variation remained strictly flat ($\le 1.2\%$ envelope variation over 11,000 sustained requests).
+* **Measured Concurrent Ingestion**: Benchmarked via the live HTTP protocol test harness `benchmarks/capacity_soak.py` against the running gateway, achieving sustained throughput > 2,200 concurrent HTTP req/s over loopback with bounded FinOps GDSF byte capacity. In-process CPU engine throughput exceeds 25,000 req/s.
+* **Singleflight Burst Coalescing**: 20 concurrent bursts with 15 identical callers spawned 20 leaders and attached 280 followers, leaving **0 orphaned or leaked broadcast channels** upon completion.
+* **GDPR Article 17 Crypto-Shredding**: Live measurement via `POST /v1/governance/shred` during active background traffic, measuring atomic AES-256-GCM TDEK zeroization latency at an average of **$3.2\ \mu\text{s}$** (P99: **$4.4\ \mu\text{s}$**), strictly satisfying the sub-millisecond SLO.
+* **Process Memory RSS Envelope**: Measured live process RSS remains bounded with predictable growth and zero memory leaks.
 
 ---
 

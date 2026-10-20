@@ -135,7 +135,7 @@ fi
 echo "[*] Executing SemanticCacheBench with --require-live..."
 export SUNBORN_REQUIRE_LIVE=1
 ${PYTHON_BIN} benchmarks/semantic_cache_bench.py --require-live
-${PYTHON_BIN} benchmarks/capacity_soak.py
+${PYTHON_BIN} benchmarks/capacity_soak.py 1000 --concurrency 10 --require-live
 ${PYTHON_BIN} benchmarks/semantic_cache_bench_t.py
 
 if [[ -n "${SPAWNED_GATEWAY_PID}" ]]; then

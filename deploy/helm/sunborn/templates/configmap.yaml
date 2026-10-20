@@ -13,8 +13,6 @@ data:
   SUNBORN_VECTOR_BACKEND: {{ .Values.env.SUNBORN_VECTOR_BACKEND | default "qdrant" | quote }}
   DRAGONFLY_URL: {{ .Values.env.DRAGONFLY_URL | quote }}
   REDIS_URL: {{ .Values.env.REDIS_URL | quote }}
-  POSTGRES_URL: {{ .Values.env.POSTGRES_URL | quote }}
-  DATABASE_URL: {{ .Values.env.DATABASE_URL | quote }}
   QDRANT_URL: {{ .Values.env.QDRANT_URL | quote }}
   SUNBORN_EMBEDDING_URL: {{ .Values.env.SUNBORN_EMBEDDING_URL | quote }}
   SUNBORN_EMBEDDING_MODEL: {{ .Values.env.SUNBORN_EMBEDDING_MODEL | default "text-embedding-3-small" | quote }}

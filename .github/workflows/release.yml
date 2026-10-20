@@ -10,28 +10,42 @@ permissions:
   packages: write
   id-token: write
 
+env:
+  REGISTRY: ghcr.io
+  GATEWAY_IMAGE: ghcr.io/sunborn/sunborn-gateway
+  FRONTEND_IMAGE: ghcr.io/sunborn/sunborn-frontend
+
 jobs:
   build-and-publish:
-    name: Build Distroless Image & Publish Release
+    name: Build Containers, Package Helm Chart & Publish Release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.16.2'
+
       - name: Log in to GitHub Container Registry (GHCR)
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata for Docker
-        id: meta
+      # --- Gateway Container ---
+      - name: Extract Metadata for Gateway
+        id: meta-gateway
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}/sunborn-gateway
+          images: ${{ env.GATEWAY_IMAGE }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -43,16 +57,56 @@ jobs:
           context: .
           file: deploy/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta-gateway.outputs.tags }}
+          labels: ${{ steps.meta-gateway.outputs.labels }}
           provenance: mode=max
           sbom: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # --- Frontend Container ---
+      - name: Extract Metadata for Frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.FRONTEND_IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=long
+
+      - name: Build and Push Frontend Container
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: deploy/Dockerfile.frontend
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --- Helm Chart Packaging ---
+      - name: Lint and Package Helm Chart
+        run: |
+          mkdir -p dist/helm
+          helm lint deploy/helm/sunborn --set secrets.existingSecret="release-validation"
+          helm package deploy/helm/sunborn \
+            --version "${GITHUB_REF_NAME#v}" \
+            --app-version "${GITHUB_REF_NAME}" \
+            --destination dist/helm
+
+      # --- GitHub Release ---
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           draft: false
           prerelease: false
+          files: |
+            dist/helm/*.tgz
+            research/results/reproduction_certificate.json
+            research/results/benchmark_run.json
+            research/results/run_manifest.json

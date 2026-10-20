@@ -13,16 +13,53 @@ spec:
     - Ingress
     - Egress
   ingress:
+    # 1. Allow traffic between pods within the same Sunborn release namespace
     - from:
-        - namespaceSelector: {}
+        - podSelector: {}
       ports:
         - protocol: TCP
           port: {{ .Values.gateway.service.port }}
         - protocol: TCP
           port: {{ .Values.frontend.service.port }}
+
+    # 2. Allow traffic from configured Ingress controller namespace
+    {{- if .Values.networkPolicy.ingressNamespaceSelector }}
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.ingressNamespaceSelector | nindent 12 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.gateway.service.port }}
+        - protocol: TCP
+          port: {{ .Values.frontend.service.port }}
+    {{- end }}
+
+    # 3. Allow Prometheus scraping of /metrics from authorized monitoring namespace only
+    {{- if .Values.networkPolicy.monitoringNamespaceSelector }}
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.monitoringNamespaceSelector | nindent 12 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.gateway.service.port }}
+    {{- end }}
+
   egress:
+    # 1. Allow DNS resolution to kube-dns / CoreDNS
     - to:
         - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+
+    # 2. Allow egress to Sunborn state backends (PostgreSQL, Dragonfly, Qdrant) within the namespace
+    - to:
+        - podSelector: {}
       ports:
         - protocol: TCP
           port: 5432
@@ -30,10 +67,22 @@ spec:
           port: 6379
         - protocol: TCP
           port: 6333
+
+    # 3. Allow egress to external backend databases/accelerators if running in dedicated namespace
+    {{- if .Values.networkPolicy.backendNamespaceSelector }}
+    - to:
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.backendNamespaceSelector | nindent 12 }}
+      ports:
         - protocol: TCP
-          port: 53
-        - protocol: UDP
-          port: 53
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 6333
+    {{- end }}
+
+    # 4. Allow egress to external LLM / embedding provider over HTTPS (port 443)
     {{- if .Values.networkPolicy.allowEgressToExternalLLM }}
     - to:
         - ipBlock:

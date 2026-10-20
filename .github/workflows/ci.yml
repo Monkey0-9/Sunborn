@@ -115,3 +115,67 @@ jobs:
       - name: Execute Full Reproducibility Verification Suite
         run: bash research/reproduce.sh
 
+  helm-and-manifest-verification:
+    name: Helm & Deployment Manifest Verification Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.16.2'
+
+      - name: Helm Lint Chart
+        run: |
+          helm lint deploy/helm/sunborn --set secrets.existingSecret="ci-validation"
+
+      - name: Verify Fail-Closed on Missing Secrets
+        run: |
+          echo "Asserting that Helm template fails when secrets are absent..."
+          if helm template sunborn deploy/helm/sunborn > /dev/null 2>&1; then
+            echo "ERROR: Helm template succeeded without required secrets! Expected fail-closed behavior."
+            exit 1
+          else
+            echo "PASS: Helm template correctly failed closed on missing production secrets."
+          fi
+
+      - name: Verify Fail-Closed on Key Separation Violation
+        run: |
+          echo "Asserting that Helm template fails when learning HMAC secret equals master KEK..."
+          if helm template sunborn deploy/helm/sunborn \
+            --set secrets.sunbornAdminKey="admin-prod-key-32b-secure-value" \
+            --set secrets.masterKek="fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210" \
+            --set secrets.learningHmacSecret="fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210" > /dev/null 2>&1; then
+            echo "ERROR: Helm template succeeded with duplicate keys! Expected key separation failure."
+            exit 1
+          else
+            echo "PASS: Helm template correctly rejected key reuse across master KEK and learning HMAC secret."
+          fi
+
+      - name: Verify Clean Template Rendering with Valid Secrets
+        run: |
+          RENDERED=$(mktemp)
+          helm template sunborn deploy/helm/sunborn \
+            --set secrets.sunbornAdminKey="admin-prod-key-32b-secure-value" \
+            --set secrets.masterKek="fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210" \
+            --set secrets.learningHmacSecret="learning-hmac-32b-secure-value" > "${RENDERED}"
+
+          echo "Verifying /metrics is NOT exposed on public Ingress..."
+          if grep -A 5 "path: /metrics" "${RENDERED}" | grep -q "sunborn.example.com"; then
+            echo "ERROR: /metrics is exposed on public ingress in rendered template!"
+            exit 1
+          else
+            echo "PASS: /metrics is strictly excluded from public ingress."
+          fi
+
+          echo "Verifying NetworkPolicy narrows ingress namespace selectors..."
+          if grep -A 15 "ingress:" "${RENDERED}" | grep -q "namespaceSelector: {}"; then
+            echo "ERROR: Ingress NetworkPolicy still contains open namespace wildcard namespaceSelector: {}!"
+            exit 1
+          else
+            echo "PASS: Ingress NetworkPolicy enforces least-privilege restricted namespace selectors."
+          fi
+
+          rm -f "${RENDERED}"
+

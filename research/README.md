@@ -52,7 +52,7 @@ To preserve empirical integrity and prevent confabulation of offline research ar
    - These offline benchmarks do **NOT** claim an uncalibrated zero false-hit rate on arbitrary, unseen production traffic without runtime conformal calibration.
 
 2. **Synthetic Cost Model Demarcation**:
-   - The reported token cost savings ($23.38\%$ in SemanticCacheBench, $10.52\%$ in SemanticCacheBench-T) are computed using an **explicit synthetic cost estimation model** assuming standard GPT-4o pricing schedule ($0.00625 USD per origin call equivalent, $0.000001 USD per cache lookup).
+   - The reported token cost savings ($12.09\%$ in SemanticCacheBench, $10.52\%$ in SemanticCacheBench-T) are computed using an **explicit synthetic cost estimation model** assuming standard GPT-4o pricing schedule ($0.00625 USD per origin call equivalent, $0.000001 USD per cache lookup).
    - Modeled cost reductions are algorithmic estimates under this pricing baseline; they must **never** be presented as audited commercial provider invoices or actual customer expenditure reductions.
 
 3. **Live Production Telemetry**:

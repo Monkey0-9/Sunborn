@@ -36,6 +36,24 @@ jobs:
           path: ./
           extra_args: --only-verified
 
-      - name: Frontend Dependency Vulnerability Check
+      - name: Frontend Dependency Vulnerability Check (Complete Surface)
         working-directory: frontend
-        run: npm audit --omit=dev --audit-level=high
+        run: npm audit --audit-level=high
+
+      - name: Semgrep Static Application Security Testing (SAST)
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/owasp-top-ten
+        continue-on-error: true
+
+      - name: Kubernetes Manifest Security & Policy Verification
+        run: |
+          echo "Verifying absence of unencrypted plaintext secrets or default passwords in deploy/..."
+          if grep -rn "change_me_in_secret" deploy/k8s/ > /dev/null 2>&1; then
+            echo "ERROR: Found plaintext default in deploy/k8s/!"
+            exit 1
+          fi
+          echo "PASS: Kubernetes manifests verified against static secret leakage."

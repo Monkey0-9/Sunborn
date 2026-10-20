@@ -37,7 +37,7 @@ spec:
             - configMapRef:
                 name: {{ include "sunborn.fullname" . }}-config
             - secretRef:
-                name: {{ include "sunborn.fullname" . }}-secrets
+                name: {{ default (printf "%s-secrets" (include "sunborn.fullname" .)) .Values.secrets.existingSecret }}
           resources:
             {{- toYaml .Values.gateway.resources | nindent 12 }}
           livenessProbe:

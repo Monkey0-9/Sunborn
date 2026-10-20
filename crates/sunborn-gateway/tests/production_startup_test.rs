@@ -207,6 +207,103 @@ async fn test_production_startup_rejects_missing_or_insecure_learning_hmac_secre
 }
 
 #[tokio::test]
+async fn test_production_startup_rejects_key_separation_violation_learning_hmac_equals_master_kek()
+{
+    let _lock = ENV_LOCK.lock().await;
+    let _guard = EnvGuard::new(&[
+        "SUNBORN_ENV",
+        "SUNBORN_MASTER_KEK",
+        "SUNBORN_ADMIN_KEY",
+        "SUNBORN_CACHE_BACKEND",
+        "SUNBORN_DB_BACKEND",
+        "SUNBORN_VECTOR_BACKEND",
+        "SUNBORN_LEARNING_HMAC_SECRET",
+        "SUNBORN_LLM_ORIGIN_URL",
+        "SUNBORN_EMBEDDING_URL",
+    ]);
+
+    std::env::set_var("SUNBORN_ENV", "production");
+    std::env::set_var("SUNBORN_MASTER_KEK", VALID_PROD_KEK);
+    std::env::set_var("SUNBORN_ADMIN_KEY", VALID_PROD_ADMIN_KEY);
+    // Key reuse violation: learning HMAC secret set to master KEK
+    std::env::set_var("SUNBORN_LEARNING_HMAC_SECRET", VALID_PROD_KEK);
+    std::env::set_var("SUNBORN_LLM_ORIGIN_URL", "http://127.0.0.1:11434");
+    std::env::set_var(
+        "SUNBORN_EMBEDDING_URL",
+        "http://127.0.0.1:8000/v1/embeddings",
+    );
+
+    let mut config = AppConfig::default();
+    config.cache.backend = "dragonfly".to_string();
+    config.cache.database_backend = "postgres".to_string();
+    config.cache.vector_backend = "qdrant".to_string();
+
+    let state = AppState::new(config);
+    let res = state.verify_production_readiness().await;
+
+    assert!(res.is_err());
+    let err = res.unwrap_err();
+    assert_eq!(err.code, ErrorCode::ConfigurationError);
+    assert!(
+        err.message
+            .contains("Cryptographic key separation violation")
+            && err
+                .message
+                .contains("SUNBORN_LEARNING_HMAC_SECRET must NOT equal SUNBORN_MASTER_KEK"),
+        "Expected key separation violation error, got: {}",
+        err.message
+    );
+}
+
+#[tokio::test]
+async fn test_production_startup_rejects_key_separation_violation_admin_key_equals_master_kek() {
+    let _lock = ENV_LOCK.lock().await;
+    let _guard = EnvGuard::new(&[
+        "SUNBORN_ENV",
+        "SUNBORN_MASTER_KEK",
+        "SUNBORN_ADMIN_KEY",
+        "SUNBORN_CACHE_BACKEND",
+        "SUNBORN_DB_BACKEND",
+        "SUNBORN_VECTOR_BACKEND",
+        "SUNBORN_LEARNING_HMAC_SECRET",
+        "SUNBORN_LLM_ORIGIN_URL",
+        "SUNBORN_EMBEDDING_URL",
+    ]);
+
+    std::env::set_var("SUNBORN_ENV", "production");
+    std::env::set_var("SUNBORN_MASTER_KEK", VALID_PROD_KEK);
+    // Key reuse violation: admin key set to master KEK
+    std::env::set_var("SUNBORN_ADMIN_KEY", VALID_PROD_KEK);
+    std::env::set_var("SUNBORN_LEARNING_HMAC_SECRET", VALID_PROD_HMAC_SECRET);
+    std::env::set_var("SUNBORN_LLM_ORIGIN_URL", "http://127.0.0.1:11434");
+    std::env::set_var(
+        "SUNBORN_EMBEDDING_URL",
+        "http://127.0.0.1:8000/v1/embeddings",
+    );
+
+    let mut config = AppConfig::default();
+    config.cache.backend = "dragonfly".to_string();
+    config.cache.database_backend = "postgres".to_string();
+    config.cache.vector_backend = "qdrant".to_string();
+
+    let state = AppState::new(config);
+    let res = state.verify_production_readiness().await;
+
+    assert!(res.is_err());
+    let err = res.unwrap_err();
+    assert_eq!(err.code, ErrorCode::ConfigurationError);
+    assert!(
+        err.message
+            .contains("Cryptographic key separation violation")
+            && err
+                .message
+                .contains("SUNBORN_MASTER_KEK and SUNBORN_ADMIN_KEY must be distinct keys"),
+        "Expected key separation violation error, got: {}",
+        err.message
+    );
+}
+
+#[tokio::test]
 async fn test_production_startup_rejects_in_memory_fallbacks() {
     let _lock = ENV_LOCK.lock().await;
     let _guard = EnvGuard::new(&[

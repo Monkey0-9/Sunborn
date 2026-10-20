@@ -239,7 +239,7 @@ The engineering team concurs with the auditor: **Enterprise release remains NO-G
 - **Changes**:
   1. Updated [`frontend/src/app/page.tsx`](file:///home/unknownuser/Sunbron/frontend/src/app/page.tsx): Completely restructured metrics into two visually distinct tracks:
      - **Track 1: Live Production Telemetry (Gateway Cluster)**: Reads live counters from `/v1/finops/report`. When latency histograms are not scraped from Prometheus, the card truthfully displays **`Not measured`** with the badge `Not measured (Requires Prometheus)`. Substituted labels like "Sub-millisecond" removed.
-     - **Track 2: Frozen Scientific Evaluation Results (SemanticCacheBench v1.0)**: Explicitly identifies source (`research/results/benchmark_run.json`), frozen sample size ($N = 124$ queries across 8 categories), and two-sided 95% Wilson confidence intervals: Conformal Precision $100.0\%$ ($[88.3\%, 100.0\%]$), Observed False-Hit Rate $0.0\%$ ($[0.0\%, 3.0\%]$), Modeled Token Savings $23.38\%$, and GDPR Shredding Latency $42.1$ µs.
+     - **Track 2: Frozen Scientific Evaluation Results (SemanticCacheBench v1.0)**: Explicitly identifies source (`research/results/benchmark_run.json`), frozen sample size ($N = 124$ queries across 8 categories), and two-sided 95% Wilson confidence intervals: Conformal Precision $100.0\%$ ($[88.3\%, 100.0\%]$), Observed False-Hit Rate $0.0\%$ ($[0.0\%, 3.0\%]$), Modeled Token Savings $12.09\%$, and GDPR Shredding Latency $42.1$ µs.
   2. Verified via Playwright Chromium E2E workflow tests (`npm test` in `frontend/`).
 
 ### 9.2 Finding 2 — Production Configuration Matrix & Strict Integration Verification

@@ -390,6 +390,23 @@ impl AppState {
                     "Production SUNBORN_LEARNING_HMAC_SECRET is using a default or insecure value. Provide a secure, high-entropy key.",
                 ));
             }
+
+            // P0-1: Cryptographic key separation validation (no key reuse across distinct security roles)
+            if master_kek == admin_key {
+                return Err(sunborn_core::SunbornError::configuration_error(
+                    "Cryptographic key separation violation: SUNBORN_MASTER_KEK and SUNBORN_ADMIN_KEY must be distinct keys.",
+                ));
+            }
+            if learning_hmac == master_kek {
+                return Err(sunborn_core::SunbornError::configuration_error(
+                    "Cryptographic key separation violation: SUNBORN_LEARNING_HMAC_SECRET must NOT equal SUNBORN_MASTER_KEK. Learning HMAC key must not default to or reuse the master KEK.",
+                ));
+            }
+            if learning_hmac == admin_key {
+                return Err(sunborn_core::SunbornError::configuration_error(
+                    "Cryptographic key separation violation: SUNBORN_LEARNING_HMAC_SECRET must NOT equal SUNBORN_ADMIN_KEY.",
+                ));
+            }
         }
 
         // 2. Validate Dragonfly cache connectivity if configured or in strict mode

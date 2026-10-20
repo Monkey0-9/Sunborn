@@ -74,6 +74,7 @@ pub fn create_router(state: AppState) -> Router {
             axum::routing::delete(handlers::delete_tenant),
         )
         .route("/v1/governance/shred", post(handlers::crypto_shred_tenant))
+        .route("/v1/governance/provision", post(handlers::provision_tenant))
         .route(
             "/v1/governance/attest",
             post(handlers::generate_merkle_attestation),

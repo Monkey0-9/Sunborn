@@ -7,7 +7,7 @@ global:
 gateway:
   replicaCount: 3
   image:
-    repository: ghcr.io/monkey0-9/sunborn-gateway
+    repository: ghcr.io/sunborn/sunborn-gateway
     pullPolicy: IfNotPresent
     tag: "0.1.0"
 
@@ -63,7 +63,7 @@ frontend:
   enabled: true
   replicaCount: 2
   image:
-    repository: ghcr.io/monkey0-9/sunborn-frontend
+    repository: ghcr.io/sunborn/sunborn-frontend
     pullPolicy: IfNotPresent
     tag: "0.1.0"
 
@@ -120,9 +120,6 @@ ingress:
         - path: /v1
           pathType: Prefix
           service: gateway
-        - path: /metrics
-          pathType: Prefix
-          service: gateway
   tls:
     - secretName: sunborn-tls-cert
       hosts:
@@ -137,8 +134,6 @@ env:
   SUNBORN_VECTOR_BACKEND: "qdrant"
   DRAGONFLY_URL: "redis://sunborn-dragonfly:6379"
   REDIS_URL: "redis://sunborn-dragonfly:6379"
-  POSTGRES_URL: "postgres://sunborn_app:change_me_in_secret@sunborn-postgres:5432/sunborn_prod"
-  DATABASE_URL: "postgres://sunborn_app:change_me_in_secret@sunborn-postgres:5432/sunborn_prod"
   QDRANT_URL: "http://sunborn-qdrant:6333"
   SUNBORN_EMBEDDING_URL: "http://sunborn-embedder:8000/v1/embeddings"
   EMBEDDING_API_URL: "http://sunborn-embedder:8000/v1/embeddings"
@@ -154,15 +149,30 @@ env:
   VAULT_TRANSIT_KEY_NAME: "sunborn-cluster-kek"
 
 secrets:
-  sunbornAdminKey: "replace-with-cryptographically-secure-32byte-hex-admin-key"
+  # Reference to an existing Kubernetes Secret containing SUNBORN_ADMIN_KEY, SUNBORN_MASTER_KEK, SUNBORN_LEARNING_HMAC_SECRET.
+  # Recommended for production deployments (e.g. HashiCorp Vault, AWS Secrets Manager, or ExternalSecrets operator).
+  existingSecret: ""
+
+  # When existingSecret is NOT used, the following keys must be supplied explicitly.
+  # Default is EMPTY: Helm template/install fails closed if required keys are missing or contain placeholder values.
+  sunbornAdminKey: ""
   openaiApiKey: ""
-  masterKek: "replace-with-256bit-master-kek-hex"
-  learningHmacSecret: "replace-with-256bit-hmac-secret-hex"
+  masterKek: ""
+  learningHmacSecret: ""
 
 networkPolicy:
   enabled: true
-  allowIngressFromCluster: true
   allowEgressToExternalLLM: true
+  # Ingress controller namespace selector (restricted rather than cluster-wide wildcard)
+  ingressNamespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: ingress-nginx
+  # Monitoring namespace selector for Prometheus ServiceMonitor scraping (/metrics)
+  monitoringNamespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: monitoring
+  # Optional selector for backend databases if deployed in separate namespace
+  backendNamespaceSelector: {}
 
 serviceMonitor:
   enabled: true

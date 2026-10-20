@@ -424,7 +424,7 @@ export default function OverviewPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold font-mono text-white tracking-tight">
-                23.38%
+                12.09%
               </div>
               <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
                 <div className="flex justify-between">
@@ -433,7 +433,7 @@ export default function OverviewPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Pricing Basis:</span>
-                  <span className="text-slate-300">Synthetic ($2.50/$10 per M tok)</span>
+                  <span className="text-slate-300">Synthetic ($0.00625/call)</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Sample Size:</span>

@@ -1471,6 +1471,32 @@ pub struct ShredTenantPayload {
     pub tenant_id: String,
 }
 
+#[derive(serde::Deserialize)]
+pub struct ProvisionTenantPayload {
+    pub tenant_id: String,
+}
+
+pub async fn provision_tenant(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    Json(payload): Json<ProvisionTenantPayload>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    sec_ctx
+        .require_admin()
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
+    let tenant = TenantId::new(&payload.tenant_id);
+    state
+        .crypto_registry
+        .provision_tenant_secure(tenant)
+        .map_err(|e| AppError::from(SunbornError::internal(format!("Provisioning failed: {e}"))))?;
+
+    Ok(Json(serde_json::json!({
+        "status": "provisioned",
+        "tenant_id": payload.tenant_id,
+    })))
+}
+
 pub async fn crypto_shred_tenant(
     State(state): State<AppState>,
     Extension(sec_ctx): Extension<SecurityContext>,
