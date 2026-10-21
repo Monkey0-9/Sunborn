@@ -30,9 +30,24 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       securityContext:
-        {{- toYaml .Values.gateway.securityContext | nindent 8 }}
+        {{- if .Values.gateway.podSecurityContext }}
+        {{- toYaml .Values.gateway.podSecurityContext | nindent 8 }}
+        {{- else }}
+        runAsNonRoot: {{ .Values.gateway.securityContext.runAsNonRoot | default true }}
+        runAsUser: {{ .Values.gateway.securityContext.runAsUser | default 65532 }}
+        runAsGroup: {{ .Values.gateway.securityContext.runAsGroup | default 65532 }}
+        {{- end }}
       containers:
         - name: gateway
+          securityContext:
+            {{- if .Values.gateway.containerSecurityContext }}
+            {{- toYaml .Values.gateway.containerSecurityContext | nindent 12 }}
+            {{- else }}
+            allowPrivilegeEscalation: {{ .Values.gateway.securityContext.allowPrivilegeEscalation | default false }}
+            readOnlyRootFilesystem: {{ .Values.gateway.securityContext.readOnlyRootFilesystem | default true }}
+            capabilities:
+              {{- toYaml .Values.gateway.securityContext.capabilities | nindent 14 }}
+            {{- end }}
           image: "{{ .Values.gateway.image.repository }}:{{ .Values.gateway.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.gateway.image.pullPolicy }}
           ports:
@@ -46,7 +61,13 @@ spec:
                 name: {{ default (printf "%s-secrets" (include "sunborn.fullname" .)) .Values.secrets.existingSecret }}
           resources:
             {{- toYaml .Values.gateway.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           livenessProbe:
             {{- toYaml .Values.gateway.livenessProbe | nindent 12 }}
           readinessProbe:
             {{- toYaml .Values.gateway.readinessProbe | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -222,6 +222,8 @@ def run_live_endurance_soak(
     total_requests: int = 2500,
     concurrency: int = 16,
     require_live: bool = True,
+    output_path: Optional[str] = None,
+    dry_run: bool = False,
 ) -> Dict:
     """Execute live 3-stage capacity soak against running Sunborn Gateway."""
     print("=" * 78)
@@ -349,9 +351,9 @@ def run_live_endurance_soak(
     shred_tenants = [f"tenant-soak-shred-{i}" for i in range(1, 6)]
     for tid in shred_tenants:
         send_provision_tenant(GATEWAY_URL, ADMIN_KEY, tid)
-        # Pre-seed cache entry for this tenant
+        # Pre-seed cache entry for this specific tenant to verify post-shred cryptographic erasure
         send_gateway_request(
-            GATEWAY_URL, ADMIN_KEY, f"Pre-seed payload for {tid}", tenant_id="system-admin"
+            GATEWAY_URL, ADMIN_KEY, f"Pre-seed payload for {tid}", tenant_id=tid
         )
 
     shred_latencies_us: List[float] = []
@@ -452,11 +454,14 @@ def run_live_endurance_soak(
         },
     }
 
-    report_path = "research/results/capacity_soak_report.json"
-    os.makedirs(os.path.dirname(report_path), exist_ok=True)
-    with open(report_path, "w") as f:
-        json.dump(report, f, indent=2)
-    print(f"\n[✓] Capacity soak evidence report persisted to {report_path}")
+    if not dry_run:
+        target_path = output_path or "research/results/capacity_soak_report.json"
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+        with open(target_path, "w") as f:
+            json.dump(report, f, indent=2)
+        print(f"\n[✓] Capacity soak evidence report persisted to {target_path}")
+    else:
+        print("\n[*] Dry-run enabled: skipped writing report to disk.")
 
     print("\n" + "=" * 78)
     print("ENDURANCE CAPACITY SOAK SUMMARY: 100% STABLE (PASS)")
@@ -498,9 +503,17 @@ if __name__ == "__main__":
     parser.add_argument("--concurrency", type=int, default=12, help="Worker thread concurrency")
     parser.add_argument("--require-live", action="store_true", default=False, help="Require live running gateway")
     parser.add_argument("--simulation", action="store_true", default=False, help="Run in offline simulation mode")
+    parser.add_argument("--output", "-o", type=str, default=None, help="Custom output JSON path for capacity soak report")
+    parser.add_argument("--dry-run", action="store_true", default=False, help="Compute metrics without writing report to disk")
     args = parser.parse_args()
 
     if args.simulation:
         run_simulation_soak(args.count)
     else:
-        run_live_endurance_soak(args.count, concurrency=args.concurrency, require_live=args.require_live)
+        run_live_endurance_soak(
+            args.count,
+            concurrency=args.concurrency,
+            require_live=args.require_live,
+            output_path=args.output,
+            dry_run=args.dry_run,
+        )

@@ -35,6 +35,8 @@ gateway:
     enabled: true
     minAvailable: 1
 
+  # Unified security context: mapped automatically to PodSecurityContext (runAsNonRoot/runAsUser/runAsGroup)
+  # and Container SecurityContext (allowPrivilegeEscalation/readOnlyRootFilesystem/capabilities).
   securityContext:
     runAsNonRoot: true
     runAsUser: 65532

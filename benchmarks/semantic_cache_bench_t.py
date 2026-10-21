@@ -27,6 +27,7 @@ import time
 import math
 import hashlib
 import platform
+import argparse
 import statistics
 from datetime import datetime, timezone
 
@@ -461,7 +462,7 @@ TEMPORAL_BENCHMARK_SCENARIOS = [
     },
 ]
 
-def run_temporal_benchmark():
+def run_temporal_benchmark(output_path: str = None, dry_run: bool = False):
     print("=" * 80)
     print("SUNBORN SEMANTICCACHEBENCH-T: STATEFUL TEMPORAL & ADVERSARIAL BENCHMARK")
     print(f"Timestamp: {datetime.now(timezone.utc).isoformat()}")
@@ -679,10 +680,14 @@ def run_temporal_benchmark():
 
     results_dir = os.path.join(os.path.dirname(__file__), "..", "research", "results")
     os.makedirs(results_dir, exist_ok=True)
-    manifest_path = os.path.join(results_dir, "run_manifest.json")
+    target_path = output_path or os.environ.get("SUNBORN_TEMPORAL_OUTPUT") or os.path.join(results_dir, "run_manifest.json")
 
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        json.dump(report_data, f, indent=2)
+    if not dry_run:
+        with open(target_path, "w", encoding="utf-8") as f:
+            json.dump(report_data, f, indent=2)
+        print(f"Immutable Run Manifest written to: {os.path.relpath(target_path)}")
+    else:
+        print("[*] Dry-run enabled: skipped writing run manifest to disk.")
 
     print("\n" + "=" * 80)
     print("KEY TEMPORAL FINDINGS (SEMANTICCACHEBENCH-T):")
@@ -691,8 +696,15 @@ def run_temporal_benchmark():
     print(f"1. Temporal Freshness & Zero False-Hits: Sunborn B3 achieved {b3_res['false_hits']} false hits ({b3_res['false_hit_rate_pct']}%, 95% CI {b3_res['false_hit_ci_95']}) and {b3_res['precision_pct']}% Precision.")
     print(f"2. Naive Cosine Vulnerability: Baseline B2 suffered {b2_res['false_hits']} false hits ({b2_res['false_hit_rate_pct']}%, 95% CI {b2_res['false_hit_ci_95']}) due to temporal blindness on knowledge mutations, outbox delays, permission revocations, and side-effects.")
     print(f"3. Net Economic Utility: Sunborn B3 saved {b3_res['cost_savings_pct']}% token cost while strictly maintaining 100% precision.")
-    print(f"Immutable Run Manifest written to: {os.path.relpath(manifest_path)}")
     print("=" * 80)
 
 if __name__ == "__main__":
-    run_temporal_benchmark()
+    parser = argparse.ArgumentParser(description="Sunborn SemanticCacheBench-T Stateful Temporal Suite")
+    parser.add_argument("--output", "-o", type=str, default=None, help="Custom output JSON path for temporal manifest")
+    parser.add_argument("--dry-run", action="store_true", default=False, help="Compute metrics without writing manifest to disk")
+    args = parser.parse_args()
+
+    run_temporal_benchmark(
+        output_path=args.output,
+        dry_run=args.dry_run,
+    )

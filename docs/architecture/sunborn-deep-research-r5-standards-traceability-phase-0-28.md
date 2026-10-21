@@ -12,16 +12,16 @@ Sunborn's core problem is not “similarity search” alone. It is safe reuse of
 
 ## 2. Authoritative standards and frameworks to map
 
- 1. **ISO/IEC/IEEE 29148:2018 — Requirements engineering** (current version confirmed by ISO in 2024): unique, verifiable requirements; lifecycle traceability; validation of requirements and related processes. [https://www.iso.org/standard/72089.html](<https://www.iso.org/standard/72089.html>)
- 2. **IEEE 1012-2024 — System, Software, and Hardware Verification and Validation** (active; published 2025): lifecycle V&V, evidence, reviews, testing and integrity-level tailoring. [https://standards.ieee.org/ieee/1800.2/7324/](<https://standards.ieee.org/ieee/1800.2/7324/>)
- 3. **ISO/IEC 25010:2023 — Product quality model**: use the model to structure quality requirements and acceptance measures rather than treating “quality” as one score. [https://www.iso.org/standard/78176.html](<https://www.iso.org/standard/78176.html>)
- 4. **NIST AI RMF 1.0 and NIST AI 600-1 GenAI Profile**: govern/map/measure/manage risks across the AI lifecycle, including generative-AI-specific risks. These are frameworks, not product certifications. [https://www.nist.gov/itl/ai-risk-management-framework](<https://www.nist.gov/itl/ai-risk-management-framework>) and [https://doi.org/10.6028/NIST.AI.600-1](<https://doi.org/10.6028/NIST.AI.600-1>)
- 5. **NIST SP 800-218 SSDF 1.1**: integrate secure development practices, vulnerability prevention and response into the lifecycle. [https://csrc.nist.gov/pubs/sp/800/218/final](<https://csrc.nist.gov/pubs/sp/800/218/final>)
- 6. **OWASP GenAI / LLM Top 10**: use the current canonical release as a threat-input checklist for prompt injection, sensitive information disclosure, supply chain, data/model poisoning, improper output handling, excessive agency, vector/embedding weaknesses and unbounded consumption. Recheck the current version at implementation/release. [https://genai.owasp.org/resource/owasp-top-10-for-llm-applications-2025/](<https://genai.owasp.org/resource/owasp-top-10-for-llm-applications-2025/>) and [https://owasp.github.io/www-project-top-10-for-large-language-model-applications/](<https://owasp.github.io/www-project-top-10-for-large-language-model-applications/>)
- 7. **OpenTelemetry semantic conventions**: standardize trace/metric/log naming and correlate cache decisions, retrieval, model/tool execution, invalidation and user-visible outcome. GenAI conventions evolve; pin a version and record compatibility. [https://opentelemetry.io/docs/specs/semconv/](<https://opentelemetry.io/docs/specs/semconv/>) and [https://github.com/open-telemetry/semantic-conventions-genai](<https://github.com/open-telemetry/semantic-conventions-genai>)
- 8. **SLSA provenance**: preserve verifiable information describing where, when and how release artifacts were built. [https://slsa.dev/spec/v1.0/provenance](<https://slsa.dev/spec/v1.0/provenance>)
- 9. **ACM Artifact Review and Badging**: build artifacts that reviewers can access and run, with complete instructions, source, data/tools/traces as permitted, environment capture and claims supported by reproducible artifacts. Venue-specific rules take precedence. [https://www.acm.org/publications/policies/artifact-review-and-badging-current](<https://www.acm.org/publications/policies/artifact-review-and-badging-current>)
-10. **ACM MMSys artifact review guidance** (practical example, not a universal rule for every ACM venue): self-contained environments, accessible/runnable code, explicit testing instructions and reproducibility evaluation. [https://2026.acmmmsys.org/artifact-review-badging](<https://2026.acmmmsys.org/artifact-review-badging>)
+ 1. **ISO/IEC/IEEE 29148:2018 — Requirements engineering** (current version confirmed by ISO in 2024): unique, verifiable requirements; lifecycle traceability; validation of requirements and related processes. [https://www.iso.org/standard/72089.html](https://www.iso.org/standard/72089.html)
+ 2. **IEEE 1012-2024 — System, Software, and Hardware Verification and Validation** (active; published 2025): lifecycle V&V, evidence, reviews, testing and integrity-level tailoring. [https://standards.ieee.org/ieee/1800.2/7324/](https://standards.ieee.org/ieee/1800.2/7324/)
+ 3. **ISO/IEC 25010:2023 — Product quality model**: use the model to structure quality requirements and acceptance measures rather than treating “quality” as one score. [https://www.iso.org/standard/78176.html](https://www.iso.org/standard/78176.html)
+ 4. **NIST AI RMF 1.0 and NIST AI 600-1 GenAI Profile**: govern/map/measure/manage risks across the AI lifecycle, including generative-AI-specific risks. These are frameworks, not product certifications. [https://www.nist.gov/itl/ai-risk-management-framework](https://www.nist.gov/itl/ai-risk-management-framework) and [https://doi.org/10.6028/NIST.AI.600-1](https://doi.org/10.6028/NIST.AI.600-1)
+ 5. **NIST SP 800-218 SSDF 1.1**: integrate secure development practices, vulnerability prevention and response into the lifecycle. [https://csrc.nist.gov/pubs/sp/800/218/final](https://csrc.nist.gov/pubs/sp/800/218/final)
+ 6. **OWASP GenAI / LLM Top 10**: use the current canonical release as a threat-input checklist for prompt injection, sensitive information disclosure, supply chain, data/model poisoning, improper output handling, excessive agency, vector/embedding weaknesses and unbounded consumption. Recheck the current version at implementation/release. [https://genai.owasp.org/resource/owasp-top-10-for-llm-applications-2025/](https://genai.owasp.org/resource/owasp-top-10-for-llm-applications-2025/) and [https://owasp.github.io/www-project-top-10-for-large-language-model-applications/](https://owasp.github.io/www-project-top-10-for-large-language-model-applications/)
+ 7. **OpenTelemetry semantic conventions**: standardize trace/metric/log naming and correlate cache decisions, retrieval, model/tool execution, invalidation and user-visible outcome. GenAI conventions evolve; pin a version and record compatibility. [https://opentelemetry.io/docs/specs/semconv/](https://opentelemetry.io/docs/specs/semconv/) and [https://github.com/open-telemetry/semantic-conventions-genai](https://github.com/open-telemetry/semantic-conventions-genai)
+ 8. **SLSA provenance**: preserve verifiable information describing where, when and how release artifacts were built. [https://slsa.dev/spec/v1.0/provenance](https://slsa.dev/spec/v1.0/provenance)
+ 9. **ACM Artifact Review and Badging**: build artifacts that reviewers can access and run, with complete instructions, source, data/tools/traces as permitted, environment capture and claims supported by reproducible artifacts. Venue-specific rules take precedence. [https://www.acm.org/publications/policies/artifact-review-and-badging-current](https://www.acm.org/publications/policies/artifact-review-and-badging-current)
+10. **ACM MMSys artifact review guidance** (practical example, not a universal rule for every ACM venue): self-contained environments, accessible/runnable code, explicit testing instructions and reproducibility evaluation. [https://2026.acmmmsys.org/artifact-review-badging](https://2026.acmmmsys.org/artifact-review-badging)
 
 Standards are copyrighted; this plan summarizes their purposes and links to official sources rather than reproducing normative clauses. The team must check the licensed full text and select applicable clauses/controls for the target context.
 
@@ -133,18 +133,18 @@ For statistical analysis, predefine primary outcomes and analysis before confirm
 
 ## 10. Research sources
 
-* ISO/IEC/IEEE 29148:2018: [https://www.iso.org/standard/72089.html](<https://www.iso.org/standard/72089.html>)
-* IEEE 1012-2024: [https://standards.ieee.org/ieee/1800.2/7324/](<https://standards.ieee.org/ieee/1800.2/7324/>)
-* ISO/IEC 25010:2023: [https://www.iso.org/standard/78176.html](<https://www.iso.org/standard/78176.html>)
-* NIST AI RMF: [https://www.nist.gov/itl/ai-risk-management-framework](<https://www.nist.gov/itl/ai-risk-management-framework>)
-* NIST AI 600-1: [https://doi.org/10.6028/NIST.AI.600-1](<https://doi.org/10.6028/NIST.AI.600-1>)
-* NIST SSDF SP 800-218: [https://csrc.nist.gov/pubs/sp/800/218/final](<https://csrc.nist.gov/pubs/sp/800/218/final>)
-* OWASP GenAI Top 10: [https://owasp.github.io/www-project-top-10-for-large-language-model-applications/](<https://owasp.github.io/www-project-top-10-for-large-language-model-applications/>)
-* OpenTelemetry semantic conventions: [https://opentelemetry.io/docs/specs/semconv/](<https://opentelemetry.io/docs/specs/semconv/>)
-* OpenTelemetry GenAI conventions: [https://github.com/open-telemetry/semantic-conventions-genai](<https://github.com/open-telemetry/semantic-conventions-genai>)
-* SLSA provenance: [https://slsa.dev/spec/v1.0/provenance](<https://slsa.dev/spec/v1.0/provenance>)
-* ACM Artifact Review and Badging: [https://www.acm.org/publications/policies/artifact-review-and-badging-current](<https://www.acm.org/publications/policies/artifact-review-and-badging-current>)
-* ACM MMSys 2026 artifact guidance: [https://2026.acmmmsys.org/artifact-review-badging](<https://2026.acmmmsys.org/artifact-review-badging>)
+* ISO/IEC/IEEE 29148:2018: [https://www.iso.org/standard/72089.html](https://www.iso.org/standard/72089.html)
+* IEEE 1012-2024: [https://standards.ieee.org/ieee/1800.2/7324/](https://standards.ieee.org/ieee/1800.2/7324/)
+* ISO/IEC 25010:2023: [https://www.iso.org/standard/78176.html](https://www.iso.org/standard/78176.html)
+* NIST AI RMF: [https://www.nist.gov/itl/ai-risk-management-framework](https://www.nist.gov/itl/ai-risk-management-framework)
+* NIST AI 600-1: [https://doi.org/10.6028/NIST.AI.600-1](https://doi.org/10.6028/NIST.AI.600-1)
+* NIST SSDF SP 800-218: [https://csrc.nist.gov/pubs/sp/800/218/final](https://csrc.nist.gov/pubs/sp/800/218/final)
+* OWASP GenAI Top 10: [https://owasp.github.io/www-project-top-10-for-large-language-model-applications/](https://owasp.github.io/www-project-top-10-for-large-language-model-applications/)
+* OpenTelemetry semantic conventions: [https://opentelemetry.io/docs/specs/semconv/](https://opentelemetry.io/docs/specs/semconv/)
+* OpenTelemetry GenAI conventions: [https://github.com/open-telemetry/semantic-conventions-genai](https://github.com/open-telemetry/semantic-conventions-genai)
+* SLSA provenance: [https://slsa.dev/spec/v1.0/provenance](https://slsa.dev/spec/v1.0/provenance)
+* ACM Artifact Review and Badging: [https://www.acm.org/publications/policies/artifact-review-and-badging-current](https://www.acm.org/publications/policies/artifact-review-and-badging-current)
+* ACM MMSys 2026 artifact guidance: [https://2026.acmmmsys.org/artifact-review-badging](https://2026.acmmmsys.org/artifact-review-badging)
 
 ## 11. Explicit limitations
 

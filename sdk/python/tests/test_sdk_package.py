@@ -1,6 +1,14 @@
 import asyncio
+import os
+import sys
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+# Ensure sdk/python is in sys.path when running tests directly without pre-installed wheel
+_sdk_root = str(Path(__file__).resolve().parent.parent)
+if _sdk_root not in sys.path:
+    sys.path.insert(0, _sdk_root)
 
 import sunborn
 from sunborn import (

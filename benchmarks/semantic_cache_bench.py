@@ -20,6 +20,7 @@ import math
 import uuid
 import hashlib
 import platform
+import argparse
 import statistics
 from datetime import datetime, timezone
 
@@ -331,7 +332,12 @@ def assess_query_risk(prompt: str) -> float:
             risk += 0.35
     return min(1.0, risk)
 
-def run_benchmark():
+def run_benchmark(
+    output_path: str = None,
+    dry_run: bool = False,
+    require_live: bool = False,
+    gateway_url: str = None,
+):
     print("=" * 80)
     print("SUNBORN SEMANTICCACHEBENCH: EMPIRICAL BASELINE EVALUATION (B0, B1, B2, B3)")
     print(f"Timestamp: {datetime.now(timezone.utc).isoformat()}")
@@ -344,7 +350,7 @@ def run_benchmark():
     exact_cache_latency_ms = 1.0
     semantic_cache_latency_ms = 8.0
 
-    gateway_raw_url = os.environ.get("SUNBORN_BENCHMARK_URL", "http://127.0.0.1:8080/v1").rstrip("/")
+    gateway_raw_url = gateway_url or os.environ.get("SUNBORN_BENCHMARK_URL", "http://127.0.0.1:8080/v1").rstrip("/")
     if gateway_raw_url.endswith("/v1"):
         gateway_base_url = gateway_raw_url[:-3].rstrip("/")
     else:
@@ -362,11 +368,12 @@ def run_benchmark():
     except Exception:
         live_gateway_available = False
 
-    require_live = (
-        "--require-live" in sys.argv
+    is_live_required = (
+        require_live
+        or "--require-live" in sys.argv
         or os.environ.get("SUNBORN_REQUIRE_LIVE", "").lower() in ("1", "true", "yes")
     )
-    if require_live and not live_gateway_available:
+    if is_live_required and not live_gateway_available:
         raise RuntimeError(
             f"FATAL: Live gateway is strictly required (--require-live / SUNBORN_REQUIRE_LIVE=1), "
             f"but health endpoint {health_url} was unreachable. "
@@ -683,18 +690,33 @@ def run_benchmark():
 
     results_dir = os.path.join(os.path.dirname(__file__), "..", "research", "results")
     os.makedirs(results_dir, exist_ok=True)
-    results_path = os.path.join(results_dir, "benchmark_run.json")
+    target_path = output_path or os.environ.get("SUNBORN_BENCHMARK_OUTPUT") or os.path.join(results_dir, "benchmark_run.json")
 
-    with open(results_path, "w", encoding="utf-8") as f:
-        json.dump(report_data, f, indent=2)
+    if not dry_run:
+        with open(target_path, "w", encoding="utf-8") as f:
+            json.dump(report_data, f, indent=2)
+        print(f"Artifact written to: {os.path.relpath(target_path)}")
+    else:
+        print("[*] Dry-run enabled: skipped writing artifact to disk.")
 
     print("\n" + "=" * 80)
     print("KEY SCIENTIFIC FINDINGS:")
     print(f"1. Zero False-Hit Reuse: Sunborn B3 false-hit rate is {report_data['baselines']['B3_SunbornCalibrated']['false_hit_rate_pct']}% with 95% Wilson CI {report_data['baselines']['B3_SunbornCalibrated']['false_hit_ci_95']} (Precision {report_data['baselines']['B3_SunbornCalibrated']['precision_pct']}%)")
     print(f"2. Adversarial Robustness: Naive Cosine B2 suffered {report_data['baselines']['B2_NaiveCosine']['false_hits']} false reuse errors ({report_data['baselines']['B2_NaiveCosine']['false_hit_rate_pct']}%, 95% CI {report_data['baselines']['B2_NaiveCosine']['false_hit_ci_95']}) on negation, entity, numeric, and temporal traps.")
     print(f"3. Net Economic Savings: Sunborn B3 achieved {report_data['baselines']['B3_SunbornCalibrated']['cost_savings_pct']}% total token cost reduction.")
-    print(f"Artifact written to: {os.path.relpath(results_path)}")
     print("=" * 80)
 
 if __name__ == "__main__":
-    run_benchmark()
+    parser = argparse.ArgumentParser(description="Sunborn SemanticCacheBench Platform")
+    parser.add_argument("--require-live", action="store_true", default=False, help="Strictly require live running gateway")
+    parser.add_argument("--output", "-o", type=str, default=None, help="Custom output JSON path for benchmark results")
+    parser.add_argument("--dry-run", action="store_true", default=False, help="Compute metrics without writing artifact to disk")
+    parser.add_argument("--gateway-url", type=str, default=None, help="Target Gateway API base URL")
+    args = parser.parse_args()
+
+    run_benchmark(
+        output_path=args.output,
+        dry_run=args.dry_run,
+        require_live=args.require_live,
+        gateway_url=args.gateway_url,
+    )

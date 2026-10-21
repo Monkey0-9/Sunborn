@@ -5,6 +5,7 @@ metadata:
   name: {{ include "sunborn.fullname" . }}-gateway-pdb
   labels:
     {{- include "sunborn.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
 spec:
   {{- if .Values.gateway.podDisruptionBudget.minAvailable }}
   minAvailable: {{ .Values.gateway.podDisruptionBudget.minAvailable }}
@@ -14,6 +15,6 @@ spec:
   {{- end }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ include "sunborn.name" . }}-gateway
-      app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- include "sunborn.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: gateway
 {{- end }}

@@ -57,7 +57,7 @@ spec:
         - protocol: UDP
           port: 53
 
-    # 2. Allow egress to Sunborn state backends (PostgreSQL, Dragonfly, Qdrant) within the namespace
+    # 2. Allow egress to Sunborn state backends (PostgreSQL, Dragonfly, Qdrant, Embedder, Vault KMS) within the namespace
     - to:
         - podSelector: {}
       ports:
@@ -67,6 +67,10 @@ spec:
           port: 6379
         - protocol: TCP
           port: 6333
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 8200
 
     # 3. Allow egress to external backend databases/accelerators if running in dedicated namespace
     {{- if .Values.networkPolicy.backendNamespaceSelector }}
@@ -80,6 +84,10 @@ spec:
           port: 6379
         - protocol: TCP
           port: 6333
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 8200
     {{- end }}
 
     # 4. Allow egress to external LLM / embedding provider over HTTPS (port 443)

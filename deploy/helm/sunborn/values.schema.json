@@ -66,6 +66,15 @@
             "minAvailable": { "type": "integer", "minimum": 1 },
             "maxUnavailable": { "type": "integer", "minimum": 1 }
           }
+        },
+        "securityContext": {
+          "type": "object"
+        },
+        "podSecurityContext": {
+          "type": "object"
+        },
+        "containerSecurityContext": {
+          "type": "object"
         }
       }
     },
@@ -73,7 +82,16 @@
       "type": "object",
       "properties": {
         "enabled": { "type": "boolean" },
-        "replicaCount": { "type": "integer", "minimum": 1 }
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "securityContext": {
+          "type": "object"
+        },
+        "podSecurityContext": {
+          "type": "object"
+        },
+        "containerSecurityContext": {
+          "type": "object"
+        }
       }
     },
     "secrets": {

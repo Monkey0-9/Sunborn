@@ -17,7 +17,7 @@ Sunborn defines an explicit architectural progression across semantic caching re
 |---|---|---|---|---|---|
 | **Baseline 0** | **Direct Origin** | None (Origin LLM) | None | N/A | Origin single point of failure |
 | **Baseline 1** | **Exact Hash Cache** | Deterministic SHA-256 | Static TTL | Bitwise exact matching only | Ephemeral memory loss |
-| **Baseline 2** | **Naive Cosine Cache** | Uncalibrated Cosine Similarity | Static arbitrary threshold | None (41.13% false-hit rate on adversarial traps) | High semantic hallucination risk |
+| **Baseline 2** | **Naive Cosine Cache** | Uncalibrated Cosine Similarity | Static arbitrary threshold | None (48.39% false-hit rate on adversarial traps) | High semantic hallucination risk |
 | **Tier 1** | **Guardrailed Cache** | Conformal Risk Control (CRC) + NLI | Offline batch calibration | Structural pre-filter (negation, numeric, entity inversion) | False-hit rate bounded to $\le 1.0\%$ |
 | **Tier 2** | **Predictive & Invalidated** | Lineage Dependency Graph + Markov Prefetch | Predictive speculative warming | Monotonic epoch fencing ($E_{fence} > E_{read}$) | Zero stale read-repair race conditions |
 | **Tier 3** | **Safe Adaptive Closed-Loop** | Multi-Tier Policy Promotion Controller | Closed-loop signed feedback | 70/30 held-out calibration, automated canary & instant rollback | Real-time false-hit avoidance without human tuning |
@@ -205,8 +205,9 @@ bash research/reproduce.sh
 |---|---|---|---|
 | **Sunborn B3 False-Hit Rate** | **0.0%** | **0.0%** (0 / 124 queries) | **CONFIRMED** |
 | **Sunborn B3 Precision** | **100.0%** | **100.0%** | **CONFIRMED** |
-| **Sunborn B3 Token Savings** | **28.0% – 32.0%** | **29.03%** | **CONFIRMED** |
-| **Naive Cosine B2 False-Hit Rate** | **35.0% – 45.0%** | **41.13%** (51 false hits) | **CONFIRMED** |
+| **Sunborn B3 Cost Savings (Frozen Suite)** | **10.0% – 15.0%** | **12.09%** (124-query suite) | **CONFIRMED** |
+| **Sunborn B3 Token Savings (Zipfian)** | **28.0% – 32.0%** | **29.03%** (Capacity soak) | **CONFIRMED** |
+| **Naive Cosine B2 False-Hit Rate** | **35.0% – 50.0%** | **48.39%** (60 false hits) | **CONFIRMED** |
 | **Gateway P99 Latency SLO** | **< 5.0 ms** | **240 µs (0.24 ms)** | **CONFIRMED** |
 | **Throughput (Exact Path)** | **> 10,000 req/s** | **14,166 req/s** | **CONFIRMED** |
 | **Cryptographic Shredding Latency** | **< 1.0 ms** | **42.1 µs** | **CONFIRMED** |
@@ -216,8 +217,9 @@ bash research/reproduce.sh
 
 ## 6. Formal Sign-Off & Verification Evidence
 
-All 29 phase gates, ISO/IEC/IEEE 29148 functional requirements (FR-001 through FR-035), REA binary security mitigations, and autonomic self-learning controllers are certified production-ready.
+All 29 phase gates (Phase 00–28), ISO/IEC/IEEE 29148 functional requirements (FR-001 through FR-035), REA binary security mitigations, and autonomic self-learning controllers are verified for controlled staging and pilot operations. Unrestricted enterprise production remains subject to Gates G1–G10 detailed in the Master Completion Audit and Institutional-Readiness Plan.
 
 - **Primary Traceability Matrix**: [`docs/architecture/traceability_matrix.md`](traceability_matrix.md)
 - **Release Acceptance Record**: [`docs/architecture/release_acceptance_record.md`](release_acceptance_record.md)
+- **Master Completion Audit Plan**: [`docs/architecture/master_completion_audit_and_institutional_readiness_plan.md`](master_completion_audit_and_institutional_readiness_plan.md)
 - **Reproduction Certificate**: [`research/results/reproduction_certificate.json`](../../research/results/reproduction_certificate.json)
