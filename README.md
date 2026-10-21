@@ -1,12 +1,14 @@
 # Sunborn: Multi-Tenant Semantic Execution Gateway & Autonomic Cache
 
+[![Release Candidate: v0.1.0-rc2](https://img.shields.io/badge/Release%20Candidate-v0.1.0--rc2-purple?style=flat-square)](RELEASE_NOTES.md)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
 [![Rust 1.80+](https://img.shields.io/badge/Rust-1.80%2B-orange?style=flat-square&logo=rust)](Cargo.toml)
 [![Next.js 15](https://img.shields.io/badge/Next.js-15.5.27%20App%20Router-black?style=flat-square&logo=next.js)](frontend)
 [![Python SDK](https://img.shields.io/badge/Python%20SDK-OpenAI%20%7C%20Claude%20%7C%20Async-3776ab?style=flat-square&logo=python)](sdk/python)
-[![Tests: 158 Passing](https://img.shields.io/badge/Tests-158%20Passing-brightgreen?style=flat-square)]()
+[![Tests: 212 Passing](https://img.shields.io/badge/Tests-212%20Passing-brightgreen?style=flat-square)]()
 [![Binary Security: Hardened](https://img.shields.io/badge/Binary%20Security-RELRO%20%7C%20PIE%20%7C%20NX-emerald?style=flat-square)](docs/architecture/autonomic_invariance_specification.md#4-reverse-engineering-analysis-rea--binary-security-audit)
 [![Zero False Hits](https://img.shields.io/badge/Semantic%20False%20Hits-0.0%25-blue?style=flat-square)](research/results/benchmark_run.json)
+[![Readiness Plan](https://img.shields.io/badge/Institutional%20Readiness-Master%20Plan%20Verified-blueviolet?style=flat-square)](docs/architecture/master_completion_audit_and_institutional_readiness_plan.md)
 
 > **Sunborn** is an open-source, high-performance distributed semantic inference cache, execution-reuse gateway, and autonomic controller designed for autonomous AI agents and large language model (LLM) applications. Sunborn combines sub-millisecond hot-path caching, conformal risk-controlled semantic retrieval, and self-learning policy promotion with formal invariant guarantees.
 
@@ -73,6 +75,19 @@ To eliminate ambiguity between modeled projections and independently measured te
 | **Full-Stack Loopback Latency** | P99: **240 µs** (Table II) | `cargo test --test performance_test` | Full Axum HTTP stack (JCS canonicalization, routing, cache) | 5,000 HTTP loopback requests | P50: 120 µs, P95: 195 µs, P99: 240 µs | Localhost loopback network; does not include wide-area WAN latency. |
 | **Client HTTP RPC Latency** | P50: **1.09 ms**, P99: **3.87 ms** | [`research/results/benchmark_run.json`](research/results/benchmark_run.json) | Python client to live gateway daemon | 124 end-to-end queries | Mean: 1.21 ms, P99: 3.87 ms | Client-side round-trip RPC latency including Python JSON serde. |
 | **Cryptographic Shredding Latency** | Average: **3.2 µs** (P99: **4.4 µs**) | [`research/results/capacity_soak_report.json`](research/results/capacity_soak_report.json) | Live TDEK zeroization via `/v1/governance/shred` under traffic | 5 tenants under concurrent load | SLO: < 1,000 µs (1.0 ms) | Microsecond atomic memory zeroization and multi-store record deletion. |
+
+### 1.2 October 21, 2026 Master Completion Audit & Institutional-Readiness Plan
+
+In accordance with institutional review standards across Senior Platform Engineering, Distributed Systems, Application Security, SRE, and AI/ML Research, Sunborn has completed the **Master Completion Audit and Institutional-Readiness Plan** (tracked under `MON-458` / `MON-526`):
+
+* **Executive Verdict**: **Controlled Pilot & Staging Cleared / Unrestricted Enterprise Production Deferred** pending third-party penetration testing and live multi-region cluster drill sign-off.
+* **Master Governance Document**: [`docs/architecture/master_completion_audit_and_institutional_readiness_plan.md`](docs/architecture/master_completion_audit_and_institutional_readiness_plan.md).
+* **Route Authorization Matrix**: [`docs/security/authorization_matrix.md`](docs/security/authorization_matrix.md) establishing exact permission, idempotency, audit, and destruction tiers across all 37 endpoints.
+* **Durable Schemas**: [`migrations/0002_durable_identity_and_keys.sql`](migrations/0002_durable_identity_and_keys.sql) persisting wrapped tenant data encryption keys and API credentials in PostgreSQL WAL.
+* **Safe Reuse Invariance**: Proof-carrying admissibility checking in [`crates/sunborn-gateway/src/handlers.rs`](crates/sunborn-gateway/src/handlers.rs) evicts corrupt/expired cache entries and falls through safely to origin execution.
+* **Shutdown Drain Semantics**: [`crates/sunborn-gateway/src/main.rs`](crates/sunborn-gateway/src/main.rs) drains outbox WAL on clean shutdown and terminates with exit code 75 (`EX_TEMPFAIL`) on deadline expiry.
+* **Helm Supply-Chain Validation**: [`deploy/helm/sunborn/templates/secret.yaml`](deploy/helm/sunborn/templates/secret.yaml) strictly fails closed on missing database URLs, eliminating placeholder fixtures (`change_in_vault`).
+* **Python SDK Lifecycle**: [`sdk/python/sunborn/client.py`](sdk/python/sunborn/client.py) enforces session closure tracking (`is_closed`), rejecting post-close requests with `RuntimeError`.
 
 ---
 

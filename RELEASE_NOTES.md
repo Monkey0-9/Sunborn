@@ -1,10 +1,35 @@
-# Sunborn Release Notes & Institutional Review Dossier (v0.1.0-rc1)
+# Sunborn Release Notes & Institutional Review Dossier
 
-**Release Candidate**: `v0.1.0-rc1`  
-**Evidence Verified**: October 20, 2026  
-**Audited Baseline**: Resolution of Independent Review NO-GO Verdict  
+## Release Candidate: `v0.1.0-rc2` (Master Audit Remediation & Institutional Readiness)
+
+**Release Candidate**: `v0.1.0-rc2`  
+**Evidence Verified**: October 21, 2026  
+**Audited Baseline**: October 21, 2026 Master Completion Audit and Institutional-Readiness Plan  
 **Repository**: `Monkey0-9/Sunborn`  
 **License**: Apache License 2.0 (see [LICENSE](file:///home/unknownuser/Sunbron/LICENSE))  
+**Governance Plan**: [`docs/architecture/master_completion_audit_and_institutional_readiness_plan.md`](file:///home/unknownuser/Sunbron/docs/architecture/master_completion_audit_and_institutional_readiness_plan.md)  
+**Linear Traceability**: `MON-458` (Master Execution Control), `MON-526` (Architecture Freeze), `WS-00`–`WS-12`, `Phase 00`–`Phase 28`  
+
+### 1. Institutional Verdict & Operational Clearance
+> **Status**: **CONTROLLED PILOT & STAGING CLEARED / UNRESTRICTED PRODUCTION DEFERRED**  
+> Authorized for controlled development, integration, staging, and sandboxed enterprise pilots. Unrestricted enterprise production with highly sensitive customer data is deferred pending external penetration testing and live multi-region cluster drill sign-off.
+
+### 2. Remediation of October 21, 2026 Master Audit Findings
+| Issue Ref | Focus Area | Resolution & Implementation Artifact |
+| :--- | :--- | :--- |
+| **AUDIT-P0-001** | Multi-Tenant Authorization | Established formal route-by-route authorization matrix in [`docs/security/authorization_matrix.md`](file:///home/unknownuser/Sunbron/docs/security/authorization_matrix.md). Verified tenant identity derives strictly from validated credentials in `SecurityContext`. All non-admin privilege escalation attempts return HTTP 403. |
+| **AUDIT-P0-002** | Durable Identity & State | Created [`migrations/0002_durable_identity_and_keys.sql`](file:///home/unknownuser/Sunbron/migrations/0002_durable_identity_and_keys.sql) defining persistent PostgreSQL tables for `tenant_wrapped_keys` and `api_credentials`. Gateway hydrates wrapped TDEKs on startup, eliminating volatile-only key risks. |
+| **AUDIT-P0-003** | Safe Semantic & Execution Reuse | Updated [`handlers.rs`](file:///home/unknownuser/Sunbron/crates/sunborn-gateway/src/handlers.rs#L258-L272) so that expired, tampered, or invalid reuse certificates immediately evict the cache entry and fall through safely to fresh origin execution. Zero unverified cached content returned. |
+| **AUDIT-P0-004** | Secret Lifecycle & Helm Hardening | Hardened [`secret.yaml`](file:///home/unknownuser/Sunbron/deploy/helm/sunborn/templates/secret.yaml#L20-L35) to fail closed at render time if `postgresUrl` is missing or contains placeholder values (`change_in_vault`). Insecure default credentials removed. |
+| **AUDIT-P0-005** | Research Validity & Provenance | Standardized all benchmark and manifest artifacts to declare `LOCAL_DEVELOPMENT_INTEGRITY_CHECK` and `NONE_UNAUTHENTICATED_LOCAL_DIGEST` to prevent conflation with external digital notary signatures. Synthetic cost assumptions disclosed. |
+| **AUDIT-P1-001** | API Contract Drift | Validated all 37 gateway endpoints against OpenAPI 3.1 specification ([`docs/api/openapi.yaml`](file:///home/unknownuser/Sunbron/docs/api/openapi.yaml)); verified zero schema drift via [`scripts/check_openapi_drift.py`](file:///home/unknownuser/Sunbron/scripts/check_openapi_drift.py). |
+| **AUDIT-P1-002** | Python SDK Lifecycle | Enforced session closure contracts (`client.is_closed = True`) across synchronous and asynchronous Python clients; post-close calls raise `RuntimeError`. Clean wheel build and installation verified in isolated virtual environment. |
+| **AUDIT-P1-003** | Gateway Shutdown Semantics | Updated [`main.rs`](file:///home/unknownuser/Sunbron/crates/sunborn-gateway/src/main.rs#L120-L142) so that shutdown deadline expiration logs an error and exits with code 75 (`EX_TEMPFAIL`) rather than exit code 0. Clean termination flushes outbox WAL via `state.graceful_drain()`. |
+| **AUDIT-P1-004** | Authenticated Rate Limiting | Updated [`rate_limit_middleware`](file:///home/unknownuser/Sunbron/crates/sunborn-gateway/src/middleware/rate_limit.rs#L180-L245) to resolve tenant identity from `SecurityContext`, returning standard RFC headers (`x-ratelimit-limit`, `x-ratelimit-remaining`, `x-ratelimit-reset`, and `retry-after`). |
+
+---
+
+## Release Candidate: `v0.1.0-rc1` (Initial Review Dossier)  
 
 ---
 
