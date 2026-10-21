@@ -90,7 +90,7 @@ async fn main() -> anyhow::Result<()> {
 
     let state = AppState::new(config);
     state.verify_production_readiness().await?;
-    let app = create_router(state);
+    let app = create_router(state.clone());
 
     let listener = TcpListener::bind(addr).await?;
     tracing::info!("Gateway listening on http://{}", addr);
@@ -123,11 +123,11 @@ async fn main() -> anyhow::Result<()> {
         tokio::spawn(async move {
             tokio::select! {
                 _ = tokio::time::sleep(std::time::Duration::from_secs(drain_timeout_secs)) => {
-                    tracing::warn!(
+                    tracing::error!(
                         timeout_secs = drain_timeout_secs,
-                        "Shutdown drain deadline reached; terminating server process"
+                        "Shutdown drain deadline reached with active work remaining; terminating server process with exit code 75"
                     );
-                    std::process::exit(0);
+                    std::process::exit(75);
                 }
                 _ = done_rx => {}
             }
@@ -135,8 +135,9 @@ async fn main() -> anyhow::Result<()> {
     });
 
     server.await?;
+    state.graceful_drain().await?;
     let _ = done_tx.send(());
-    tracing::info!("Sunborn Gateway shutdown complete: all in-flight connections drained cleanly.");
+    tracing::info!("Sunborn Gateway shutdown complete: all in-flight connections and background work drained cleanly.");
 
     Ok(())
 }

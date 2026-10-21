@@ -555,7 +555,10 @@ async fn test_cluster_sync_vector_clock_and_autonomic_status() {
 
 #[tokio::test]
 async fn test_runtime_reuse_certificate_admissibility_and_rejection() {
-    let state = AppState::new(AppConfig::default());
+    let mut config = AppConfig::default();
+    config.cache.exact_cache_enabled = true;
+    config.cache.semantic_cache_enabled = false;
+    let state = AppState::new(config);
     let app = create_router(state.clone());
 
     state.api_key_registry.register_key(
@@ -647,14 +650,10 @@ async fn test_runtime_reuse_certificate_admissibility_and_rejection() {
     assert_eq!(resp3.status(), StatusCode::OK);
     let body3 = resp3.into_body().collect().await.unwrap().to_bytes();
     let json3: Value = serde_json::from_slice(&body3).unwrap();
-    assert_eq!(json3["decision"]["action"], "revalidate");
+    assert_eq!(json3["decision"]["action"], "origin_execute");
     assert_eq!(json3["cached"], false);
-    assert!(json3["decision"]["reason_code"]
-        .as_str()
-        .unwrap()
-        .contains("CERTIFICATE_ADMISSIBILITY_REJECTED"));
 
-    // 4. Exact Cache Entry with Tampered Certificate Signature -> Fails closed to Revalidate
+    // 4. Exact Cache Entry with Tampered Certificate Signature -> Fails closed to Origin Execution
     let req_env1: RequestEnvelope = serde_json::from_value(payload1.clone()).unwrap();
     let identity = sunborn_identity::IdentityEngine::compute_identity(&req_env1);
     if let Ok(Some(mut cached)) = state.cache.get(&identity.key).await {
@@ -679,12 +678,8 @@ async fn test_runtime_reuse_certificate_admissibility_and_rejection() {
     assert_eq!(resp4.status(), StatusCode::OK);
     let body4 = resp4.into_body().collect().await.unwrap().to_bytes();
     let json4: Value = serde_json::from_slice(&body4).unwrap();
-    assert_eq!(json4["decision"]["action"], "revalidate");
+    assert_eq!(json4["decision"]["action"], "origin_execute");
     assert_eq!(json4["cached"], false);
-    assert!(json4["decision"]["reason_code"]
-        .as_str()
-        .unwrap()
-        .contains("CERTIFICATE_ADMISSIBILITY_REJECTED"));
 }
 
 #[tokio::test]

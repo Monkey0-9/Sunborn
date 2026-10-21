@@ -461,5 +461,27 @@ The engineering governance record formally adopts the auditor's commit attributi
 - **Gate 4 (Independent Scientific & Security Validation - P1)**: 5 reproducibility gates confirmed, honest certificate disclosure, adversarial security test suite.
 - **Gate 5 (Institutional Product Maturity - P2)**: Versioning policy, operator runbooks, route-by-route authorization matrix, and verified clean CI pipeline.
 
+---
+
+## 13. Institutional Master Completion Audit & Readiness Plan (October 21, 2026)
+
+### 13.1 Auditor Verdict & Operational Stance
+- **Executive Verdict**: **NOT YET CLEARED FOR UNRESTRICTED PRODUCTION USE**. Controlled development, staging, and sandboxed enterprise pilots are authorized subject to environment-specific safeguards; unrestricted enterprise production containing highly sensitive data is deferred pending full multi-replica live testing and independent review.
+- **Authoritative Document**: The comprehensive master plan is codified in [`docs/architecture/master_completion_audit_and_institutional_readiness_plan.md`](file:///home/unknownuser/Sunbron/docs/architecture/master_completion_audit_and_institutional_readiness_plan.md).
+- **Core Principle**: Proving properties under production failure, hostile traffic, concurrent tenants, and sustained load takes precedence over adding more features.
+
+### 13.2 Resolution of October 21, 2026 Release Blockers
+1. **Graceful Shutdown Drain Semantics**: When shutdown drain exceeds the deadline (`SUNBORN_DRAIN_TIMEOUT_SECS`), the process emits an error and terminates with exit code 75 (`EX_TEMPFAIL`) rather than claiming successful exit code 0. Normal termination invokes `state.graceful_drain()` to flush database outbox and drain in-flight connections.
+2. **Durable Identity & Cryptographic Keys**: Introduced `migrations/0002_durable_identity_and_keys.sql` defining persistent tables for `tenant_wrapped_keys` and `api_credentials`. `AppState` hydrates wrapped tenant keys from PostgreSQL on startup, eliminating volatile-only credential risks.
+3. **Safe Semantic & Execution Reuse**: Proof-carrying admissibility checking in `crates/sunborn-gateway/src/handlers.rs` strictly rejects expired, tampered, or unverified cache entries, evicting the corrupted entry and falling through to fresh origin execution with zero unverified content returned to callers.
+4. **Helm Secret Fail-Closed Hardening**: `deploy/helm/sunborn/templates/secret.yaml` strictly fails closed if `postgresUrl` is missing or contains placeholder strings (`change_in_vault`). Default fallback production database credentials have been eliminated.
+5. **Python SDK Context Lifecycle**: Synchronous and asynchronous clients enforce session closure tracking (`is_closed`), rejecting post-close requests with `RuntimeError`.
+6. **Authenticated Rate Limiting**: The rate-limiting middleware extracts tenant identity strictly from verified credentials in `SecurityContext`, returning standard RFC rate-limiting headers (`x-ratelimit-limit`, `x-ratelimit-remaining`, `x-ratelimit-reset`, and `retry-after`).
+7. **Empirical Research Attestation**: Reproduction certificates and manifests explicitly declare `NONE_UNAUTHENTICATED_LOCAL_DIGEST` to prevent conflation with third-party digital notary attestations.
+
+### 13.3 Release Target
+The immediate institutional milestone is an **evidence-backed release candidate (`v0.1.0-rc2`)** with all P0 blockers verified and all Gates G1–G10 satisfied.
+
+
 
 

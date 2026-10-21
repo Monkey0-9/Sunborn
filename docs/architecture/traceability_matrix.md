@@ -43,6 +43,12 @@
 | **FR-033** | Tenant-Isolated Learning Store & GDPR Article 17 Purge (Layer 2) | `crates/sunborn-gateway/src/learning/store.rs` | `learning_controller_test::test_layer2_tenant_safe_store_and_gdpr_purge` | **Verified** |
 | **FR-034** | Offline Held-Out Calibration & Counterfactual Shadowing (Layers 3 & 4) | `crates/sunborn-gateway/src/learning/calibration.rs`<br>`crates/sunborn-gateway/src/learning/shadow.rs` | `learning_controller_test::test_layer3_offline_calibration_on_held_out_splits`<br>`learning_controller_test::test_layer4_counterfactual_shadow_evaluator` | **Verified** |
 | **FR-035** | Canary Promotion, Automated Rollback & BFF Secret Isolation (Layer 5) | `crates/sunborn-gateway/src/learning/controller.rs`<br>`frontend/src/app/api/proxy/[...path]/route.ts` | `learning_controller_test::test_layer5_canary_rollout_and_automated_rollback`<br>`frontend npm run build` (BFF proxy route) | **Verified** |
+| **FR-036** | Durable Credential & Key Hydration from PostgreSQL | `crates/sunborn-db/src/postgres.rs`<br>`crates/sunborn-gateway/src/state.rs`<br>`migrations/0002_durable_identity_and_keys.sql` | `crates/sunborn-gateway/tests/production_startup_test.rs`<br>`crates/sunborn-db/src/postgres.rs` | **Verified** |
+| **FR-037** | Fail-Closed Helm Secret Validation | `deploy/helm/sunborn/templates/secret.yaml`<br>`deploy/helm/sunborn/values.schema.json` | `helm lint`<br>`helm template` fail-closed assertions | **Verified** |
+| **FR-038** | Authenticated Rate Limiting & RFC Headers | `crates/sunborn-gateway/src/middleware/rate_limit.rs` | `crates/sunborn-gateway/tests/security_test.rs` | **Verified** |
+| **FR-039** | Graceful Shutdown Drain & Exit Semantics (Exit 75) | `crates/sunborn-gateway/src/main.rs`<br>`crates/sunborn-gateway/src/state.rs` | `sunborn-gateway::state::AppState::graceful_drain` | **Verified** |
+| **FR-040** | Safe Fail-Through on Certificate Admissibility Failure | `crates/sunborn-gateway/src/handlers.rs` | `crates/sunborn-gateway/tests/reuse_certificate_path_test.rs`<br>`crates/sunborn-gateway/tests/integration_test.rs` | **Verified** |
+| **FR-041** | Python SDK Session Lifecycle & RFC 7807 Hierarchy | `sdk/python/sunborn/client.py`<br>`sdk/python/sunborn/async_client.py` | `sdk/python/tests/test_sdk_package.py` | **Verified** |
 
 ---
 

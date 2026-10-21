@@ -31,12 +31,18 @@ class TestSunbornPackage(unittest.TestCase):
         with SunbornClient(api_key="test-key-ctx") as client:
             self.assertEqual(client.api_key, "test-key-ctx")
             self.assertEqual(client.tenant_id, "default-tenant")
+            self.assertFalse(client.is_closed)
+        self.assertTrue(client.is_closed)
+        with self.assertRaises(RuntimeError):
+            client._post("/requests", {})
 
     def test_async_client_context_manager(self):
         async def _test():
             async with AsyncSunbornClient(api_key="test-key-async-ctx") as client:
                 self.assertEqual(client.api_key, "test-key-async-ctx")
                 self.assertEqual(client.base_url, "http://localhost:8080/v1")
+                self.assertFalse(client.is_closed)
+            self.assertTrue(client.is_closed)
 
         asyncio.run(_test())
 

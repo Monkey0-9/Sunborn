@@ -46,6 +46,11 @@ class AsyncSunbornClient:
         self._sync_client.close()
 
     @property
+    def is_closed(self) -> bool:
+        """Returns True if the underlying client session is closed."""
+        return self._sync_client.is_closed
+
+    @property
     def base_url(self) -> str:
         return self._sync_client.base_url
 

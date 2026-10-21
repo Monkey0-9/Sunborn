@@ -46,6 +46,7 @@ class SunbornClient:
         self.timeout = timeout
         self.max_retries = max(0, max_retries)
         self.backoff_factor = backoff_factor
+        self._closed = False
 
     def __enter__(self) -> "SunbornClient":
         return self
@@ -55,11 +56,18 @@ class SunbornClient:
 
     def close(self) -> None:
         """Closes any underlying client connections and cleans up resources."""
-        pass
+        self._closed = True
+
+    @property
+    def is_closed(self) -> bool:
+        """Returns True if the client session has been closed."""
+        return self._closed
 
     def _post(
         self, path: str, payload: dict, custom_headers: dict | None = None
     ) -> dict:
+        if self._closed:
+            raise RuntimeError("Cannot execute requests on a closed SunbornClient session.")
         url = f"{self.base_url}/{path.lstrip('/')}"
         data = json.dumps(payload, default=str).encode("utf-8")
         headers = {

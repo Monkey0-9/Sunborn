@@ -259,56 +259,39 @@ pub async fn execute_request_inner(
                 tracing::warn!(
                     request_id = %req.request_id.0,
                     error = %admissibility_err,
-                    "Exact cache candidate failed proof-carrying admissibility verification -> Abstaining to Revalidate"
+                    "Exact cache candidate failed proof-carrying admissibility verification -> Evicting entry and falling through to origin"
                 );
+                let cache_clone = state.cache.clone();
+                let key_to_evict = identity.key.clone();
+                tokio::spawn(async move {
+                    let _ = cache_clone.delete(&key_to_evict).await;
+                });
+                // Fall through to semantic cache or origin execution (do NOT return unverified content)
+            } else {
+                let certificate = Some(cert);
+
                 return Ok(ResponseEnvelope {
                     request_id: req.request_id,
                     tenant_id: req.tenant_id,
                     application_id: req.application_id,
                     decision: DecisionRecord {
-                        action: DecisionAction::Revalidate,
+                        action: DecisionAction::SafeHit,
                         cache_path: CachePath::Exact,
-                        confidence: 0.5,
-                        risk_score: 1.0,
-                        reason_code: format!(
-                            "CERTIFICATE_ADMISSIBILITY_REJECTED: {admissibility_err}"
-                        ),
-                        latency_saved_ms: None,
+                        confidence: 1.0,
+                        risk_score: 0.0,
+                        reason_code: "EXACT_CANONICAL_MATCH".to_string(),
+                        latency_saved_ms: Some(150),
                         policy_version: Some(state.learning_controller.get_active_policy_version()),
                         policy_id: Some(state.learning_controller.get_active_policy_id()),
                     },
                     content: cached_entry.content,
-                    cached: false,
+                    cached: true,
                     cache_key: Some(identity.key),
                     created_at: Utc::now(),
                     duration_ms,
-                    certificate: Some(cert),
+                    certificate,
                 });
             }
-
-            let certificate = Some(cert);
-
-            return Ok(ResponseEnvelope {
-                request_id: req.request_id,
-                tenant_id: req.tenant_id,
-                application_id: req.application_id,
-                decision: DecisionRecord {
-                    action: DecisionAction::SafeHit,
-                    cache_path: CachePath::Exact,
-                    confidence: 1.0,
-                    risk_score: 0.0,
-                    reason_code: "EXACT_CANONICAL_MATCH".to_string(),
-                    latency_saved_ms: Some(150),
-                    policy_version: Some(state.learning_controller.get_active_policy_version()),
-                    policy_id: Some(state.learning_controller.get_active_policy_id()),
-                },
-                content: cached_entry.content,
-                cached: true,
-                cache_key: Some(identity.key),
-                created_at: Utc::now(),
-                duration_ms,
-                certificate,
-            });
         }
     }
 
@@ -316,114 +299,86 @@ pub async fn execute_request_inner(
     if state.config.cache.semantic_cache_enabled
         && state.circuit_breaker.status().await != sunborn_cache::CircuitStatus::Open
     {
-        let req_hash =
-            u64::from_str_radix(&identity.hash[..16.min(identity.hash.len())], 16).unwrap_or(0);
-        let weights = state
-            .learning_controller
-            .select_policy_for_request(req_hash);
-        if let Ok(outcome) = state
-            .decision_engine
-            .evaluate_with_thresholds(
-                &req,
-                weights.min_similarity_threshold,
-                weights.max_risk_threshold,
-            )
-            .await
-        {
-            if outcome.decision.action == DecisionAction::SafeHit {
-                if let Some(content) = outcome.matched_content {
-                    SEMANTIC_HITS.fetch_add(1, Ordering::Relaxed);
-                    let duration_ms = start.elapsed().as_millis() as u64;
-                    tracing::info!(
-                        request_id = %req.request_id.0,
-                        confidence = outcome.decision.confidence,
-                        "Semantic cache HIT (C2)"
-                    );
+        'semantic_eval: {
+            let req_hash =
+                u64::from_str_radix(&identity.hash[..16.min(identity.hash.len())], 16).unwrap_or(0);
+            let weights = state
+                .learning_controller
+                .select_policy_for_request(req_hash);
+            if let Ok(outcome) = state
+                .decision_engine
+                .evaluate_with_thresholds(
+                    &req,
+                    weights.min_similarity_threshold,
+                    weights.max_risk_threshold,
+                )
+                .await
+            {
+                if outcome.decision.action == DecisionAction::SafeHit {
+                    if let Some(content) = outcome.matched_content {
+                        SEMANTIC_HITS.fetch_add(1, Ordering::Relaxed);
+                        let duration_ms = start.elapsed().as_millis() as u64;
+                        tracing::info!(
+                            request_id = %req.request_id.0,
+                            confidence = outcome.decision.confidence,
+                            "Semantic cache HIT (C2)"
+                        );
 
-                    let mut decision = outcome.decision;
-                    decision.policy_id = Some(state.learning_controller.get_active_policy_id());
-                    decision.policy_version =
-                        Some(state.learning_controller.get_active_policy_version());
+                        let mut decision = outcome.decision;
+                        decision.policy_id = Some(state.learning_controller.get_active_policy_id());
+                        decision.policy_version =
+                            Some(state.learning_controller.get_active_policy_version());
 
-                    let cert = match outcome.matched_certificate {
-                        Some(c) => c,
-                        None => {
+                        let cert = match outcome.matched_certificate {
+                            Some(c) => c,
+                            None => {
+                                tracing::warn!(
+                                    request_id = %req.request_id.0,
+                                    "Semantic cache match lacks a verified ReuseCertificate -> Treating as MISS and falling through to origin"
+                                );
+                                break 'semantic_eval;
+                            }
+                        };
+
+                        // Runtime proof-carrying admissibility check:
+                        let source_epochs: Vec<(uuid::Uuid, u64)> = req
+                            .dependency_snapshots
+                            .iter()
+                            .map(|s| (s.source_id, s.snapshot_epoch))
+                            .collect();
+                        if let Err(admissibility_err) = cert.verify_admissibility(
+                            &state.learning_hmac_secret,
+                            &req.tenant_id,
+                            &req.application_id,
+                            &req.model,
+                            None,
+                            Utc::now(),
+                            req.knowledge_epoch.unwrap_or(1),
+                            &source_epochs,
+                        ) {
                             tracing::warn!(
                                 request_id = %req.request_id.0,
-                                "Semantic cache match lacks a verified ReuseCertificate -> Abstaining to Revalidate"
+                                error = %admissibility_err,
+                                "Semantic cache candidate failed proof-carrying admissibility verification -> Treating as MISS and falling through to origin"
                             );
-                            let mut rejected_decision = decision;
-                            rejected_decision.action = DecisionAction::Revalidate;
-                            rejected_decision.reason_code =
-                                "CERTIFICATE_MISSING_ON_SEMANTIC_MATCH".to_string();
-                            return Ok(ResponseEnvelope {
-                                request_id: req.request_id,
-                                tenant_id: req.tenant_id,
-                                application_id: req.application_id,
-                                decision: rejected_decision,
-                                content,
-                                cached: false,
-                                cache_key: outcome.matched_id,
-                                created_at: Utc::now(),
-                                duration_ms,
-                                certificate: None,
-                            });
+                            break 'semantic_eval;
                         }
-                    };
 
-                    // Runtime proof-carrying admissibility check:
-                    let source_epochs: Vec<(uuid::Uuid, u64)> = req
-                        .dependency_snapshots
-                        .iter()
-                        .map(|s| (s.source_id, s.snapshot_epoch))
-                        .collect();
-                    if let Err(admissibility_err) = cert.verify_admissibility(
-                        &state.learning_hmac_secret,
-                        &req.tenant_id,
-                        &req.application_id,
-                        &req.model,
-                        None,
-                        Utc::now(),
-                        req.knowledge_epoch.unwrap_or(1),
-                        &source_epochs,
-                    ) {
-                        tracing::warn!(
-                            request_id = %req.request_id.0,
-                            error = %admissibility_err,
-                            "Semantic cache candidate failed proof-carrying admissibility verification -> Abstaining to Revalidate"
-                        );
-                        let mut rejected_decision = decision;
-                        rejected_decision.action = DecisionAction::Revalidate;
-                        rejected_decision.reason_code =
-                            format!("CERTIFICATE_ADMISSIBILITY_REJECTED: {admissibility_err}");
+                        let certificate = Some(cert);
+
                         return Ok(ResponseEnvelope {
                             request_id: req.request_id,
                             tenant_id: req.tenant_id,
                             application_id: req.application_id,
-                            decision: rejected_decision,
+                            decision,
                             content,
-                            cached: false,
+                            cached: true,
                             cache_key: outcome.matched_id,
                             created_at: Utc::now(),
                             duration_ms,
-                            certificate: Some(cert),
+                            certificate,
                         });
                     }
-
-                    let certificate = Some(cert);
-
-                    return Ok(ResponseEnvelope {
-                        request_id: req.request_id,
-                        tenant_id: req.tenant_id,
-                        application_id: req.application_id,
-                        decision,
-                        content,
-                        cached: true,
-                        cache_key: outcome.matched_id,
-                        created_at: Utc::now(),
-                        duration_ms,
-                        certificate,
-                    });
                 }
             }
         }

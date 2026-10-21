@@ -163,6 +163,7 @@ secrets:
   openaiApiKey: ""
   masterKek: ""
   learningHmacSecret: ""
+  postgresUrl: ""
 
 networkPolicy:
   enabled: true

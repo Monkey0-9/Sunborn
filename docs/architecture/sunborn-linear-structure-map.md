@@ -182,3 +182,24 @@ Linear now has two independent dimensions:
 * **Sequence**: Phase 0 → Phase 28.
 
 This prevents cross-cutting frontend/backend/security/research work from being scattered while still preserving a strict implementation order.
+
+---
+
+## October 21, 2026 Master Completion Audit & Institutional-Readiness Mapping (MON-458 / MON-526)
+
+The findings from the **Master Completion Audit and Institutional-Readiness Plan (October 21, 2026)** are mapped directly into the authoritative Linear hierarchy and phase milestones:
+
+| Issue Identifier | Parent Workstream | Chronological Milestone | Scope / Invariant Enforced | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **AUDIT-P0-001** | `WS-09` (QA, Security & Validation) | `PHASE 18` — Multi-Tenancy Isolation | Route-by-route authorization matrix (`docs/security/authorization_matrix.md`); tenant identity strictly from verified credentials in `SecurityContext`. | **VERIFIED** |
+| **AUDIT-P0-002** | `WS-05` (Data & Storage) | `PHASE 23` — Disaster Recovery | Authoritative state inventory; PostgreSQL durable schema for wrapped TDEKs and API credentials (`migrations/0002_durable_identity_and_keys.sql`). | **VERIFIED** |
+| **AUDIT-P0-003** | `WS-06` (Cache & Decision Intelligence) | `PHASE 07` — Cache Decision Engine | Proof-carrying admissibility contract; invalid/expired/tampered reuse certificates fail safely by evicting entry and falling through to fresh origin execution. | **VERIFIED** |
+| **AUDIT-P0-004** | `WS-01` (Architecture & Governance) | `PHASE 26` — Governance / Lifecycle | Cryptographic key separation (KEK vs Admin vs HMAC); fail-closed Helm secret rendering without default production database URLs. | **VERIFIED** |
+| **AUDIT-P0-005** | `WS-11` (Research, Benchmarking) | `PHASE 28` — Scientific Publication | Transparent empirical evidence bounds; Wilson score confidence intervals ($N=124$); honest unauthenticated local integrity digest verification. | **VERIFIED** |
+| **AUDIT-P1-001** | `WS-03` (Backend & API) | `PHASE 02` — Gateway Identity & API | Full route/schema/auth parity between OpenAPI 3.1 (`docs/api/openapi.yaml`) and Axum handlers; RFC 7807 problem details across all 37 endpoints. | **VERIFIED** |
+| **AUDIT-P1-002** | `WS-03` (Backend & API) | `PHASE 01` — Developer Platform | Python SDK session lifecycle enforcement (`is_closed`), prohibiting post-close requests with `RuntimeError`; clean wheel installation. | **VERIFIED** |
+| **AUDIT-P1-003** | `WS-10` (SRE, Deployment & DR) | `PHASE 21` — Chaos / Reliability | Graceful shutdown `state.graceful_drain()` flushing outbox WAL; drain deadline timeout logs error and exits with code 75 (`EX_TEMPFAIL`). | **VERIFIED** |
+| **AUDIT-P1-004** | `WS-09` (QA, Security & Validation) | `PHASE 02` — Gateway Identity & Auth | Authenticated tenant rate limiting extracting tenant from `SecurityContext`; returns `x-ratelimit-limit`, `x-ratelimit-remaining`, `x-ratelimit-reset`, and `retry-after`. | **VERIFIED** |
+| **AUDIT-P1-005** | `WS-10` (SRE, Deployment & DR) | `PHASE 19` — Observability / Telemetry | Correlated structured logging (`x-request-id`); Prometheus metric scraping (`/metrics`) with bounded tenant cardinality to prevent label explosion. | **VERIFIED** |
+| **AUDIT-P1-006** | `WS-10` (SRE, Deployment & DR) | `PHASE 22` — Kubernetes | PodDisruptionBudget (`minAvailable: 1`), non-root container profile (`UID 1000`), NetworkPolicy, and values JSON schema validation. | **VERIFIED** |
+

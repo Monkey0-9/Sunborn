@@ -139,12 +139,88 @@ impl PostgresDatabaseStore {
                 details JSONB NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS tenant_wrapped_keys (
+                tenant_id VARCHAR(128) PRIMARY KEY,
+                key_version INT NOT NULL DEFAULT 1,
+                wrapped_tdek BYTEA NOT NULL,
+                kms_provider VARCHAR(64) NOT NULL DEFAULT 'local-aead',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+
+            CREATE TABLE IF NOT EXISTS api_credentials (
+                key_hash VARCHAR(128) PRIMARY KEY,
+                tenant_id VARCHAR(128) NOT NULL,
+                application_id VARCHAR(128) NOT NULL,
+                rate_limit_rps INT NOT NULL DEFAULT 100,
+                allowed_models JSONB NOT NULL DEFAULT '["*"]'::jsonb,
+                is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+                status VARCHAR(32) NOT NULL DEFAULT 'active',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
             "#,
         )
         .execute(pool)
         .await?;
 
         Ok(())
+    }
+
+    /// Persists an enveloped Tenant Data Encryption Key (TDEK) wrapped under the master KEK into PostgreSQL.
+    pub async fn persist_wrapped_tdek(
+        &self,
+        tenant_id: &str,
+        wrapped_tdek: &[u8],
+        kms_provider: &str,
+    ) -> Result<()> {
+        if let Some(pool) = self.get_pool().await {
+            let res = sqlx::query(
+                "INSERT INTO tenant_wrapped_keys (tenant_id, wrapped_tdek, kms_provider, updated_at)
+                 VALUES ($1, $2, $3, NOW())
+                 ON CONFLICT (tenant_id) DO UPDATE SET wrapped_tdek = $2, kms_provider = $3, updated_at = NOW()",
+            )
+            .bind(tenant_id)
+            .bind(wrapped_tdek)
+            .bind(kms_provider)
+            .execute(&pool)
+            .await;
+
+            if let Err(e) = res {
+                tracing::error!(error = %e, "Failed to persist wrapped TDEK to PostgreSQL");
+                if self.strict_durability {
+                    return Err(sunborn_core::SunbornError::database(format!(
+                        "Failed to persist wrapped TDEK: {e}"
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Fetches all persisted wrapped TDEKs for startup key hydration into memory.
+    pub async fn fetch_all_wrapped_tdeks(&self) -> Result<Vec<(String, Vec<u8>, String)>> {
+        if let Some(pool) = self.get_pool().await {
+            let rows: std::result::Result<Vec<(String, Vec<u8>, String)>, sqlx::Error> =
+                sqlx::query_as(
+                    "SELECT tenant_id, wrapped_tdek, kms_provider FROM tenant_wrapped_keys",
+                )
+                .fetch_all(&pool)
+                .await;
+
+            match rows {
+                Ok(records) => return Ok(records),
+                Err(e) => {
+                    tracing::warn!(error = %e, "Failed to query tenant_wrapped_keys from PostgreSQL");
+                    if self.strict_durability {
+                        return Err(sunborn_core::SunbornError::database(format!(
+                            "Failed to query tenant_wrapped_keys: {e}"
+                        )));
+                    }
+                }
+            }
+        }
+        Ok(Vec::new())
     }
 }
 

@@ -82,7 +82,8 @@
         "existingSecret": { "type": "string" },
         "sunbornAdminKey": { "type": "string" },
         "masterKek": { "type": "string" },
-        "learningHmacSecret": { "type": "string" }
+        "learningHmacSecret": { "type": "string" },
+        "postgresUrl": { "type": "string" }
       }
     },
     "networkPolicy": {

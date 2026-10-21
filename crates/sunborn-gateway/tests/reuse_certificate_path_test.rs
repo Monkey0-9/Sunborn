@@ -11,6 +11,7 @@ use tower::ServiceExt;
 async fn test_reuse_certificate_authenticated_and_validated_on_reuse_path() {
     let mut config = AppConfig::default();
     config.cache.exact_cache_enabled = true;
+    config.cache.semantic_cache_enabled = false;
     let state = AppState::new(config);
     let app = create_router(state.clone());
 
@@ -103,6 +104,7 @@ async fn test_reuse_certificate_authenticated_and_validated_on_reuse_path() {
 async fn test_reuse_certificate_tampered_signature_abstains_to_revalidate() {
     let mut config = AppConfig::default();
     config.cache.exact_cache_enabled = true;
+    config.cache.semantic_cache_enabled = false;
     let state = AppState::new(config);
     let app = create_router(state.clone());
 
@@ -166,14 +168,17 @@ async fn test_reuse_certificate_tampered_signature_abstains_to_revalidate() {
         !res_env2.cached,
         "Must not reuse entry with tampered signature"
     );
-    assert_eq!(res_env2.decision.action, DecisionAction::Revalidate);
-    assert!(res_env2.decision.reason_code.contains("CERTIFICATE"));
+    assert_eq!(res_env2.decision.action, DecisionAction::OriginExecute);
+    assert!(res_env2
+        .content
+        .contains("[Origin Response from gpt-4o for tenant enterprise-fintech]"));
 }
 
 #[tokio::test]
 async fn test_reuse_certificate_tampered_merkle_root_abstains_to_revalidate() {
     let mut config = AppConfig::default();
     config.cache.exact_cache_enabled = true;
+    config.cache.semantic_cache_enabled = false;
     let state = AppState::new(config);
     let app = create_router(state.clone());
 
@@ -237,14 +242,17 @@ async fn test_reuse_certificate_tampered_merkle_root_abstains_to_revalidate() {
         !res_env2.cached,
         "Must not reuse entry with tampered Merkle root"
     );
-    assert_eq!(res_env2.decision.action, DecisionAction::Revalidate);
-    assert!(res_env2.decision.reason_code.contains("CERTIFICATE"));
+    assert_eq!(res_env2.decision.action, DecisionAction::OriginExecute);
+    assert!(res_env2
+        .content
+        .contains("[Origin Response from gpt-4o for tenant enterprise-fintech]"));
 }
 
 #[tokio::test]
 async fn test_reuse_certificate_epoch_advance_abstains_to_revalidate() {
     let mut config = AppConfig::default();
     config.cache.exact_cache_enabled = true;
+    config.cache.semantic_cache_enabled = false;
     let state = AppState::new(config);
     let app = create_router(state.clone());
 
@@ -325,17 +333,17 @@ async fn test_reuse_certificate_epoch_advance_abstains_to_revalidate() {
         !res_env2.cached,
         "Must not reuse certificate across monotonic epoch advance"
     );
-    assert_eq!(res_env2.decision.action, DecisionAction::Revalidate);
+    assert_eq!(res_env2.decision.action, DecisionAction::OriginExecute);
     assert!(res_env2
-        .decision
-        .reason_code
-        .contains("CERTIFICATE_ADMISSIBILITY_REJECTED"));
+        .content
+        .contains("[Origin Response from gpt-4o for tenant enterprise-fintech]"));
 }
 
 #[tokio::test]
 async fn test_reuse_certificate_expired_validity_window_abstains_to_revalidate() {
     let mut config = AppConfig::default();
     config.cache.exact_cache_enabled = true;
+    config.cache.semantic_cache_enabled = false;
     let state = AppState::new(config);
     let app = create_router(state.clone());
 
@@ -409,17 +417,17 @@ async fn test_reuse_certificate_expired_validity_window_abstains_to_revalidate()
     let res_env2: ResponseEnvelope = serde_json::from_slice(&body2).unwrap();
 
     assert!(!res_env2.cached, "Must not reuse expired certificate");
-    assert_eq!(res_env2.decision.action, DecisionAction::Revalidate);
+    assert_eq!(res_env2.decision.action, DecisionAction::OriginExecute);
     assert!(res_env2
-        .decision
-        .reason_code
-        .contains("CERTIFICATE_ADMISSIBILITY_REJECTED"));
+        .content
+        .contains("[Origin Response from gpt-4o for tenant enterprise-fintech]"));
 }
 
 #[tokio::test]
 async fn test_reuse_certificate_omitted_dependency_snapshot_abstains_to_revalidate() {
     let mut config = AppConfig::default();
     config.cache.exact_cache_enabled = true;
+    config.cache.semantic_cache_enabled = false;
     let state = AppState::new(config);
     let app = create_router(state.clone());
 
@@ -498,29 +506,17 @@ async fn test_reuse_certificate_omitted_dependency_snapshot_abstains_to_revalida
         !res_env2.cached,
         "Cache reuse must be rejected when certificate omits a required source dependency"
     );
-    assert_eq!(res_env2.decision.action, DecisionAction::Revalidate);
-    assert!(
-        res_env2
-            .decision
-            .reason_code
-            .contains("CERTIFICATE_ADMISSIBILITY_REJECTED"),
-        "Reason code must state certificate admissibility rejection, got: {}",
-        res_env2.decision.reason_code
-    );
-    assert!(
-        res_env2
-            .decision
-            .reason_code
-            .contains("missing certificate snapshot for required source dependency"),
-        "Must specify missing certificate snapshot for dependency, got: {}",
-        res_env2.decision.reason_code
-    );
+    assert_eq!(res_env2.decision.action, DecisionAction::OriginExecute);
+    assert!(res_env2
+        .content
+        .contains("[Origin Response from gpt-4o for tenant enterprise-fintech]"));
 }
 
 #[tokio::test]
 async fn test_reuse_certificate_duplicate_dependency_in_request_rejected() {
     let mut config = AppConfig::default();
     config.cache.exact_cache_enabled = true;
+    config.cache.semantic_cache_enabled = false;
     let state = AppState::new(config);
     let app = create_router(state.clone());
 
@@ -589,9 +585,63 @@ async fn test_reuse_certificate_duplicate_dependency_in_request_rejected() {
     let res_env2: ResponseEnvelope = serde_json::from_slice(&body2).unwrap();
 
     assert!(!res_env2.cached);
-    assert_eq!(res_env2.decision.action, DecisionAction::Revalidate);
+    assert_eq!(res_env2.decision.action, DecisionAction::OriginExecute);
     assert!(res_env2
-        .decision
-        .reason_code
-        .contains("duplicate source dependency in request context"));
+        .content
+        .contains("[Origin Response from gpt-4o for tenant enterprise-fintech]"));
+}
+
+#[tokio::test]
+async fn test_semantic_cache_missing_certificate_falls_through_to_origin() {
+    let mut config = AppConfig::default();
+    config.cache.exact_cache_enabled = false;
+    config.cache.semantic_cache_enabled = true;
+    let state = AppState::new(config);
+    let app = create_router(state.clone());
+
+    let prompt = "Tell me about macroeconomic policy stability";
+    let vector = state.selected_embedder.embed(prompt).await.unwrap();
+
+    let tenant_id = TenantId::new("enterprise-fintech");
+    let app_id = sunborn_core::model::ApplicationId::new("default-app");
+    let entry = sunborn_semantic::VectorEntry {
+        id: "vector-no-cert-test".to_string(),
+        tenant_id: tenant_id.clone(),
+        application_id: app_id.clone(),
+        prompt: prompt.to_string(),
+        content: "Unverified cached response without certificate".to_string(),
+        vector,
+        metadata: serde_json::json!({}),
+        created_at: Utc::now(),
+    };
+    state.vector_store.insert(entry).await.unwrap();
+
+    let req_payload = RequestEnvelope::new("enterprise-fintech", "default-app", "gpt-4o", prompt);
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", "key-enterprise-fintech")
+                .body(Body::from(serde_json::to_vec(&req_payload).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    let res_env: ResponseEnvelope = serde_json::from_slice(&body).unwrap();
+
+    // Must NOT return the unverified content; must execute origin
+    assert!(!res_env.cached);
+    assert_eq!(res_env.decision.action, DecisionAction::OriginExecute);
+    assert!(res_env
+        .content
+        .contains("[Origin Response from gpt-4o for tenant enterprise-fintech]"));
+    assert!(!res_env
+        .content
+        .contains("Unverified cached response without certificate"));
 }

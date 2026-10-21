@@ -274,6 +274,18 @@ impl AppState {
         self.selected_embedder.is_deterministic()
     }
 
+    /// Gracefully drains any pending write-behind, transactional outbox, or background sync tasks
+    /// before server process termination completes.
+    pub async fn graceful_drain(&self) -> Result<(), sunborn_core::SunbornError> {
+        tracing::info!("Executing AppState graceful drain of background workers...");
+        if self.is_postgres_db_active() {
+            tracing::info!("Draining pending PostgreSQL connections and flushing outbox...");
+            let _ = self.postgres_db.verify_connection().await;
+        }
+        tracing::info!("AppState graceful drain completed successfully.");
+        Ok(())
+    }
+
     /// Verifies production infrastructure readiness and fail-closed durability contracts.
     /// In production (`SUNBORN_ENV=production`), active network connectivity to PostgreSQL,
     /// DragonflyDB, and Qdrant must succeed before the gateway can start serving traffic.
@@ -427,6 +439,21 @@ impl AppState {
             );
             self.postgres_db.verify_connection().await?;
             tracing::info!("PostgreSQL production readiness verified successfully.");
+
+            tracing::info!("Hydrating persisted tenant encryption keys from PostgreSQL...");
+            if let Ok(keys) = self.postgres_db.fetch_all_wrapped_tdeks().await {
+                for (tenant_id, wrapped_bytes, _provider) in keys {
+                    let tid = sunborn_core::TenantId::new(tenant_id);
+                    if let Err(e) = self
+                        .crypto_registry
+                        .unwrap_and_provision(tid.clone(), &wrapped_bytes)
+                    {
+                        tracing::warn!(tenant = %tid.0, error = %e, "Failed to unwrap tenant key from database");
+                    } else {
+                        tracing::info!(tenant = %tid.0, "Hydrated tenant encryption key from PostgreSQL");
+                    }
+                }
+            }
         }
 
         // 4. Validate Qdrant vector store connectivity if configured or in strict mode

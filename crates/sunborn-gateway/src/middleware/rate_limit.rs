@@ -179,20 +179,46 @@ pub fn get_login_rate_limiter() -> &'static LoginRateLimiter {
 }
 
 pub async fn rate_limit_middleware(headers: HeaderMap, req: Request, next: Next) -> Response {
-    let tenant = headers
-        .get("x-tenant-id")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("default-tenant");
-
-    // Standard rate limiter instance per process
-    // In production cluster, backed by Dragonfly / Redis EVAL scripts
-    static LIMITER: std::sync::OnceLock<RateLimiter> = std::sync::OnceLock::new();
-    let limiter = LIMITER.get_or_init(|| RateLimiter::new(100.0, 10.0));
-
-    if limiter.check(tenant).await {
-        next.run(req).await
+    // 1. Enforce tenant identity from authenticated SecurityContext over raw caller headers
+    let tenant = if let Some(sec_ctx) = req
+        .extensions()
+        .get::<crate::middleware::auth::SecurityContext>()
+    {
+        sec_ctx.tenant_id.0.clone()
     } else {
-        (
+        headers
+            .get("x-tenant-id")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("default-tenant")
+            .to_string()
+    };
+
+    // Standard rate limiter instance per process / cluster
+    static LIMITER: std::sync::OnceLock<RateLimiter> = std::sync::OnceLock::new();
+    let limiter = LIMITER.get_or_init(|| {
+        let rps = std::env::var("SUNBORN_RATE_LIMIT_RPS")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(100.0);
+        RateLimiter::new(rps, rps)
+    });
+
+    let status = limiter.check_status(&tenant).await;
+    if status.allowed {
+        let mut response = next.run(req).await;
+        let resp_headers = response.headers_mut();
+        if let Ok(limit_val) = status.limit.to_string().parse() {
+            resp_headers.insert("x-ratelimit-limit", limit_val);
+        }
+        if let Ok(rem_val) = status.remaining.to_string().parse() {
+            resp_headers.insert("x-ratelimit-remaining", rem_val);
+        }
+        if let Ok(reset_val) = status.reset_secs.to_string().parse() {
+            resp_headers.insert("x-ratelimit-reset", reset_val);
+        }
+        response
+    } else {
+        let mut resp = (
             StatusCode::TOO_MANY_REQUESTS,
             Json(json!({
                 "type": "https://sunborn.ai/errors/rate-limit-exceeded",
@@ -201,6 +227,20 @@ pub async fn rate_limit_middleware(headers: HeaderMap, req: Request, next: Next)
                 "detail": format!("Rate limit exceeded for tenant '{}'. Please retry later.", tenant)
             })),
         )
-            .into_response()
+            .into_response();
+        let resp_headers = resp.headers_mut();
+        if let Ok(retry_val) = status.reset_secs.max(1).to_string().parse() {
+            resp_headers.insert("retry-after", retry_val);
+        }
+        if let Ok(limit_val) = status.limit.to_string().parse() {
+            resp_headers.insert("x-ratelimit-limit", limit_val);
+        }
+        if let Ok(rem_val) = 0.to_string().parse() {
+            resp_headers.insert("x-ratelimit-remaining", rem_val);
+        }
+        if let Ok(reset_val) = status.reset_secs.max(1).to_string().parse() {
+            resp_headers.insert("x-ratelimit-reset", reset_val);
+        }
+        resp
     }
 }
