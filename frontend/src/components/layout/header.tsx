@@ -70,6 +70,7 @@ export function Header() {
     { name: "Learning Control", href: "/learning", icon: GitBranch },
     { name: "Governance", href: "/governance", icon: Flame },
     { name: "Security", href: "/security", icon: Lock },
+    { name: "Ceremony", href: "/ceremony", icon: Globe },
   ];
 
   return (

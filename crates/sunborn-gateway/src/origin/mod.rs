@@ -2,6 +2,7 @@ pub mod provider;
 pub mod singleflight;
 
 pub use provider::{
-    HttpLlmOriginProvider, LlmOriginProvider, MockOriginProvider, OriginExecutionResult,
+    ArbitrageProviderEntry, HttpLlmOriginProvider, LlmOriginProvider, MockOriginProvider,
+    MultiProviderArbitrageRouter, OriginExecutionResult,
 };
 pub use singleflight::SingleflightStreamer;

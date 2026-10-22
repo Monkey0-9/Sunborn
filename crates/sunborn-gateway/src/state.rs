@@ -54,6 +54,7 @@ pub struct AppState {
     pub learning_store: Arc<crate::learning::TenantLearningStore>,
     pub learning_controller: Arc<crate::learning::PolicyPromotionController>,
     pub learning_hmac_secret: Vec<u8>,
+    pub spend_velocity_controller: Arc<sunborn_core::SpendVelocityController>,
 }
 
 impl AppState {
@@ -152,7 +153,68 @@ impl AppState {
             8,
             1.5,
         ));
-        let crypto_registry = Arc::new(TenantCryptoRegistry::new());
+        let kms_provider_type = std::env::var("SUNBORN_KMS_PROVIDER")
+            .unwrap_or_else(|_| "local-aead".to_string())
+            .to_lowercase();
+
+        let master_kek_seed = if let Ok(master_kek) =
+            std::env::var("SUNBORN_MASTER_KEK").or_else(|_| std::env::var("MASTER_KEK"))
+        {
+            let mut hasher = Sha256::new();
+            hasher.update(b"sunborn-master-kek-seed-v1:");
+            hasher.update(master_kek.as_bytes());
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&hasher.finalize());
+            arr
+        } else {
+            [0x42u8; 32]
+        };
+
+        let kms_provider: Arc<dyn sunborn_identity::KeyManagementProvider> =
+            match kms_provider_type.as_str() {
+                "vault-transit" | "vault" => {
+                    let key_name = std::env::var("SUNBORN_VAULT_KEY_NAME")
+                        .unwrap_or_else(|_| "sunborn-tenant-kek".to_string());
+                    Arc::new(sunborn_identity::VaultTransitKeyProvider::new(
+                        key_name,
+                        1,
+                        master_kek_seed,
+                    ))
+                }
+                "pkcs11-hsm" | "hsm" => {
+                    let slot = std::env::var("SUNBORN_HSM_SLOT_ID")
+                        .ok()
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(1);
+                    let label = std::env::var("SUNBORN_HSM_TOKEN_LABEL")
+                        .unwrap_or_else(|_| "Sunborn-HSM-PCIe".to_string());
+                    let handle = std::env::var("SUNBORN_HSM_KEY_HANDLE")
+                        .ok()
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(1001);
+                    Arc::new(sunborn_identity::Pkcs11HsmKeyProvider::new(
+                        slot,
+                        label,
+                        handle,
+                        master_kek_seed,
+                    ))
+                }
+                "aws-kms" => {
+                    let arn = std::env::var("SUNBORN_AWS_KMS_KEY_ARN").unwrap_or_else(|_| {
+                        "arn:aws:kms:us-east-1:123456789012:key/sunborn-root-kek".to_string()
+                    });
+                    let region = std::env::var("SUNBORN_AWS_REGION")
+                        .unwrap_or_else(|_| "us-east-1".to_string());
+                    Arc::new(sunborn_identity::AwsKmsKeyProvider::new(
+                        arn,
+                        region,
+                        master_kek_seed,
+                    ))
+                }
+                _ => Arc::new(sunborn_identity::LocalAeadKeyProvider::new(master_kek_seed)),
+            };
+
+        let crypto_registry = Arc::new(TenantCryptoRegistry::with_provider(kms_provider));
         let _ =
             crypto_registry.provision_tenant_secure(sunborn_core::TenantId::new("tenant-alpha"));
         let _ = crypto_registry
@@ -175,15 +237,44 @@ impl AppState {
             let api_key = std::env::var("SUNBORN_LLM_ORIGIN_API_KEY")
                 .or_else(|_| std::env::var("OPENAI_API_KEY"))
                 .ok();
-            Arc::new(crate::origin::provider::HttpLlmOriginProvider::new(
+            let primary = Arc::new(crate::origin::provider::HttpLlmOriginProvider::new(
                 url, api_key,
-            ))
+            ));
+
+            if let Ok(failover_url) = std::env::var("SUNBORN_FAILOVER_ORIGIN_URL") {
+                let failover_key = std::env::var("SUNBORN_FAILOVER_ORIGIN_KEY").ok();
+                let secondary = Arc::new(crate::origin::provider::HttpLlmOriginProvider::new(
+                    failover_url,
+                    failover_key,
+                ));
+                Arc::new(crate::origin::provider::MultiProviderArbitrageRouter::new(
+                    vec![
+                        crate::origin::provider::ArbitrageProviderEntry {
+                            name: "primary-origin".into(),
+                            provider: primary,
+                            cost_per_million_input: 2.50,
+                            cost_per_million_output: 10.00,
+                            priority: 1,
+                        },
+                        crate::origin::provider::ArbitrageProviderEntry {
+                            name: "failover-origin".into(),
+                            provider: secondary,
+                            cost_per_million_input: 3.00,
+                            cost_per_million_output: 15.00,
+                            priority: 2,
+                        },
+                    ],
+                ))
+            } else {
+                primary
+            }
         } else {
             Arc::new(MockOriginProvider::new())
         };
         let api_key_registry = Arc::new(crate::middleware::auth::get_global_registry().clone());
         let learning_store = Arc::new(crate::learning::TenantLearningStore::default());
         let learning_controller = Arc::new(crate::learning::PolicyPromotionController::default());
+        let spend_velocity_controller = Arc::new(sunborn_core::SpendVelocityController::default());
 
         let is_prod = std::env::var("SUNBORN_ENV")
             .or_else(|_| std::env::var("ENVIRONMENT"))
@@ -237,6 +328,7 @@ impl AppState {
             learning_store,
             learning_controller,
             learning_hmac_secret,
+            spend_velocity_controller,
         }
     }
 

@@ -5,7 +5,7 @@ pub mod privacy;
 
 pub use canonical::{canonicalize_json, canonicalize_text};
 pub use crypto_shred::{
-    constant_time_compare, hkdf_sha256_derive, hmac_sha256, EncryptedEnvelope,
+    constant_time_compare, hkdf_sha256_derive, hmac_sha256, AwsKmsKeyProvider, EncryptedEnvelope,
     KeyManagementProvider, LocalAeadKeyProvider, Pkcs11HsmKeyProvider, TenantCryptoRegistry,
     VaultTransitKeyProvider, ZeroizingKey,
 };

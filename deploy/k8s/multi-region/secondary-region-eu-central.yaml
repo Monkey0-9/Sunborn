@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sunborn-gateway-eu-central
+  namespace: sunborn
+  labels:
+    app.kubernetes.io/name: sunborn-gateway
+    topology.kubernetes.io/region: eu-central-1
+    sunborn.io/role: secondary-standby
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sunborn-gateway
+      topology.kubernetes.io/region: eu-central-1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sunborn-gateway
+        topology.kubernetes.io/region: eu-central-1
+        sunborn.io/role: secondary-standby
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+      containers:
+        - name: gateway
+          image: sunborn-gateway:v0.1.0-rc2
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: SUNBORN_REGION
+              value: "eu-central-1"
+            - name: SUNBORN_CLUSTER_ROLE
+              value: "standby"
+            - name: SUNBORN_KMS_PROVIDER
+              value: "aws-kms"
+            - name: SUNBORN_AWS_REGION
+              value: "eu-central-1"
+            - name: SUNBORN_AWS_KMS_KEY_ARN
+              value: "arn:aws:kms:eu-central-1:123456789012:key/sunborn-eu-root-kek"
+            - name: SUNBORN_CACHE_BACKEND
+              value: "dragonfly"
+            - name: SUNBORN_DRAGONFLY_URL
+              value: "redis://dragonfly-eu.sunborn.svc.cluster.local:6379"
+            - name: SUNBORN_VECTOR_BACKEND
+              value: "qdrant"
+            - name: SUNBORN_QDRANT_URL
+              value: "http://qdrant-eu.sunborn.svc.cluster.local:6333"
+            - name: SUNBORN_POSTGRES_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sunborn-secrets
+                  key: postgres-url
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "1Gi"
+            limits:
+              cpu: "4000m"
+              memory: "4Gi"
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sunborn-gateway-eu-central
+  namespace: sunborn
+  labels:
+    app.kubernetes.io/name: sunborn-gateway
+    topology.kubernetes.io/region: eu-central-1
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+  selector:
+    app.kubernetes.io/name: sunborn-gateway
+    topology.kubernetes.io/region: eu-central-1

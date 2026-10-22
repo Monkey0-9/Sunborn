@@ -7,8 +7,8 @@ pub mod microbatch;
 pub mod vector_store;
 
 pub use conformal::{
-    NonExchangeableConformalCalibrator, ShadowObservation, StreamingOODDetector,
-    TaskStratifiedConformalCalibrator, TaskStratum,
+    NonExchangeableConformalCalibrator, RollingWindowConformalEngine, ShadowObservation,
+    StreamingOODDetector, TaskStratifiedConformalCalibrator, TaskStratum,
 };
 pub use context_digest::ContextDigest;
 

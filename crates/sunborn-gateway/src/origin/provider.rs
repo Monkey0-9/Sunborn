@@ -330,3 +330,162 @@ impl LlmOriginProvider for MockOriginProvider {
         })
     }
 }
+
+use std::sync::Arc;
+
+/// Upstream provider entry in the dynamic spot arbitrage router
+#[derive(Clone)]
+pub struct ArbitrageProviderEntry {
+    pub name: String,
+    pub provider: Arc<dyn LlmOriginProvider>,
+    pub cost_per_million_input: f64,
+    pub cost_per_million_output: f64,
+    pub priority: u32,
+}
+
+/// Dynamic Multi-Provider Spot Arbitrage & Failover Router.
+/// Automatically executes requests against the highest-priority/lowest-cost healthy upstream provider,
+/// falling over to secondary and tertiary providers in real-time on HTTP 429, 5xx, or network errors.
+pub struct MultiProviderArbitrageRouter {
+    providers: Vec<ArbitrageProviderEntry>,
+    fallback_on_error: bool,
+}
+
+impl MultiProviderArbitrageRouter {
+    pub fn new(mut providers: Vec<ArbitrageProviderEntry>) -> Self {
+        providers.sort_by_key(|p| p.priority);
+        Self {
+            providers,
+            fallback_on_error: true,
+        }
+    }
+
+    pub fn providers(&self) -> &[ArbitrageProviderEntry] {
+        &self.providers
+    }
+}
+
+#[async_trait]
+impl LlmOriginProvider for MultiProviderArbitrageRouter {
+    fn is_mock(&self) -> bool {
+        self.providers.iter().all(|p| p.provider.is_mock())
+    }
+
+    async fn execute(&self, req: &RequestEnvelope) -> Result<OriginExecutionResult> {
+        if self.providers.is_empty() {
+            return Err(SunbornError::origin(
+                "No upstream LLM providers configured in arbitrage router",
+            ));
+        }
+
+        let mut last_error = None;
+        for entry in &self.providers {
+            match entry.provider.execute(req).await {
+                Ok(res) => {
+                    tracing::info!(
+                        provider = %entry.name,
+                        model = %res.model,
+                        latency_ms = res.latency_ms,
+                        "Arbitrage router successfully executed query"
+                    );
+                    return Ok(res);
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        provider = %entry.name,
+                        error = %err,
+                        "Primary provider execution failed; cascading to next arbitrage provider"
+                    );
+                    last_error = Some(err);
+                    if !self.fallback_on_error {
+                        break;
+                    }
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| SunbornError::origin("All arbitrage providers failed")))
+    }
+
+    async fn health_check(&self) -> Result<()> {
+        if self.providers.is_empty() {
+            return Err(SunbornError::origin("No providers in arbitrage router"));
+        }
+        let mut any_healthy = false;
+        let mut last_err = None;
+        for p in &self.providers {
+            match p.provider.health_check().await {
+                Ok(()) => {
+                    any_healthy = true;
+                    break;
+                }
+                Err(e) => {
+                    last_err = Some(e);
+                }
+            }
+        }
+
+        if any_healthy {
+            Ok(())
+        } else {
+            Err(last_err
+                .unwrap_or_else(|| SunbornError::origin("All providers failed healthcheck")))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct FailingProvider;
+    #[async_trait]
+    impl LlmOriginProvider for FailingProvider {
+        async fn execute(&self, _req: &RequestEnvelope) -> Result<OriginExecutionResult> {
+            Err(SunbornError::origin(
+                "Upstream HTTP 429 rate limit exceeded",
+            ))
+        }
+        async fn health_check(&self) -> Result<()> {
+            Err(SunbornError::origin("Service unavailable"))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_multi_provider_arbitrage_failover() {
+        let failing = Arc::new(FailingProvider);
+        let healthy = Arc::new(MockOriginProvider::new());
+
+        let router = MultiProviderArbitrageRouter::new(vec![
+            ArbitrageProviderEntry {
+                name: "primary-openai".into(),
+                provider: failing,
+                cost_per_million_input: 2.50,
+                cost_per_million_output: 10.00,
+                priority: 1,
+            },
+            ArbitrageProviderEntry {
+                name: "secondary-mock".into(),
+                provider: healthy,
+                cost_per_million_input: 3.00,
+                cost_per_million_output: 15.00,
+                priority: 2,
+            },
+        ]);
+
+        let req = RequestEnvelope::new(
+            "test-tenant",
+            "test-app",
+            "gpt-4o",
+            "What is quantum error correction?",
+        );
+
+        // Primary fails, router cascades seamlessly to secondary
+        let res = router
+            .execute(&req)
+            .await
+            .expect("Arbitrage failover should succeed");
+        assert!(res.content.contains("quantum error correction"));
+        assert!(router.health_check().await.is_ok());
+    }
+}

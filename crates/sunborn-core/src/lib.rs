@@ -12,7 +12,7 @@ pub use certificate::{
 pub use cluster::{CausalityRelation, ClusterSyncDigest, VectorClock};
 pub use config::AppConfig;
 pub use error::{ErrorCode, Result, SunbornError};
-pub use finops::{FinOpsEngine, ModelPricing};
+pub use finops::{FinOpsEngine, ModelPricing, SpendVelocityController};
 pub use model::{
     ApplicationId, CachePath, CorrectnessTier, DecisionAction, DecisionRecord, RequestEnvelope,
     RequestId, ResponseEnvelope, TenantId, ToolDefinition,

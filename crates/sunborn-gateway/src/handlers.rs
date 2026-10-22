@@ -1764,6 +1764,7 @@ pub async fn predict_speculative(
 pub async fn get_cluster_sync_status(State(state): State<AppState>) -> impl IntoResponse {
     let vc = state.vector_clock.read().unwrap().clone();
     let region = std::env::var("SUNBORN_REGION").unwrap_or_else(|_| "us-east-1".to_string());
+    let kms_provider = state.crypto_registry.provider().provider_name();
     Json(json!({
         "node_id": "gateway-primary-node-1",
         "region": region,
@@ -1772,7 +1773,9 @@ pub async fn get_cluster_sync_status(State(state): State<AppState>) -> impl Into
         "cluster_state": "synchronized",
         "vector_clock": vc,
         "anti_entropy_protocol": "single-node-epoch",
-        "consensus_mode": "single_node_authoritative"
+        "consensus_mode": "single_node_authoritative",
+        "kms_provider": kms_provider,
+        "spend_velocity_enforcement": "active"
     }))
 }
 

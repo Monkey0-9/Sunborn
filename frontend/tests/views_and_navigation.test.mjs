@@ -19,6 +19,7 @@ test('Frontend Views: All 8 App Router views exist and define default export', (
     { name: 'Knowledge Graph', path: path.join(srcDir, 'app', 'knowledge', 'page.tsx') },
     { name: 'Adaptive Learning', path: path.join(srcDir, 'app', 'learning', 'page.tsx') },
     { name: 'Security & Isolation', path: path.join(srcDir, 'app', 'security', 'page.tsx') },
+    { name: 'Sovereign Ceremony', path: path.join(srcDir, 'app', 'ceremony', 'page.tsx') },
   ];
 
   for (const view of views) {
@@ -84,6 +85,7 @@ test('Frontend Layout & Navigation: Header navigation links to all views', () =>
     '/security',
     '/learning',
     '/finops',
+    '/ceremony',
   ];
 
   for (const route of expectedNavRoutes) {

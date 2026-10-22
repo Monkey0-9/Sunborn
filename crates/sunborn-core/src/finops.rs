@@ -124,6 +124,84 @@ pub struct NetUtilityParameters {
     pub expected_incorrect_reuse_loss: f64,
 }
 
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
+
+type SpendHistoryMap = Arc<RwLock<HashMap<String, Vec<(Instant, f64)>>>>;
+
+/// Real-time spend velocity controller preventing runaway token expenditures and infinite LLM agent loops.
+#[derive(Clone)]
+pub struct SpendVelocityController {
+    max_spend_per_window_usd: f64,
+    window_duration: Duration,
+    spend_history: SpendHistoryMap,
+}
+
+impl Default for SpendVelocityController {
+    fn default() -> Self {
+        Self::new(100.0, Duration::from_secs(60)) // Default $100/minute ceiling
+    }
+}
+
+impl SpendVelocityController {
+    pub fn new(max_spend_per_window_usd: f64, window_duration: Duration) -> Self {
+        Self {
+            max_spend_per_window_usd,
+            window_duration,
+            spend_history: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Records an expenditure in USD and checks if the tenant has exceeded their spend velocity ceiling.
+    /// Returns Ok(current_window_spend) or Err((total_window_spend, max_allowed)).
+    pub fn record_and_check(
+        &self,
+        tenant_id: &str,
+        cost_usd: f64,
+    ) -> std::result::Result<f64, (f64, f64)> {
+        let now = Instant::now();
+        let cutoff = now.checked_sub(self.window_duration).unwrap_or(now);
+
+        let mut map = self.spend_history.write().unwrap();
+        let entries = map.entry(tenant_id.to_string()).or_default();
+
+        // Prune expired entries outside rolling window
+        entries.retain(|(ts, _)| *ts >= cutoff);
+        entries.push((now, cost_usd));
+
+        let total_window_spend: f64 = entries.iter().map(|(_, c)| *c).sum();
+
+        if total_window_spend > self.max_spend_per_window_usd {
+            Err((total_window_spend, self.max_spend_per_window_usd))
+        } else {
+            Ok(total_window_spend)
+        }
+    }
+
+    /// Current spend in the active rolling window
+    pub fn current_spend(&self, tenant_id: &str) -> f64 {
+        let now = Instant::now();
+        let cutoff = now.checked_sub(self.window_duration).unwrap_or(now);
+
+        let map = self.spend_history.read().unwrap();
+        if let Some(entries) = map.get(tenant_id) {
+            entries
+                .iter()
+                .filter(|(ts, _)| *ts >= cutoff)
+                .map(|(_, c)| *c)
+                .sum()
+        } else {
+            0.0
+        }
+    }
+
+    pub fn reset_tenant(&self, tenant_id: &str) {
+        let mut map = self.spend_history.write().unwrap();
+        map.remove(tenant_id);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -172,5 +250,27 @@ mod tests {
             penalized_utility < 0.0,
             "High incorrect-reuse loss must drive utility negative"
         );
+    }
+
+    #[test]
+    fn test_spend_velocity_controller_rate_limiting() {
+        let controller = SpendVelocityController::new(10.0, Duration::from_secs(60));
+        let tenant = "tenant-finops-test";
+
+        // Under limit
+        assert!(controller.record_and_check(tenant, 4.0).is_ok());
+        assert!(controller.record_and_check(tenant, 5.0).is_ok());
+        assert_eq!(controller.current_spend(tenant), 9.0);
+
+        // Exceed limit ($9 + $2 = $11 > $10)
+        let res = controller.record_and_check(tenant, 2.0);
+        assert!(res.is_err());
+        let (total, max) = res.unwrap_err();
+        assert_eq!(total, 11.0);
+        assert_eq!(max, 10.0);
+
+        // Reset tenant
+        controller.reset_tenant(tenant);
+        assert_eq!(controller.current_spend(tenant), 0.0);
     }
 }

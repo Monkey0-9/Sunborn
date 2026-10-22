@@ -282,6 +282,49 @@ impl NonExchangeableConformalCalibrator {
     }
 }
 
+/// Thread-safe concurrent rolling-window conformal engine for live adaptive recalibration.
+#[derive(Clone)]
+pub struct RollingWindowConformalEngine {
+    inner: Arc<RwLock<NonExchangeableConformalCalibrator>>,
+    ood_detector: Arc<StreamingOODDetector>,
+}
+
+impl Default for RollingWindowConformalEngine {
+    fn default() -> Self {
+        Self::new(200, 0.995, 0.05)
+    }
+}
+
+impl RollingWindowConformalEngine {
+    pub fn new(max_window_size: usize, decay_rho: f64, target_alpha: f64) -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(NonExchangeableConformalCalibrator::new(
+                max_window_size,
+                decay_rho,
+                target_alpha,
+            ))),
+            ood_detector: Arc::new(StreamingOODDetector::new(50, 2.5)),
+        }
+    }
+
+    pub async fn record_and_recalibrate(&self, similarity: f64, semantic_loss: f64) -> f64 {
+        let is_drift = self.ood_detector.observe_and_check_drift(similarity);
+        let mut cal = self.inner.write().await;
+        cal.record_shadow_evaluation(similarity, semantic_loss);
+        let thresh = cal.calibrated_threshold();
+        if is_drift {
+            (thresh + 0.02).min(0.995)
+        } else {
+            thresh
+        }
+    }
+
+    pub async fn current_threshold(&self) -> f64 {
+        let cal = self.inner.read().await;
+        cal.calibrated_threshold()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -354,6 +397,29 @@ mod tests {
         assert!(
             tightened_thresh > relaxed_thresh,
             "Threshold must tighten when errors occur at candidate similarities"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_rolling_window_conformal_engine_concurrent_recalibration() {
+        let engine = RollingWindowConformalEngine::new(50, 0.995, 0.05);
+
+        // Record 35 clean observations
+        for _ in 0..35 {
+            engine.record_and_recalibrate(0.96, 0.0).await;
+        }
+
+        let thresh = engine.current_threshold().await;
+        assert!(
+            thresh < 0.97,
+            "Calibrated threshold should relax on clean feedback"
+        );
+
+        // Inject high semantic loss observation
+        let tightened = engine.record_and_recalibrate(0.88, 0.95).await;
+        assert!(
+            tightened >= thresh,
+            "Threshold must tighten after high semantic loss"
         );
     }
 }

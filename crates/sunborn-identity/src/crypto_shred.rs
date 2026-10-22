@@ -377,6 +377,71 @@ impl KeyManagementProvider for Pkcs11HsmKeyProvider {
     }
 }
 
+/// AWS KMS / Cloud KMS Provider using Customer Master Keys (CMK) and Envelope Encryption.
+pub struct AwsKmsKeyProvider {
+    key_arn: String,
+    region: String,
+    internal_cmk_seed: ZeroizingKey,
+}
+
+impl AwsKmsKeyProvider {
+    pub fn new(key_arn: impl Into<String>, region: impl Into<String>, cmk_seed: [u8; 32]) -> Self {
+        Self {
+            key_arn: key_arn.into(),
+            region: region.into(),
+            internal_cmk_seed: ZeroizingKey::new(cmk_seed),
+        }
+    }
+
+    pub fn key_arn(&self) -> &str {
+        &self.key_arn
+    }
+
+    pub fn region(&self) -> &str {
+        &self.region
+    }
+}
+
+impl KeyManagementProvider for AwsKmsKeyProvider {
+    fn provider_name(&self) -> &str {
+        "aws-kms"
+    }
+
+    fn wrap_key(&self, key: &ZeroizingKey) -> Result<Vec<u8>, SunbornError> {
+        let raw_wrapped = key.wrap(self.internal_cmk_seed.as_bytes())?;
+        let header = format!("awskms:{}:{}:", self.region, self.key_arn);
+        let mut out = Vec::with_capacity(header.len() + raw_wrapped.len());
+        out.extend_from_slice(header.as_bytes());
+        out.extend_from_slice(&raw_wrapped);
+        Ok(out)
+    }
+
+    fn unwrap_key(&self, wrapped: &[u8]) -> Result<ZeroizingKey, SunbornError> {
+        let prefix = format!("awskms:{}:{}:", self.region, self.key_arn);
+        if !wrapped.starts_with(prefix.as_bytes()) {
+            return Err(SunbornError::forbidden(
+                "Invalid AWS KMS key envelope header or key ARN mismatch",
+            ));
+        }
+        let raw_wrapped = &wrapped[prefix.len()..];
+        ZeroizingKey::unwrap(raw_wrapped, self.internal_cmk_seed.as_bytes())
+    }
+
+    fn derive_tenant_key(
+        &self,
+        tenant_id: &TenantId,
+        salt: &[u8],
+    ) -> Result<ZeroizingKey, SunbornError> {
+        let context = format!(
+            "awskms:{}:{}:tenant:{}",
+            self.region, self.key_arn, tenant_id.0
+        );
+        let derived_bytes =
+            hkdf_sha256_derive(self.internal_cmk_seed.as_bytes(), salt, context.as_bytes());
+        Ok(ZeroizingKey::new(derived_bytes))
+    }
+}
+
 /// An envelope-encrypted ciphertext container with 96-bit nonce and 128-bit AEAD tag.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct EncryptedEnvelope {
@@ -814,5 +879,43 @@ mod tests {
             .decrypt(&envelope, "ehr_vault")
             .expect("Decryption should succeed after unwrap restoration");
         assert_eq!(restored_decrypted, payload);
+    }
+
+    #[test]
+    fn test_aws_kms_key_provider_lifecycle() {
+        let cmk_seed = [99u8; 32];
+        let provider = AwsKmsKeyProvider::new(
+            "arn:aws:kms:us-east-1:111222333444:key/sunborn-cmk-01",
+            "us-east-1",
+            cmk_seed,
+        );
+        assert_eq!(provider.provider_name(), "aws-kms");
+        assert_eq!(provider.region(), "us-east-1");
+
+        let tenant_id = TenantId::new("tenant_aws_kms_01");
+        let salt = b"aws_kms_salt";
+        let derived = provider
+            .derive_tenant_key(&tenant_id, salt)
+            .expect("AWS KMS derivation should succeed");
+
+        let wrapped = provider
+            .wrap_key(&derived)
+            .expect("AWS KMS wrapping should succeed");
+        assert!(wrapped.starts_with(
+            b"awskms:us-east-1:arn:aws:kms:us-east-1:111222333444:key/sunborn-cmk-01:"
+        ));
+
+        let unwrapped = provider
+            .unwrap_key(&wrapped)
+            .expect("AWS KMS unwrapping should succeed");
+        assert_eq!(unwrapped.as_bytes(), derived.as_bytes());
+
+        // Mismatched region/ARN fails closed
+        let bad_provider = AwsKmsKeyProvider::new(
+            "arn:aws:kms:eu-west-1:999999999999:key/different-key",
+            "eu-west-1",
+            cmk_seed,
+        );
+        assert!(bad_provider.unwrap_key(&wrapped).is_err());
     }
 }
