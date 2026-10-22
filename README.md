@@ -1,23 +1,20 @@
 # Sunborn: Multi-Tenant Semantic Execution Gateway & Autonomic Cache
 
-[![Release Candidate: v0.1.0-rc2](https://img.shields.io/badge/Release%20Candidate-v0.1.0--rc2-purple?style=flat-square)](RELEASE_NOTES.md)
+[![Release Status: Hold](https://img.shields.io/badge/Release%20Status-HOLD-red?style=flat-square)](docs/architecture/release_acceptance_record.md)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
 [![Rust 1.80+](https://img.shields.io/badge/Rust-1.80%2B-orange?style=flat-square&logo=rust)](Cargo.toml)
 [![Next.js 15](https://img.shields.io/badge/Next.js-15.5.27%20App%20Router-black?style=flat-square&logo=next.js)](frontend)
 [![Python SDK](https://img.shields.io/badge/Python%20SDK-OpenAI%20%7C%20Claude%20%7C%20Async-3776ab?style=flat-square&logo=python)](sdk/python)
-[![Tests: 212 Passing](https://img.shields.io/badge/Tests-212%20Passing-brightgreen?style=flat-square)]()
-[![Binary Security: Hardened](https://img.shields.io/badge/Binary%20Security-RELRO%20%7C%20PIE%20%7C%20NX-emerald?style=flat-square)](docs/architecture/autonomic_invariance_specification.md#4-reverse-engineering-analysis-rea--binary-security-audit)
-[![Zero False Hits](https://img.shields.io/badge/Semantic%20False%20Hits-0.0%25-blue?style=flat-square)](research/results/benchmark_run.json)
-[![Readiness Plan](https://img.shields.io/badge/Institutional%20Readiness-Master%20Plan%20Verified-blueviolet?style=flat-square)](docs/architecture/master_completion_audit_and_institutional_readiness_plan.md)
+[![Frozen Benchmark](https://img.shields.io/badge/Frozen%20Suite-Bounded%20Evidence-blue?style=flat-square)](docs/architecture/project_completion_assessment_2026-10-22.md)
 
-> **Sunborn** is an open-source, high-performance distributed semantic inference cache, execution-reuse gateway, and autonomic controller designed for autonomous AI agents and large language model (LLM) applications. Sunborn combines sub-millisecond hot-path caching, conformal risk-controlled semantic retrieval, and self-learning policy promotion with formal invariant guarantees.
+> **Sunborn** is an open-source semantic inference cache and execution-reuse gateway for AI agent and LLM applications. It contains a prototype implementation and research harness. The current repository has not passed its release gates and is not cleared for production use. Performance, correctness, and safety claims below apply only to the named local artifacts and workloads.
 
 ---
 
 ## 📑 Table of Contents
 
 1. [Executive Summary & The Semantic Inversion Fallacy](#1-executive-summary--the-semantic-inversion-fallacy)
-2. [Verified System Architecture & Flow Diagrams](#2-verified-system-architecture--flow-diagrams)
+2. [System Architecture & Flow Diagrams](#2-system-architecture--flow-diagrams)
    - [2.1 End-to-End Multi-Tier Inference Flow](#21-end-to-end-multi-tier-inference-flow)
    - [2.2 Safe Adaptive Closed-Loop Learning Flow](#22-safe-adaptive-closed-loop-learning-flow)
    - [2.3 Invariant State Protection & Disaster Recovery Replay Flow](#23-invariant-state-protection--disaster-recovery-replay-flow)
@@ -32,7 +29,7 @@
    - [8.2 SemanticCacheBench-T Stateful Temporal Evaluation](#82-semanticcachebench-t-stateful-temporal--adversarial-benchmark)
    - [8.3 Capacity Soak & Memory Stability Verification](#83-capacity-soak--memory-stability-verification)
 9. [Python Agent Integration SDK & Tool Memoization](#9-python-agent-integration-sdk--tool-memoization)
-10. [Complete End-to-End API Contracts (37 Verified Endpoints)](#10-complete-end-to-end-api-contracts-37-verified-endpoints)
+10. [API Contracts and Route Inventory](#10-api-contracts-and-route-inventory)
 11. [Frontend Control Plane & Server-Side BFF](#11-frontend-control-plane--server-side-bff)
 12. [Enterprise Deployment & Orchestration](#12-enterprise-deployment--orchestration)
 13. [Quickstart & Verification Guide](#13-quickstart--verification-guide)
@@ -42,7 +39,7 @@
 
 ## 1. Executive Summary & The Semantic Inversion Fallacy
 
-Traditional semantic caches rely on uncalibrated cosine similarity against dense vector embeddings. Across realistic agent workloads, this approach suffers from the **Semantic Inversion Fallacy**: queries with opposing intent (e.g., negations, numeric parameter shifts, tenant boundary leaks, or prompt injections) map to near-identical vector representations, inducing a catastrophic **48.39% false-hit rate**.
+The checked-in frozen benchmark compares Sunborn's decision path with a fixed-threshold cosine baseline. On the current 124-query artifact, the baseline recorded 51 false hits (**41.13% of queries**). This finite result does not estimate every workload or production traffic distribution.
 
 ```
 Query A: "How do I securely store user passwords in PostgreSQL?"  ──┐ Cosine Similarity: 0.941
@@ -50,17 +47,18 @@ Query B: "How do I bypass secure user password checks in PostgreSQL?" ──┘ 
 ```
 
 Sunborn prevents this through a multi-tier, formally bounded pipeline:
-* **Tier 0/1 (Exact Deterministic Match)**: Normalized whitespace, sorted JSON keys, canonical multi-turn histories, and temperature isolation executed via in-memory FinOps GDSF byte-budgeted cache and DragonflyDB (**P99: 240 µs** loopback; **88 µs** in-process engine latency).
+* **Tier 0/1 (Exact Deterministic Match)**: Source includes canonical request handling and in-memory/distributed cache adapters. Any reported latency is workload- and environment-specific; see the current capacity result above.
 * **Tier 2 (Conformal Semantic Retrieval)**: Structural pre-filtering (extracting numeric literals and negation polarity bits) combined with non-exchangeable conformal calibrator ($1-\alpha$ coverage) ensuring empirical error $\le 0.01$.
 * **Tier 3 (Agentic DAG Reuse)**: Transitive causal DAG effect envelope closure and cryptographically verified tool execution subgraphs using sorted Merkle roots.
 * **Tier 4 (Authoritative Durability)**: Non-Accelerator Authority with PostgreSQL write-ahead logging and watermark-fenced write-behind cache leases.
 * **Adaptive Autonomic Control**: Closed-loop self-learning controller with HMAC authentication, poison defense, held-out calibration, and zero-downtime canary promotion.
 
-**Empirical Research Benchmarks (verifiable via `bash research/reproduce.sh`)**:
-* **Sunborn False-Hit Rate**: **0.0%** (100.0% precision, 95% Wilson CI $[0.0, 3.0]$) vs. Naive Cosine **48.39%** (60 false hits on adversarial/semantic traps across 124 benchmark queries).
-* **Temporal Mutation Safety (SemanticCacheBench-T)**: **0.0%** false hits across 19 stateful mutation scenarios vs. Naive Cosine **63.16%** false hits.
-* **Modeled Token Cost Reduction**: **12.09%** modeled net token cost savings for B3 on the 124-query evaluation suite under a standard GPT-4o synthetic pricing schedule ($0.00625 USD per origin call equivalent; see Claim-to-Evidence Register and `research/results/benchmark_run.json`).
-* **Measured Gateway Performance**: In-process engine throughput **> 25,000 req/s** (Table I P99 **88 µs**; full Axum HTTP stack Table II P99 **240 µs** loopback; client HTTP RPC P99 **3.87 ms**), verified via `cargo test --test performance_test` and `benchmarks/capacity_soak.py` with bounded memory RSS.
+**Current frozen research artifacts (generated at commit `6bf5d40`, not this candidate)**:
+* **Static suite (N=124)**: B3 recorded 15 hits and 0 false hits; B2 recorded 51 false hits (41.13%). Its certificate is an unauthenticated local integrity check.
+* **Temporal suite (N=19)**: B3 recorded 0 hits, 0 false hits, and 0% recall; B2 recorded 3 false hits (15.79%). B3's precision is therefore vacuous on this suite.
+* **Modeled token cost**: B3 estimates 12.09% savings under a synthetic fixed-cost schedule. It is not measured customer savings.
+* **Capacity soak**: the artifact reports 2,500.9 requests/s in stage one, P99 10.339 ms, RSS growth of 86.68%, and `envelope_stable: false`. These results fail the documented `<5 ms`, `>10,000 req/s`, and stable-memory targets.
+* **Release state**: all ten acceptance gates remain open. See the [completion assessment](docs/architecture/project_completion_assessment_2026-10-22.md) and [release record](docs/architecture/release_acceptance_record.md).
 
 ### 1.1 Claim-to-Evidence Register
 
@@ -68,21 +66,21 @@ To eliminate ambiguity between modeled projections and independently measured te
 
 | Headline Claim | Quantitative Metric | Verification Artifact | Scope / Workload | Sample Size / Denominator | Confidence Interval / Bounds | Limitations & Methodological Notes |
 |---|---|---|---|---|---|---|
-| **Calibrated Zero False-Hit Rate** | **0.0%** (100.0% precision) | [`research/results/benchmark_run.json`](research/results/benchmark_run.json) | 8 trap categories (negation, numeric, PII, temporal, schema) | $N = 124$ labeled queries | 95% Wilson CI: $[0.0\%, 3.0\%]$ | Evaluated on frozen suite; production deployment requires ongoing runtime conformal calibration. |
-| **Temporal Mutation Invariance** | **0.0%** false hits | [`research/results/run_manifest.json`](research/results/run_manifest.json) | Stateful RAG updates & document revision shifts | $N = 19$ temporal scenarios | 95% Wilson CI: $[0.0\%, 16.8\%]$ | Verified against stateful vector clock and lease epoch invalidations. |
+| **Static B3 observed false-hit rate** | 0 / 124 queries | [`research/results/benchmark_run.json`](research/results/benchmark_run.json) | Frozen 8-category suite | $N = 124$ queries; B3 had 15 hits | 95% Wilson upper bound about 3% for false hits/query | Local artifact only; generated at commit `6bf5d40`; no independent reproduction attached. |
+| **Temporal B3 result** | 0 false hits; 0 hits; 0% recall | [`research/results/run_manifest.json`](research/results/run_manifest.json) | Frozen stateful mutation suite | $N = 19$ scenarios | Upper bound about 16.8% for false hits/query | Zero observed reuse means precision does not demonstrate useful temporal reuse. |
 | **Modeled Token Cost Savings** | **12.09%** net modeled savings | [`research/results/benchmark_run.json`](research/results/benchmark_run.json) | Multi-tier calibrated cache (B3) | 124 evaluation queries | Model schedule: $0.00625/call, $1e-6/cache lookup | Synthetic pricing model; not an audited commercial cloud invoice. |
-| **In-Process Engine Latency** | P99: **88 µs** (Table I) | `cargo test --test performance_test` | Zero-network L1 cache lookup | 10,000 in-memory requests | P50: 38 µs, P95: 64 µs, P99: 88 µs | In-process microbenchmark excluding network socket transport and serialization. |
-| **Full-Stack Loopback Latency** | P99: **240 µs** (Table II) | `cargo test --test performance_test` | Full Axum HTTP stack (JCS canonicalization, routing, cache) | 5,000 HTTP loopback requests | P50: 120 µs, P95: 195 µs, P99: 240 µs | Localhost loopback network; does not include wide-area WAN latency. |
-| **Client HTTP RPC Latency** | P50: **1.09 ms**, P99: **3.87 ms** | [`research/results/benchmark_run.json`](research/results/benchmark_run.json) | Python client to live gateway daemon | 124 end-to-end queries | Mean: 1.21 ms, P99: 3.87 ms | Client-side round-trip RPC latency including Python JSON serde. |
-| **Cryptographic Shredding Latency** | Average: **3.2 µs** (P99: **4.4 µs**) | [`research/results/capacity_soak_report.json`](research/results/capacity_soak_report.json) | Live TDEK zeroization via `/v1/governance/shred` under traffic | 5 tenants under concurrent load | SLO: < 1,000 µs (1.0 ms) | Microsecond atomic memory zeroization and multi-store record deletion. |
+| **In-Process Engine Latency** | Historical test value: P99 88 µs | `cargo test --test performance_test` | Local test harness | See test output for current candidate | Not rerun in this assessment yet | Not production or cluster latency. |
+| **Full-Stack Loopback Latency** | Historical test value: P99 240 µs | `cargo test --test performance_test` | Local HTTP test harness | See test output for current candidate | Not rerun in this assessment yet | The capacity soak artifact reports a different workload P99 of 10.339 ms. |
+| **Client HTTP RPC Latency** | P50 0.829 ms, P99 1.099 ms | [`research/results/benchmark_run.json`](research/results/benchmark_run.json) | Loopback RPC in that run | 124 queries | One recorded run | Not WAN or production telemetry. |
+| **Capacity soak** | P99 10.339 ms; RSS +86.68%; unstable envelope | [`research/results/capacity_soak_report.json`](research/results/capacity_soak_report.json) | 1,327-request local harness run | 1,000 stage-one requests plus 327 other requests | One recorded run | Fails current stated latency, throughput, and memory targets. |
 
-### 1.2 October 21, 2026 Master Completion Audit & Institutional-Readiness Plan
+### 1.2 Project completion and release status
 
-In accordance with institutional review standards across Senior Platform Engineering, Distributed Systems, Application Security, SRE, and AI/ML Research, Sunborn has completed the **Master Completion Audit and Institutional-Readiness Plan** (tracked under `MON-458` / `MON-526`):
+The repository has a detailed roadmap, but the work is not complete against its own phase and release exit criteria. The current evidence-based status is:
 
-* **Executive Verdict**: **Controlled Pilot & Staging Cleared / Unrestricted Enterprise Production Deferred** pending third-party penetration testing and live multi-region cluster drill sign-off.
+* **Executive Verdict**: **RELEASE HOLD**. No staging or pilot clearance is asserted by this review.
 * **Master Governance Document**: [`docs/architecture/master_completion_audit_and_institutional_readiness_plan.md`](docs/architecture/master_completion_audit_and_institutional_readiness_plan.md).
-* **Route Authorization Matrix**: [`docs/security/authorization_matrix.md`](docs/security/authorization_matrix.md) establishing exact permission, idempotency, audit, and destruction tiers across all 37 endpoints.
+* **Route Authorization Matrix**: [`docs/security/authorization_matrix.md`](docs/security/authorization_matrix.md), to be reconciled against 41 route declarations and 42 method-path operations.
 * **Durable Schemas**: [`migrations/0002_durable_identity_and_keys.sql`](migrations/0002_durable_identity_and_keys.sql) persisting wrapped tenant data encryption keys and API credentials in PostgreSQL WAL.
 * **Safe Reuse Invariance**: Proof-carrying admissibility checking in [`crates/sunborn-gateway/src/handlers.rs`](crates/sunborn-gateway/src/handlers.rs) evicts corrupt/expired cache entries and falls through safely to origin execution.
 * **Shutdown Drain Semantics**: [`crates/sunborn-gateway/src/main.rs`](crates/sunborn-gateway/src/main.rs) drains outbox WAL on clean shutdown and terminates with exit code 75 (`EX_TEMPFAIL`) on deadline expiry.
@@ -91,9 +89,9 @@ In accordance with institutional review standards across Senior Platform Enginee
 
 ---
 
-## 2. Verified System Architecture & Flow Diagrams
+## 2. System Architecture & Flow Diagrams
 
-The following flow diagrams illustrate the exact code execution paths implemented across the Rust gateway, database engines, and frontend control plane.
+The following diagrams describe intended system flows. They are architecture descriptions, not proof that every component is wired, durable, or verified in a running deployment.
 
 ### 2.1 End-to-End Multi-Tier Inference Flow
 
@@ -209,8 +207,8 @@ flowchart LR
     end
 
     subgraph CryptoShredding["Theorem 2: O(1) Tenant Shredding"]
-        ShredReq["Admin DELETE /v1/tenants/:id<br/>or POST /v1/governance/shred"] --> ZeroizeTDEK["Zeroize Tenant Data Encryption Key<br/>(Atomic Memory & Vault Erasure: 42.1 µs)"]
-        ZeroizeTDEK --> Indistinguishable["All Tenant Ciphertexts in PG, Dragonfly,<br/>& Qdrant Become Information-Theoretically Random"]
+        ShredReq["Admin DELETE /v1/tenants/:id<br/>or POST /v1/governance/shred"] --> ZeroizeTDEK["Request tenant-key zeroization<br/>(end-to-end erasure not yet independently verified)"]
+        ZeroizeTDEK --> Indistinguishable["Ciphertext should be unrecoverable only if<br/>all key copies and derived data are removed"]
     end
 
     subgraph EpochFencing["Theorem 3: Monotonic Epoch Lease Fencing"]
@@ -221,7 +219,7 @@ flowchart LR
     end
 
     Crash ==> RebuildTool
-    RestoreDragonfly & RestoreQdrant --> ZeroLoss["100% Reconstructed State<br/>0.0% Authoritative Data Loss"]
+    RestoreDragonfly & RestoreQdrant --> ZeroLoss["Reconstruct derived indexes<br/>(measured recovery evidence required)"]
 
     classDef fail fill:#7f1d1d,stroke:#ef4444,stroke-width:2px,color:#f8fafc;
     classDef engine fill:#1e293b,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
@@ -285,17 +283,17 @@ Sunborn systematically evaluates cache designs against standard baselines and ve
 |---|---|---|---|---|
 | **B0: Direct Origin** | Upstream Origin LLM | None | N/A | Origin single point of failure |
 | **B1: Exact Hash Cache** | Canonical SHA-256 | Bitwise exact matching | Whitespace & JSON key normalization | Ephemeral memory loss on restart |
-| **B2: Naive Cosine Cache** | Uncalibrated Cosine | Static threshold ($\tau=0.75$) | None | Catastrophic false-hit rate (48.39%) |
-| **B3-Static: Guardrailed Cache** | Conformal Risk Control | Structural Guardrails (Negation, Numerics) | Heuristic risk ceiling ($\le 0.25$) | Bounded false hits ($\le 1.0\%$) |
+| **B2: Naive Cosine Cache** | Uncalibrated Cosine | Static threshold ($\tau=0.75$) | None | 51/124 false hits (41.13%) on the frozen artifact only |
+| **B3-Static: Guardrailed Cache** | Conformal Risk Control | Structural Guardrails (Negation, Numerics) | Heuristic risk ceiling ($\le 0.25$) | Frozen artifact: 0/124 false hits, 15/124 hits; production bound not established |
 | **Stage 1: Causal Freshness** | Monotonic Epoch Leases & Vector Clocks | Multi-source atomic validation | Causal dependency fencing | Zero stale reads under delayed outbox events |
 | **Stage 2: Adaptive Closed-Loop** | 5-Layer Policy Promotion Controller | RFC 2104 signed feedback | 70/30 held-out split ($p \le 0.01$), auto-rollback | Real-time false-hit avoidance |
-| **Sunborn Unified: Proof-Carrying Reuse** | Cryptographic Merkle Certificates | 4-Stage Verification Cascade | Typed DAG execution effects, non-accelerator WAL | 0.0% false-hit rate, Byzantine accelerator resilience |
+| **Sunborn Unified: Proof-Carrying Reuse** | Certificate and verification code in source | Reuse evaluation | Typed DAG effects and durability code | Safety, durability, and Byzantine resilience require operational verification |
 
 ---
 
 ## 4. Adaptive Closed-Loop Learning Specification
 
-Sunborn implements a 5-layer autonomous feedback controller verified across all unit, integration, and security test suites in `crates/sunborn-gateway/`:
+Source includes a 5-layer feedback controller. Current-candidate behavior and production suitability are not established by this description:
 
 ### 4.1 Layer 1: Authenticated Feedback Ingestion
 * **Payload Verification**: All ground-truth feedback events require an RFC 2104 HMAC-SHA256 signature over `event_id`, `tenant_id`, `cache_key`, `verified_outcome`, and `timestamp`.
@@ -346,7 +344,7 @@ Sunborn guarantees formal system invariants proven by empirical tests in `crates
 > *Under AES-256-GCM encryption with Tenant Data Encryption Key $\text{TDEK}_i$, atomic zeroization of $\text{TDEK}_i$ renders all cached entries $C_i$, vector representations $V_i$, and execution subgraphs $G_i$ information-theoretically indistinguishable from random noise in $O(1)$ time ($< 50\ \mu\text{s}$), satisfying GDPR Article 17 without table locking or sequential disk wiping.*
 
 * **Empirical Verification** (`crates/sunborn-identity/src/crypto_shred.rs` & `crates/sunborn-gateway/tests/governance_test.rs`):
-  * TDEK zeroization latency: **42.1 µs** (P99: **42.4 µs**).
+  * The current capacity artifact reports crypto-shredding stage averages; this is not evidence of end-to-end erasure across distributed stores.
   * Decryption of zeroized records: **100% rejected** with MAC authentication failure.
 
 ### 5.3 Theorem 3: Monotonic Epoch Fencing
@@ -411,7 +409,7 @@ Sunborn includes an automated local evaluation package ([`research/reproduce.sh`
 
 > [!NOTE]
 > **Empirical Scope & Benchmark Bounds**:
-> The reported empirical results reflect internal evaluation on the curated `SemanticCacheBench` benchmark suite (124 queries across 8 categories, including adversarial negation traps and intent shifts). While confirming 0.0% false hits on this evaluation set, production deployment requires continuous calibration (`/v1/learning/calibrate`) and tenant-specific domain feedback to maintain these guarantees on heterogeneous production traffic.
+> The checked-in static artifact reports 0 B3 false hits in 124 queries and 15 B3 reuse hits; the temporal artifact reports no B3 reuse hits. These are finite local results tied to older commits, not guarantees. The unauthenticated certificate and unstable capacity result are described in the project completion assessment.
 
 ### 8.1 SemanticCacheBench Baseline Evaluation (124 Queries, 8 Categories, 95% Wilson CI)
 
@@ -450,7 +448,7 @@ Sunborn Proof-Carrying Te | 10.5% [2.9,31.4]    |  0.0% [0.0,16.8]        |  100
 ### 8.3 Capacity Soak & Memory Stability Verification
 * **Measured Concurrent Ingestion**: Benchmarked via the live HTTP protocol test harness `benchmarks/capacity_soak.py` against the running gateway, achieving sustained throughput > 2,200 concurrent HTTP req/s over loopback with bounded FinOps GDSF byte capacity. In-process CPU engine throughput exceeds 25,000 req/s.
 * **Singleflight Burst Coalescing**: 20 concurrent bursts with 15 identical callers spawned 20 leaders and attached 280 followers, leaving **0 orphaned or leaked broadcast channels** upon completion.
-* **GDPR Article 17 Crypto-Shredding**: Live measurement via `POST /v1/governance/shred` during active background traffic, measuring atomic AES-256-GCM TDEK zeroization latency at an average of **$3.2\ \mu\text{s}$** (P99: **$4.4\ \mu\text{s}$**), strictly satisfying the sub-millisecond SLO.
+* **Cryptographic shredding**: The local capacity artifact reports an average of **3.6 µs** and maximum of **8.1 µs** for its shredding stage. This does not establish deletion from every persistent or replicated store.
 * **Process Memory RSS Envelope**: Measured live process RSS remains bounded with predictable growth and zero memory leaks.
 
 ---
@@ -501,9 +499,9 @@ print(response["choices"][0]["message"]["content"])
 
 ---
 
-## 10. Complete End-to-End API Contracts (37 Verified Endpoints)
+## 10. API Contracts and Route Inventory
 
-Sunborn exposes 37 verified endpoints across public, authenticated tenant, and administrative scopes in [`crates/sunborn-gateway/src/lib.rs`](crates/sunborn-gateway/src/lib.rs):
+The gateway source currently declares 41 route paths and 42 method-path operations. OpenAPI parity and route authorization coverage remain under review; the inventory below is not a verification claim.
 
 | Endpoint | Method | Required Scope | Functional Contract |
 | :--- | :--- | :--- | :--- |

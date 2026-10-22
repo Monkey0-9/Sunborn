@@ -5,6 +5,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -20,6 +21,7 @@ pub struct ApiCredential {
     pub rate_limit_rps: u32,
     pub allowed_models: Vec<String>,
     pub is_admin: bool,
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Clone, Debug)]
@@ -33,6 +35,12 @@ pub struct SecurityContext {
 }
 
 impl SecurityContext {
+    pub fn allows_model(&self, model: &str) -> bool {
+        self.allowed_models
+            .iter()
+            .any(|allowed| allowed == "*" || allowed == model)
+    }
+
     pub fn require_admin(&self) -> Result<(), &'static str> {
         if !self.is_authenticated || !self.is_admin {
             return Err("Administrative privileges required for this operation");
@@ -79,6 +87,10 @@ pub struct ApiKeyRegistry {
     credentials: Arc<RwLock<HashMap<String, ApiCredential>>>,
 }
 
+fn env_allowed_models(models: Option<Vec<String>>) -> Vec<String> {
+    models.unwrap_or_else(|| vec!["*".to_string()])
+}
+
 impl Default for ApiKeyRegistry {
     fn default() -> Self {
         Self::new()
@@ -108,6 +120,25 @@ impl ApiKeyRegistry {
         allowed_models: Vec<String>,
         is_admin: bool,
     ) {
+        self.register_key_with_expiration(
+            raw_key,
+            tenant_id,
+            application_id,
+            allowed_models,
+            is_admin,
+            None,
+        );
+    }
+
+    fn register_key_with_expiration(
+        &self,
+        raw_key: &str,
+        tenant_id: TenantId,
+        application_id: ApplicationId,
+        allowed_models: Vec<String>,
+        is_admin: bool,
+        expires_at: Option<DateTime<Utc>>,
+    ) {
         let hash = Self::hash_key(raw_key);
         let cred = ApiCredential {
             tenant_id,
@@ -116,13 +147,22 @@ impl ApiKeyRegistry {
             rate_limit_rps: 100,
             allowed_models,
             is_admin,
+            expires_at,
         };
         self.credentials.write().unwrap().insert(hash, cred);
     }
 
     pub fn validate_key(&self, raw_key: &str) -> Option<ApiCredential> {
         let hash = Self::hash_key(raw_key);
-        self.credentials.read().unwrap().get(&hash).cloned()
+        let credential = self.credentials.read().unwrap().get(&hash).cloned()?;
+        if credential
+            .expires_at
+            .as_ref()
+            .is_some_and(|expires_at| expires_at <= &Utc::now())
+        {
+            return None;
+        }
+        Some(credential)
     }
 
     /// Hydrates durable API credentials from PostgreSQL into the in-memory lookup cache.
@@ -143,6 +183,7 @@ impl ApiKeyRegistry {
                     rate_limit_rps: r.rate_limit_rps,
                     allowed_models: r.allowed_models,
                     is_admin: r.is_admin,
+                    expires_at: r.expires_at,
                 },
             );
         }
@@ -177,16 +218,11 @@ impl ApiKeyRegistry {
                     app: String,
                     #[serde(default)]
                     is_admin: bool,
-                    #[serde(default)]
-                    allowed_models: Vec<String>,
+                    allowed_models: Option<Vec<String>>,
                 }
                 if let Ok(entries) = serde_json::from_str::<Vec<KeyEntry>>(trimmed) {
                     for entry in entries {
-                        let models = if entry.allowed_models.is_empty() {
-                            vec!["*".to_string()]
-                        } else {
-                            entry.allowed_models
-                        };
+                        let models = env_allowed_models(entry.allowed_models);
                         self.register_key(
                             &entry.key,
                             TenantId::new(entry.tenant),
@@ -365,5 +401,72 @@ pub async fn auth_middleware(headers: HeaderMap, mut req: Request, next: Next) -
             })),
         )
             .into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Duration;
+
+    fn security_context(allowed_models: Vec<&str>) -> SecurityContext {
+        SecurityContext {
+            tenant_id: TenantId::new("tenant-test"),
+            application_id: ApplicationId::new("app-test"),
+            api_key_hash: String::new(),
+            allowed_models: allowed_models.into_iter().map(str::to_owned).collect(),
+            is_authenticated: true,
+            is_admin: false,
+        }
+    }
+
+    #[test]
+    fn empty_model_permissions_deny_all_models() {
+        assert!(!security_context(vec![]).allows_model("model-a"));
+    }
+
+    #[test]
+    fn model_permissions_allow_only_matching_models_or_wildcard() {
+        let scoped = security_context(vec!["model-a"]);
+        assert!(scoped.allows_model("model-a"));
+        assert!(!scoped.allows_model("model-b"));
+
+        assert!(security_context(vec!["*"]).allows_model("model-b"));
+    }
+
+    #[test]
+    fn explicit_empty_env_permissions_do_not_expand_to_wildcard() {
+        assert_eq!(env_allowed_models(None), vec!["*"]);
+        assert!(env_allowed_models(Some(Vec::new())).is_empty());
+    }
+
+    #[test]
+    fn expired_api_credentials_are_rejected() {
+        let registry = ApiKeyRegistry::new();
+        registry.register_key_with_expiration(
+            "expired-test-key",
+            TenantId::new("tenant-expired"),
+            ApplicationId::new("app-expired"),
+            vec!["*".to_string()],
+            false,
+            Some(Utc::now() - Duration::seconds(1)),
+        );
+
+        assert!(registry.validate_key("expired-test-key").is_none());
+    }
+
+    #[test]
+    fn unexpired_api_credentials_remain_valid() {
+        let registry = ApiKeyRegistry::new();
+        registry.register_key_with_expiration(
+            "valid-test-key",
+            TenantId::new("tenant-valid"),
+            ApplicationId::new("app-valid"),
+            vec!["*".to_string()],
+            false,
+            Some(Utc::now() + Duration::seconds(60)),
+        );
+
+        assert!(registry.validate_key("valid-test-key").is_some());
     }
 }

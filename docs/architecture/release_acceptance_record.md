@@ -9,44 +9,43 @@
 
 ---
 
-## 1. Executive Clearance & Operational Verdict
+## 1. Release Hold & Scope of This Record
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                        RELEASE VERDICT: CONDITIONAL                    │
+│                        RELEASE VERDICT: HOLD                           │
 ├────────────────────────────────────────────────────────────────────────┤
-│  [✓] Controlled Development & Staging Workloads : AUTHORIZED          │
-│  [✓] Isolated Enterprise Pilot (Gated Multi-Tenant): AUTHORIZED        │
+│  [ ] Controlled Staging & Pilot Workloads      : NOT CLEARED BY THIS RECORD │
 │  [!] Unrestricted Enterprise Production           : PENDING G1–G10 GATES │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-In accordance with the senior platform engineering, distributed systems, AI/ML research, application security, and SRE review standards articulated in the **Master Completion Audit and Institutional-Readiness Plan**:
-- **Controlled Staging & Pilot Clearance**: Sunborn v0.1.0-rc2 is cleared for deployment in dedicated development, pre-production staging, and single-tenant or strictly isolated pilot enterprise environments.
-- **Production Hold**: Unrestricted production adoption across high-consequence enterprise workloads handling highly sensitive or regulated data remains gated pending successful human sign-off on Gates **G1 through G10**.
+This is a source and workflow review record, not an operational authorization. No gate has independent closure evidence attached for the current candidate. Any pilot or production deployment requires a separate, environment-specific risk decision and accountable human approval.
 
 ---
 
 ## 2. Institutional Release Gates & Verification Status
 
+**Review status (2026-10-22): RELEASE HOLD.** The statuses below are based on a source and workflow review; no gate is independently closed by this review. Automated checks for the current working tree and live staging evidence have not yet been produced. A source file or test existing is not evidence that its gate passed.
+
 | Gate | Focus Area | Requirement Summary | Verification Status | Primary Evidence |
 |---|---|---|---|---|
-| **G1** | **Durable Authentication** | Credential persistence in PostgreSQL (`api_credentials`); zero reliance on volatile in-memory storage. | **IMPLEMENTED** | [`crates/sunborn-db/src/postgres.rs`](../../crates/sunborn-db/src/postgres.rs) |
-| **G2** | **Formal Authorization** | Route-by-route permission matrix enforcing authenticated tenant scoping across all 41 routes. | **IMPLEMENTED** | [`docs/security/authorization_matrix.md`](../security/authorization_matrix.md) |
-| **G3** | **Graceful Shutdown** | Drain timeout exits with code 75 (`EX_TEMPFAIL`); in-flight WAL flushed via `graceful_drain()`. | **VERIFIED** | [`crates/sunborn-gateway/src/main.rs`](../../crates/sunborn-gateway/src/main.rs) |
-| **G4** | **API & SDK Parity** | OpenAPI 3.1 zero-drift contract enforcement; Python SDK typed exceptions and session lifecycle checks. | **VERIFIED** | [`scripts/check_openapi_drift.py`](../../scripts/check_openapi_drift.py), [`sdk/python/`](../../sdk/python/) |
-| **G5** | **Helm Orchestration** | PodDisruptionBudget with aligned selector labels; non-root user (UID 65532/1001); ingress proxy limits. | **VERIFIED** | [`deploy/helm/sunborn/`](../../deploy/helm/sunborn/) |
-| **G6** | **Fail-Closed Secrets** | Strict rejection of empty/placeholder secrets; distinct KEK and HMAC secrets; non-root filesystem. | **VERIFIED** | [`deploy/helm/sunborn/templates/secret.yaml`](../../deploy/helm/sunborn/templates/secret.yaml) |
-| **G7** | **Cryptographic Shredding** | Microsecond TDEK zeroization ($< 50 \ \mu\text{s}$) satisfying GDPR Article 17 across cache & vector store. | **VERIFIED** | [`crates/sunborn-identity/src/crypto_shred.rs`](../../crates/sunborn-identity/src/crypto_shred.rs) |
-| **G8** | **Non-Accelerator Authority** | Authoritative state persisted to PostgreSQL WAL; 100% state replay recovery after catastrophic L1/L2 crash. | **VERIFIED** | [`crates/sunborn-gateway/tests/disaster_recovery_test.rs`](../../crates/sunborn-gateway/tests/disaster_recovery_test.rs) |
-| **G9** | **Scientific Provenance** | Honest reproduction certificate (`LOCAL_DEVELOPMENT_INTEGRITY_CHECK`); zero false-hit rate on 124-query suite. | **VERIFIED** | [`research/verify_certificate.py`](../../research/verify_certificate.py) |
-| **G10**| **BFF & Client Security** | 24/24 passing frontend unit/BFF security tests; CSRF origin enforcement; path normalization defenses. | **VERIFIED** | [`frontend/tests/`](../../frontend/tests/) |
+| **G1** | **Durable Authentication** | Credential persistence, expiry, revocation, and fail-closed startup hydration. | **OPEN — source fix under verification; independent and multi-replica evidence outstanding** | [`crates/sunborn-db/src/postgres.rs`](../../crates/sunborn-db/src/postgres.rs), [`crates/sunborn-gateway/src/state.rs`](../../crates/sunborn-gateway/src/state.rs) |
+| **G2** | **Formal Authorization** | Route/method inventory and handler-level tenant/admin enforcement; independent adversarial review. | **OPEN — route totals and policy claims need reconciliation** | [`docs/security/authorization_matrix.md`](../security/authorization_matrix.md) |
+| **G3** | **Graceful Shutdown** | Drain timeout and acknowledged-write durability under staging load. | **OPEN — source/tests exist; live evidence not attached** | [`crates/sunborn-gateway/src/main.rs`](../../crates/sunborn-gateway/src/main.rs) |
+| **G4** | **API & SDK Parity** | OpenAPI method/schema/error parity and clean SDK installation on the candidate commit. | **OPEN — automated checks configured; current candidate not yet run** | [`scripts/check_openapi_drift.py`](../../scripts/check_openapi_drift.py), [`sdk/python/`](../../sdk/python/) |
+| **G5** | **Helm Orchestration** | Chart validation plus cluster upgrade, disruption, network policy, and rollback evidence. | **OPEN — templates exist; live cluster evidence outstanding** | [`deploy/helm/sunborn/`](../../deploy/helm/sunborn/) |
+| **G6** | **Fail-Closed Secrets** | Startup and chart rejection of missing, reused, or placeholder secrets; key rotation review. | **OPEN — configuration checks exist; operational lifecycle evidence outstanding** | [`deploy/helm/sunborn/templates/secret.yaml`](../../deploy/helm/sunborn/templates/secret.yaml) |
+| **G7** | **Cryptographic Shredding** | Independent verification of key erasure and data removal across every store and replica. | **OPEN — source and local tests do not prove end-to-end erasure** | [`crates/sunborn-identity/src/crypto_shred.rs`](../../crates/sunborn-identity/src/crypto_shred.rs) |
+| **G8** | **Non-Accelerator Authority** | Measured RPO/RTO through database/cache/vector failure and full recovery drills. | **OPEN — live multi-replica drill outstanding** | [`crates/sunborn-gateway/tests/disaster_recovery_test.rs`](../../crates/sunborn-gateway/tests/disaster_recovery_test.rs) |
+| **G9** | **Scientific Provenance** | Clean-environment independent reproduction and bounded claims on the evaluated corpus. | **OPEN — local certificate is not an independent signature** | [`research/verify_certificate.py`](../../research/verify_certificate.py) |
+| **G10**| **BFF & Client Security** | Current frontend tests, browser/accessibility checks, and independent BFF threat review. | **OPEN — current candidate not yet run or independently reviewed** | [`frontend/tests/`](../../frontend/tests/) |
 
 ---
 
-## 3. Workstream Execution Matrix (WS-00 through WS-12)
+## 3. Workstream Source Inventory (WS-00 through WS-12)
 
-Every workstream outlined in the 30-cycle execution roadmap is mapped to concrete code deliverables and automated test targets:
+The following is a source inventory only. It does not mean that the workstream, tests, or exit criteria have passed:
 
 - **WS-00 (Core Architecture)**: Verified deterministic hashing, FinOps utility scoring, and vector clocks in [`crates/sunborn-core`](../../crates/sunborn-core).
 - **WS-01 (Identity & Privacy)**: Verified JCS canonicalization, PII redaction, and AES-256-GCM crypto-shredding in [`crates/sunborn-identity`](../../crates/sunborn-identity).
@@ -54,13 +53,13 @@ Every workstream outlined in the 30-cycle execution roadmap is mapped to concret
 - **WS-03 (Semantic Reasoning)**: Verified Conformal Risk Control, structural guardrails, and BGE-small embeddings in [`crates/sunborn-semantic`](../../crates/sunborn-semantic).
 - **WS-04 (Execution Reuse)**: Verified Merkle-DAG inclusion proofs, top-level DAG evaluation, and cycle detection in [`crates/sunborn-execution`](../../crates/sunborn-execution).
 - **WS-05 (Causal Invalidation)**: Verified roaring bitmap SIMD unions, atomic epoch leases, and outbox write-behind in [`crates/sunborn-invalidation`](../../crates/sunborn-invalidation).
-- **WS-06 (Gateway Control Plane)**: Verified singleflight coalescing, predictive radix routing, and 41 Axum routes in [`crates/sunborn-gateway`](../../crates/sunborn-gateway).
+- **WS-06 (Gateway Control Plane)**: Router source contains 41 route declarations and 42 method-path operations in [`crates/sunborn-gateway`](../../crates/sunborn-gateway); contract and authorization parity remain open.
 - **WS-07 (Rebuild & Recovery)**: Verified dense vector re-indexing and outbox WAL replay in [`apps/sunborn-rebuild`](../../apps/sunborn-rebuild).
 - **WS-08 (Database Persistence)**: Verified PostgreSQL group commit and durable credential persistence in [`crates/sunborn-db`](../../crates/sunborn-db).
-- **WS-09 (Testing & Verification)**: Verified 141 Rust tests, 24 frontend tests, 24 SDK tests, and 23 research verification tests.
+- **WS-09 (Testing & Verification)**: Test suites are present; current-candidate suite results must be produced by CI and recorded against the release commit.
 - **WS-10 (DevOps & Packaging)**: Verified Helm chart validation, fail-closed secrets schema, and Python SDK wheel packaging.
 - **WS-11 (Web Control Plane)**: Verified Next.js 15.5 App Router with 12 static/dynamic routes and zero secret leakage in [`frontend/`](../../frontend/).
-- **WS-12 (Scientific Evaluation)**: Verified 124 frozen query benchmarks and cryptographic reproducibility certificate in [`research/`](../../research/).
+- **WS-12 (Scientific Evaluation)**: Frozen benchmark artifacts exist in [`research/`](../../research/); they are tied to an older commit and the certificate is unauthenticated.
 
 ---
 
@@ -68,12 +67,11 @@ Every workstream outlined in the 30-cycle execution roadmap is mapped to concret
 
 ```
 Repository       : Monkey0-9/Sunborn
-Git Head Commit  : be0d4d68e6f1f516a22b7a950e3034988e0eb5a9
-Rustc Compiler   : rustc 1.99.0 (b940084d7 2026-09-28)
-Cargo Toolchain  : cargo 1.99.0 (5f94df478 2026-08-27)
-Python Runtime   : Python 3.13.16 / glibc 2.39
-Node.js Runtime  : Node.js v22.14.0 / Next.js 15.5.27
-OpenAPI Version  : 3.1.0 (41 endpoints strictly verified)
+Review base      : ed2e4135ffd8135d8780945730fde2744b4d6dc8
+Review changes   : Working tree; not yet committed or release-built
+Release digest   : NOT ISSUED — generate from the exact signed release artifacts
+Toolchain        : Record from the release CI run; historical values are not accepted as current evidence
+OpenAPI coverage : Reconcile route and method counts before declaring parity
 ```
 
 ### Authoritative Cross-References:

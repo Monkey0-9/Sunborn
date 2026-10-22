@@ -7,6 +7,8 @@
 **Architecture Gate**: `MON-526` (Phase 00 Architecture & Requirements Freeze)  
 **Operational Status**: **NO-GO FOR SENSITIVE PRODUCTION** (Maintained pending Gates G1–G10 Independent Execution)
 
+> **Historical audit narrative; superseded 2026-10-22.** Later statements in this document that say all phases, gates, benchmark results, or production controls were independently verified are not current evidence. The current status and corrected artifact findings are in [`project_completion_assessment_2026-10-22.md`](project_completion_assessment_2026-10-22.md); all release gates remain open.
+
 ---
 
 ## 1. Response to Auditor Verification & Planning Inconsistency
@@ -480,7 +482,7 @@ The engineering governance record formally adopts the auditor's commit attributi
 7. **Empirical Research Attestation**: Reproduction certificates and manifests explicitly declare `NONE_UNAUTHENTICATED_LOCAL_DIGEST` to prevent conflation with third-party digital notary attestations.
 
 ### 13.3 Release Target
-The immediate institutional milestone is an **evidence-backed release candidate (`v0.1.0-rc2`)** with all P0 blockers verified and all Gates G1–G10 satisfied.
+The previous release-candidate statement is withdrawn. The next milestone is to resolve the current assessment findings, attach candidate-specific evidence, and obtain the independent and operational sign-offs required by the open gates.
 
 
 

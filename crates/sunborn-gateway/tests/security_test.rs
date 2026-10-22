@@ -376,6 +376,35 @@ async fn test_tenant_spoofing_rejected_with_authenticated_key() {
 }
 
 #[tokio::test]
+async fn test_application_spoofing_rejected_with_authenticated_key() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state);
+    let spoof_payload =
+        RequestEnvelope::new("tenant-alpha", "app-other", "gpt-4o", "Scoped prompt");
+
+    let res = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", "test-key-alpha")
+                .body(Body::from(serde_json::to_vec(&spoof_payload).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert!(json["detail"]
+        .as_str()
+        .unwrap()
+        .contains("Application spoofing rejected"));
+}
+
+#[tokio::test]
 async fn test_valid_authenticated_tenant_request_succeeds() {
     let state = AppState::new(AppConfig::default());
     let app = create_router(state);

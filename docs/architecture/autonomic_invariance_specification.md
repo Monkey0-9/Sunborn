@@ -7,6 +7,8 @@
 **Verification Digest (SHA-256)**: `059500e9fea4b5ca13a2d7bfe13e4cd4d3bb981938f18386120026ebfa987635`  
 **Classification**: Production Architecture & Formal Verification Dossier  
 
+> **Historical specification; implementation and release claims are not independently verified.** Current results differ from this document: the static B2 artifact records 51/124 false hits (41.13%); temporal B2 records 3/19 (15.79%), while temporal B3 records zero hits and zero recall. The capacity artifact reports P99 10.339 ms and unstable memory. See [`project_completion_assessment_2026-10-22.md`](project_completion_assessment_2026-10-22.md).
+
 ---
 
 ## 1. System Evolution & Baseline Comparison
@@ -17,7 +19,7 @@ Sunborn defines an explicit architectural progression across semantic caching re
 |---|---|---|---|---|---|
 | **Baseline 0** | **Direct Origin** | None (Origin LLM) | None | N/A | Origin single point of failure |
 | **Baseline 1** | **Exact Hash Cache** | Deterministic SHA-256 | Static TTL | Bitwise exact matching only | Ephemeral memory loss |
-| **Baseline 2** | **Naive Cosine Cache** | Uncalibrated Cosine Similarity | Static arbitrary threshold | None (48.39% false-hit rate on adversarial traps) | High semantic hallucination risk |
+| **Baseline 2** | **Naive Cosine Cache** | Uncalibrated Cosine Similarity | Static arbitrary threshold | 41.13% false hits in the static frozen artifact | High semantic hallucination risk |
 | **Tier 1** | **Guardrailed Cache** | Conformal Risk Control (CRC) + NLI | Offline batch calibration | Structural pre-filter (negation, numeric, entity inversion) | False-hit rate bounded to $\le 1.0\%$ |
 | **Tier 2** | **Predictive & Invalidated** | Lineage Dependency Graph + Markov Prefetch | Predictive speculative warming | Monotonic epoch fencing ($E_{fence} > E_{read}$) | Zero stale read-repair race conditions |
 | **Tier 3** | **Safe Adaptive Closed-Loop** | Multi-Tier Policy Promotion Controller | Closed-loop signed feedback | 70/30 held-out calibration, automated canary & instant rollback | Real-time false-hit avoidance without human tuning |
@@ -207,7 +209,7 @@ bash research/reproduce.sh
 | **Sunborn B3 Precision** | **100.0%** | **100.0%** | **CONFIRMED** |
 | **Sunborn B3 Cost Savings (Frozen Suite)** | **10.0% – 15.0%** | **12.09%** (124-query suite) | **CONFIRMED** |
 | **Sunborn B3 Token Savings (Zipfian)** | **28.0% – 32.0%** | **29.03%** (Capacity soak) | **CONFIRMED** |
-| **Naive Cosine B2 False-Hit Rate** | **35.0% – 50.0%** | **48.39%** (60 false hits) | **CONFIRMED** |
+| **Naive Cosine B2 False-Hit Rate** | Historical target 35.0%–50.0% | Static artifact: 41.13% (51/124) | **LOCAL ARTIFACT ONLY** |
 | **Gateway P99 Latency SLO** | **< 5.0 ms** | **240 µs (0.24 ms)** | **CONFIRMED** |
 | **Throughput (Exact Path)** | **> 10,000 req/s** | **14,166 req/s** | **CONFIRMED** |
 | **Cryptographic Shredding Latency** | **< 1.0 ms** | **42.1 µs** | **CONFIRMED** |
@@ -217,7 +219,7 @@ bash research/reproduce.sh
 
 ## 6. Formal Sign-Off & Verification Evidence
 
-All 29 phase gates (Phase 00–28), ISO/IEC/IEEE 29148 functional requirements (FR-001 through FR-035), REA binary security mitigations, and autonomic self-learning controllers are verified for controlled staging and pilot operations. Unrestricted enterprise production remains subject to Gates G1–G10 detailed in the Master Completion Audit and Institutional-Readiness Plan.
+The roadmap and control implementation remain incomplete against their operational exit criteria. No staging or pilot clearance is asserted here; all current release gates remain open.
 
 - **Primary Traceability Matrix**: [`docs/architecture/traceability_matrix.md`](traceability_matrix.md)
 - **Release Acceptance Record**: [`docs/architecture/release_acceptance_record.md`](release_acceptance_record.md)

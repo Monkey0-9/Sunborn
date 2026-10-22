@@ -9,7 +9,7 @@ gateway:
   image:
     repository: ghcr.io/sunborn/sunborn-gateway
     pullPolicy: IfNotPresent
-    tag: "0.1.0"
+    tag: ""
 
   service:
     type: ClusterIP
@@ -71,7 +71,7 @@ frontend:
   image:
     repository: ghcr.io/sunborn/sunborn-frontend
     pullPolicy: IfNotPresent
-    tag: "0.1.0"
+    tag: ""
 
   service:
     type: ClusterIP
@@ -169,7 +169,8 @@ secrets:
 
 networkPolicy:
   enabled: true
-  allowEgressToExternalLLM: true
+  # Public HTTPS egress is opt-in. Prefer an egress gateway or provider CIDR policy.
+  allowEgressToExternalLLM: false
   # Ingress controller namespace selector (restricted rather than cluster-wide wildcard)
   ingressNamespaceSelector:
     matchLabels:

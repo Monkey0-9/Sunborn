@@ -157,15 +157,16 @@ pub async fn execute_request_inner(
 
     if req.application_id.0.is_empty() {
         req.application_id = sec_ctx.application_id.clone();
+    } else if req.application_id != sec_ctx.application_id {
+        return Err(SunbornError::unauthorized(format!(
+            "Application spoofing rejected: authenticated context is '{}', but request payload specified '{}'",
+            sec_ctx.application_id.0, req.application_id.0
+        ))
+        .into());
     }
 
     // Enforce model authorization permissions
-    if !sec_ctx.allowed_models.is_empty()
-        && !sec_ctx
-            .allowed_models
-            .iter()
-            .any(|m| m == "*" || m == &req.model)
-    {
+    if !sec_ctx.allows_model(&req.model) {
         return Err(SunbornError::unauthorized(format!(
             "Model '{}' is not authorized for tenant '{}'",
             req.model, sec_ctx.tenant_id.0

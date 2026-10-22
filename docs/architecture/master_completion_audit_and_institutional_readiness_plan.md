@@ -12,10 +12,10 @@
 
 ## Executive Verdict
 
-> **NOT YET CLEARED FOR UNRESTRICTED PRODUCTION USE**  
-> Controlled development, staging, and sandboxed pilot environments are authorized subject to environment-specific safeguards. Enterprise workloads containing highly sensitive customer data, unencrypted PII, or critical production dependencies are strictly deferred until Gates G1–G10 achieve independent verification and sign-off.
+> **CURRENT STATUS: RELEASE HOLD**
+> This plan is not deployment authorization. No controlled pilot or staging clearance is asserted without current environment-specific evidence and accountable approval. High-consequence and sensitive production use remains deferred until applicable release gates are independently verified.
 
-The current repository reflects substantial engineering maturation and concrete controls: the OpenAPI 3.1 specification, Python package metadata and typed exceptions, Helm values JSON schema, Kubernetes PodDisruptionBudget, trace request-ID correlation middleware, graceful-shutdown drain wiring, and hardened production-readiness checks are all present in source code. 
+The repository contains an OpenAPI 3.1 specification, Python package metadata, Helm values schema, Kubernetes templates, tracing middleware, graceful-shutdown code, and production-readiness checks. Their presence is a source inventory, not evidence of correct behavior in an operational environment. See the [2026-10-22 completion assessment](project_completion_assessment_2026-10-22.md) for current evidence and findings.
 
 However, a feature being present in source code is not equivalent to proving it operates correctly under distributed partition, hostile adversarial traffic, concurrent multi-tenant churn, or sustained memory pressure. Sunborn's next milestone is not the accumulation of additional features, but the rigorous, evidence-based verification of these safety, durability, and isolation guarantees.
 
@@ -29,7 +29,7 @@ The following inventory reflects verified source-level inspection of the Sunborn
 | :--- | :--- | :--- |
 | **Graceful Shutdown** | `SIGINT`/`SIGTERM` signal handlers in `crates/sunborn-gateway/src/main.rs`, `axum::serve::with_graceful_shutdown`, explicit `state.graceful_drain()` hook. | **Implemented & Hardened**. Normal termination flushes database outbox and drains in-flight connections cleanly. Forced deadline expiry now logs an error and exits with code 75 (`EX_TEMPFAIL`) rather than claiming successful exit code 0. Orchestrator termination grace period (`terminationGracePeriodSeconds: 30`) is aligned. |
 | **Request Correlation** | Validated/generated UUIDv4 request IDs, header-size checks (64 KB ceiling), and `TracingContext` in `crates/sunborn-gateway/src/middleware/trace.rs`. | **Implemented**. Validated against HTTP header-injection attacks; propagation across backend microservices and OpenTelemetry spans requires live tracing infrastructure verification. |
-| **API Contract** | OpenAPI 3.1 specification in `docs/api/openapi.yaml` with symlink at repository root `openapi.yaml`. | **Present**. Covers 37 gateway endpoints. Schema, route, and authentication requirement parity is documented; continuous drift-detection automation must run in CI. |
+| **API Contract** | OpenAPI 3.1 specification in `docs/api/openapi.yaml` with symlink at repository root `openapi.yaml`. | **Present**. Gateway source contains 41 route declarations and 42 method-path operations; OpenAPI, method, and authorization parity require reconciliation. |
 | **Python SDK Packaging** | `pyproject.toml`, typed RFC 7807 exception hierarchy (`SunbornError`, `SunbornAuthError`, etc.), async and sync clients in `sdk/python/sunborn/`. | **Present & Hardened**. Package builds cleanly; context managers enforce lifecycle tracking (`client.is_closed = True`), rejecting post-close requests with `RuntimeError`. |
 | **Helm Schema & Disruption** | `deploy/helm/sunborn/values.schema.json`, `templates/pdb.yaml`, and hardened `templates/secret.yaml`. | **Present & Hardened**. Helm schema validates inputs; Secret template fails closed if database connection credentials are missing or contain `"change_in_vault"` / `"placeholder"` fixtures. Live cluster rolling-upgrade tests are scheduled for Gate G8. |
 | **Production Startup Checks** | Fail-closed `verify_production_readiness()` in `crates/sunborn-gateway/src/state.rs`. | **Implemented & Hardened**. Strictly rejects mock origin providers, deterministic embeddings, in-memory caches/databases, and placeholder secrets when `SUNBORN_ENV=production`. Real network verification probes PostgreSQL, DragonflyDB, and Qdrant. |
@@ -146,7 +146,7 @@ These five release blockers must be resolved before introducing new AI features,
 
 | Priority | Area | Linear WS & Milestone | Required Completion & Code Grounding | Acceptance Criteria |
 | :--- | :--- | :--- | :--- | :--- |
-| **P1** | **API Contract** | `WS-03`<br/>Phase 02 / 27 | Validate all 37 gateway routes against `docs/api/openapi.yaml`. Automated schema diff test in CI asserts route, parameter, and error parity. | Zero OpenAPI schema drift; all endpoints conform to RFC 7807 problem details. |
+| **P1** | **API Contract** | `WS-03`<br/>Phase 02 / 27 | Reconcile all 41 route declarations and 42 method-path operations with `docs/api/openapi.yaml`, generated policy inventory, and error behavior. | Candidate-level parity check and reviewed method/resource matrix. |
 | **P1** | **Python SDK** | `WS-03`<br/>Phase 01 / 27 | Build wheel from clean environment; test async cancellation, timeouts, backoff retries, exception subclassing, and context managers (`client.is_closed`). | Clean install in virtual environment; all 5 SDK contract tests pass; requests on closed sessions raise `RuntimeError`. |
 | **P1** | **Gateway Reliability** | `WS-03`, `WS-10`<br/>Phase 21 / 27 | Exercise shutdown under load; verify `state.graceful_drain()` flushes database outbox; deadline exit code 75 on timeout. | Zero acknowledged writes lost; clean drain within timeout. |
 | **P1** | **Rate Limiting** | `WS-09`<br/>Phase 02 / 18 | Extract tenant identity from `SecurityContext`; return standard `x-ratelimit-limit`, `x-ratelimit-remaining`, `x-ratelimit-reset`, and `retry-after` headers. | Rate limits enforced per authenticated tenant; burst traffic sheds gracefully with HTTP 429. |
@@ -239,20 +239,22 @@ flowchart TD
 
 ---
 
-## 5. Acceptance Gates Enforced
+## 5. Acceptance Gates
 
-The following 8 release gates must be satisfied sequentially. **No gate closes based on code compilation or green unit tests alone; verifiable operational evidence is required.**
+The ten release gates in [`release_acceptance_record.md`](release_acceptance_record.md) are authoritative. All remain open until their evidence is reviewed against the exact release candidate. **No gate closes based on code compilation or green unit tests alone; verifiable operational evidence is required.**
 
 | Gate | Focus Domain | Minimum Evidence Required for Gate Closure | Sign-Off Owner |
 | :--- | :--- | :--- | :--- |
-| **G1** | **Security** | Independent adversarial penetration testing; zero high/critical vulnerabilities; cross-tenant leakage tests pass; non-admin privilege escalation strictly denied. | Team D, Team G, Team P |
-| **G2** | **Cache Correctness** | Zero observed false hits on benchmark corpus; proof-carrying admissibility enforced on all reusable entries; invalidation and epoch fence tests pass. | Team F, Team N |
-| **G3** | **Durability & State** | PostgreSQL WAL authority verified; restart and crash-recovery tests pass; key hydration from database succeeds; cold index rebuild passes. | Team E, Team L |
-| **G4** | **Performance & Scale** | Hot-path P99 latency $< 5.0\text{ ms}$; sustained throughput $> 10,000\text{ req/s}$; memory remains bounded under Zipfian churn. | Team B, Team K |
-| **G5** | **Research & Claims** | Reproduction verifier passes in clean environment; Wilson confidence intervals reported; synthetic cost assumptions explicitly disclosed. | Team N, Team P |
-| **G6** | **Deployment & Helm** | Helm lint and template rendering pass; secret templates fail closed on missing credentials; PodDisruptionBudget and NetworkPolicy validated. | Team M, Team L |
-| **G7** | **SDK & API** | Zero OpenAPI schema drift; Python SDK wheel builds and installs cleanly; closed session handling verified; typed RFC 7807 exceptions mapped. | Team B, Team J |
-| **G8** | **Operations & DR** | Graceful shutdown drains connections cleanly; disaster recovery rebuild restores state within RTO; runbooks validated in staging. | Team L, Team P |
+| **G1** | **Durable Authentication** | Credential create, expiry, revocation, startup hydration, and cross-replica invalidation verified. | Security, database, independent reviewer |
+| **G2** | **Formal Authorization** | Generated method/resource inventory matches route policy; handler-level checks and independent adversarial review pass. | Gateway, security, independent reviewer |
+| **G3** | **Graceful Shutdown** | Acknowledged-write durability and bounded drain behavior demonstrated under staging load. | Gateway, SRE |
+| **G4** | **API & SDK Parity** | OpenAPI methods, schemas, and errors match handlers; clean SDK build/install passes on candidate. | API, SDK |
+| **G5** | **Helm Orchestration** | Chart validation, upgrades, disruptions, NetworkPolicy, and rollback proven in a cluster. | Deployment, SRE |
+| **G6** | **Fail-Closed Secrets** | Missing/reused secrets rejected; rotation and external secret lifecycle reviewed. | Security, operations |
+| **G7** | **Cryptographic Shredding** | Independent verification of key and data removal across all stores and replicas. | Cryptography, privacy, independent reviewer |
+| **G8** | **Non-Accelerator Authority** | Measured recovery and RPO/RTO through database, cache, vector, and network failures. | Database, SRE |
+| **G9** | **Scientific Provenance** | Clean-environment reproduction on candidate; bounded claims and authenticated or explicitly unauthenticated provenance. | Research, independent reviewer |
+| **G10** | **BFF & Client Security** | Current browser, accessibility, BFF threat, CSRF, and client-secret tests pass. | Frontend, security, independent reviewer |
 
 > [!IMPORTANT]
 > **Statistical Bounding Principle**: "Zero observed false hits" is an empirical measurement on a finite test corpus ($N=124$), not a mathematical proof of zero defect probability across infinite production inputs. Institutional adoption contracts must specify the acceptable risk threshold $\alpha$ (e.g., $\alpha \le 0.01$ at 95% confidence) and maintain runtime conformal abstention.
@@ -315,4 +317,4 @@ It is never described as "universally safe" or "guaranteed to have zero failure 
 6. **Advanced Autonomous Capabilities and Dashboard Enhancements** (P2)
 
 ### Final Status Determination
-Sunborn possesses a robust, high-performance architecture with newly verified production-grade controls. The immediate institutional milestone is the delivery and qualification of **Release Candidate `v0.1.0-rc2`** supported by end-to-end empirical verification—establishing the foundation for enterprise pilot deployment.
+Sunborn has a substantial prototype and historical local artifacts. The current repository is **not release-qualified**. The next milestone is to resolve the findings in the current completion assessment, rerun checks on one fixed candidate, and obtain the operational and independent evidence required by Gates G1–G10.

@@ -3,6 +3,8 @@
 
 **Document Version:** 1.0.0  
 **Status:** Living Engineering & Verification Artifact  
+
+> **Status correction (2026-10-22):** This matrix is a historical source-to-test mapping, not evidence that the listed requirements have passed. Its “VERIFIED” labels and H1 result are superseded by [`project_completion_assessment_2026-10-22.md`](project_completion_assessment_2026-10-22.md). The temporal benchmark has 0 B3 reuse hits and the capacity artifact fails the stated SLOs.
 **Applicable Standards:**
 - **ISO/IEC/IEEE 29148:2018** (Requirements Engineering & Verification Criteria)
 - **IEEE 1012-2024** (System & Software Verification and Validation)
@@ -38,7 +40,7 @@
 ### Hypothesis H1 (State-Complete Temporal Reuse)
 - **Null Hypothesis ($H_{1,0}$):** In environments with mutable knowledge and outbox delays, state-complete epoch fencing achieves no lower false-hit rate than uncalibrated cosine caching.
 - **Alternative ($H_{1,a}$):** Monotonic epoch fencing and causal version snapshots achieve 0.0% false-hit rate under knowledge mutations and outbox delivery jitter, whereas uncalibrated cosine caching experiences $\ge 40\%$ false-hit errors.
-- **Empirical Status:** **Confirmed.** In `SemanticCacheBench-T`, Sunborn B3 achieved 0 false hits (0.0% false-hit rate, 100.0% precision), while Baseline B2 suffered 63.2% false-hit rate.
+- **Empirical Status:** **Not confirmed.** The checked-in temporal artifact has B3 0 hits and 0% recall; B2 records 3/19 false hits (15.79%). Independent candidate reproduction is outstanding.
 
 ### Hypothesis H2 (Risk-Budgeted Abstention)
 - **Null Hypothesis ($H_{2,0}$):** Dynamic conformal risk thresholding does not improve precision on held-out adversarial negation and entity traps compared to fixed similarity thresholds ($\tau = 0.75$).

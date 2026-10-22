@@ -1,6 +1,10 @@
 name: Sunborn CI & Quality Gate
 
+permissions:
+  contents: read
+
 on:
+  workflow_call:
   push:
     branches: [ "main", "master" ]
   pull_request:
@@ -149,6 +153,21 @@ jobs:
       - name: Helm Lint Chart
         run: |
           helm lint deploy/helm/sunborn --set secrets.existingSecret="ci-validation"
+
+      - name: Verify Helm image tags and external secret contract
+        run: |
+          RENDERED=$(mktemp)
+          helm template sunborn deploy/helm/sunborn \
+            --set secrets.existingSecret="ci-validation" > "${RENDERED}"
+          grep -F 'image: "ghcr.io/sunborn/sunborn-gateway:0.1.0"' "${RENDERED}"
+          grep -F 'image: "ghcr.io/sunborn/sunborn-frontend:0.1.0"' "${RENDERED}"
+          grep -F 'key: SUNBORN_ADMIN_KEY' "${RENDERED}"
+          grep -F 'key: SUNBORN_MASTER_KEK' "${RENDERED}"
+          grep -F 'key: SUNBORN_LEARNING_HMAC_SECRET' "${RENDERED}"
+          grep -F 'key: POSTGRES_URL' "${RENDERED}"
+
+      - name: Check static Kubernetes manifests
+        run: python3 scripts/check_k8s_manifests.py
 
       - name: Verify Fail-Closed on Missing Secrets
         run: |

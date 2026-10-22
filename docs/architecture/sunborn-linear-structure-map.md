@@ -1,5 +1,7 @@
 # SUNBORN — Linear Structure Map
 
+> **Historical planning snapshot.** “VERIFIED” labels in this map are not current implementation or phase-closure evidence. Linear's `MON-458` record reports that Phase 20–28 issue-level controls are missing. Use [`project_completion_assessment_2026-10-22.md`](project_completion_assessment_2026-10-22.md) and the release acceptance record for current status.
+
 # SUNBORN — LINEAR STRUCTURE MAP
 
 ## The one rule that makes the project easy to understand

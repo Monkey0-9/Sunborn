@@ -1,5 +1,6 @@
 use crate::models::{
-    AuditRecord, DurableApiCredentialRecord, DurableCacheRecord, OutboxRecord, TenantRecord,
+    AuditRecord, DurableApiCredentialRecord, DurableCacheRecord, NewApiCredentialRecord,
+    OutboxRecord, TenantRecord,
 };
 use crate::repository::{DatabaseStore, MemoryDatabaseStore};
 use async_trait::async_trait;
@@ -159,8 +160,13 @@ impl PostgresDatabaseStore {
                 allowed_models JSONB NOT NULL DEFAULT '["*"]'::jsonb,
                 is_admin BOOLEAN NOT NULL DEFAULT FALSE,
                 status VARCHAR(32) NOT NULL DEFAULT 'active',
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                expires_at TIMESTAMPTZ,
+                revoked_at TIMESTAMPTZ
             );
+
+            ALTER TABLE api_credentials ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+            ALTER TABLE api_credentials ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
             "#,
         )
         .execute(pool)
@@ -226,35 +232,29 @@ impl PostgresDatabaseStore {
     }
 
     /// Persists an API credential record into the durable PostgreSQL `api_credentials` table.
-    pub async fn persist_api_credential(
-        &self,
-        key_hash: &str,
-        tenant_id: &str,
-        application_id: &str,
-        rate_limit_rps: i32,
-        allowed_models: &[String],
-        is_admin: bool,
-    ) -> Result<()> {
+    pub async fn persist_api_credential(&self, credential: &NewApiCredentialRecord) -> Result<()> {
         if let Some(pool) = self.get_pool().await {
-            let models_json =
-                serde_json::to_value(allowed_models).unwrap_or_else(|_| serde_json::json!(["*"]));
+            let models_json = serde_json::json!(credential.allowed_models);
             let res = sqlx::query(
-                "INSERT INTO api_credentials (key_hash, tenant_id, application_id, rate_limit_rps, allowed_models, is_admin, status, created_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, 'active', NOW())
+                "INSERT INTO api_credentials (key_hash, tenant_id, application_id, rate_limit_rps, allowed_models, is_admin, status, created_at, expires_at, revoked_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, 'active', NOW(), $7, NULL)
                  ON CONFLICT (key_hash) DO UPDATE SET
                     tenant_id = $2,
                     application_id = $3,
                     rate_limit_rps = $4,
                     allowed_models = $5,
                     is_admin = $6,
-                    status = 'active'",
+                    status = 'active',
+                    expires_at = $7,
+                    revoked_at = NULL",
             )
-            .bind(key_hash)
-            .bind(tenant_id)
-            .bind(application_id)
-            .bind(rate_limit_rps)
+            .bind(&credential.key_hash)
+            .bind(&credential.tenant_id)
+            .bind(&credential.application_id)
+            .bind(credential.rate_limit_rps)
             .bind(models_json)
-            .bind(is_admin)
+            .bind(credential.is_admin)
+            .bind(credential.expires_at)
             .execute(&pool)
             .await;
 
@@ -266,6 +266,10 @@ impl PostgresDatabaseStore {
                     )));
                 }
             }
+        } else if self.strict_durability {
+            return Err(sunborn_core::SunbornError::database(
+                "Cannot persist API credential: PostgreSQL is unavailable",
+            ));
         }
         Ok(())
     }
@@ -273,7 +277,7 @@ impl PostgresDatabaseStore {
     /// Fetches all active durable API credentials from PostgreSQL for registry hydration.
     pub async fn fetch_all_api_credentials(&self) -> Result<Vec<DurableApiCredentialRecord>> {
         if let Some(pool) = self.get_pool().await {
-            let query = "SELECT key_hash, tenant_id, application_id, rate_limit_rps, allowed_models, is_admin, status, created_at FROM api_credentials WHERE status = 'active'";
+            let query = "SELECT key_hash, tenant_id, application_id, rate_limit_rps, allowed_models, is_admin, status, created_at, expires_at FROM api_credentials WHERE status = 'active' AND (expires_at IS NULL OR expires_at > NOW())";
             let rows = sqlx::query(query).fetch_all(&pool).await;
 
             match rows {
@@ -281,8 +285,8 @@ impl PostgresDatabaseStore {
                     let mut out = Vec::with_capacity(records.len());
                     for row in records {
                         let models_val: serde_json::Value = row.get("allowed_models");
-                        let allowed_models: Vec<String> = serde_json::from_value(models_val)
-                            .unwrap_or_else(|_| vec!["*".to_string()]);
+                        let allowed_models: Vec<String> =
+                            serde_json::from_value(models_val).unwrap_or_default();
                         let rps: i32 = row.get("rate_limit_rps");
                         out.push(DurableApiCredentialRecord {
                             key_hash: row.get("key_hash"),
@@ -293,6 +297,7 @@ impl PostgresDatabaseStore {
                             is_admin: row.get("is_admin"),
                             status: row.get("status"),
                             created_at: row.get("created_at"),
+                            expires_at: row.get("expires_at"),
                         });
                     }
                     return Ok(out);
@@ -306,6 +311,10 @@ impl PostgresDatabaseStore {
                     }
                 }
             }
+        } else if self.strict_durability {
+            return Err(sunborn_core::SunbornError::database(
+                "Cannot fetch API credentials: PostgreSQL is unavailable",
+            ));
         }
         Ok(Vec::new())
     }
@@ -314,7 +323,7 @@ impl PostgresDatabaseStore {
     pub async fn revoke_api_credential(&self, key_hash: &str) -> Result<()> {
         if let Some(pool) = self.get_pool().await {
             let res =
-                sqlx::query("UPDATE api_credentials SET status = 'revoked' WHERE key_hash = $1")
+                sqlx::query("UPDATE api_credentials SET status = 'revoked', revoked_at = NOW() WHERE key_hash = $1")
                     .bind(key_hash)
                     .execute(&pool)
                     .await;
@@ -327,6 +336,10 @@ impl PostgresDatabaseStore {
                     )));
                 }
             }
+        } else if self.strict_durability {
+            return Err(sunborn_core::SunbornError::database(
+                "Cannot revoke API credential: PostgreSQL is unavailable",
+            ));
         }
         Ok(())
     }

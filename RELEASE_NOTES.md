@@ -1,33 +1,16 @@
 # Sunborn Release Notes & Institutional Review Dossier
 
-## Release Candidate: `v0.1.0-rc3` (Sovereign Production Hardening & Project Day Zero-Defect Baseline)
+## Proposed `v0.1.0-rc3` — NOT RELEASED; RELEASE HOLD
 
-**Release Target**: `v0.1.0-rc3` (Sovereign Edition)  
-**Verification Date**: October 22, 2026  
-**Audited Baseline**: Joint Review Board Sovereign Completion Plan  
-**Repository**: `Monkey0-9/Sunborn`  
-**License**: Apache License 2.0 (see [LICENSE](file:///home/unknownuser/Sunbron/LICENSE))  
-**Governance Plan**: [`docs/architecture/master_completion_audit_and_institutional_readiness_plan.md`](file:///home/unknownuser/Sunbron/docs/architecture/master_completion_audit_and_institutional_readiness_plan.md)  
+This draft is not a release authorization or verification dossier. The repository has no evidence that a “zero-defect” release, production launch, FIPS validation, multi-region active-active operation, or independent review has been achieved. The prior draft's “Sovereign Production & Ceremonial Launch Cleared” statement and associated guarantees are withdrawn.
 
-### 1. Sovereign Verdict & Operational Clearance
-> **Status**: **SOVEREIGN PRODUCTION & CEREMONIAL LAUNCH CLEARED**  
-> Formally verified and cleared for high-consequence Project Day presentation and enterprise production. Dual-admin quorum authorization, persistent database key hydration, multi-provider spot arbitrage, FIPS 140-3 HSM envelope encryption, and real-time spend velocity circuit breakers are 100% active and tested.
-
-### 2. Sovereign Feature Deliverables & Verified Subsystems
-| Deliverable | Implementation Artifact | Operational & Security Guarantee |
-| :--- | :--- | :--- |
-| **Dual-Admin Quorum Authorization** | [`crates/sunborn-gateway/src/middleware/auth.rs`](file:///home/unknownuser/Sunbron/crates/sunborn-gateway/src/middleware/auth.rs), [`crates/sunborn-gateway/tests/quorum_authorization_test.rs`](file:///home/unknownuser/Sunbron/crates/sunborn-gateway/tests/quorum_authorization_test.rs) | High-consequence destructive operations (`/v1/chaos/trip`, `/v1/governance/shred`, `/v1/tenants/{id}`) strictly require secondary administrator credentials (`x-quorum-admin-key`). Self-quorum attempts are strictly rejected with HTTP 403. |
-| **Durable API Credential Hydration** | [`crates/sunborn-db/src/postgres.rs`](file:///home/unknownuser/Sunbron/crates/sunborn-db/src/postgres.rs), [`migrations/0002_durable_identity_and_keys.sql`](file:///home/unknownuser/Sunbron/migrations/0002_durable_identity_and_keys.sql) | API credentials and tenant metadata persist in PostgreSQL WAL (`api_credentials`). Hydration on boot guarantees zero credential loss across replica restarts. |
-| **Cloud KMS & Hardware Security Module (HSM)** | [`crates/sunborn-identity/src/crypto_shred.rs`](file:///home/unknownuser/Sunbron/crates/sunborn-identity/src/crypto_shred.rs) | Full support for `AwsKmsKeyProvider`, `Pkcs11HsmKeyProvider`, `VaultTransitKeyProvider`, and `LocalAeadKeyProvider` with FIPS 140-3 Level 3 envelope encryption. |
-| **Dynamic Spot Arbitrage & Failover Router** | [`crates/sunborn-gateway/src/origin/provider.rs`](file:///home/unknownuser/Sunbron/crates/sunborn-gateway/src/origin/provider.rs) | `MultiProviderArbitrageRouter` automatically routes queries across OpenAI, Anthropic, Azure, and local vLLM nodes, cascading dynamically on HTTP 429 rate limits or upstream outages. |
-| **Spend Velocity Circuit Breaker** | [`crates/sunborn-core/src/finops.rs`](file:///home/unknownuser/Sunbron/crates/sunborn-core/src/finops.rs) | `SpendVelocityController` enforces rolling-window dollar caps per tenant/minute, cutting off runaway token loops and preventing unexpected cloud credit card exhaustion. |
-| **Continuous Rolling Conformal Recalibration** | [`crates/sunborn-semantic/src/conformal.rs`](file:///home/unknownuser/Sunborn/crates/sunborn-semantic/src/conformal.rs) | `RollingWindowConformalEngine` tracks real-time semantic drift and tightens conformal risk thresholds $\hat{q}$ under distribution shifts. |
-| **Multi-Region Active-Active Topologies** | [`deploy/k8s/multi-region/`](file:///home/unknownuser/Sunbron/deploy/k8s/multi-region/) | Kubernetes manifests for multi-region active-active deployments across `us-east-1` and `eu-central-1` with Cilium ClusterMesh and latency-based DNS routing. |
-| **Sovereign Presentation Kiosk (`/ceremony`)** | [`frontend/src/app/ceremony/page.tsx`](file:///home/unknownuser/Sunbron/frontend/src/app/ceremony/page.tsx) | Ceremonial 4K/8K control plane view featuring 6-language internationalization (EN, FR, AR, ZH, JA, DE), live 60 FPS Merkle Execution DAG inspector, VIP delegation sandboxes, and air-gapped demo mode. |
+The current evidence-based assessment is [`docs/architecture/project_completion_assessment_2026-10-22.md`](docs/architecture/project_completion_assessment_2026-10-22.md). The ten release gates remain open in [`docs/architecture/release_acceptance_record.md`](docs/architecture/release_acceptance_record.md). No production deployment or package publication is authorized by this document.
 
 ---
 
-## Release Candidate: `v0.1.0-rc2` (Master Audit Remediation & Institutional Readiness)
+## Release Candidate: `v0.1.0-rc2` (Historical Draft; Superseded)
+
+> Statements below that describe pilot/staging clearance, verification, or resolved blockers are not current release evidence. The current status is RELEASE HOLD.
 
 **Release Candidate**: `v0.1.0-rc2`  
 **Evidence Verified**: October 21, 2026  

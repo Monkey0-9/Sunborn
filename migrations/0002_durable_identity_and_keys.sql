@@ -27,5 +27,9 @@ CREATE TABLE IF NOT EXISTS api_credentials (
     revoked_at TIMESTAMPTZ
 );
 
+-- Upgrade databases where the application-created table predates the durable schema.
+ALTER TABLE api_credentials ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+ALTER TABLE api_credentials ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
+
 CREATE INDEX IF NOT EXISTS idx_api_credentials_tenant ON api_credentials(tenant_id, status);
 CREATE INDEX IF NOT EXISTS idx_api_credentials_expires_at ON api_credentials(expires_at);

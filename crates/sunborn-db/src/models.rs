@@ -58,4 +58,16 @@ pub struct DurableApiCredentialRecord {
     pub is_admin: bool,
     pub status: String,
     pub created_at: DateTime<Utc>,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewApiCredentialRecord {
+    pub key_hash: String,
+    pub tenant_id: String,
+    pub application_id: String,
+    pub rate_limit_rps: i32,
+    pub allowed_models: Vec<String>,
+    pub is_admin: bool,
+    pub expires_at: Option<DateTime<Utc>>,
 }

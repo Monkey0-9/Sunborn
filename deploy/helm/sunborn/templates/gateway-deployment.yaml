@@ -57,8 +57,33 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "sunborn.fullname" . }}-config
-            - secretRef:
-                name: {{ default (printf "%s-secrets" (include "sunborn.fullname" .)) .Values.secrets.existingSecret }}
+          env:
+            - name: SUNBORN_ADMIN_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (printf "%s-secrets" (include "sunborn.fullname" .)) .Values.secrets.existingSecret }}
+                  key: SUNBORN_ADMIN_KEY
+            - name: SUNBORN_MASTER_KEK
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (printf "%s-secrets" (include "sunborn.fullname" .)) .Values.secrets.existingSecret }}
+                  key: SUNBORN_MASTER_KEK
+            - name: SUNBORN_LEARNING_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (printf "%s-secrets" (include "sunborn.fullname" .)) .Values.secrets.existingSecret }}
+                  key: SUNBORN_LEARNING_HMAC_SECRET
+            - name: POSTGRES_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (printf "%s-secrets" (include "sunborn.fullname" .)) .Values.secrets.existingSecret }}
+                  key: POSTGRES_URL
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (printf "%s-secrets" (include "sunborn.fullname" .)) .Values.secrets.existingSecret }}
+                  key: OPENAI_API_KEY
+                  optional: true
           resources:
             {{- toYaml .Values.gateway.resources | nindent 12 }}
           volumeMounts:

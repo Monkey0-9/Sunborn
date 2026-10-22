@@ -1,5 +1,7 @@
 # Sunborn Performance Engineering & Profiling Report
 
+> **Historical report; not current release evidence (2026-10-22).** The figures and PASS labels below are not tied to the current candidate and conflict with the checked-in capacity artifact, which reports 2,500.9 req/s in stage one, P99 10.339 ms, and RSS growth of 86.68% (`envelope_stable: false`). Current acceptance targets are not met by that run. See [`project_completion_assessment_2026-10-22.md`](project_completion_assessment_2026-10-22.md).
+
 > **Traceability**: Validates Phase 24 and NFR-001/NFR-002 latency and throughput SLOs.
 
 ---

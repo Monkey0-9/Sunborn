@@ -533,17 +533,33 @@ impl AppState {
             tracing::info!("PostgreSQL production readiness verified successfully.");
 
             tracing::info!("Hydrating persisted tenant encryption keys from PostgreSQL...");
-            if let Ok(keys) = self.postgres_db.fetch_all_wrapped_tdeks().await {
-                for (tenant_id, wrapped_bytes, _provider) in keys {
-                    let tid = sunborn_core::TenantId::new(tenant_id);
-                    if let Err(e) = self
-                        .crypto_registry
-                        .unwrap_and_provision(tid.clone(), &wrapped_bytes)
-                    {
-                        tracing::warn!(tenant = %tid.0, error = %e, "Failed to unwrap tenant key from database");
-                    } else {
-                        tracing::info!(tenant = %tid.0, "Hydrated tenant encryption key from PostgreSQL");
+            let persisted_keys = match self.postgres_db.fetch_all_wrapped_tdeks().await {
+                Ok(keys) => keys,
+                Err(error) if is_prod => {
+                    return Err(sunborn_core::SunbornError::database(format!(
+                        "Production startup failed to load durable tenant encryption keys: {error}"
+                    )));
+                }
+                Err(error) => {
+                    tracing::warn!(error = %error, "Failed to fetch persisted tenant encryption keys");
+                    Vec::new()
+                }
+            };
+            for (tenant_id, wrapped_bytes, _provider) in persisted_keys {
+                let tid = sunborn_core::TenantId::new(tenant_id);
+                if let Err(error) = self
+                    .crypto_registry
+                    .unwrap_and_provision(tid.clone(), &wrapped_bytes)
+                {
+                    if is_prod {
+                        return Err(sunborn_core::SunbornError::configuration_error(format!(
+                            "Production startup failed to unwrap tenant encryption key for tenant {}: {error}",
+                            tid.0
+                        )));
                     }
+                    tracing::warn!(tenant = %tid.0, error = %error, "Failed to unwrap tenant key from database");
+                } else {
+                    tracing::info!(tenant = %tid.0, "Hydrated tenant encryption key from PostgreSQL");
                 }
             }
 
@@ -553,6 +569,11 @@ impl AppState {
                 .hydrate_from_db(&self.postgres_db)
                 .await
             {
+                if is_prod {
+                    return Err(sunborn_core::SunbornError::database(format!(
+                        "Production startup failed to hydrate durable API credentials: {e}"
+                    )));
+                }
                 tracing::warn!(error = %e, "Failed to hydrate API credentials from PostgreSQL");
             }
         }

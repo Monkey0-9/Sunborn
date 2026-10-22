@@ -1,10 +1,14 @@
 name: Security Audit & Supply-Chain Integrity
 
+permissions:
+  contents: read
+
 on:
+  workflow_call:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
   schedule:
     - cron: '0 4 * * 1' # Weekly security audit on Mondays at 04:00 UTC
 
@@ -47,13 +51,6 @@ jobs:
             p/security-audit
             p/secrets
             p/owasp-top-ten
-        continue-on-error: true
 
       - name: Kubernetes Manifest Security & Policy Verification
-        run: |
-          echo "Verifying absence of unencrypted plaintext secrets or default passwords in deploy/..."
-          if grep -rn "change_me_in_secret" deploy/k8s/ > /dev/null 2>&1; then
-            echo "ERROR: Found plaintext default in deploy/k8s/!"
-            exit 1
-          fi
-          echo "PASS: Kubernetes manifests verified against static secret leakage."
+        run: python3 scripts/check_k8s_manifests.py

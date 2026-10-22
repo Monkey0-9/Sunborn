@@ -6,9 +6,7 @@ on:
       - 'v*.*.*'
 
 permissions:
-  contents: write
-  packages: write
-  id-token: write
+  contents: read
 
 env:
   REGISTRY: ghcr.io
@@ -16,14 +14,65 @@ env:
   FRONTEND_IMAGE: ghcr.io/sunborn/sunborn-frontend
 
 jobs:
+  verify-ci:
+    name: Required CI verification
+    uses: ./.github/workflows/ci.yml
+
+  verify-security:
+    name: Required security verification
+    uses: ./.github/workflows/security.yml
+
+  verify-release-chart:
+    name: Verify chart images match release tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.16.2'
+      - name: Package and render candidate chart
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          CHART_VERSION="${RELEASE_TAG#v}"
+          mkdir -p /tmp/sunborn-release-chart
+          helm lint deploy/helm/sunborn --set secrets.existingSecret="ci-validation"
+          helm package deploy/helm/sunborn \
+            --version "${CHART_VERSION}" \
+            --app-version "${CHART_VERSION}" \
+            --destination /tmp/sunborn-release-chart
+          RENDERED=$(mktemp)
+          helm template sunborn "/tmp/sunborn-release-chart/sunborn-${CHART_VERSION}.tgz" \
+            --set secrets.existingSecret="ci-validation" > "${RENDERED}"
+          grep -F "image: \"ghcr.io/sunborn/sunborn-gateway:${CHART_VERSION}\"" "${RENDERED}"
+          grep -F "image: \"ghcr.io/sunborn/sunborn-frontend:${CHART_VERSION}\"" "${RENDERED}"
+
   build-and-publish:
     name: Build Containers, Package Helm Chart & Publish Release
+    needs: [verify-ci, verify-security, verify-release-chart]
     runs-on: ubuntu-latest
+    environment: release-approval
+    permissions:
+      contents: write
+      packages: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Verify release tag format and commit
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tag must use vMAJOR.MINOR.PATCH format."
+            exit 1
+          fi
+          git show-ref --verify --quiet "refs/tags/${RELEASE_TAG}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -95,7 +144,7 @@ jobs:
           helm lint deploy/helm/sunborn --set secrets.existingSecret="release-validation"
           helm package deploy/helm/sunborn \
             --version "${GITHUB_REF_NAME#v}" \
-            --app-version "${GITHUB_REF_NAME}" \
+            --app-version "${GITHUB_REF_NAME#v}" \
             --destination dist/helm
 
       # --- GitHub Release ---
