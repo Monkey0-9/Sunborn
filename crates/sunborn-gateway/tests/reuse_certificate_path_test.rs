@@ -17,7 +17,7 @@ async fn test_reuse_certificate_authenticated_and_validated_on_reuse_path() {
 
     let req_payload1 = RequestEnvelope::new(
         "enterprise-fintech",
-        "default-app",
+        "app-fintech",
         "gpt-4o",
         "Explain deterministic execution reuse in distributed caching",
     );
@@ -67,7 +67,7 @@ async fn test_reuse_certificate_authenticated_and_validated_on_reuse_path() {
     // 2. Second Call: Cache HIT (Exact C0/C1) -> Validated through verify_admissibility
     let req_payload2 = RequestEnvelope::new(
         "enterprise-fintech",
-        "default-app",
+        "app-fintech",
         "gpt-4o",
         "Explain deterministic execution reuse in distributed caching",
     );
@@ -110,7 +110,7 @@ async fn test_reuse_certificate_tampered_signature_abstains_to_revalidate() {
 
     let req_payload = RequestEnvelope::new(
         "enterprise-fintech",
-        "default-app",
+        "app-fintech",
         "gpt-4o",
         "Quantum computing error correction thresholds",
     );
@@ -184,7 +184,7 @@ async fn test_reuse_certificate_tampered_merkle_root_abstains_to_revalidate() {
 
     let req_payload = RequestEnvelope::new(
         "enterprise-fintech",
-        "default-app",
+        "app-fintech",
         "gpt-4o",
         "Post-quantum cryptographic signature standards",
     );
@@ -258,7 +258,7 @@ async fn test_reuse_certificate_epoch_advance_abstains_to_revalidate() {
 
     let mut req_payload1 = RequestEnvelope::new(
         "enterprise-fintech",
-        "default-app",
+        "app-fintech",
         "gpt-4o",
         "What is the current liquidity ratio for treasury desk 4?",
     );
@@ -349,7 +349,7 @@ async fn test_reuse_certificate_expired_validity_window_abstains_to_revalidate()
 
     let req_payload = RequestEnvelope::new(
         "enterprise-fintech",
-        "default-app",
+        "app-fintech",
         "gpt-4o",
         "Real-time FX spot rates USD/EUR",
     );
@@ -437,7 +437,7 @@ async fn test_reuse_certificate_omitted_dependency_snapshot_abstains_to_revalida
     // 1. Initial request with authoritative dependency doc_id_1 only
     let mut req1 = RequestEnvelope::new(
         "enterprise-fintech",
-        "default-app",
+        "app-fintech",
         "gpt-4o",
         "Calculate capital adequacy ratio based on risk-weighted assets",
     );
@@ -525,7 +525,7 @@ async fn test_reuse_certificate_duplicate_dependency_in_request_rejected() {
     // Initial request admitted
     let mut req1 = RequestEnvelope::new(
         "enterprise-fintech",
-        "default-app",
+        "app-fintech",
         "gpt-4o",
         "Explain Basel III leverage ratio requirements",
     );
@@ -603,7 +603,7 @@ async fn test_semantic_cache_missing_certificate_falls_through_to_origin() {
     let vector = state.selected_embedder.embed(prompt).await.unwrap();
 
     let tenant_id = TenantId::new("enterprise-fintech");
-    let app_id = sunborn_core::model::ApplicationId::new("default-app");
+    let app_id = sunborn_core::model::ApplicationId::new("app-fintech");
     let entry = sunborn_semantic::VectorEntry {
         id: "vector-no-cert-test".to_string(),
         tenant_id: tenant_id.clone(),
@@ -616,7 +616,7 @@ async fn test_semantic_cache_missing_certificate_falls_through_to_origin() {
     };
     state.vector_store.insert(entry).await.unwrap();
 
-    let req_payload = RequestEnvelope::new("enterprise-fintech", "default-app", "gpt-4o", prompt);
+    let req_payload = RequestEnvelope::new("enterprise-fintech", "app-fintech", "gpt-4o", prompt);
 
     let resp = app
         .oneshot(
