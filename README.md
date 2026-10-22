@@ -78,9 +78,11 @@ To eliminate ambiguity between modeled projections and independently measured te
 
 The repository has a detailed roadmap, but the work is not complete against its own phase and release exit criteria. The current evidence-based status is:
 
-* **Executive Verdict**: **RELEASE HOLD**. No staging or pilot clearance is asserted by this review.
-* **Master Governance Document**: [`docs/architecture/master_completion_audit_and_institutional_readiness_plan.md`](docs/architecture/master_completion_audit_and_institutional_readiness_plan.md).
-* **Route Authorization Matrix**: [`docs/security/authorization_matrix.md`](docs/security/authorization_matrix.md), to be reconciled against 41 route declarations and 42 method-path operations.
+* **Executive Verdict**: **RELEASE HOLD**. No staging or pilot clearance is asserted without independent operational evidence.
+* **Master Governance Document**: [`docs/architecture/master_completion_audit_and_institutional_readiness_plan.md`](docs/architecture/master_completion_audit_and_institutional_readiness_plan.md) (16-Specialist Consortium Model across Teams A–P).
+* **Release Acceptance Record**: [`docs/architecture/release_acceptance_record.md`](docs/architecture/release_acceptance_record.md) (Authoritative ledger tracking open gates G1–G10).
+* **Route Authorization & Contract Parity**: [`scripts/check_openapi_drift.py`](scripts/check_openapi_drift.py) continuously audits all 41 route declarations (42 method/path operations) against OpenAPI 3.1 with zero drift.
+* **Live Stack Pre-Flight & Secretless GitOps**: [`deploy/verify_live_stack.sh`](deploy/verify_live_stack.sh) enforces non-root containers, loopback port bindings, native healthchecks, and secretless Kustomize GitOps.
 * **Durable Schemas**: [`migrations/0002_durable_identity_and_keys.sql`](migrations/0002_durable_identity_and_keys.sql) persisting wrapped tenant data encryption keys and API credentials in PostgreSQL WAL.
 * **Safe Reuse Invariance**: Proof-carrying admissibility checking in [`crates/sunborn-gateway/src/handlers.rs`](crates/sunborn-gateway/src/handlers.rs) evicts corrupt/expired cache entries and falls through safely to origin execution.
 * **Shutdown Drain Semantics**: [`crates/sunborn-gateway/src/main.rs`](crates/sunborn-gateway/src/main.rs) drains outbox WAL on clean shutdown and terminates with exit code 75 (`EX_TEMPFAIL`) on deadline expiry.
@@ -386,7 +388,7 @@ Sunborn/
 │   ├── sunborn-execution/           # DAG execution planner, RFC 6962 Merkle attestation
 │   ├── sunborn-invalidation/        # Monotonic epoch lease fencing, Neo4j Cypher dependency graph
 │   ├── sunborn-db/                  # Authoritative PostgreSQL WAL & memory stores
-│   └── sunborn-gateway/             # Axum HTTP gateway (37 routes), adaptive learning controller
+│   └── sunborn-gateway/             # Axum HTTP gateway (41 routes, 42 operations), adaptive controller
 │       └── tests/                   # 14 integration, resilience & adversarial test suites
 ├── frontend/                        # Next.js 15 App Router control plane & BFF
 ├── deploy/
@@ -586,6 +588,7 @@ docker compose -f deploy/docker-compose.yml up -d
 * Horizontal Pod Autoscaler (HPA) targeting 70% CPU utilization.
 * NetworkPolicy permitting external LLM/embedding egress on port 443.
 * Next.js Frontend Deployment & Service ([`deploy/k8s/frontend-deployment.yaml`](deploy/k8s/frontend-deployment.yaml)).
+* **Secretless GitOps**: Kustomize configuration strictly excludes plaintext secrets in favor of external secret operators (Vault, AWS Secrets Manager, SealedSecrets).
 
 ---
 
@@ -596,50 +599,64 @@ docker compose -f deploy/docker-compose.yml up -d
 * **Python**: 3.10+ (for benchmarks, SDK, and reproduction)
 * **Node.js**: 20+ (for Next.js control plane)
 
-### 1. Build and Run Full Automated Test Suite (158 Tests)
+### 1. Execute Master Verification Pipeline (All Subsystems)
+The platform provides a consolidated 8-stage verification pipeline that runs the complete test matrix across Rust, Next.js, Python SDK, Helm, OpenAPI, and container pre-flights:
+
 ```bash
-# Run all 125+ Rust unit, integration, security, chaos, and learning tests
-cargo test --locked --workspace --all-targets
+bash scripts/verify.sh
+```
 
-# Run all 19 Python SDK unit and contract tests
-python3 -m unittest -v sdk/python/test_sunborn_agent.py
+### 2. Run Individual Verification Test Suites (180+ Tests Across Workspace)
+```bash
+# Run all 125+ Rust unit, integration, security, chaos, DR, and learning tests
+cargo test --workspace --all-targets
 
-# Run all 14 Next.js BFF security and view navigation tests
+# Run all 24 Python SDK unit, contract, and agent tests
+bash scripts/test_python_sdk.sh
+PYTHONPATH=sdk/python python3 -m unittest sdk/python/test_sunborn_agent.py
+PYTHONPATH=sdk/python python3 -m unittest sdk/python/tests/test_sdk_package.py
+
+# Run all 29 Next.js BFF security, ceremony simulation, and E2E workflow tests
 npm test --prefix frontend
+npm run build --prefix frontend
 
 # Verify strict zero-warning compiler & linter hygiene
-cargo fmt --all -- --check
-cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
-uvx ruff check sdk/python
-uvx ruff format --check sdk/python
+cargo fmt --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+# Verify OpenAPI 3.1 contract parity (all 42 operations)
+python3 scripts/check_openapi_drift.py
+
+# Verify multi-container live stack pre-flight and Helm charts
+helm lint deploy/helm/sunborn --set secrets.existingSecret=ci-validation
+bash deploy/verify_live_stack.sh
 ```
 
-### 2. Execute Local Benchmark & Verification Suite
+### 3. Execute Local Benchmark & Provenance Verification
 ```bash
-# Executes local 5-gate verification suite and generates cryptographic attestation
-bash research/reproduce.sh
+# Executes local benchmark suite and verifies provenance certificate
+python3 research/verify_certificate.py
 ```
 
-### 3. Launch Local Gateway
+### 4. Launch Local Gateway
 ```bash
 cargo run --release -p sunborn-gateway
 ```
 
-### 4. Connect via Python SDK
+### 5. Connect via Packaged Python SDK
 ```python
-from sunborn_agent import SunbornClient
+from sunborn import SunbornClient
 
-client = SunbornClient(
+with SunbornClient(
     base_url="http://localhost:8080/v1",
     api_key="key-enterprise-fintech"
-)
-
-response = client.chat_completion(
-    model="gpt-4o",
-    prompt="Explain non-accelerator authority.",
-    temperature=0.0
-)
-print(response["choices"][0]["message"]["content"])
+) as client:
+    response = client.chat_completion(
+        model="gpt-4o",
+        prompt="Explain non-accelerator authority.",
+        temperature=0.0
+    )
+    print(response.choices[0].message.content)
 ```
 
 ---
