@@ -14,6 +14,7 @@
 * `verify_certificate.py`: Independent certificate and artifact provenance verifier with explicit 4-state outcome semantics.
 * `tests/test_verifier_negative.py`: Negative verification test suite proving strict rejection of offline artifacts, corrupted traces, and mismatched keys.
 * `../benchmarks/semantic_cache_bench.py`: SemanticCacheBench dataset runner (uses a lightweight embedding backend by default; `--use-fastembed` explicitly opts into loading FastEmbed; supports strict live gateway RPC via `--require-live` and developer offline simulation via `--allow-offline`).
+* `benchmark_credentials.py`: Generates test-only least-privilege API credentials, one per benchmark application, so live cases retain tenant/application isolation without using a credential scoped to a different app.
 * `../benchmarks/temporal_bench.py`: SemanticCacheBench-T stateful temporal mutation runner.
 * `../benchmarks/capacity_soak.py`: 3-stage local HTTP capacity and memory harness.
 

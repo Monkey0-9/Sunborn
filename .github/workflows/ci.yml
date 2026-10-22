@@ -116,6 +116,9 @@ jobs:
       - name: Run Verifier Negative Tests
         run: python3 -m unittest research/tests/test_verifier_negative.py
 
+      - name: Verify Isolated Live Benchmark Credentials
+        run: python3 research/tests/test_benchmark_credentials.py
+
       - name: Execute Full Reproducibility Verification Suite
         run: bash research/reproduce.sh
 

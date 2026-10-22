@@ -114,6 +114,9 @@ if curl -s http://127.0.0.1:8080/health >/dev/null 2>&1; then
     GATEWAY_HEALTHY=1
 else
     echo "[*] Launching Sunborn Gateway daemon for live HTTP benchmark evaluation..."
+    # The live benchmark uses one least-privilege credential per isolated
+    # application so each case is authorized without sharing cache state.
+    export SUNBORN_API_KEYS="$("${PYTHON_BIN}" research/benchmark_credentials.py)"
     cargo build --bin sunborn-gateway
     ./target/debug/sunborn-gateway >/dev/null 2>&1 &
     SPAWNED_GATEWAY_PID=$!

@@ -17,7 +17,6 @@ import re
 import json
 import time
 import math
-import uuid
 import hashlib
 import platform
 import argparse
@@ -398,7 +397,6 @@ def run_benchmark(
         print("[*] Running in standalone calibrated evaluation mode.")
     print(f"[*] Embedding Backend: {EMBEDDING_BACKEND_NAME}")
 
-    bench_run_id = uuid.uuid4().hex[:8]
 
     baselines = {
         "B0_NoCache": {
@@ -497,7 +495,8 @@ def run_benchmark(
             case_execution_mode = "live_gateway_rpc"
             try:
                 import urllib.request
-                app_id = f"bench-{bench_run_id}-{item['id']}"
+                app_id = f"bench-{item['id']}"
+                api_key = f"sunborn-benchmark-{item['id']}"
 
                 # 1. Seed base query into gateway cache & vector store
                 seed_data = json.dumps({
@@ -511,7 +510,7 @@ def run_benchmark(
                     data=seed_data,
                     headers={
                         "Content-Type": "application/json",
-                        "x-api-key": "key-enterprise-fintech",
+                        "x-api-key": api_key,
                     },
                     method="POST"
                 )
@@ -531,7 +530,7 @@ def run_benchmark(
                     data=test_data,
                     headers={
                         "Content-Type": "application/json",
-                        "x-api-key": "key-enterprise-fintech",
+                        "x-api-key": api_key,
                     },
                     method="POST"
                 )
