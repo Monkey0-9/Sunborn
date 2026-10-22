@@ -8,7 +8,11 @@ are completely and strictly documented in docs/api/openapi.yaml and openapi.yaml
 import os
 import re
 import sys
-import yaml
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 def main():
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -38,9 +42,19 @@ def main():
 
     # 3. Parse OpenAPI specification
     with open(openapi_doc_path, "r", encoding="utf-8") as f:
-        spec = yaml.safe_load(f)
+        doc_content = f.read()
 
-    openapi_paths = set(spec.get("paths", {}).keys())
+    if yaml is not None:
+        spec = yaml.safe_load(doc_content)
+        openapi_paths = set(spec.get("paths", {}).keys())
+    else:
+        # Fallback to stdlib regex extraction if PyYAML is not installed in the environment
+        paths_match = re.search(r'\npaths:\n(.*?)(?:\ncomponents:|\Z)', doc_content, re.DOTALL)
+        if paths_match:
+            openapi_paths = set(re.findall(r'^\s{2}(/[^\s:]+):', paths_match.group(1), re.MULTILINE))
+        else:
+            print("ERROR: Could not find paths section in openapi.yaml")
+            sys.exit(1)
 
     # 4. Compare sets
     missing_in_spec = normalized_gateway_routes - openapi_paths

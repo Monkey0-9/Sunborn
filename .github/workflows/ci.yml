@@ -128,6 +128,8 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           version: "latest"
+      - name: Install PyYAML
+        run: uv pip install --system pyyaml
       - name: Verify OpenAPI 3.1 Specification Drift
         run: python3 scripts/check_openapi_drift.py
       - name: Verify Python SDK Package & Clean Installation
@@ -158,13 +160,27 @@ jobs:
             echo "PASS: Helm template correctly failed closed on missing production secrets."
           fi
 
+      - name: Verify Fail-Closed on Missing Database URL
+        run: |
+          echo "Asserting that Helm template fails when postgresUrl is absent..."
+          if helm template sunborn deploy/helm/sunborn \
+            --set secrets.sunbornAdminKey="admin-prod-key-32b-secure-value" \
+            --set secrets.masterKek="fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210" \
+            --set secrets.learningHmacSecret="learning-hmac-32b-secure-value" > /dev/null 2>&1; then
+            echo "ERROR: Helm template succeeded without postgresUrl! Expected fail-closed behavior."
+            exit 1
+          else
+            echo "PASS: Helm template correctly failed closed on missing postgresUrl."
+          fi
+
       - name: Verify Fail-Closed on Key Separation Violation
         run: |
           echo "Asserting that Helm template fails when learning HMAC secret equals master KEK..."
           if helm template sunborn deploy/helm/sunborn \
             --set secrets.sunbornAdminKey="admin-prod-key-32b-secure-value" \
             --set secrets.masterKek="fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210" \
-            --set secrets.learningHmacSecret="fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210" > /dev/null 2>&1; then
+            --set secrets.learningHmacSecret="fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210" \
+            --set secrets.postgresUrl="postgresql://sunborn_admin:secret@sunborn-postgres:5432/sunborn" > /dev/null 2>&1; then
             echo "ERROR: Helm template succeeded with duplicate keys! Expected key separation failure."
             exit 1
           else
@@ -177,7 +193,8 @@ jobs:
           helm template sunborn deploy/helm/sunborn \
             --set secrets.sunbornAdminKey="admin-prod-key-32b-secure-value" \
             --set secrets.masterKek="fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210" \
-            --set secrets.learningHmacSecret="learning-hmac-32b-secure-value" > "${RENDERED}"
+            --set secrets.learningHmacSecret="learning-hmac-32b-secure-value" \
+            --set secrets.postgresUrl="postgresql://sunborn_admin:secret@sunborn-postgres:5432/sunborn" > "${RENDERED}"
 
           echo "Verifying /metrics is NOT exposed on public Ingress..."
           if grep -A 5 "path: /metrics" "${RENDERED}" | grep -q "sunborn.example.com"; then
