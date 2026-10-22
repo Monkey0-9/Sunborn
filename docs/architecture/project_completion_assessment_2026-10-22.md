@@ -61,7 +61,7 @@ Use the ten gates in [`release_acceptance_record.md`](release_acceptance_record.
 
 ## Local verification for this change
 
-- Rust formatting and strict Clippy passed. Workspace unit/integration tests passed after the socket-using adversarial suite was rerun with local network permission.
+- Rust formatting and strict Clippy passed. In the full workspace test run, unit tests passed, but two socket-based adversarial tests could not bind in the sandbox. The focused 18-test adversarial suite passed when rerun with local network permission; the full workspace suite was not rerun as one command with that permission.
 - Frontend production build, TypeScript check, and all 24 frontend tests passed. The browser integration tests also required local network permission to start the Next.js test server.
 - OpenAPI route drift, Kubernetes placeholder/secret checks, and Helm lint passed.
 - Research verifier negative tests passed, and the checked-in certificate verifier returned `INTEGRITY_VERIFIED_UNAUTHENTICATED` for the historical artifacts. Those artifacts remain tied to the older commit identified above.
