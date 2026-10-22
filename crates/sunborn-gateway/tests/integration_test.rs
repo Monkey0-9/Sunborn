@@ -532,8 +532,10 @@ async fn test_cluster_sync_vector_clock_and_autonomic_status() {
     assert_eq!(sync_resp.status(), StatusCode::OK);
     let sync_body = sync_resp.into_body().collect().await.unwrap().to_bytes();
     let sync_json: Value = serde_json::from_slice(&sync_body).unwrap();
-    assert_eq!(sync_json["cluster_state"], "synchronized");
+    assert_eq!(sync_json["cluster_state"], "single-node");
+    assert_eq!(sync_json["spend_velocity_enforcement"], "not_enforced");
     assert_eq!(sync_json["node_id"], "gateway-primary-node-1");
+    assert!(sync_json["status_observed_at"].as_str().is_some());
 
     // 2. Verify Autonomic Incidents
     let auto_resp = app

@@ -7,6 +7,8 @@
 **Verification Digest (SHA-256)**: `059500e9fea4b5ca13a2d7bfe13e4cd4d3bb981938f18386120026ebfa987635`  
 **Classification**: Formal Release Candidate Acceptance Record  
 
+> **Fresh review note (2026-10-22): RELEASE HOLD.** The source review found that the named Vault/AWS/HSM providers are local envelope test doubles, the ceremonial page fabricated a success result, the multi-region ingress routes to one region, spend velocity is not enforced on requests, and rolling calibration is not validated for live control. Source-level corrections are tracked in [`project_completion_assessment_2026-10-22.md`](project_completion_assessment_2026-10-22.md); these do not close G1–G10. No remote KMS integration, multi-region failover exercise, independent penetration test, or candidate-bound reproduction evidence is available. The digest below is historical and is not the digest for this review branch. MON-458 and MON-526 are now In Progress.
+
 ---
 
 ## 1. Release Hold & Scope of This Record
@@ -33,7 +35,7 @@ This is a source and workflow review record, not an operational authorization. N
 | **G1** | **Durable Authentication** | Credential persistence, expiry, revocation, and fail-closed startup hydration. | **OPEN — source fix under verification; independent and multi-replica evidence outstanding** | [`crates/sunborn-db/src/postgres.rs`](../../crates/sunborn-db/src/postgres.rs), [`crates/sunborn-gateway/src/state.rs`](../../crates/sunborn-gateway/src/state.rs) |
 | **G2** | **Formal Authorization** | Route/method inventory and handler-level tenant/admin enforcement; independent adversarial review. | **OPEN — route totals and policy claims need reconciliation** | [`docs/security/authorization_matrix.md`](../security/authorization_matrix.md) |
 | **G3** | **Graceful Shutdown** | Drain timeout and acknowledged-write durability under staging load. | **OPEN — source/tests exist; live evidence not attached** | [`crates/sunborn-gateway/src/main.rs`](../../crates/sunborn-gateway/src/main.rs) |
-| **G4** | **API & SDK Parity** | OpenAPI method/schema/error parity and clean SDK installation on the candidate commit. | **OPEN — automated checks configured; current candidate not yet run** | [`scripts/check_openapi_drift.py`](../../scripts/check_openapi_drift.py), [`sdk/python/`](../../sdk/python/) |
+| **G4** | **API & SDK Parity** | OpenAPI method/schema/error parity and clean SDK installation on the candidate commit. | **OPEN — 42 method/path pairs and minimum operation structure pass; runtime schema/auth/error parity and clean SDK install remain unverified** | [`scripts/check_openapi_drift.py`](../../scripts/check_openapi_drift.py), [`sdk/python/`](../../sdk/python/) |
 | **G5** | **Helm Orchestration** | Chart validation plus cluster upgrade, disruption, network policy, and rollback evidence. | **OPEN — templates exist; live cluster evidence outstanding** | [`deploy/helm/sunborn/`](../../deploy/helm/sunborn/) |
 | **G6** | **Fail-Closed Secrets** | Startup and chart rejection of missing, reused, or placeholder secrets; key rotation review. | **OPEN — configuration checks exist; operational lifecycle evidence outstanding** | [`deploy/helm/sunborn/templates/secret.yaml`](../../deploy/helm/sunborn/templates/secret.yaml) |
 | **G7** | **Cryptographic Shredding** | Independent verification of key erasure and data removal across every store and replica. | **OPEN — source and local tests do not prove end-to-end erasure** | [`crates/sunborn-identity/src/crypto_shred.rs`](../../crates/sunborn-identity/src/crypto_shred.rs) |

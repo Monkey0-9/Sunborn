@@ -130,7 +130,8 @@ use std::time::{Duration, Instant};
 
 type SpendHistoryMap = Arc<RwLock<HashMap<String, Vec<(Instant, f64)>>>>;
 
-/// Real-time spend velocity controller preventing runaway token expenditures and infinite LLM agent loops.
+/// In-process spend accounting helper. It is not wired into the gateway request path and does not
+/// provide durable or cross-replica budget enforcement; callers must not treat it as a hard limit.
 #[derive(Clone)]
 pub struct SpendVelocityController {
     max_spend_per_window_usd: f64,

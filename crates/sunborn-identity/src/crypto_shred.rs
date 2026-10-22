@@ -168,11 +168,17 @@ impl ZeroizingKey {
     }
 }
 
-/// Key Management Provider Interface for Enterprise Hardware Security Modules (PKCS#11)
-/// and Cloud Key Management Services (HashiCorp Vault Transit, AWS KMS).
+/// Interface for tenant key wrapping. A provider must explicitly identify remote cryptographic
+/// operations; a local envelope adapter does not establish a KMS/HSM trust boundary.
 pub trait KeyManagementProvider: Send + Sync {
-    /// Provider type and identifier (e.g. "local-aead", "vault-transit", "pkcs11-hsm")
+    /// Provider identifier. This is descriptive metadata, not proof of certification.
     fn provider_name(&self) -> &str;
+
+    /// True only when cryptographic operations are actually delegated to an external KMS/HSM.
+    /// Local envelope simulations must retain the default `false` value.
+    fn uses_remote_crypto(&self) -> bool {
+        false
+    }
 
     /// Wraps/encrypts a plaintext Tenant Data Encryption Key (TDEK) under the Key Encryption Key (KEK).
     fn wrap_key(&self, key: &ZeroizingKey) -> Result<Vec<u8>, SunbornError>;
@@ -236,7 +242,7 @@ impl KeyManagementProvider for LocalAeadKeyProvider {
     }
 }
 
-/// HashiCorp Vault Transit Engine Adapter for centralized enterprise KMS key derivation and wrapping.
+/// Local envelope test double. It does not call HashiCorp Vault Transit.
 pub struct VaultTransitKeyProvider {
     transit_key_name: String,
     key_version: u32,
@@ -263,7 +269,7 @@ impl VaultTransitKeyProvider {
 
 impl KeyManagementProvider for VaultTransitKeyProvider {
     fn provider_name(&self) -> &str {
-        "vault-transit"
+        "local-envelope-test-double"
     }
 
     fn wrap_key(&self, key: &ZeroizingKey) -> Result<Vec<u8>, SunbornError> {
@@ -301,7 +307,7 @@ impl KeyManagementProvider for VaultTransitKeyProvider {
     }
 }
 
-/// PKCS#11 Hardware Security Module (HSM) Key Provider meeting FIPS 140-3 Level 3 requirements.
+/// Local envelope test double. It does not use PKCS#11 or establish FIPS validation.
 pub struct Pkcs11HsmKeyProvider {
     slot_id: u64,
     token_label: String,
@@ -339,7 +345,7 @@ impl Pkcs11HsmKeyProvider {
 
 impl KeyManagementProvider for Pkcs11HsmKeyProvider {
     fn provider_name(&self) -> &str {
-        "pkcs11-hsm"
+        "local-envelope-test-double"
     }
 
     fn wrap_key(&self, key: &ZeroizingKey) -> Result<Vec<u8>, SunbornError> {
@@ -377,7 +383,7 @@ impl KeyManagementProvider for Pkcs11HsmKeyProvider {
     }
 }
 
-/// AWS KMS / Cloud KMS Provider using Customer Master Keys (CMK) and Envelope Encryption.
+/// Local envelope test double. It does not call AWS KMS or Google Cloud KMS.
 pub struct AwsKmsKeyProvider {
     key_arn: String,
     region: String,
@@ -404,7 +410,7 @@ impl AwsKmsKeyProvider {
 
 impl KeyManagementProvider for AwsKmsKeyProvider {
     fn provider_name(&self) -> &str {
-        "aws-kms"
+        "local-envelope-test-double"
     }
 
     fn wrap_key(&self, key: &ZeroizingKey) -> Result<Vec<u8>, SunbornError> {
@@ -468,7 +474,7 @@ impl TenantCryptoRegistry {
     pub fn new() -> Self {
         let provider = Arc::new(
             LocalAeadKeyProvider::generate_random()
-                .unwrap_or_else(|_| LocalAeadKeyProvider::new([0x42u8; 32])),
+                .expect("OS cryptographic entropy is required to initialize tenant key registry"),
         );
         Self {
             keys: RwLock::new(HashMap::new()),
@@ -769,7 +775,8 @@ mod tests {
     fn test_vault_transit_key_provider_wrapping_and_derivation() {
         let vault_kek = [55u8; 32];
         let provider = VaultTransitKeyProvider::new("sunborn-production-kek", 3, vault_kek);
-        assert_eq!(provider.provider_name(), "vault-transit");
+        assert_eq!(provider.provider_name(), "local-envelope-test-double");
+        assert!(!provider.uses_remote_crypto());
         assert_eq!(provider.transit_key_name(), "sunborn-production-kek");
         assert_eq!(provider.key_version(), 3);
 
@@ -800,7 +807,8 @@ mod tests {
     fn test_pkcs11_hsm_key_provider_hardware_boundary_and_wrapping() {
         let hsm_seed = [33u8; 32];
         let provider = Pkcs11HsmKeyProvider::new(1, "Luna-HSM-PCIe", 1001, hsm_seed);
-        assert_eq!(provider.provider_name(), "pkcs11-hsm");
+        assert_eq!(provider.provider_name(), "local-envelope-test-double");
+        assert!(!provider.uses_remote_crypto());
         assert_eq!(provider.slot_id(), 1);
         assert_eq!(provider.token_label(), "Luna-HSM-PCIe");
         assert_eq!(provider.hsm_key_handle(), 1001);
@@ -889,7 +897,8 @@ mod tests {
             "us-east-1",
             cmk_seed,
         );
-        assert_eq!(provider.provider_name(), "aws-kms");
+        assert_eq!(provider.provider_name(), "local-envelope-test-double");
+        assert!(!provider.uses_remote_crypto());
         assert_eq!(provider.region(), "us-east-1");
 
         let tenant_id = TenantId::new("tenant_aws_kms_01");

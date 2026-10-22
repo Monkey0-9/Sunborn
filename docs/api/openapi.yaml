@@ -38,6 +38,53 @@ components:
       type: string
       example: "app-customer-support"
 
+    ClusterStatusResponse:
+      type: object
+      required:
+        - node_id
+        - region
+        - status_observed_at
+        - mode
+        - nodes_active
+        - cluster_state
+        - vector_clock
+        - anti_entropy_protocol
+        - consensus_mode
+        - kms_provider
+        - spend_velocity_enforcement
+      properties:
+        node_id:
+          type: string
+        region:
+          type: string
+        status_observed_at:
+          type: string
+          format: date-time
+          description: Time the gateway generated this status snapshot; not an independent cluster-health attestation.
+        mode:
+          type: string
+          example: standalone_authoritative
+        nodes_active:
+          type: integer
+          minimum: 1
+        cluster_state:
+          type: string
+          enum: [single-node]
+        vector_clock:
+          type: object
+          additionalProperties:
+            type: integer
+        anti_entropy_protocol:
+          type: string
+        consensus_mode:
+          type: string
+        kms_provider:
+          type: string
+          description: Configured local provider identifier; does not imply a remote KMS/HSM integration.
+        spend_velocity_enforcement:
+          type: string
+          enum: [not_enforced]
+
     ProblemDetails:
       type: object
       required:
@@ -809,6 +856,10 @@ paths:
       responses:
         '200':
           description: Cluster status report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterStatusResponse'
         '401':
           description: Unauthorized
 
@@ -824,6 +875,10 @@ paths:
       responses:
         '200':
           description: Cluster synchronization report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterStatusResponse'
         '401':
           description: Unauthorized
 

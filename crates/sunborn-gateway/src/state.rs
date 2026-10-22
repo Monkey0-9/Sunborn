@@ -55,6 +55,7 @@ pub struct AppState {
     pub learning_controller: Arc<crate::learning::PolicyPromotionController>,
     pub learning_hmac_secret: Vec<u8>,
     pub spend_velocity_controller: Arc<sunborn_core::SpendVelocityController>,
+    pub key_provider_configuration_error: Option<String>,
 }
 
 impl AppState {
@@ -157,62 +158,36 @@ impl AppState {
             .unwrap_or_else(|_| "local-aead".to_string())
             .to_lowercase();
 
-        let master_kek_seed = if let Ok(master_kek) =
-            std::env::var("SUNBORN_MASTER_KEK").or_else(|_| std::env::var("MASTER_KEK"))
-        {
-            let mut hasher = Sha256::new();
-            hasher.update(b"sunborn-master-kek-seed-v1:");
-            hasher.update(master_kek.as_bytes());
-            let mut arr = [0u8; 32];
-            arr.copy_from_slice(&hasher.finalize());
-            arr
-        } else {
-            [0x42u8; 32]
-        };
+        let master_kek_seed = std::env::var("SUNBORN_MASTER_KEK")
+            .or_else(|_| std::env::var("MASTER_KEK"))
+            .ok()
+            .map(|master_kek| {
+                let mut hasher = Sha256::new();
+                hasher.update(b"sunborn-master-kek-seed-v1:");
+                hasher.update(master_kek.as_bytes());
+                let mut arr = [0u8; 32];
+                arr.copy_from_slice(&hasher.finalize());
+                arr
+            });
 
+        let key_provider_configuration_error = (kms_provider_type != "local-aead").then(|| {
+            format!(
+                "Unsupported SUNBORN_KMS_PROVIDER `{kms_provider_type}`: no remote KMS/HSM adapter is implemented. Use local-aead only for development; production readiness will reject it."
+            )
+        });
+        if key_provider_configuration_error.is_some() {
+            tracing::error!(
+                provider = %kms_provider_type,
+                "Unsupported KMS provider configuration; startup readiness will fail closed"
+            );
+        }
+        let local_provider = match master_kek_seed {
+            Some(seed) => sunborn_identity::LocalAeadKeyProvider::new(seed),
+            None => sunborn_identity::LocalAeadKeyProvider::generate_random()
+                .expect("OS cryptographic entropy is required to initialize local key provider"),
+        };
         let kms_provider: Arc<dyn sunborn_identity::KeyManagementProvider> =
-            match kms_provider_type.as_str() {
-                "vault-transit" | "vault" => {
-                    let key_name = std::env::var("SUNBORN_VAULT_KEY_NAME")
-                        .unwrap_or_else(|_| "sunborn-tenant-kek".to_string());
-                    Arc::new(sunborn_identity::VaultTransitKeyProvider::new(
-                        key_name,
-                        1,
-                        master_kek_seed,
-                    ))
-                }
-                "pkcs11-hsm" | "hsm" => {
-                    let slot = std::env::var("SUNBORN_HSM_SLOT_ID")
-                        .ok()
-                        .and_then(|v| v.parse().ok())
-                        .unwrap_or(1);
-                    let label = std::env::var("SUNBORN_HSM_TOKEN_LABEL")
-                        .unwrap_or_else(|_| "Sunborn-HSM-PCIe".to_string());
-                    let handle = std::env::var("SUNBORN_HSM_KEY_HANDLE")
-                        .ok()
-                        .and_then(|v| v.parse().ok())
-                        .unwrap_or(1001);
-                    Arc::new(sunborn_identity::Pkcs11HsmKeyProvider::new(
-                        slot,
-                        label,
-                        handle,
-                        master_kek_seed,
-                    ))
-                }
-                "aws-kms" => {
-                    let arn = std::env::var("SUNBORN_AWS_KMS_KEY_ARN").unwrap_or_else(|_| {
-                        "arn:aws:kms:us-east-1:123456789012:key/sunborn-root-kek".to_string()
-                    });
-                    let region = std::env::var("SUNBORN_AWS_REGION")
-                        .unwrap_or_else(|_| "us-east-1".to_string());
-                    Arc::new(sunborn_identity::AwsKmsKeyProvider::new(
-                        arn,
-                        region,
-                        master_kek_seed,
-                    ))
-                }
-                _ => Arc::new(sunborn_identity::LocalAeadKeyProvider::new(master_kek_seed)),
-            };
+            Arc::new(local_provider);
 
         let crypto_registry = Arc::new(TenantCryptoRegistry::with_provider(kms_provider));
         let _ =
@@ -329,6 +304,7 @@ impl AppState {
             learning_controller,
             learning_hmac_secret,
             spend_velocity_controller,
+            key_provider_configuration_error,
         }
     }
 
@@ -382,6 +358,12 @@ impl AppState {
     /// In production (`SUNBORN_ENV=production`), active network connectivity to PostgreSQL,
     /// DragonflyDB, and Qdrant must succeed before the gateway can start serving traffic.
     pub async fn verify_production_readiness(&self) -> Result<(), sunborn_core::SunbornError> {
+        if let Some(message) = &self.key_provider_configuration_error {
+            return Err(sunborn_core::SunbornError::configuration_error(
+                message.clone(),
+            ));
+        }
+
         let is_prod = std::env::var("SUNBORN_ENV")
             .or_else(|_| std::env::var("ENVIRONMENT"))
             .map(|v| {
@@ -399,6 +381,13 @@ impl AppState {
 
         // 1. Production environment strictness: disallow ephemeral in-memory stores, insecure secrets, and mock providers
         if is_prod {
+            if !self.crypto_registry.provider().uses_remote_crypto() {
+                return Err(sunborn_core::SunbornError::configuration_error(format!(
+                    "Production startup refused: configured key provider `{}` does not delegate cryptographic operations to a remote KMS/HSM.",
+                    self.crypto_registry.provider().provider_name()
+                )));
+            }
+
             if !cache_backend.eq_ignore_ascii_case("dragonfly") || !self.is_dragonfly_cache_active()
             {
                 return Err(sunborn_core::SunbornError::configuration_error(
@@ -620,6 +609,21 @@ mod tests {
             res.unwrap_err().code,
             sunborn_core::ErrorCode::ConfigurationError
         );
+    }
+
+    #[tokio::test]
+    async fn test_verify_readiness_rejects_unimplemented_remote_kms_provider() {
+        let _lock = TEST_MUTEX.lock().await;
+        std::env::remove_var("SUNBORN_ENV");
+        std::env::set_var("SUNBORN_KMS_PROVIDER", "aws-kms");
+        let state = AppState::new(AppConfig::default());
+        std::env::remove_var("SUNBORN_KMS_PROVIDER");
+
+        let error = state.verify_production_readiness().await.unwrap_err();
+        assert_eq!(error.code, sunborn_core::ErrorCode::ConfigurationError);
+        assert!(error
+            .message
+            .contains("no remote KMS/HSM adapter is implemented"));
     }
 
     #[tokio::test]

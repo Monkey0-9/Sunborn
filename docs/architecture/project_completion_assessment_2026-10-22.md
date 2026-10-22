@@ -15,9 +15,9 @@ The assurance goal should be a bounded, evidence-backed system for a named workl
 
 | Area | Evidence available in this checkout | Assessment |
 |---|---|---|
-| Git/GitHub | Local `main` matches `origin/main` at the review base; GitHub reports only `main`, no open PRs, and no combined status checks for the base commit. | The current branch has no PR review or CI result attached. |
-| Linear plan | `MON-458` is marked Done, but its description says issue-level phase controls exist only for Phases 00–19 and Phases 20–28 are missing. `MON-526` is also Done, but its own closure criteria require reviewed evidence. | Planning status is not completion evidence; reopen/reconcile the control record and create the missing phase controls when workspace limits permit. |
-| Authorization | Router has 41 route declarations, including one path with GET and DELETE methods (42 method-path operations). Current docs also claim 37 endpoints. Request handling checked tenant identity but did not check a supplied application ID against the credential; this assessment fixes that path and adds a regression test. | Reconcile OpenAPI, route, method, authorization, and test inventories with one generated source of truth. Independent adversarial review remains open. |
+| Git/GitHub | At the review base, GitHub reported only `main`, no open PRs, and no combined status checks for the base commit. The review changes now live in draft PR #1. | The draft has no independent PR review or CI result attached yet. |
+| Linear plan | MON-458 described issue-level phase controls only for Phases 00–19 and Phases 20–28 as missing. MON-458 and MON-526 were marked Done despite open evidence criteria. | Both records are now In Progress with findings appended; missing phase controls remain blocked by the workspace issue limit. |
+| Authorization and API contract | Router has 41 route declarations and 42 method/path operations. The checker now matches all 42 operations to OpenAPI and checks minimum response/security/request-body schema structure. The status schema documents its observation timestamp, single-node state, local provider, and disabled spend enforcement. | Runtime schema, authorization, and error behavior still require contract/policy tests; independent adversarial review remains open. |
 | Credentials | PostgreSQL schema and startup hydration exist. Credential persistence/revocation methods have no runtime call sites; revocation does not invalidate already hydrated credentials on a live replica. | Durable credential lifecycle is incomplete. Design persistence, local eviction, cross-replica invalidation, and failure behavior before claiming G1 closure. |
 | Deployment secrets | Static Kustomize included a placeholder Secret, and the frontend imported the gateway Secret. The checked-in changes remove these deployment paths. Helm now references only required gateway secret keys and defaults public HTTPS egress off. | Validate the rendered chart and actual External Secrets integration; cluster evidence is still required. |
 | Release images | Release packaging sets chart `appVersion`, but values previously pinned images to `0.1.0`. The values now defer to the chart app version. | Verify packaged chart rendering for an actual release version. |
@@ -63,7 +63,7 @@ Use the ten gates in [`release_acceptance_record.md`](release_acceptance_record.
 
 - Rust formatting and strict Clippy passed. In the full workspace test run, unit tests passed, but two socket-based adversarial tests could not bind in the sandbox. The focused 18-test adversarial suite passed when rerun with local network permission; the full workspace suite was not rerun as one command with that permission.
 - Frontend production build, TypeScript check, and all 24 frontend tests passed. The browser integration tests also required local network permission to start the Next.js test server.
-- OpenAPI route drift, Kubernetes placeholder/secret checks, and Helm lint passed.
+- The historical checks listed above were performed on the prior audit branch state. The fresh update's verification is listed below; neither set closes operational gates.
 - Research verifier negative tests passed, and the checked-in certificate verifier returned `INTEGRITY_VERIFIED_UNAUTHENTICATED` for the historical artifacts. Those artifacts remain tied to the older commit identified above.
 - The Python SDK unit suite did not complete: it stalled at `test_async_sunborn_client` in this environment. Treat SDK CI as unresolved until that test is diagnosed and the full suite passes.
 - Local Semgrep was unavailable, and no Semgrep MCP tool was exposed in this session. The security workflow changes have not yet been run by GitHub Actions for this branch.
@@ -72,3 +72,29 @@ Use the ten gates in [`release_acceptance_record.md`](release_acceptance_record.
 ## Review boundaries
 
 This assessment included repository source and documentation inspection, three scoped agent code-review passes, current connected GitHub repository metadata, and Linear control-record inspection. It did not represent 300–400 human reviewers, an external audit firm, production deployment, live staging verification, or a FIPS validation. No universal zero-risk guarantee is possible.
+
+## Fresh completion review update — October 22, 2026
+
+The following source-level corrections have been made on the release-readiness branch. They reduce misleading behavior and make unsupported production configuration fail closed; they do not close the corresponding operational release gates.
+
+| Finding | Repository correction | Still required to close the gate |
+|---|---|---|
+| KMS provider names implied real remote cryptography | Local envelope test doubles now identify as such; the deterministic KEK fallback is removed; startup rejects unsupported provider names, and production startup rejects local-only crypto. Helm passes the actual `SUNBORN_KMS_PROVIDER` setting and defaults to local-only. Regional sketches no longer claim Vault/AWS KMS is configured. | Implement and exercise a real cloud KMS/HSM adapter with workload identity, authorization, rotation, remote audit evidence, and outage behavior. There is no real remote provider in this candidate. |
+| Ceremony page fabricated a successful inference and attestation | The page is permanently labeled simulation-only; it generates no fake action or successful result. Failed, malformed, timed-out, or stale status shows unavailable; provider and cluster values are gateway-reported and unverified. Unsupported claims and fake VIP profiles were removed. | Add a genuine authenticated gateway demonstration with request ID, real timing, and verifiable provenance before advertising live behavior. |
+| Multi-region files looked deployable and routed to one region | Manifests are marked design-only, use a non-pullable immutable-image placeholder and `.invalid` host, remove fake KMS ARNs, and document that the route has no failover. | Build real regional infrastructure and run measured primary-loss, integrity, isolation, failback, and recovery drills. No multi-region claim is cleared. |
+| Spend controller was an in-memory helper presented as enforcement | Cluster status reports `not_enforced`; source documentation says the helper is not connected to billing requests, durable storage, or replicas. | Wire authenticated tenant and actual provider usage into a durable, distributed budget mechanism; test concurrency, restart, retries, clock changes, and provider billing reconciliation. |
+| Rolling conformal recalibration was described as live | Source documentation now labels it experimental shadow research output; it is not used to authorize reuse. | Establish provenance and poisoning controls, preregister coverage criteria, reproduce held-out/shift tests, and keep any promotion shadow-only until approved. |
+| Master verifier did not match CI Helm invocation | `scripts/verify.sh` now uses the existing-secret validation override, consistent eight-stage numbering, and non-certifying completion text. | Run the master verifier from a clean candidate checkout and record its result; the research reproduction script deletes existing benchmark outputs before running, so it was not executed. SDK and environment-dependent checks remain unresolved. |
+
+### Fresh review verification
+
+- `cargo fmt --check` passed. The new unsupported-KMS startup test and cluster-status integration test passed; all 19 `sunborn-identity` tests passed.
+- Frontend production build passed. The full frontend suite passed: 29 tests, including stale/malformed/timeout status cases and the ceremony page's simulation-only disclosure.
+- OpenAPI checker matched 42 method/path operations and validated minimum operation structure. Runtime schema/auth/error parity remains open.
+- Helm lint and template rendering passed with the existing-secret validation override.
+- `kubectl` is not installed, so Kustomize rendering was not verified. The full master verifier and research reproduction were not run because the reproduction script deletes existing benchmark results before regeneration. Preserve and independently regenerate those candidate-bound artifacts through a non-destructive workflow.
+- No real cloud KMS, regional staging environment, live failover, independent review, or exact-candidate signed research reproduction was available.
+
+The proposed effort weights for the remaining completion work are: security/authorization/cryptography/tenant isolation 25%; cache correctness/durable state/invalidation 20%; research/calibration/reproduction 15%; reliability/performance/recovery 15%; deployment/SRE/observability/DR 10%; API/SDK/frontend/developer experience 10%; governance/compliance/release operations 5%. These are planning weights, not completion scores. Preserve Phase 0–28, WS-00–WS-12, MON-458, and MON-526 as the control structure; map each item to an owner, independent reviewer, invariant, tests, evidence, residual risk, and rollback plan. No workstream or phase closes on code presence or green CI alone.
+
+**Current release decision remains RELEASE HOLD.** This review did not involve a 300–400 person independent team and does not claim world-ranking, zero defects, or zero risk. Independent security, research, and operational reviews remain release prerequisites.

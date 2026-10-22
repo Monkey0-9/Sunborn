@@ -3,6 +3,8 @@ kind: Deployment
 metadata:
   name: sunborn-gateway-us-east
   namespace: sunborn
+  annotations:
+    sunborn.io/verification-status: "design-only-not-for-production"
   labels:
     app.kubernetes.io/name: sunborn-gateway
     topology.kubernetes.io/region: us-east-1
@@ -26,7 +28,7 @@ spec:
         fsGroup: 65532
       containers:
         - name: gateway
-          image: sunborn-gateway:v0.1.0-rc2
+          image: ghcr.io/sunborn/sunborn-gateway:REPLACE_WITH_VERIFIED_IMMUTABLE_DIGEST
           ports:
             - containerPort: 8080
               name: http
@@ -36,11 +38,9 @@ spec:
             - name: SUNBORN_CLUSTER_ROLE
               value: "primary"
             - name: SUNBORN_KMS_PROVIDER
-              value: "aws-kms"
+              value: "local-aead"
             - name: SUNBORN_AWS_REGION
               value: "us-east-1"
-            - name: SUNBORN_AWS_KMS_KEY_ARN
-              value: "arn:aws:kms:us-east-1:123456789012:key/sunborn-root-kek"
             - name: SUNBORN_CACHE_BACKEND
               value: "dragonfly"
             - name: SUNBORN_DRAGONFLY_URL

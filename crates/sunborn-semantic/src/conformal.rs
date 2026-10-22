@@ -282,7 +282,11 @@ impl NonExchangeableConformalCalibrator {
     }
 }
 
-/// Thread-safe concurrent rolling-window conformal engine for live adaptive recalibration.
+/// Experimental rolling-window recalibration engine.
+///
+/// This component is not connected to the request decision path and has not been validated for
+/// online risk control. Treat its thresholds as shadow research output only; do not use them to
+/// authorize cache reuse or weaken fixed security and freshness checks.
 #[derive(Clone)]
 pub struct RollingWindowConformalEngine {
     inner: Arc<RwLock<NonExchangeableConformalCalibrator>>,

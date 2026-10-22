@@ -151,8 +151,8 @@ env:
   DECISION_SIMILARITY_THRESHOLD: "0.85"
   DECISION_MAX_RISK: "0.05"
   EPOCH_LEASE_TTL_SECS: "60"
-  KMS_PROVIDER: "vault-transit"
-  VAULT_TRANSIT_KEY_NAME: "sunborn-cluster-kek"
+  # No remote KMS implementation is currently available. Production startup fails closed.
+  SUNBORN_KMS_PROVIDER: "local-aead"
 
 secrets:
   # Reference to an existing Kubernetes Secret containing SUNBORN_ADMIN_KEY, SUNBORN_MASTER_KEK, SUNBORN_LEARNING_HMAC_SECRET.

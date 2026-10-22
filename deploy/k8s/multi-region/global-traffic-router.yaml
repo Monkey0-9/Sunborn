@@ -4,21 +4,16 @@ metadata:
   name: sunborn-global-ingress
   namespace: sunborn
   annotations:
+    sunborn.io/verification-status: "design-only-not-for-production"
+    sunborn.io/verification-note: "Routes to one region only; no health-based global failover is configured or proven"
     kubernetes.io/ingress.class: "nginx"
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/proxy-body-size: "64k"
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "5"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
-    external-dns.alpha.kubernetes.io/hostname: "api.sunborn.io"
-    external-dns.alpha.kubernetes.io/routing-policy: "latency"
 spec:
-  tls:
-    - hosts:
-        - api.sunborn.io
-      secretName: sunborn-global-tls
   rules:
-    - host: api.sunborn.io
+    - host: api.sunborn.invalid
       http:
         paths:
           - path: /

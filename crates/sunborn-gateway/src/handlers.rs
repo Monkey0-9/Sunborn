@@ -1769,14 +1769,15 @@ pub async fn get_cluster_sync_status(State(state): State<AppState>) -> impl Into
     Json(json!({
         "node_id": "gateway-primary-node-1",
         "region": region,
+        "status_observed_at": Utc::now().to_rfc3339(),
         "mode": "standalone_authoritative",
         "nodes_active": 1,
-        "cluster_state": "synchronized",
+        "cluster_state": "single-node",
         "vector_clock": vc,
         "anti_entropy_protocol": "single-node-epoch",
         "consensus_mode": "single_node_authoritative",
         "kms_provider": kms_provider,
-        "spend_velocity_enforcement": "active"
+        "spend_velocity_enforcement": "not_enforced"
     }))
 }
 

@@ -11,7 +11,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const frontendDir = path.resolve(__dirname, '..');
 
-const TEST_PORT = 38472;
+// Avoid accidentally reusing a stale Next.js process from a prior interrupted run.
+const TEST_PORT = 38000 + (process.pid % 20000);
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 
 let nextProcess = null;
@@ -106,7 +107,6 @@ test('E2E Workflow 1: Onboarding & Gateway Connectivity Lifecycle', async (t) =>
   if (!requireBrowser(t)) return;
   const context = await browser.newContext();
   const page = await context.newPage();
-
   try {
     await page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' });
 
@@ -179,6 +179,23 @@ test('E2E Workflow 1: Onboarding & Gateway Connectivity Lifecycle', async (t) =>
     const reqTotalLocator = page.locator('text=12,450');
     await reqTotalLocator.waitFor({ timeout: 3000 });
     assert.ok(await reqTotalLocator.isVisible(), 'Live request counter must reflect fetched telemetry');
+  } finally {
+    await context.close();
+  }
+});
+
+test('Ceremony demo renders an explicit simulation notice without fabricated live results', async (t) => {
+  if (!requireBrowser(t)) return;
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  try {
+    await page.goto(`${BASE_URL}/ceremony`, { waitUntil: 'domcontentloaded' });
+    const bodyText = await page.locator('body').innerText();
+    assert.match(bodyText, /Demonstration mode/i);
+    assert.match(bodyText, /Simulation mode/i);
+    assert.match(bodyText, /does not produce or verify cryptographic proofs/i);
+    assert.doesNotMatch(bodyText, /142\s*µs|1840|0x7f9a88b12c40e53a992bcda77f6b98e1045f29c1|CACHE_EXACT_HIT/);
   } finally {
     await context.close();
   }

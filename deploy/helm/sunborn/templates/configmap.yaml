@@ -24,5 +24,4 @@ data:
   DECISION_SIMILARITY_THRESHOLD: {{ .Values.env.DECISION_SIMILARITY_THRESHOLD | quote }}
   DECISION_MAX_RISK: {{ .Values.env.DECISION_MAX_RISK | quote }}
   EPOCH_LEASE_TTL_SECS: {{ .Values.env.EPOCH_LEASE_TTL_SECS | quote }}
-  KMS_PROVIDER: {{ .Values.env.KMS_PROVIDER | quote }}
-  VAULT_TRANSIT_KEY_NAME: {{ .Values.env.VAULT_TRANSIT_KEY_NAME | quote }}
+  SUNBORN_KMS_PROVIDER: {{ .Values.env.SUNBORN_KMS_PROVIDER | default "local-aead" | quote }}

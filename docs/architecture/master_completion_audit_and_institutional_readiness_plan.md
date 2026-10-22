@@ -8,6 +8,8 @@
 **Operating Framework**: 16-Specialist Collaborative Engineering Model (Teams A–P)  
 **Target Release Artifact**: Evidence-Backed Release Candidate (`v0.1.0-rc2`)  
 
+> **Fresh review addendum (2026-10-22):** The completion assessment and release acceptance record are authoritative for current findings. Specific corrections and unresolved acceptance evidence for the fake local KMS adapters, fabricated demonstration, unproven regional routing, unwired in-memory spend helper, experimental rolling calibration, and master verifier mismatch are recorded in [`project_completion_assessment_2026-10-22.md`](project_completion_assessment_2026-10-22.md). All remain release gates; source-only corrections are not evidence of operational completion. Preserve the existing Phase 0–28 / WS-00–WS-12 mapping and MON-458/MON-526 controls.
+
 ---
 
 ## Executive Verdict
