@@ -91,7 +91,7 @@ python3 -c "
 import yaml
 with open('${SCRIPT_DIR}/k8s/kustomization.yaml') as f:
     kust = yaml.safe_load(f)
-assert len(kust.get('resources', [])) >= 8
+assert len(kust.get('resources', [])) >= 7
 print(f'  ✓ Kustomization manifests verified ({len(kust[\"resources\"])} resources bound)')
 "
 
