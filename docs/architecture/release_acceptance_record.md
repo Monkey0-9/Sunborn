@@ -28,7 +28,7 @@ This is a source and workflow review record, not an operational authorization. N
 
 ## 2. Institutional Release Gates & Verification Status
 
-**Review status (2026-10-22): RELEASE HOLD.** The statuses below are based on source review and current PR checks; no gate is independently closed by this review. On PR head `2005627666a4f7ee8a64178ab543e6ecb921f175`, Rust workspace, frontend, Helm, OpenAPI/Python packaging, and Security checks passed, while the scientific reproducibility job failed on a live benchmark HTTP 401. A follow-up scoped-credential correction is awaiting a new full CI run. No live staging evidence is attached.
+**Review status (2026-10-22): RELEASE HOLD.** The statuses below are based on source review and current PR checks; no gate is independently closed by this review. On PR head `c85e608fa7096e80ee762b3e0a0581b0ab6253dc`, CI/Quality #69 and Security #65 passed, including the scientific reproduction workflow after its per-application test credentials were corrected. This is configured CI evidence, not independent reproduction or live staging evidence. No gate is independently closed by this result.
 
 | Gate | Focus Area | Requirement Summary | Verification Status | Primary Evidence |
 |---|---|---|---|---|
@@ -70,7 +70,7 @@ The following is a source inventory only. It does not mean that the workstream, 
 ```
 Repository       : Monkey0-9/Sunborn
 Review base      : ed2e4135ffd8135d8780945730fde2744b4d6dc8
-Review changes   : Draft PR #1 (`codex/sunborn-release-readiness-2026-10-22`); not merged or release-built
+Review changes   : Draft PR #1 at `c85e608fa7096e80ee762b3e0a0581b0ab6253dc`; not merged or release-built
 Release digest   : NOT ISSUED — generate from the exact signed release artifacts
 Toolchain        : Record from the release CI run; historical values are not accepted as current evidence
 OpenAPI coverage : Reconcile route and method counts before declaring parity
