@@ -358,11 +358,7 @@ impl AppState {
     /// In production (`SUNBORN_ENV=production`), active network connectivity to PostgreSQL,
     /// DragonflyDB, and Qdrant must succeed before the gateway can start serving traffic.
     pub async fn verify_production_readiness(&self) -> Result<(), sunborn_core::SunbornError> {
-        if let Some(message) = &self.key_provider_configuration_error {
-            return Err(sunborn_core::SunbornError::configuration_error(
-                message.clone(),
-            ));
-        }
+        self.verify_key_provider_configuration()?;
 
         let is_prod = std::env::var("SUNBORN_ENV")
             .or_else(|_| std::env::var("ENVIRONMENT"))
@@ -381,13 +377,6 @@ impl AppState {
 
         // 1. Production environment strictness: disallow ephemeral in-memory stores, insecure secrets, and mock providers
         if is_prod {
-            if !self.crypto_registry.provider().uses_remote_crypto() {
-                return Err(sunborn_core::SunbornError::configuration_error(format!(
-                    "Production startup refused: configured key provider `{}` does not delegate cryptographic operations to a remote KMS/HSM.",
-                    self.crypto_registry.provider().provider_name()
-                )));
-            }
-
             if !cache_backend.eq_ignore_ascii_case("dragonfly") || !self.is_dragonfly_cache_active()
             {
                 return Err(sunborn_core::SunbornError::configuration_error(
@@ -582,6 +571,27 @@ impl AppState {
             self.selected_embedder.health_check().await?;
         }
 
+        self.verify_remote_key_provider(is_prod)?;
+
+        Ok(())
+    }
+
+    fn verify_key_provider_configuration(&self) -> Result<(), sunborn_core::SunbornError> {
+        if let Some(message) = &self.key_provider_configuration_error {
+            return Err(sunborn_core::SunbornError::configuration_error(
+                message.clone(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn verify_remote_key_provider(&self, is_prod: bool) -> Result<(), sunborn_core::SunbornError> {
+        if is_prod && !self.crypto_registry.provider().uses_remote_crypto() {
+            return Err(sunborn_core::SunbornError::configuration_error(format!(
+                "Production startup refused: configured key provider `{}` does not delegate cryptographic operations to a remote KMS/HSM.",
+                self.crypto_registry.provider().provider_name()
+            )));
+        }
         Ok(())
     }
 }
@@ -624,6 +634,17 @@ mod tests {
         assert!(error
             .message
             .contains("no remote KMS/HSM adapter is implemented"));
+    }
+
+    #[tokio::test]
+    async fn test_production_rejects_local_key_provider() {
+        let _lock = TEST_MUTEX.lock().await;
+        let state = AppState::new(AppConfig::default());
+        let error = state.verify_remote_key_provider(true).unwrap_err();
+        assert_eq!(error.code, sunborn_core::ErrorCode::ConfigurationError);
+        assert!(error
+            .message
+            .contains("does not delegate cryptographic operations"));
     }
 
     #[tokio::test]
