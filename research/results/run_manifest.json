@@ -3,14 +3,14 @@
     "evaluation_suite": "SemanticCacheBench-T (Temporal & Stateful)",
     "provenance_type": "FROZEN_OFFLINE_BENCHMARK_EVALUATION",
     "evidence_scope": "Stateful temporal mutation benchmark across 6 sequential phases. Evaluates causal leases and verification cascade under simulated mutations; does NOT represent uncalibrated live production streams.",
-    "evaluation_time_utc": "2026-10-21T13:04:34.290589+00:00",
+    "evaluation_time_utc": "2026-10-22T09:30:13.578154+00:00",
     "platform": "Linux-6.12.0-211.64.1.el10_2.x86_64-x86_64-with-glibc2.39",
     "python_version": "3.13.16",
-    "git_commit": "3a6257ce45bb3fb2697a21f970cb9e95c054c71d",
-    "git_tree": "c55059a3d7d46da3d72483217f22b40d19bacdc6",
-    "benchmark_code_sha256": "f1c7a37554b68d27c3f869708556aa7aa0ff8170a7a8e7c0f40c053e89de0bee",
+    "git_commit": "6bf5d40ab6890b3e618f533cfcf47155fdb44250",
+    "git_tree": "885e0545d1885e9c356e9eff3868b181b1accba3",
+    "benchmark_code_sha256": "9d408197d7d072d322e8a52352557c3de75d226396c6f37bfadf0bfaf89865fa",
     "benchmark_code_version": "1.0.0",
-    "embedding_backend": "BAAI/bge-small-en-v1.5 (fastembed)",
+    "embedding_backend": "deterministic_subword_384d_hash_vectorizer (default)",
     "decision_engine": "Sunborn-Semantic DecisionEngine (VerificationCascade + Causal Leases + Conformal Risk Bound <= 0.25)",
     "total_temporal_scenarios": 19,
     "phases_evaluated": [
@@ -97,43 +97,43 @@
     },
     "B2_NaiveCosine": {
       "name": "Naive Cosine (Fixed tau=0.75, Blind to Temporal)",
-      "hits": 18,
-      "hit_rate_pct": 94.74,
+      "hits": 3,
+      "hit_rate_pct": 15.79,
       "hit_rate_ci_95": [
-        75.36,
-        99.06
+        5.52,
+        37.57
       ],
-      "false_hits": 12,
-      "false_hit_rate_pct": 63.16,
+      "false_hits": 3,
+      "false_hit_rate_pct": 15.79,
       "false_hit_ci_95": [
-        41.04,
-        80.85
+        5.52,
+        37.57
       ],
-      "precision_pct": 33.33,
+      "precision_pct": 0.0,
       "precision_ci_95": [
-        16.28,
-        56.25
+        0.0,
+        56.15
       ],
-      "recall_pct": 100.0,
+      "recall_pct": 0.0,
       "recall_ci_95": [
-        60.97,
-        100.0
+        0.0,
+        39.03
       ],
-      "avg_latency_ms": 31.26,
-      "total_cost_usd": 0.006268,
-      "cost_savings_pct": 94.72,
-      "tp": 6,
-      "fp": 12,
-      "tn": 1,
-      "fn": 0
+      "avg_latency_ms": 380.21,
+      "total_cost_usd": 0.100003,
+      "cost_savings_pct": 15.79,
+      "tp": 0,
+      "fp": 3,
+      "tn": 10,
+      "fn": 6
     },
     "B3_SunbornTemporal": {
       "name": "Sunborn Proof-Carrying Temporal Reuse Engine",
-      "hits": 2,
-      "hit_rate_pct": 10.53,
+      "hits": 0,
+      "hit_rate_pct": 0.0,
       "hit_rate_ci_95": [
-        2.94,
-        31.39
+        0.0,
+        16.82
       ],
       "false_hits": 0,
       "false_hit_rate_pct": 0.0,
@@ -143,30 +143,30 @@
       ],
       "precision_pct": 100.0,
       "precision_ci_95": [
-        34.24,
+        100.0,
         100.0
       ],
-      "recall_pct": 33.33,
+      "recall_pct": 0.0,
       "recall_ci_95": [
-        9.68,
-        70.0
+        0.0,
+        39.03
       ],
-      "avg_latency_ms": 403.47,
-      "total_cost_usd": 0.106252,
-      "cost_savings_pct": 10.52,
-      "tp": 2,
+      "avg_latency_ms": 450.0,
+      "total_cost_usd": 0.11875,
+      "cost_savings_pct": 0.0,
+      "tp": 0,
       "fp": 0,
       "tn": 13,
-      "fn": 4
+      "fn": 6
     }
   },
   "raw_execution_traces": [
     {
       "id": "KM-001",
       "phase": "Phase1_KnowledgeMutation",
-      "similarity": 0.9509,
+      "similarity": 0.6902,
       "risk_score": 0.0,
-      "b2_reused": true,
+      "b2_reused": false,
       "b3_reused": false,
       "b3_stage": "Stage3_EpochLeaseStale",
       "ground_truth": false
@@ -174,19 +174,19 @@
     {
       "id": "KM-002",
       "phase": "Phase1_KnowledgeMutation",
-      "similarity": 0.8386,
+      "similarity": 0.4084,
       "risk_score": 0.0,
-      "b2_reused": true,
-      "b3_reused": true,
-      "b3_stage": "Stage4_ReuseGranted",
+      "b2_reused": false,
+      "b3_reused": false,
+      "b3_stage": "Stage4_EffectOrSimilarityAbstain",
       "ground_truth": true
     },
     {
       "id": "KM-003",
       "phase": "Phase1_KnowledgeMutation",
-      "similarity": 0.8828,
+      "similarity": 0.2541,
       "risk_score": 0.0,
-      "b2_reused": true,
+      "b2_reused": false,
       "b3_reused": false,
       "b3_stage": "Stage3_EpochLeaseStale",
       "ground_truth": false
@@ -194,9 +194,9 @@
     {
       "id": "KM-004",
       "phase": "Phase1_KnowledgeMutation",
-      "similarity": 0.9283,
+      "similarity": 0.456,
       "risk_score": 0.0,
-      "b2_reused": true,
+      "b2_reused": false,
       "b3_reused": false,
       "b3_stage": "Stage2_StructuralOrRiskViolation",
       "ground_truth": true
@@ -204,9 +204,9 @@
     {
       "id": "PR-001",
       "phase": "Phase2_PermissionRevocation",
-      "similarity": 0.8011,
+      "similarity": 0.5988,
       "risk_score": 0.0,
-      "b2_reused": true,
+      "b2_reused": false,
       "b3_reused": false,
       "b3_stage": "Stage1_AuthRevoked",
       "ground_truth": false
@@ -214,9 +214,9 @@
     {
       "id": "PR-002",
       "phase": "Phase2_PermissionRevocation",
-      "similarity": 0.8717,
+      "similarity": 0.5733,
       "risk_score": 0.0,
-      "b2_reused": true,
+      "b2_reused": false,
       "b3_reused": false,
       "b3_stage": "Stage1_AuthRevoked",
       "ground_truth": false
@@ -224,9 +224,9 @@
     {
       "id": "PR-003",
       "phase": "Phase2_PermissionRevocation",
-      "similarity": 0.8239,
+      "similarity": 0.3266,
       "risk_score": 0.0,
-      "b2_reused": true,
+      "b2_reused": false,
       "b3_reused": false,
       "b3_stage": "Stage2_StructuralOrRiskViolation",
       "ground_truth": true
@@ -234,9 +234,9 @@
     {
       "id": "PU-001",
       "phase": "Phase3_PolicyUpdate",
-      "similarity": 0.914,
+      "similarity": 0.4895,
       "risk_score": 0.35,
-      "b2_reused": true,
+      "b2_reused": false,
       "b3_reused": false,
       "b3_stage": "Stage2_StructuralOrRiskViolation",
       "ground_truth": false
@@ -244,19 +244,19 @@
     {
       "id": "PU-002",
       "phase": "Phase3_PolicyUpdate",
-      "similarity": 0.9188,
+      "similarity": 0.379,
       "risk_score": 0.0,
-      "b2_reused": true,
-      "b3_reused": true,
-      "b3_stage": "Stage4_ReuseGranted",
+      "b2_reused": false,
+      "b3_reused": false,
+      "b3_stage": "Stage4_EffectOrSimilarityAbstain",
       "ground_truth": true
     },
     {
       "id": "TS-001",
       "phase": "Phase4_ToolSchemaChange",
-      "similarity": 0.828,
+      "similarity": 0.4478,
       "risk_score": 0.0,
-      "b2_reused": true,
+      "b2_reused": false,
       "b3_reused": false,
       "b3_stage": "Stage2_StructuralOrRiskViolation",
       "ground_truth": false
@@ -264,9 +264,9 @@
     {
       "id": "TS-002",
       "phase": "Phase4_ToolSchemaChange",
-      "similarity": 0.9366,
+      "similarity": 0.3222,
       "risk_score": 0.0,
-      "b2_reused": true,
+      "b2_reused": false,
       "b3_reused": false,
       "b3_stage": "Stage2_StructuralOrRiskViolation",
       "ground_truth": false
@@ -274,9 +274,9 @@
     {
       "id": "DO-001",
       "phase": "Phase5_DelayedOutboxEvent",
-      "similarity": 0.8478,
+      "similarity": 0.4839,
       "risk_score": 0.0,
-      "b2_reused": true,
+      "b2_reused": false,
       "b3_reused": false,
       "b3_stage": "Stage2_StructuralOrRiskViolation",
       "ground_truth": false
@@ -284,9 +284,9 @@
     {
       "id": "DO-002",
       "phase": "Phase5_DelayedOutboxEvent",
-      "similarity": 0.8463,
+      "similarity": 0.2545,
       "risk_score": 0.0,
-      "b2_reused": true,
+      "b2_reused": false,
       "b3_reused": false,
       "b3_stage": "Stage2_StructuralOrRiskViolation",
       "ground_truth": true
@@ -294,9 +294,9 @@
     {
       "id": "AT-001",
       "phase": "Phase6_AdversarialTraps",
-      "similarity": 0.8386,
+      "similarity": 0.6549,
       "risk_score": 0.35,
-      "b2_reused": true,
+      "b2_reused": false,
       "b3_reused": false,
       "b3_stage": "Stage2_StructuralOrRiskViolation",
       "ground_truth": false
@@ -304,7 +304,7 @@
     {
       "id": "AT-002",
       "phase": "Phase6_AdversarialTraps",
-      "similarity": 0.9595,
+      "similarity": 0.8673,
       "risk_score": 0.0,
       "b2_reused": true,
       "b3_reused": false,
@@ -314,7 +314,7 @@
     {
       "id": "AT-003",
       "phase": "Phase6_AdversarialTraps",
-      "similarity": 0.9131,
+      "similarity": 0.8673,
       "risk_score": 0.0,
       "b2_reused": true,
       "b3_reused": false,
@@ -324,7 +324,7 @@
     {
       "id": "AT-004",
       "phase": "Phase6_AdversarialTraps",
-      "similarity": 0.6348,
+      "similarity": 0.2894,
       "risk_score": 0.35,
       "b2_reused": false,
       "b3_reused": false,
@@ -334,7 +334,7 @@
     {
       "id": "AT-005",
       "phase": "Phase6_AdversarialTraps",
-      "similarity": 0.9493,
+      "similarity": 0.8907,
       "risk_score": 0.0,
       "b2_reused": true,
       "b3_reused": false,
@@ -344,9 +344,9 @@
     {
       "id": "AT-006",
       "phase": "Phase6_AdversarialTraps",
-      "similarity": 0.9734,
+      "similarity": 0.406,
       "risk_score": 0.0,
-      "b2_reused": true,
+      "b2_reused": false,
       "b3_reused": false,
       "b3_stage": "Stage2_StructuralOrRiskViolation",
       "ground_truth": true

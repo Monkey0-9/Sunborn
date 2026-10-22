@@ -13,7 +13,7 @@
 * `results/reproduction_certificate.json`: Signed cryptographic attestation certificate verifying benchmark provenance (HMAC-SHA-256 or unauthenticated local development integrity check).
 * `verify_certificate.py`: Independent certificate and artifact provenance verifier with explicit 4-state outcome semantics.
 * `tests/test_verifier_negative.py`: Negative verification test suite proving strict rejection of offline artifacts, corrupted traces, and mismatched keys.
-* `../benchmarks/semantic_cache_bench.py`: SemanticCacheBench dataset runner (supports strict live gateway RPC via `--require-live` and developer offline simulation via `--allow-offline`).
+* `../benchmarks/semantic_cache_bench.py`: SemanticCacheBench dataset runner (uses a lightweight embedding backend by default; `--use-fastembed` explicitly opts into loading FastEmbed; supports strict live gateway RPC via `--require-live` and developer offline simulation via `--allow-offline`).
 * `../benchmarks/temporal_bench.py`: SemanticCacheBench-T stateful temporal mutation runner.
 * `../benchmarks/capacity_soak.py`: 3-stage continuous capacity and memory stability simulator.
 
@@ -58,4 +58,3 @@ To preserve empirical integrity and prevent confabulation of offline research ar
 3. **Live Production Telemetry**:
    - In production deployments, real-time cache hit ratios, token avoided counters, and P99 latency are gathered dynamically from active gateway ingress nodes via `/v1/finops/report` and Prometheus scrapers.
    - When live telemetry is unmeasured or Prometheus exporters are unattached, the UI and API truthfully report `Not measured` rather than displaying static demonstration values.
-

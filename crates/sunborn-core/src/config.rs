@@ -136,6 +136,18 @@ impl AppConfig {
             .ok();
         let strict_durability = parse_bool_env("SUNBORN_STRICT_DURABILITY", false)?;
 
+        let exact_cache_enabled = if parse_bool_env("SUNBORN_DISABLE_EXACT_CACHE", false)? {
+            false
+        } else {
+            parse_bool_env("SUNBORN_EXACT_CACHE_ENABLED", true)?
+        };
+
+        let semantic_cache_enabled = if parse_bool_env("SUNBORN_DISABLE_SEMANTIC_CACHE", false)? {
+            false
+        } else {
+            parse_bool_env("SUNBORN_SEMANTIC_CACHE_ENABLED", true)?
+        };
+
         let enforce_auth = if std::env::var("SUNBORN_AUTH_ENFORCE").is_ok() {
             parse_bool_env("SUNBORN_AUTH_ENFORCE", true)?
         } else {
@@ -145,8 +157,8 @@ impl AppConfig {
         Ok(Self {
             server: ServerConfig { host, port },
             cache: CacheConfig {
-                exact_cache_enabled: true,
-                semantic_cache_enabled: true,
+                exact_cache_enabled,
+                semantic_cache_enabled,
                 dragonfly_url,
                 qdrant_url,
                 default_ttl_secs: 3600,

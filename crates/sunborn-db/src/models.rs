@@ -47,3 +47,15 @@ pub struct AuditRecord {
     pub details: serde_json::Value,
     pub created_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DurableApiCredentialRecord {
+    pub key_hash: String,
+    pub tenant_id: String,
+    pub application_id: String,
+    pub rate_limit_rps: u32,
+    pub allowed_models: Vec<String>,
+    pub is_admin: bool,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+}

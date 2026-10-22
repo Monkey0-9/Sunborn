@@ -1,4 +1,6 @@
-use crate::models::{AuditRecord, DurableCacheRecord, OutboxRecord, TenantRecord};
+use crate::models::{
+    AuditRecord, DurableApiCredentialRecord, DurableCacheRecord, OutboxRecord, TenantRecord,
+};
 use crate::repository::{DatabaseStore, MemoryDatabaseStore};
 use async_trait::async_trait;
 use sqlx::{postgres::PgPoolOptions, PgPool, Row};
@@ -221,6 +223,112 @@ impl PostgresDatabaseStore {
             }
         }
         Ok(Vec::new())
+    }
+
+    /// Persists an API credential record into the durable PostgreSQL `api_credentials` table.
+    pub async fn persist_api_credential(
+        &self,
+        key_hash: &str,
+        tenant_id: &str,
+        application_id: &str,
+        rate_limit_rps: i32,
+        allowed_models: &[String],
+        is_admin: bool,
+    ) -> Result<()> {
+        if let Some(pool) = self.get_pool().await {
+            let models_json =
+                serde_json::to_value(allowed_models).unwrap_or_else(|_| serde_json::json!(["*"]));
+            let res = sqlx::query(
+                "INSERT INTO api_credentials (key_hash, tenant_id, application_id, rate_limit_rps, allowed_models, is_admin, status, created_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, 'active', NOW())
+                 ON CONFLICT (key_hash) DO UPDATE SET
+                    tenant_id = $2,
+                    application_id = $3,
+                    rate_limit_rps = $4,
+                    allowed_models = $5,
+                    is_admin = $6,
+                    status = 'active'",
+            )
+            .bind(key_hash)
+            .bind(tenant_id)
+            .bind(application_id)
+            .bind(rate_limit_rps)
+            .bind(models_json)
+            .bind(is_admin)
+            .execute(&pool)
+            .await;
+
+            if let Err(e) = res {
+                tracing::error!(error = %e, "Failed to persist API credential to PostgreSQL");
+                if self.strict_durability {
+                    return Err(sunborn_core::SunbornError::database(format!(
+                        "Failed to persist API credential: {e}"
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Fetches all active durable API credentials from PostgreSQL for registry hydration.
+    pub async fn fetch_all_api_credentials(&self) -> Result<Vec<DurableApiCredentialRecord>> {
+        if let Some(pool) = self.get_pool().await {
+            let query = "SELECT key_hash, tenant_id, application_id, rate_limit_rps, allowed_models, is_admin, status, created_at FROM api_credentials WHERE status = 'active'";
+            let rows = sqlx::query(query).fetch_all(&pool).await;
+
+            match rows {
+                Ok(records) => {
+                    let mut out = Vec::with_capacity(records.len());
+                    for row in records {
+                        let models_val: serde_json::Value = row.get("allowed_models");
+                        let allowed_models: Vec<String> = serde_json::from_value(models_val)
+                            .unwrap_or_else(|_| vec!["*".to_string()]);
+                        let rps: i32 = row.get("rate_limit_rps");
+                        out.push(DurableApiCredentialRecord {
+                            key_hash: row.get("key_hash"),
+                            tenant_id: row.get("tenant_id"),
+                            application_id: row.get("application_id"),
+                            rate_limit_rps: rps.max(1) as u32,
+                            allowed_models,
+                            is_admin: row.get("is_admin"),
+                            status: row.get("status"),
+                            created_at: row.get("created_at"),
+                        });
+                    }
+                    return Ok(out);
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "Failed to fetch api_credentials from PostgreSQL");
+                    if self.strict_durability {
+                        return Err(sunborn_core::SunbornError::database(format!(
+                            "Failed to fetch api_credentials: {e}"
+                        )));
+                    }
+                }
+            }
+        }
+        Ok(Vec::new())
+    }
+
+    /// Revokes an API credential in the durable PostgreSQL store by marking status='revoked'.
+    pub async fn revoke_api_credential(&self, key_hash: &str) -> Result<()> {
+        if let Some(pool) = self.get_pool().await {
+            let res =
+                sqlx::query("UPDATE api_credentials SET status = 'revoked' WHERE key_hash = $1")
+                    .bind(key_hash)
+                    .execute(&pool)
+                    .await;
+
+            if let Err(e) = res {
+                tracing::error!(error = %e, "Failed to revoke API credential in PostgreSQL");
+                if self.strict_durability {
+                    return Err(sunborn_core::SunbornError::database(format!(
+                        "Failed to revoke API credential: {e}"
+                    )));
+                }
+            }
+        }
+        Ok(())
     }
 }
 

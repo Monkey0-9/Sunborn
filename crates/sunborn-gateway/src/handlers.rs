@@ -1241,10 +1241,14 @@ pub async fn verify_multi_store_erasure_integrity(
 pub async fn delete_tenant(
     State(state): State<AppState>,
     Extension(sec_ctx): Extension<SecurityContext>,
+    headers: axum::http::HeaderMap,
     Path(tenant_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    let quorum_key = headers
+        .get("x-quorum-admin-key")
+        .and_then(|v| v.to_str().ok());
     sec_ctx
-        .require_admin()
+        .require_admin_quorum(quorum_key, &state.api_key_registry)
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
 
     let tenant = TenantId::new(&tenant_id);
@@ -1449,9 +1453,13 @@ pub async fn chaos_status(State(state): State<AppState>) -> impl IntoResponse {
 pub async fn chaos_trip(
     State(state): State<AppState>,
     Extension(sec_ctx): Extension<SecurityContext>,
+    headers: axum::http::HeaderMap,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    let quorum_key = headers
+        .get("x-quorum-admin-key")
+        .and_then(|v| v.to_str().ok());
     sec_ctx
-        .require_admin()
+        .require_admin_quorum(quorum_key, &state.api_key_registry)
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
     state.circuit_breaker.trip().await;
     Ok(Json(json!({
@@ -1463,9 +1471,13 @@ pub async fn chaos_trip(
 pub async fn chaos_reset(
     State(state): State<AppState>,
     Extension(sec_ctx): Extension<SecurityContext>,
+    headers: axum::http::HeaderMap,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    let quorum_key = headers
+        .get("x-quorum-admin-key")
+        .and_then(|v| v.to_str().ok());
     sec_ctx
-        .require_admin()
+        .require_admin_quorum(quorum_key, &state.api_key_registry)
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
     state.circuit_breaker.reset().await;
     Ok(Json(json!({
@@ -1508,10 +1520,14 @@ pub async fn provision_tenant(
 pub async fn crypto_shred_tenant(
     State(state): State<AppState>,
     Extension(sec_ctx): Extension<SecurityContext>,
+    headers: axum::http::HeaderMap,
     Json(payload): Json<ShredTenantPayload>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    let quorum_key = headers
+        .get("x-quorum-admin-key")
+        .and_then(|v| v.to_str().ok());
     sec_ctx
-        .require_admin()
+        .require_admin_quorum(quorum_key, &state.api_key_registry)
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
 
     let tenant = TenantId::new(&payload.tenant_id);

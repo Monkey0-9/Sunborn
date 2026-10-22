@@ -454,6 +454,15 @@ impl AppState {
                     }
                 }
             }
+
+            tracing::info!("Hydrating persisted API credentials from PostgreSQL...");
+            if let Err(e) = self
+                .api_key_registry
+                .hydrate_from_db(&self.postgres_db)
+                .await
+            {
+                tracing::warn!(error = %e, "Failed to hydrate API credentials from PostgreSQL");
+            }
         }
 
         // 4. Validate Qdrant vector store connectivity if configured or in strict mode

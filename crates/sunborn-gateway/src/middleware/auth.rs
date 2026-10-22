@@ -39,6 +39,39 @@ impl SecurityContext {
         }
         Ok(())
     }
+
+    /// Enforces m-of-n administrative quorum for high-consequence operations
+    /// (e.g., cryptographic shredding, tenant deletion, chaos fault injection).
+    /// When `SUNBORN_ADMIN_QUORUM_REQUIRED=true`, a distinct secondary administrator key
+    /// must be supplied via the `x-quorum-admin-key` header.
+    pub fn require_admin_quorum(
+        &self,
+        quorum_key: Option<&str>,
+        registry: &ApiKeyRegistry,
+    ) -> Result<(), &'static str> {
+        self.require_admin()?;
+        let quorum_enforced = std::env::var("SUNBORN_ADMIN_QUORUM_REQUIRED")
+            .map(|v| v.to_lowercase() == "true" || v == "1")
+            .unwrap_or(false);
+
+        if !quorum_enforced {
+            return Ok(());
+        }
+
+        match quorum_key {
+            Some(raw_key) => {
+                let quorum_hash = ApiKeyRegistry::hash_key(raw_key);
+                if quorum_hash == self.api_key_hash {
+                    return Err("Quorum authorization violation: Second administrator key must be distinct from the primary caller");
+                }
+                match registry.validate_key(raw_key) {
+                    Some(cred) if cred.is_admin => Ok(()),
+                    _ => Err("Quorum authorization failed: Invalid or unauthorized secondary administrator credentials"),
+                }
+            }
+            None => Err("Quorum authorization required: High-consequence operation requires 'x-quorum-admin-key' header from secondary administrator"),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -90,6 +123,34 @@ impl ApiKeyRegistry {
     pub fn validate_key(&self, raw_key: &str) -> Option<ApiCredential> {
         let hash = Self::hash_key(raw_key);
         self.credentials.read().unwrap().get(&hash).cloned()
+    }
+
+    /// Hydrates durable API credentials from PostgreSQL into the in-memory lookup cache.
+    pub async fn hydrate_from_db(
+        &self,
+        db: &sunborn_db::PostgresDatabaseStore,
+    ) -> Result<usize, sunborn_core::SunbornError> {
+        let records = db.fetch_all_api_credentials().await?;
+        let count = records.len();
+        let mut guard = self.credentials.write().unwrap();
+        for r in records {
+            guard.insert(
+                r.key_hash.clone(),
+                ApiCredential {
+                    tenant_id: TenantId::new(r.tenant_id),
+                    application_id: ApplicationId::new(r.application_id),
+                    key_hash: r.key_hash,
+                    rate_limit_rps: r.rate_limit_rps,
+                    allowed_models: r.allowed_models,
+                    is_admin: r.is_admin,
+                },
+            );
+        }
+        tracing::info!(
+            hydrated_credentials = count,
+            "Hydrated durable API credentials from PostgreSQL"
+        );
+        Ok(count)
     }
 
     pub fn load_from_env(&self) {

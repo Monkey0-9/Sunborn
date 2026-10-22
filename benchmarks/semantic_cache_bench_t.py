@@ -31,23 +31,32 @@ import argparse
 import statistics
 from datetime import datetime, timezone
 
-# Initialize Pretrained Embedding Pipeline (BAAI/bge-small-en-v1.5)
 _embed_model = None
-try:
-    from fastembed import TextEmbedding
-    _embed_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
-except Exception:
-    _embed_model = None
+EMBEDDING_BACKEND_NAME = "deterministic_subword_384d_hash_vectorizer (default)"
 
-EMBEDDING_BACKEND_NAME = "BAAI/bge-small-en-v1.5 (fastembed)" if _embed_model is not None else "deterministic_subword_384d_hash_vectorizer (fallback, fastembed uninstalled)"
+def configure_embedding_backend(use_fastembed: bool) -> None:
+    global _embed_model, EMBEDDING_BACKEND_NAME
+    if not use_fastembed:
+        _embed_model = None
+        EMBEDDING_BACKEND_NAME = "deterministic_subword_384d_hash_vectorizer (default)"
+        return
+
+    if _embed_model is not None:
+        return
+
+    try:
+        from fastembed import TextEmbedding
+        _embed_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+    except Exception as exc:
+        raise RuntimeError(
+            "Could not initialize FastEmbed. Omit --use-fastembed to use the lightweight default backend."
+        ) from exc
+    EMBEDDING_BACKEND_NAME = "BAAI/bge-small-en-v1.5 (fastembed)"
 
 def get_embedding(text: str) -> list[float]:
     """Generates embedding using BAAI/bge-small-en-v1.5 or deterministic n-gram vectorizer fallback."""
     if _embed_model is not None:
-        try:
-            return list(list(_embed_model.embed([text]))[0])
-        except Exception:
-            pass
+        return list(list(_embed_model.embed([text]))[0])
     words = text.lower().replace("?", "").replace(".", "").replace(",", "").replace(";", "").split()
     vec = [0.0] * 384
     for pos, w in enumerate(words):
@@ -462,7 +471,9 @@ TEMPORAL_BENCHMARK_SCENARIOS = [
     },
 ]
 
-def run_temporal_benchmark(output_path: str = None, dry_run: bool = False):
+def run_temporal_benchmark(output_path: str = None, dry_run: bool = False, use_fastembed: bool = False):
+    configure_embedding_backend(use_fastembed)
+
     print("=" * 80)
     print("SUNBORN SEMANTICCACHEBENCH-T: STATEFUL TEMPORAL & ADVERSARIAL BENCHMARK")
     print(f"Timestamp: {datetime.now(timezone.utc).isoformat()}")
@@ -702,9 +713,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Sunborn SemanticCacheBench-T Stateful Temporal Suite")
     parser.add_argument("--output", "-o", type=str, default=None, help="Custom output JSON path for temporal manifest")
     parser.add_argument("--dry-run", action="store_true", default=False, help="Compute metrics without writing manifest to disk")
+    parser.add_argument("--use-fastembed", action="store_true", help="Opt in to loading the FastEmbed model")
     args = parser.parse_args()
 
     run_temporal_benchmark(
         output_path=args.output,
         dry_run=args.dry_run,
+        use_fastembed=args.use_fastembed,
     )

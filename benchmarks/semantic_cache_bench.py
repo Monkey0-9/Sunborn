@@ -197,23 +197,32 @@ BENCHMARK_SUITE = [
     {"id": "DIS-015", "category": "unrelated", "query": "What is Plate Tectonics theory in geological science?", "variant": "Guide to making authentic Japanese tonkotsu ramen broth", "equivalent": False, "risk": 0.0},
 ]
 
-# Initialize Pretrained Embedding Pipeline (BAAI/bge-small-en-v1.5)
 _embed_model = None
-try:
-    from fastembed import TextEmbedding
-    _embed_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
-except Exception:
-    _embed_model = None
+EMBEDDING_BACKEND_NAME = "deterministic_subword_384d_hash_vectorizer (default)"
 
-EMBEDDING_BACKEND_NAME = "BAAI/bge-small-en-v1.5 (fastembed)" if _embed_model is not None else "deterministic_subword_384d_hash_vectorizer (fallback, fastembed uninstalled)"
+def configure_embedding_backend(use_fastembed: bool) -> None:
+    global _embed_model, EMBEDDING_BACKEND_NAME
+    if not use_fastembed:
+        _embed_model = None
+        EMBEDDING_BACKEND_NAME = "deterministic_subword_384d_hash_vectorizer (default)"
+        return
+
+    if _embed_model is not None:
+        return
+
+    try:
+        from fastembed import TextEmbedding
+        _embed_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+    except Exception as exc:
+        raise RuntimeError(
+            "Could not initialize FastEmbed. Omit --use-fastembed to use the lightweight default backend."
+        ) from exc
+    EMBEDDING_BACKEND_NAME = "BAAI/bge-small-en-v1.5 (fastembed)"
 
 def get_embedding(text: str) -> list[float]:
     """Generates embedding using BAAI/bge-small-en-v1.5 or deterministic n-gram vectorizer fallback."""
     if _embed_model is not None:
-        try:
-            return list(list(_embed_model.embed([text]))[0])
-        except Exception:
-            pass
+        return list(list(_embed_model.embed([text]))[0])
     # High-dimensional subword and semantic hash fallback
     words = text.lower().replace("?", "").replace(".", "").replace(",", "").replace(";", "").split()
     vec = [0.0] * 384
@@ -337,7 +346,10 @@ def run_benchmark(
     dry_run: bool = False,
     require_live: bool = False,
     gateway_url: str = None,
+    use_fastembed: bool = False,
 ):
+    configure_embedding_backend(use_fastembed)
+
     print("=" * 80)
     print("SUNBORN SEMANTICCACHEBENCH: EMPIRICAL BASELINE EVALUATION (B0, B1, B2, B3)")
     print(f"Timestamp: {datetime.now(timezone.utc).isoformat()}")
@@ -712,6 +724,7 @@ if __name__ == "__main__":
     parser.add_argument("--output", "-o", type=str, default=None, help="Custom output JSON path for benchmark results")
     parser.add_argument("--dry-run", action="store_true", default=False, help="Compute metrics without writing artifact to disk")
     parser.add_argument("--gateway-url", type=str, default=None, help="Target Gateway API base URL")
+    parser.add_argument("--use-fastembed", action="store_true", help="Opt in to loading the FastEmbed model")
     args = parser.parse_args()
 
     run_benchmark(
@@ -719,4 +732,5 @@ if __name__ == "__main__":
         dry_run=args.dry_run,
         require_live=args.require_live,
         gateway_url=args.gateway_url,
+        use_fastembed=args.use_fastembed,
     )
