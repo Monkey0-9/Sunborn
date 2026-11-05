@@ -2201,10 +2201,12 @@ dependencies = [
  "aes-gcm",
  "hex",
  "regex",
+ "reqwest",
  "serde",
  "serde_json",
  "sha2",
  "sunborn-core",
+ "tokio",
  "tracing",
  "zeroize",
 ]

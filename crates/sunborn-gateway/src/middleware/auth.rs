@@ -58,9 +58,10 @@ impl SecurityContext {
         registry: &ApiKeyRegistry,
     ) -> Result<(), &'static str> {
         self.require_admin()?;
+        let is_prod = sunborn_core::is_production_mode();
         let quorum_enforced = std::env::var("SUNBORN_ADMIN_QUORUM_REQUIRED")
             .map(|v| v.to_lowercase() == "true" || v == "1")
-            .unwrap_or(false);
+            .unwrap_or(is_prod); // Defaults to true in production mode!
 
         if !quorum_enforced {
             return Ok(());
@@ -150,6 +151,43 @@ impl ApiKeyRegistry {
             expires_at,
         };
         self.credentials.write().unwrap().insert(hash, cred);
+    }
+
+    /// Registers a pre-constructed ApiCredential directly into memory.
+    pub fn register_credential(&self, cred: ApiCredential) {
+        self.credentials.write().unwrap().insert(cred.key_hash.clone(), cred);
+    }
+
+    /// Revokes an API credential by its raw key string.
+    pub fn revoke_key(&self, raw_key: &str) -> bool {
+        let hash = Self::hash_key(raw_key);
+        self.revoke_key_hash(&hash)
+    }
+
+    /// Revokes an API credential by its SHA256 key hash.
+    pub fn revoke_key_hash(&self, key_hash: &str) -> bool {
+        let mut guard = self.credentials.write().unwrap();
+        guard.remove(key_hash).is_some()
+    }
+
+    /// Revokes all API credentials belonging to a specified tenant.
+    pub fn revoke_tenant_keys(&self, tenant_id: &TenantId) -> usize {
+        let mut guard = self.credentials.write().unwrap();
+        let before = guard.len();
+        guard.retain(|_, cred| cred.tenant_id != *tenant_id);
+        before - guard.len()
+    }
+
+    /// Returns true if the registry contains an active credential with the given hash.
+    pub fn contains_key_hash(&self, key_hash: &str) -> bool {
+        let guard = self.credentials.read().unwrap();
+        guard.contains_key(key_hash)
+    }
+
+    /// Returns the total number of registered credentials currently in memory.
+    pub fn key_count(&self) -> usize {
+        let guard = self.credentials.read().unwrap();
+        guard.len()
     }
 
     pub fn validate_key(&self, raw_key: &str) -> Option<ApiCredential> {
@@ -332,12 +370,8 @@ static GLOBAL_REGISTRY: std::sync::OnceLock<ApiKeyRegistry> = std::sync::OnceLoc
 pub fn get_global_registry() -> &'static ApiKeyRegistry {
     GLOBAL_REGISTRY.get_or_init(|| {
         let registry = ApiKeyRegistry::new();
-        let is_prod = std::env::var("SUNBORN_ENV")
-            .map(|v| v.to_lowercase() == "production")
-            .unwrap_or(false);
-        let allow_fixtures = std::env::var("SUNBORN_ALLOW_TEST_FIXTURES")
-            .map(|v| v.to_lowercase() == "true" || v == "1")
-            .unwrap_or(false);
+        let is_prod = sunborn_core::is_production_mode();
+        let allow_fixtures = sunborn_core::allow_test_fixtures();
 
         // Fail-closed security rule: Never seed test credentials in production.
         // In release builds, require explicit SUNBORN_ALLOW_TEST_FIXTURES=true.

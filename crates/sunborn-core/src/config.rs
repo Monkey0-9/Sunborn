@@ -94,6 +94,29 @@ pub fn parse_bool_env(key: &str, default: bool) -> crate::error::Result<bool> {
     }
 }
 
+/// Canonical production environment check across all components.
+/// Strictly recognizes "production" and "prod" in either `SUNBORN_ENV` or `ENVIRONMENT`.
+pub fn is_production_mode() -> bool {
+    let check = |key: &str| {
+        std::env::var(key)
+            .map(|v| {
+                let s = v.trim().to_lowercase();
+                s == "production" || s == "prod"
+            })
+            .unwrap_or(false)
+    };
+    check("SUNBORN_ENV") || check("ENVIRONMENT")
+}
+
+/// Determines whether test fixtures are permitted.
+/// Unconditionally returns `false` in production mode.
+pub fn allow_test_fixtures() -> bool {
+    if is_production_mode() {
+        return false;
+    }
+    parse_bool_env("SUNBORN_ALLOW_TEST_FIXTURES", false).unwrap_or(false)
+}
+
 impl AppConfig {
     pub fn try_load_from_env() -> crate::error::Result<Self> {
         let _ = dotenvy::dotenv();

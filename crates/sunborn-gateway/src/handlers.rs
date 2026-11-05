@@ -18,7 +18,7 @@ use sunborn_core::{
     TenantId,
 };
 use sunborn_execution::ExecutionCacheStore;
-use sunborn_identity::IdentityEngine;
+use sunborn_identity::{EncryptedEnvelope, IdentityEngine};
 use sunborn_invalidation::InvalidationEvent;
 use sunborn_semantic::{EmbeddingProvider, VectorEntry, VectorStore};
 use uuid::Uuid;
@@ -47,9 +47,7 @@ pub async fn ready(State(state): State<AppState>) -> impl IntoResponse {
     let llm_res = state.origin_provider.health_check().await;
     let embed_res = state.selected_embedder.health_check().await;
 
-    let is_prod = std::env::var("SUNBORN_ENV")
-        .map(|v| v.to_lowercase() == "production")
-        .unwrap_or(false);
+    let is_prod = sunborn_core::is_production_mode();
 
     let cache_ok = cache_res.is_ok();
     let db_ok = db_res.is_ok();
@@ -70,11 +68,11 @@ pub async fn ready(State(state): State<AppState>) -> impl IntoResponse {
         "components": {
             "cache": {
                 "status": if cache_ok { "connected" } else { "unavailable" },
-                "error": cache_res.err().map(|e| e.to_string())
+                "error": cache_res.err().map(|_| "cache_unavailable".to_string())
             },
             "database": {
                 "status": if db_ok { "connected" } else { "unavailable" },
-                "error": db_res.err().map(|e| e.to_string())
+                "error": db_res.err().map(|_| "database_unavailable".to_string())
             },
             "vector_store": {
                 "status": if vector_ok { "connected" } else { "unavailable" },
@@ -271,6 +269,23 @@ pub async fn execute_request_inner(
             } else {
                 let certificate = Some(cert);
 
+                // Authenticated Decryption on Read Path (ER-001)
+                let content = if let Some(env_val) = cached_entry.metadata.get("encrypted_envelope") {
+                    if let Ok(envelope) = serde_json::from_value::<EncryptedEnvelope>(env_val.clone()) {
+                        match state.crypto_registry.decrypt(&envelope, "cache_admission") {
+                            Ok(plain_bytes) => String::from_utf8(plain_bytes).unwrap_or(cached_entry.content),
+                            Err(err) => {
+                                tracing::warn!(tenant = %req.tenant_id.0, error = %err, "TDEK decryption failed or key shredded -> Rejecting cached entry");
+                                return Err(SunbornError::forbidden(format!("Tenant '{}' key shredded or unprovisioned", req.tenant_id.0)).into());
+                            }
+                        }
+                    } else {
+                        cached_entry.content
+                    }
+                } else {
+                    cached_entry.content
+                };
+
                 return Ok(ResponseEnvelope {
                     request_id: req.request_id,
                     tenant_id: req.tenant_id,
@@ -285,7 +300,7 @@ pub async fn execute_request_inner(
                         policy_version: Some(state.learning_controller.get_active_policy_version()),
                         policy_id: Some(state.learning_controller.get_active_policy_id()),
                     },
-                    content: cached_entry.content,
+                    content,
                     cached: true,
                     cache_key: Some(identity.key),
                     created_at: Utc::now(),
@@ -442,19 +457,51 @@ pub async fn execute_request_inner(
             &state.learning_hmac_secret,
         );
 
+        // Authenticated Encryption on Write Path (ER-001)
+        let maybe_envelope = if state.crypto_registry.is_active(&req.tenant_id) {
+            match state.crypto_registry.encrypt(&req.tenant_id, origin_content.as_bytes(), "cache_admission") {
+                Ok(env) => Some(env),
+                Err(err) => {
+                    tracing::warn!(tenant = %req.tenant_id.0, error = %err, "TDEK encryption failed on admission");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        let (stored_content, envelope_meta) = if let Some(ref env) = maybe_envelope {
+            (
+                format!("sunborn:enc:v1:{}", hex::encode(&env.ciphertext)),
+                serde_json::to_value(env).ok(),
+            )
+        } else {
+            (origin_content.clone(), None)
+        };
+
         // a) Save in exact cache with embedded certificate metadata
         let mut entry = CacheEntry::new(
             &identity.key,
-            &origin_content,
+            &stored_content,
             Some(state.config.cache.default_ttl_secs),
         );
         if let Ok(cert_val) = serde_json::to_value(&admission_cert) {
             entry.metadata["certificate"] = cert_val;
         }
+        if let Some(ref env_val) = envelope_meta {
+            entry.metadata["encrypted_envelope"] = env_val.clone();
+        }
         let _ = state.cache.set(entry).await;
 
         // b) Admit into semantic vector store
         if let Ok(vector) = state.selected_embedder.embed(&req.prompt).await {
+            let mut meta = serde_json::json!({
+                "model": req.model,
+                "certificate": serde_json::to_value(&admission_cert).unwrap_or_default(),
+            });
+            if let Some(ref env_val) = envelope_meta {
+                meta["encrypted_envelope"] = env_val.clone();
+            }
             let _ = state
                 .vector_store
                 .insert(VectorEntry {
@@ -462,12 +509,9 @@ pub async fn execute_request_inner(
                     tenant_id: req.tenant_id.clone(),
                     application_id: req.application_id.clone(),
                     prompt: req.prompt.clone(),
-                    content: origin_content.clone(),
+                    content: stored_content.clone(),
                     vector,
-                    metadata: serde_json::json!({
-                        "model": req.model,
-                        "certificate": serde_json::to_value(&admission_cert).unwrap_or_default(),
-                    }),
+                    metadata: meta,
                     created_at: Utc::now(),
                 })
                 .await;
@@ -484,7 +528,7 @@ pub async fn execute_request_inner(
                 policy_version: "v1".to_string(),
                 hash: identity.hash.clone(),
                 prompt_canonical: req.prompt.clone(),
-                content: origin_content.clone(),
+                content: stored_content.clone(),
                 hit_count: 0,
                 created_at: Utc::now(),
                 expires_at: Some(
@@ -502,9 +546,7 @@ pub async fn execute_request_inner(
                 error = %e,
                 "Authoritative database persistence failed on cache admission"
             );
-            let is_prod = std::env::var("SUNBORN_ENV")
-                .map(|v| v.to_lowercase() == "production")
-                .unwrap_or(false);
+            let is_prod = sunborn_core::is_production_mode();
             if is_prod && state.config.cache.strict_durability {
                 return Err(SunbornError::database(format!(
                     "Strict durability violation: failed to persist authoritative cache entry to database: {e}"
@@ -1189,27 +1231,55 @@ pub async fn verify_multi_store_erasure_integrity(
     tenant_id: &str,
 ) -> (bool, ErasureResidualCounts) {
     let tenant = TenantId::new(tenant_id);
-    let db_res = state.db.count_tenant_entries(tenant_id).await.unwrap_or(0);
+    let mut verification_failed = false;
+
+    let db_res = match state.db.count_tenant_entries(tenant_id).await {
+        Ok(count) => count,
+        Err(err) => {
+            tracing::error!(tenant = %tenant_id, error = %err, "Database count check failed during erasure verification");
+            verification_failed = true;
+            1
+        }
+    };
 
     let prefix_sunborn = format!("sunborn:{}:", tenant_id);
     let prefix_legacy = format!("tenant:{}:", tenant_id);
-    let exact_res = state
-        .cache
-        .count_by_prefix(&prefix_sunborn)
-        .await
-        .unwrap_or(0)
-        + state
-            .cache
-            .count_by_prefix(&prefix_legacy)
-            .await
-            .unwrap_or(0);
+    let exact_res_1 = match state.cache.count_by_prefix(&prefix_sunborn).await {
+        Ok(count) => count,
+        Err(err) => {
+            tracing::error!(tenant = %tenant_id, error = %err, "Cache prefix check failed during erasure verification");
+            verification_failed = true;
+            1
+        }
+    };
+    let exact_res_2 = match state.cache.count_by_prefix(&prefix_legacy).await {
+        Ok(count) => count,
+        Err(err) => {
+            tracing::error!(tenant = %tenant_id, error = %err, "Legacy cache prefix check failed during erasure verification");
+            verification_failed = true;
+            1
+        }
+    };
+    let exact_res = exact_res_1 + exact_res_2;
 
-    let vector_res = state.vector_store.count(&tenant).await.unwrap_or(0);
-    let execution_res = state
-        .execution_store
-        .count_by_tenant(&tenant)
-        .await
-        .unwrap_or(0);
+    let vector_res = match state.vector_store.count(&tenant).await {
+        Ok(count) => count,
+        Err(err) => {
+            tracing::error!(tenant = %tenant_id, error = %err, "Vector store count check failed during erasure verification");
+            verification_failed = true;
+            1
+        }
+    };
+
+    let execution_res = match state.execution_store.count_by_tenant(&tenant).await {
+        Ok(count) => count,
+        Err(err) => {
+            tracing::error!(tenant = %tenant_id, error = %err, "Execution store count check failed during erasure verification");
+            verification_failed = true;
+            1
+        }
+    };
+
     let learning_res = state.learning_store.tenant_event_count(&tenant);
 
     let residuals = ErasureResidualCounts {
@@ -1220,14 +1290,19 @@ pub async fn verify_multi_store_erasure_integrity(
         learning_store: learning_res,
     };
 
-    let all_zero =
-        db_res == 0 && exact_res == 0 && vector_res == 0 && execution_res == 0 && learning_res == 0;
+    let all_zero = !verification_failed
+        && db_res == 0
+        && exact_res == 0
+        && vector_res == 0
+        && execution_res == 0
+        && learning_res == 0;
 
     if !all_zero {
         tracing::warn!(
             tenant = %tenant_id,
             ?residuals,
-            "Multi-store erasure integrity verification FAILED: residual records found"
+            verification_failed,
+            "Multi-store erasure integrity verification FAILED: residual records or check errors found"
         );
     } else {
         tracing::info!(
@@ -1291,6 +1366,7 @@ pub async fn delete_tenant(
         .await
         .map_err(AppError::from)?;
     let learning_deleted = state.learning_store.purge_tenant(&tenant);
+    let _credentials_revoked = state.api_key_registry.revoke_tenant_keys(&tenant);
 
     // 1. Independent Read-After-Delete Verification Pass
     let (verified_erasure, residuals) =
@@ -1568,6 +1644,7 @@ pub async fn crypto_shred_tenant(
         .await
         .map_err(AppError::from)?;
     let learning_deleted = state.learning_store.purge_tenant(&tenant);
+    let _credentials_revoked = state.api_key_registry.revoke_tenant_keys(&tenant);
 
     // Independent Read-After-Delete Verification Pass
     let (verified_erasure, residuals) =
@@ -1933,6 +2010,241 @@ pub async fn login(headers: axum::http::HeaderMap, Json(payload): Json<LoginRequ
         .into_response();
     attach_rate_limit_headers(&mut resp, &status);
     resp
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateCredentialRequest {
+    pub tenant_id: String,
+    pub application_id: String,
+    #[serde(default)]
+    pub raw_key: Option<String>,
+    #[serde(default = "default_allowed_models")]
+    pub allowed_models: Vec<String>,
+    #[serde(default)]
+    pub is_admin: bool,
+    #[serde(default = "default_rate_limit")]
+    pub rate_limit_rps: i32,
+    #[serde(default)]
+    pub expires_in_secs: Option<u64>,
+}
+
+fn default_allowed_models() -> Vec<String> {
+    vec!["*".to_string()]
+}
+
+fn default_rate_limit() -> i32 {
+    100
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RevokeCredentialRequest {
+    #[serde(default)]
+    pub key_hash: Option<String>,
+    #[serde(default)]
+    pub raw_key: Option<String>,
+    #[serde(default)]
+    pub tenant_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RotateCredentialRequest {
+    #[serde(default)]
+    pub old_key_hash: Option<String>,
+    #[serde(default)]
+    pub old_raw_key: Option<String>,
+    pub tenant_id: String,
+    pub application_id: String,
+    #[serde(default)]
+    pub new_raw_key: Option<String>,
+    #[serde(default = "default_allowed_models")]
+    pub allowed_models: Vec<String>,
+    #[serde(default)]
+    pub is_admin: bool,
+    #[serde(default = "default_rate_limit")]
+    pub rate_limit_rps: i32,
+    #[serde(default)]
+    pub expires_in_secs: Option<u64>,
+}
+
+pub async fn create_api_credential(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    headers: axum::http::HeaderMap,
+    Json(payload): Json<CreateCredentialRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let quorum_key = headers
+        .get("x-quorum-admin-key")
+        .and_then(|v| v.to_str().ok());
+    sec_ctx
+        .require_admin_quorum(quorum_key, &state.api_key_registry)
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
+    let raw_key = payload.raw_key.unwrap_or_else(|| {
+        format!("sb_live_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
+    });
+    let key_hash = crate::middleware::auth::ApiKeyRegistry::hash_key(&raw_key);
+    let expires_at = payload
+        .expires_in_secs
+        .map(|s| Utc::now() + chrono::Duration::seconds(s as i64));
+
+    let new_rec = sunborn_db::NewApiCredentialRecord {
+        key_hash: key_hash.clone(),
+        tenant_id: payload.tenant_id.clone(),
+        application_id: payload.application_id.clone(),
+        rate_limit_rps: payload.rate_limit_rps,
+        allowed_models: payload.allowed_models.clone(),
+        is_admin: payload.is_admin,
+        expires_at,
+    };
+    state
+        .postgres_db
+        .persist_api_credential(&new_rec)
+        .await
+        .map_err(AppError::from)?;
+
+    state.api_key_registry.register_credential(crate::middleware::auth::ApiCredential {
+        tenant_id: TenantId::new(&payload.tenant_id),
+        application_id: sunborn_core::ApplicationId::new(&payload.application_id),
+        key_hash: key_hash.clone(),
+        rate_limit_rps: payload.rate_limit_rps as u32,
+        allowed_models: payload.allowed_models,
+        is_admin: payload.is_admin,
+        expires_at,
+    });
+
+    Ok(Json(json!({
+        "status": "created",
+        "raw_key": raw_key,
+        "key_hash": key_hash,
+        "tenant_id": payload.tenant_id,
+        "application_id": payload.application_id,
+        "is_admin": payload.is_admin,
+        "expires_at": expires_at,
+    })))
+}
+
+pub async fn revoke_api_credential(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    headers: axum::http::HeaderMap,
+    Json(payload): Json<RevokeCredentialRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let quorum_key = headers
+        .get("x-quorum-admin-key")
+        .and_then(|v| v.to_str().ok());
+    sec_ctx
+        .require_admin_quorum(quorum_key, &state.api_key_registry)
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
+    if let Some(tenant_id) = payload.tenant_id {
+        let tid = TenantId::new(&tenant_id);
+        let revoked_in_mem = state.api_key_registry.revoke_tenant_keys(&tid);
+        let _ = state.db.delete_tenant_data(&tenant_id).await;
+        return Ok(Json(json!({
+            "status": "revoked_tenant_credentials",
+            "tenant_id": tenant_id,
+            "revoked_count": revoked_in_mem
+        })));
+    }
+
+    let key_hash = if let Some(hash) = payload.key_hash {
+        hash
+    } else if let Some(raw) = payload.raw_key {
+        crate::middleware::auth::ApiKeyRegistry::hash_key(&raw)
+    } else {
+        return Err(AppError::from(SunbornError::invalid_payload(
+            "Either key_hash, raw_key, or tenant_id must be provided to revoke credential",
+        )));
+    };
+
+    let removed_from_mem = state.api_key_registry.revoke_key_hash(&key_hash);
+    state
+        .postgres_db
+        .revoke_api_credential(&key_hash)
+        .await
+        .map_err(AppError::from)?;
+
+    Ok(Json(json!({
+        "status": "revoked",
+        "key_hash": key_hash,
+        "revoked_from_memory": removed_from_mem,
+    })))
+}
+
+pub async fn rotate_api_credential(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    headers: axum::http::HeaderMap,
+    Json(payload): Json<RotateCredentialRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let quorum_key = headers
+        .get("x-quorum-admin-key")
+        .and_then(|v| v.to_str().ok());
+    sec_ctx
+        .require_admin_quorum(quorum_key, &state.api_key_registry)
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
+    let old_hash = if let Some(hash) = payload.old_key_hash {
+        hash
+    } else if let Some(raw) = payload.old_raw_key {
+        crate::middleware::auth::ApiKeyRegistry::hash_key(&raw)
+    } else {
+        return Err(AppError::from(SunbornError::invalid_payload(
+            "Either old_key_hash or old_raw_key must be provided for rotation",
+        )));
+    };
+
+    // 1. Revoke old credential in-memory and in durable storage
+    state.api_key_registry.revoke_key_hash(&old_hash);
+    state
+        .postgres_db
+        .revoke_api_credential(&old_hash)
+        .await
+        .map_err(AppError::from)?;
+
+    // 2. Issue new credential
+    let new_raw = payload.new_raw_key.unwrap_or_else(|| {
+        format!("sb_live_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
+    });
+    let new_hash = crate::middleware::auth::ApiKeyRegistry::hash_key(&new_raw);
+    let expires_at = payload
+        .expires_in_secs
+        .map(|s| Utc::now() + chrono::Duration::seconds(s as i64));
+
+    let new_rec = sunborn_db::NewApiCredentialRecord {
+        key_hash: new_hash.clone(),
+        tenant_id: payload.tenant_id.clone(),
+        application_id: payload.application_id.clone(),
+        rate_limit_rps: payload.rate_limit_rps,
+        allowed_models: payload.allowed_models.clone(),
+        is_admin: payload.is_admin,
+        expires_at,
+    };
+    state
+        .postgres_db
+        .persist_api_credential(&new_rec)
+        .await
+        .map_err(AppError::from)?;
+
+    state.api_key_registry.register_credential(crate::middleware::auth::ApiCredential {
+        tenant_id: TenantId::new(&payload.tenant_id),
+        application_id: sunborn_core::ApplicationId::new(&payload.application_id),
+        key_hash: new_hash.clone(),
+        rate_limit_rps: payload.rate_limit_rps as u32,
+        allowed_models: payload.allowed_models,
+        is_admin: payload.is_admin,
+        expires_at,
+    });
+
+    Ok(Json(json!({
+        "status": "rotated",
+        "old_key_hash": old_hash,
+        "new_raw_key": new_raw,
+        "new_key_hash": new_hash,
+        "tenant_id": payload.tenant_id,
+        "application_id": payload.application_id,
+        "expires_at": expires_at,
+    })))
 }
 
 pub struct AppError(SunbornError);

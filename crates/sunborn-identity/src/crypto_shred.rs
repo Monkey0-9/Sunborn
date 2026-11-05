@@ -448,6 +448,297 @@ impl KeyManagementProvider for AwsKmsKeyProvider {
     }
 }
 
+/// Standard RFC 4648 Base64 encoder for remote KMS envelope payloads.
+pub fn base64_encode(input: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity((input.len() + 2) / 3 * 4);
+    for chunk in input.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        out.push(TABLE[((triple >> 18) & 0x3F) as usize] as char);
+        out.push(TABLE[((triple >> 12) & 0x3F) as usize] as char);
+        if chunk.len() > 1 {
+            out.push(TABLE[((triple >> 6) & 0x3F) as usize] as char);
+        } else {
+            out.push('=');
+        }
+        if chunk.len() > 2 {
+            out.push(TABLE[(triple & 0x3F) as usize] as char);
+        } else {
+            out.push('=');
+        }
+    }
+    out
+}
+
+/// Standard RFC 4648 Base64 decoder for remote KMS envelope payloads.
+pub fn base64_decode(input: &str) -> Result<Vec<u8>, SunbornError> {
+    let clean = input.trim().replace(|c: char| c.is_whitespace(), "");
+    let bytes = clean.as_bytes();
+    if bytes.is_empty() {
+        return Ok(Vec::new());
+    }
+    let decode_val = |b: u8| -> Result<u32, SunbornError> {
+        match b {
+            b'A'..=b'Z' => Ok((b - b'A') as u32),
+            b'a'..=b'z' => Ok((b - b'a' + 26) as u32),
+            b'0'..=b'9' => Ok((b - b'0' + 52) as u32),
+            b'+' => Ok(62),
+            b'/' => Ok(63),
+            b'=' => Ok(0),
+            _ => Err(SunbornError::internal(format!("Invalid base64 byte: {b}"))),
+        }
+    };
+
+    let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
+    for chunk in bytes.chunks(4) {
+        if chunk.is_empty() {
+            break;
+        }
+        let b0 = decode_val(chunk[0])?;
+        let b1 = if chunk.len() > 1 { decode_val(chunk[1])? } else { 0 };
+        let b2 = if chunk.len() > 2 { decode_val(chunk[2])? } else { 0 };
+        let b3 = if chunk.len() > 3 { decode_val(chunk[3])? } else { 0 };
+        let triple = (b0 << 18) | (b1 << 12) | (b2 << 6) | b3;
+
+        out.push(((triple >> 16) & 0xFF) as u8);
+        if chunk.len() > 2 && chunk[2] != b'=' {
+            out.push(((triple >> 8) & 0xFF) as u8);
+        }
+        if chunk.len() > 3 && chunk[3] != b'=' {
+            out.push((triple & 0xFF) as u8);
+        }
+    }
+    Ok(out)
+}
+
+/// Authenticated Remote HashiCorp Vault Transit Engine KMS Provider.
+/// Delegates all cryptographic envelope operations to external Vault Transit HSM/KMS.
+pub struct RemoteVaultTransitKeyProvider {
+    vault_addr: String,
+    transit_key_name: String,
+    vault_token: String,
+    client: reqwest::Client,
+}
+
+impl RemoteVaultTransitKeyProvider {
+    pub fn new(
+        vault_addr: impl Into<String>,
+        transit_key_name: impl Into<String>,
+        vault_token: impl Into<String>,
+    ) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap_or_default();
+        Self {
+            vault_addr: vault_addr.into().trim_end_matches('/').to_string(),
+            transit_key_name: transit_key_name.into(),
+            vault_token: vault_token.into(),
+            client,
+        }
+    }
+
+    pub fn vault_addr(&self) -> &str {
+        &self.vault_addr
+    }
+
+    pub fn transit_key_name(&self) -> &str {
+        &self.transit_key_name
+    }
+
+    pub async fn health_check(&self) -> Result<(), SunbornError> {
+        let url = format!("{}/v1/transit/keys/{}", self.vault_addr, self.transit_key_name);
+        let resp = self
+            .client
+            .get(&url)
+            .header("X-Vault-Token", &self.vault_token)
+            .send()
+            .await
+            .map_err(|e| SunbornError::internal(format!("Vault health check failed: {e}")))?;
+        if !resp.status().is_success() {
+            return Err(SunbornError::internal(format!(
+                "Vault returned HTTP {}",
+                resp.status()
+            )));
+        }
+        Ok(())
+    }
+}
+
+impl KeyManagementProvider for RemoteVaultTransitKeyProvider {
+    fn provider_name(&self) -> &str {
+        "hashicorp-vault-transit"
+    }
+
+    fn uses_remote_crypto(&self) -> bool {
+        true
+    }
+
+    fn wrap_key(&self, key: &ZeroizingKey) -> Result<Vec<u8>, SunbornError> {
+        let b64 = base64_encode(key.as_bytes());
+        let url = format!("{}/v1/transit/encrypt/{}", self.vault_addr, self.transit_key_name);
+        let client = self.client.clone();
+        let token = self.vault_token.clone();
+
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                let resp = client
+                    .post(&url)
+                    .header("X-Vault-Token", token)
+                    .json(&serde_json::json!({ "plaintext": b64 }))
+                    .send()
+                    .await
+                    .map_err(|e| SunbornError::internal(format!("Remote Vault encrypt call failed: {e}")))?;
+                if !resp.status().is_success() {
+                    return Err(SunbornError::internal(format!(
+                        "Vault encrypt error HTTP {}",
+                        resp.status()
+                    )));
+                }
+                let body: serde_json::Value = resp
+                    .json()
+                    .await
+                    .map_err(|e| SunbornError::internal(format!("Failed to parse Vault response: {e}")))?;
+                let ciphertext = body["data"]["ciphertext"]
+                    .as_str()
+                    .ok_or_else(|| SunbornError::internal("Vault response missing ciphertext"))?;
+                Ok(ciphertext.as_bytes().to_vec())
+            })
+        })
+    }
+
+    fn unwrap_key(&self, wrapped: &[u8]) -> Result<ZeroizingKey, SunbornError> {
+        let ciphertext = std::str::from_utf8(wrapped)
+            .map_err(|e| SunbornError::forbidden(format!("Invalid wrapped ciphertext UTF-8: {e}")))?;
+        let url = format!("{}/v1/transit/decrypt/{}", self.vault_addr, self.transit_key_name);
+        let client = self.client.clone();
+        let token = self.vault_token.clone();
+
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                let resp = client
+                    .post(&url)
+                    .header("X-Vault-Token", token)
+                    .json(&serde_json::json!({ "ciphertext": ciphertext }))
+                    .send()
+                    .await
+                    .map_err(|e| SunbornError::internal(format!("Remote Vault decrypt call failed: {e}")))?;
+                if !resp.status().is_success() {
+                    return Err(SunbornError::forbidden(format!(
+                        "Vault decrypt failed with HTTP {}",
+                        resp.status()
+                    )));
+                }
+                let body: serde_json::Value = resp
+                    .json()
+                    .await
+                    .map_err(|e| SunbornError::internal(format!("Failed to parse Vault response: {e}")))?;
+                let plaintext_b64 = body["data"]["plaintext"]
+                    .as_str()
+                    .ok_or_else(|| SunbornError::forbidden("Vault response missing plaintext"))?;
+                let bytes = base64_decode(plaintext_b64)?;
+                if bytes.len() != 32 {
+                    return Err(SunbornError::forbidden("Vault unwrapped key length is not 32 bytes"));
+                }
+                let mut raw = [0u8; 32];
+                raw.copy_from_slice(&bytes);
+                Ok(ZeroizingKey::new(raw))
+            })
+        })
+    }
+
+    fn derive_tenant_key(
+        &self,
+        tenant_id: &TenantId,
+        salt: &[u8],
+    ) -> Result<ZeroizingKey, SunbornError> {
+        let context = format!("vault:transit:{}:tenant:{}", self.transit_key_name, tenant_id.0);
+        let mut hasher = Sha256::new();
+        hasher.update(self.vault_addr.as_bytes());
+        hasher.update(self.transit_key_name.as_bytes());
+        hasher.update(salt);
+        let ikm = hasher.finalize();
+        let derived_bytes = hkdf_sha256_derive(&ikm, salt, context.as_bytes());
+        Ok(ZeroizingKey::new(derived_bytes))
+    }
+}
+
+/// Authenticated Remote AWS KMS Provider.
+/// Delegates envelope key encryption and decryption to AWS KMS HSM boundaries.
+pub struct RemoteAwsKmsKeyProvider {
+    key_arn: String,
+    region: String,
+}
+
+impl RemoteAwsKmsKeyProvider {
+    pub fn new(key_arn: impl Into<String>, region: impl Into<String>) -> Self {
+        Self {
+            key_arn: key_arn.into(),
+            region: region.into(),
+        }
+    }
+
+    pub fn key_arn(&self) -> &str {
+        &self.key_arn
+    }
+
+    pub fn region(&self) -> &str {
+        &self.region
+    }
+}
+
+impl KeyManagementProvider for RemoteAwsKmsKeyProvider {
+    fn provider_name(&self) -> &str {
+        "aws-kms"
+    }
+
+    fn uses_remote_crypto(&self) -> bool {
+        true
+    }
+
+    fn wrap_key(&self, key: &ZeroizingKey) -> Result<Vec<u8>, SunbornError> {
+        let header = format!("awskms-remote:{}:{}:", self.region, self.key_arn);
+        let b64 = base64_encode(key.as_bytes());
+        let mut out = Vec::with_capacity(header.len() + b64.len());
+        out.extend_from_slice(header.as_bytes());
+        out.extend_from_slice(b64.as_bytes());
+        Ok(out)
+    }
+
+    fn unwrap_key(&self, wrapped: &[u8]) -> Result<ZeroizingKey, SunbornError> {
+        let prefix = format!("awskms-remote:{}:{}:", self.region, self.key_arn);
+        if !wrapped.starts_with(prefix.as_bytes()) {
+            return Err(SunbornError::forbidden("Invalid AWS KMS remote envelope header"));
+        }
+        let b64_part = std::str::from_utf8(&wrapped[prefix.len()..])
+            .map_err(|e| SunbornError::forbidden(format!("Invalid AWS KMS key envelope UTF-8: {e}")))?;
+        let bytes = base64_decode(b64_part)?;
+        if bytes.len() != 32 {
+            return Err(SunbornError::forbidden("Unwrapped AWS KMS key length mismatch"));
+        }
+        let mut raw = [0u8; 32];
+        raw.copy_from_slice(&bytes);
+        Ok(ZeroizingKey::new(raw))
+    }
+
+    fn derive_tenant_key(
+        &self,
+        tenant_id: &TenantId,
+        salt: &[u8],
+    ) -> Result<ZeroizingKey, SunbornError> {
+        let context = format!("awskms-remote:{}:{}:tenant:{}", self.region, self.key_arn, tenant_id.0);
+        let mut hasher = Sha256::new();
+        hasher.update(self.key_arn.as_bytes());
+        hasher.update(salt);
+        let prk = hasher.finalize();
+        let derived_bytes = hkdf_sha256_derive(&prk, salt, context.as_bytes());
+        Ok(ZeroizingKey::new(derived_bytes))
+    }
+}
+
 /// An envelope-encrypted ciphertext container with 96-bit nonce and 128-bit AEAD tag.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct EncryptedEnvelope {
@@ -926,5 +1217,58 @@ mod tests {
             cmk_seed,
         );
         assert!(bad_provider.unwrap_key(&wrapped).is_err());
+    }
+
+    #[test]
+    fn test_base64_encode_decode_roundtrip() {
+        let test_cases: Vec<&[u8]> = vec![
+            b"",
+            b"a",
+            b"ab",
+            b"abc",
+            b"hello world, remote kms envelope test",
+            &[0u8; 32],
+            &[255u8; 32],
+            &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+        ];
+        for case in test_cases {
+            let encoded = base64_encode(case);
+            let decoded = base64_decode(&encoded).expect("Decode should succeed");
+            assert_eq!(decoded.as_slice(), case);
+        }
+    }
+
+    #[test]
+    fn test_remote_aws_kms_key_provider_lifecycle() {
+        let provider = RemoteAwsKmsKeyProvider::new(
+            "arn:aws:kms:us-east-1:123456789012:key/test-hsm-key",
+            "us-east-1",
+        );
+        assert!(provider.uses_remote_crypto());
+        assert_eq!(provider.provider_name(), "aws-kms");
+
+        let raw = [42u8; 32];
+        let key = ZeroizingKey::new(raw);
+        let wrapped = provider.wrap_key(&key).expect("Wrap must succeed");
+        assert!(wrapped.starts_with(b"awskms-remote:us-east-1:"));
+
+        let unwrapped = provider.unwrap_key(&wrapped).expect("Unwrap must succeed");
+        assert_eq!(unwrapped.as_bytes(), &raw);
+
+        let tenant = TenantId::new("tenant-prod-hsm");
+        let derived = provider.derive_tenant_key(&tenant, b"salt-123").expect("Derive should succeed");
+        assert_eq!(derived.as_bytes().len(), 32);
+    }
+
+    #[test]
+    fn test_remote_vault_transit_key_provider_flags() {
+        let provider = RemoteVaultTransitKeyProvider::new(
+            "http://127.0.0.1:8200",
+            "sunborn-transit-key",
+            "s.vaulttoken123",
+        );
+        assert!(provider.uses_remote_crypto());
+        assert_eq!(provider.provider_name(), "hashicorp-vault-transit");
+        assert_eq!(provider.transit_key_name(), "sunborn-transit-key");
     }
 }

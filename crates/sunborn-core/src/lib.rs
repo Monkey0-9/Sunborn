@@ -10,7 +10,7 @@ pub use certificate::{
     ReuseCertificate, SafetyEvidenceRecord, SourceVersionSnapshot, ValidityWindow,
 };
 pub use cluster::{CausalityRelation, ClusterSyncDigest, VectorClock};
-pub use config::AppConfig;
+pub use config::{allow_test_fixtures, is_production_mode, AppConfig};
 pub use error::{ErrorCode, Result, SunbornError};
 pub use finops::{FinOpsEngine, ModelPricing, SpendVelocityController};
 pub use model::{

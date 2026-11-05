@@ -10,6 +10,18 @@ use std::time::Duration;
 use sunborn_core::{Result, SunbornError};
 use tokio::sync::RwLock;
 
+pub fn redact_connection_url(url: &str) -> String {
+    if let Some(at_idx) = url.find('@') {
+        if let Some(proto_idx) = url.find("://") {
+            let userinfo_start = proto_idx + 3;
+            if userinfo_start < at_idx {
+                return format!("{}***:***@{}", &url[..userinfo_start], &url[at_idx + 1..]);
+            }
+        }
+    }
+    url.to_string()
+}
+
 /// Production PostgreSQL database store adapter implementing DatabaseStore
 #[derive(Clone)]
 pub struct PostgresDatabaseStore {
@@ -57,13 +69,13 @@ impl PostgresDatabaseStore {
                 Ok(_) => Ok(()),
                 Err(err) => Err(SunbornError::database(format!(
                     "PostgreSQL query check failed at {}: {err}",
-                    self.connection_url
+                    redact_connection_url(&self.connection_url)
                 ))),
             }
         } else {
             Err(SunbornError::database(format!(
                 "Unable to establish connection pool to PostgreSQL at {}",
-                self.connection_url
+                redact_connection_url(&self.connection_url)
             )))
         }
     }
@@ -97,7 +109,7 @@ impl PostgresDatabaseStore {
     }
 
     async fn migrate(&self, pool: &PgPool) -> std::result::Result<(), sqlx::Error> {
-        sqlx::query(
+        sqlx::raw_sql(
             r#"
             CREATE TABLE IF NOT EXISTS tenants (
                 id VARCHAR(128) PRIMARY KEY,
@@ -751,28 +763,49 @@ impl DatabaseStore for PostgresDatabaseStore {
     async fn delete_tenant_data(&self, tenant_id: &str) -> Result<usize> {
         let mut pg_deleted = 0;
         if let Some(pool) = self.get_pool().await {
-            match sqlx::query("DELETE FROM durable_cache_entries WHERE tenant_id = $1")
+            // 1. Delete durable cache entries
+            let cache_res = sqlx::query("DELETE FROM durable_cache_entries WHERE tenant_id = $1")
                 .bind(tenant_id)
                 .execute(&pool)
                 .await
-            {
-                Ok(res) => {
-                    pg_deleted = res.rows_affected() as usize;
-                }
-                Err(err) => {
-                    tracing::error!(error = %err, "PostgreSQL delete_tenant_data failed");
-                    if self.strict_durability {
-                        return Err(sunborn_core::SunbornError::database(format!(
-                            "PostgreSQL delete_tenant_data failed: {}",
-                            err
-                        )));
-                    }
-                }
-            }
-            let _ = sqlx::query("DELETE FROM tenants WHERE id = $1")
+                .map_err(|err| {
+                    tracing::error!(error = %err, "PostgreSQL delete durable_cache_entries failed");
+                    SunbornError::database(format!("PostgreSQL delete durable_cache_entries failed: {err}"))
+                })?;
+            pg_deleted += cache_res.rows_affected() as usize;
+
+            // 2. Delete tenant wrapped keys (cryptographic shredding at rest)
+            let keys_res = sqlx::query("DELETE FROM tenant_wrapped_keys WHERE tenant_id = $1")
                 .bind(tenant_id)
                 .execute(&pool)
-                .await;
+                .await
+                .map_err(|err| {
+                    tracing::error!(error = %err, "PostgreSQL delete tenant_wrapped_keys failed");
+                    SunbornError::database(format!("PostgreSQL delete tenant_wrapped_keys failed: {err}"))
+                })?;
+            pg_deleted += keys_res.rows_affected() as usize;
+
+            // 3. Delete tenant API credentials
+            let creds_res = sqlx::query("DELETE FROM api_credentials WHERE tenant_id = $1")
+                .bind(tenant_id)
+                .execute(&pool)
+                .await
+                .map_err(|err| {
+                    tracing::error!(error = %err, "PostgreSQL delete api_credentials failed");
+                    SunbornError::database(format!("PostgreSQL delete api_credentials failed: {err}"))
+                })?;
+            pg_deleted += creds_res.rows_affected() as usize;
+
+            // 4. Delete tenant root record
+            let tenant_res = sqlx::query("DELETE FROM tenants WHERE id = $1")
+                .bind(tenant_id)
+                .execute(&pool)
+                .await
+                .map_err(|err| {
+                    tracing::error!(error = %err, "PostgreSQL delete tenants failed");
+                    SunbornError::database(format!("PostgreSQL delete tenants failed: {err}"))
+                })?;
+            pg_deleted += tenant_res.rows_affected() as usize;
         } else if self.strict_durability {
             return Err(sunborn_core::SunbornError::database(
                 "PostgreSQL connection pool unavailable; fail-closed durability enforced",
@@ -785,22 +818,49 @@ impl DatabaseStore for PostgresDatabaseStore {
     async fn count_tenant_entries(&self, tenant_id: &str) -> Result<usize> {
         let mut pg_count = 0;
         if let Some(pool) = self.get_pool().await {
-            let cache_res: std::result::Result<(i64,), sqlx::Error> =
+            // Count cache entries
+            let cache_row: (i64,) =
                 sqlx::query_as("SELECT COUNT(*) FROM durable_cache_entries WHERE tenant_id = $1")
                     .bind(tenant_id)
                     .fetch_one(&pool)
-                    .await;
-            if let Ok(cache_rows) = cache_res {
-                pg_count += cache_rows.0 as usize;
-            }
-            let tenant_res: std::result::Result<(i64,), sqlx::Error> =
+                    .await
+                    .map_err(|err| {
+                        SunbornError::database(format!("PostgreSQL count durable_cache_entries failed: {err}"))
+                    })?;
+            pg_count += cache_row.0 as usize;
+
+            // Count tenant records
+            let tenant_row: (i64,) =
                 sqlx::query_as("SELECT COUNT(*) FROM tenants WHERE id = $1")
                     .bind(tenant_id)
                     .fetch_one(&pool)
-                    .await;
-            if let Ok(tenant_rows) = tenant_res {
-                pg_count += tenant_rows.0 as usize;
-            }
+                    .await
+                    .map_err(|err| {
+                        SunbornError::database(format!("PostgreSQL count tenants failed: {err}"))
+                    })?;
+            pg_count += tenant_row.0 as usize;
+
+            // Count wrapped keys
+            let keys_row: (i64,) =
+                sqlx::query_as("SELECT COUNT(*) FROM tenant_wrapped_keys WHERE tenant_id = $1")
+                    .bind(tenant_id)
+                    .fetch_one(&pool)
+                    .await
+                    .map_err(|err| {
+                        SunbornError::database(format!("PostgreSQL count tenant_wrapped_keys failed: {err}"))
+                    })?;
+            pg_count += keys_row.0 as usize;
+
+            // Count active credentials
+            let creds_row: (i64,) =
+                sqlx::query_as("SELECT COUNT(*) FROM api_credentials WHERE tenant_id = $1")
+                    .bind(tenant_id)
+                    .fetch_one(&pool)
+                    .await
+                    .map_err(|err| {
+                        SunbornError::database(format!("PostgreSQL count api_credentials failed: {err}"))
+                    })?;
+            pg_count += creds_row.0 as usize;
         } else if self.strict_durability {
             return Err(sunborn_core::SunbornError::database(
                 "PostgreSQL connection pool unavailable; fail-closed durability enforced",

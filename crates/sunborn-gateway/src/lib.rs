@@ -53,6 +53,15 @@ pub fn create_router(state: AppState) -> Router {
         .route("/ready", get(handlers::ready))
         .route("/metrics", get(handlers::metrics))
         .route("/v1/auth/login", post(handlers::login))
+        .route("/v1/auth/credentials", post(handlers::create_api_credential))
+        .route(
+            "/v1/auth/credentials/revoke",
+            post(handlers::revoke_api_credential),
+        )
+        .route(
+            "/v1/auth/credentials/rotate",
+            post(handlers::rotate_api_credential),
+        )
         .route("/v1/requests", post(handlers::execute_request))
         .route("/v1/chat/completions", post(handlers::chat_completions))
         .route("/v1/messages", post(handlers::anthropic_messages))

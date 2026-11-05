@@ -74,6 +74,10 @@ export default function FinOpsPage() {
   const netSavings = Math.max(0, avoidedTokenSpend - infraOverhead);
   const roiMultiplier = infraOverhead > 0 ? (netSavings / infraOverhead).toFixed(1) : "0";
 
+  // Dynamic Break-Even Calculation (FIN-001)
+  const savingsPerQuery = (cacheHitRatio / 100) * costPerQueryOrigin;
+  const dynamicBreakEven = savingsPerQuery > 0 ? Math.ceil(infraOverhead / savingsPerQuery) : 0;
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -94,8 +98,8 @@ export default function FinOpsPage() {
           <Badge variant="outline" className="font-mono">
             API: GET /v1/finops/report
           </Badge>
-          <Badge variant="success" dot>
-            AUDITED TOKEN ACCOUNTING
+          <Badge variant="cyan" dot>
+            MODELED TOKEN PROJECTIONS
           </Badge>
         </div>
       </div>
@@ -118,7 +122,7 @@ export default function FinOpsPage() {
               <span className="text-emerald-400 font-bold">{formatNumber(liveReport.semanticHits)}</span>
             </div>
             <div>
-              <span className="text-slate-500 mr-1.5">Measured Savings:</span>
+              <span className="text-slate-500 mr-1.5">Modeled Estimate:</span>
               <span className="text-emerald-300 font-bold">{formatCurrency(liveReport.estimatedSavingsUsd)}</span>
             </div>
           </div>
@@ -280,7 +284,7 @@ export default function FinOpsPage() {
                 <span>Financial Impact Breakdown</span>
               </CardTitle>
               <CardDescription>
-                Audited comparison between uncached origin spend and Sunborn caching.
+                Modeled comparison between uncached origin spend and Sunborn caching based on current inputs.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 font-mono text-xs">
@@ -304,10 +308,10 @@ export default function FinOpsPage() {
               <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 space-y-2">
                 <div className="flex items-center gap-2 text-emerald-400 font-bold">
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Break-Even Verified</span>
+                  <span>Calculated Dynamic Break-Even</span>
                 </div>
                 <p className="text-[11px] text-slate-300 leading-relaxed">
-                  Sunborn achieves immediate break-even at only <strong>18,500 requests/month</strong>. At current enterprise volume ({formatNumber(monthlyQueries)} reqs), the platform pays for its annual infrastructure cost in under <strong>4 days</strong>.
+                  Sunborn achieves break-even at approximately <strong>{formatNumber(dynamicBreakEven)} requests/month</strong> with these slider inputs. *Estimates reflect mathematical cost projections, not an audited accounting ledger.
                 </p>
               </div>
             </CardContent>

@@ -239,9 +239,7 @@ impl EmbeddingProvider for HttpEmbeddingProvider {
             }
         }
 
-        let is_prod = std::env::var("SUNBORN_ENV")
-            .map(|v| v.to_lowercase() == "production")
-            .unwrap_or(false);
+        let is_prod = sunborn_core::is_production_mode();
         if is_prod {
             return Err(sunborn_core::SunbornError::embedding(format!(
                 "Upstream HTTP embedding provider at {} failed to generate valid vector; fail-closed abstention enforced in production",

@@ -87,6 +87,18 @@ async function handleProxy(req: NextRequest, context: RouteContext) {
     headers.set("Authorization", `Bearer ${process.env.SUNBORN_READ_ONLY_TOKEN}`);
   }
 
+  // Enforce 10MB request payload size cap (BFF-001)
+  const contentLength = Number(req.headers.get("content-length") || "0");
+  if (contentLength > 10 * 1024 * 1024) {
+    return NextResponse.json(
+      { error: "PAYLOAD_TOO_LARGE", detail: "Request body exceeds maximum permitted 10MB limit." },
+      { status: 413 }
+    );
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60_000);
+
   try {
     let body: BodyInit | undefined = undefined;
     if (["POST", "PUT", "PATCH"].includes(req.method)) {
@@ -98,7 +110,9 @@ async function handleProxy(req: NextRequest, context: RouteContext) {
       headers,
       body,
       cache: "no-store",
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
     const DISALLOWED_RESPONSE_HEADERS = new Set([
       "server",
@@ -119,6 +133,17 @@ async function handleProxy(req: NextRequest, context: RouteContext) {
       }
     });
 
+    const contentType = gatewayRes.headers.get("content-type") || "";
+    const isStream = contentType.includes("text/event-stream") || contentType.includes("application/octet-stream");
+
+    if (isStream && gatewayRes.body) {
+      return new NextResponse(gatewayRes.body as any, {
+        status: gatewayRes.status,
+        statusText: gatewayRes.statusText,
+        headers: responseHeaders,
+      });
+    }
+
     const data = await gatewayRes.arrayBuffer();
     return new NextResponse(data, {
       status: gatewayRes.status,
@@ -126,6 +151,13 @@ async function handleProxy(req: NextRequest, context: RouteContext) {
       headers: responseHeaders,
     });
   } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === "AbortError") {
+      return NextResponse.json(
+        { error: "GATEWAY_TIMEOUT", detail: "Gateway request timed out after 60 seconds." },
+        { status: 504 }
+      );
+    }
     return NextResponse.json(
       {
         error: "GATEWAY_CONNECTION_FAILED",

@@ -5,7 +5,14 @@ import { spawn, execSync } from 'node:child_process';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright';
+
+let chromium = null;
+try {
+  const pw = await import('playwright');
+  chromium = pw.chromium;
+} catch {
+  // Playwright package is not installed in this environment
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,6 +26,12 @@ let nextProcess = null;
 let browser = null;
 
 before(async () => {
+  if (!chromium) {
+    if (process.env.CI === 'true' || process.env.STRICT_E2E === 'true' || process.env.STRICT_E2E === '1') {
+      assert.fail('Fatal E2E error: Playwright is required in CI / STRICT_E2E mode');
+    }
+    return;
+  }
   // Ensure Next.js production build exists
   const buildIdPath = path.join(frontendDir, '.next', 'BUILD_ID');
   if (!fs.existsSync(buildIdPath)) {

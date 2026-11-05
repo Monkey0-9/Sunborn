@@ -229,6 +229,22 @@ export function PlanetScaleStressSimulator() {
 
   return (
     <div className="space-y-8">
+      {/* Persistent Illustrative Simulation Disclaimer (UX-001) */}
+      <div className="rounded-xl border border-blue-500/30 bg-blue-950/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-blue-200">
+        <div className="flex items-center gap-3">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+          </span>
+          <p>
+            <strong>Illustrative Architectural Simulation:</strong> No network traffic is sent and no cluster infrastructure is modified. Calculations reflect client-side mathematical models.
+          </p>
+        </div>
+        <Badge variant="outline" className="font-mono text-[10px] text-blue-300 border-blue-500/40 shrink-0 self-start sm:self-auto">
+          CLIENT-SIDE MATH PROJECTION
+        </Badge>
+      </div>
+
       {/* Header Banner */}
       <div className="rounded-2xl border border-cyan-500/30 bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-950/40 p-6 sm:p-8 backdrop-blur-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 -mt-10 -mr-10 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -237,10 +253,10 @@ export function PlanetScaleStressSimulator() {
           <div className="space-y-3 max-w-3xl">
             <div className="flex flex-wrap items-center gap-2.5">
               <Badge variant="cyan" dot>
-                GLOBAL ENGINEERING AUDIT
+                ARCHITECTURAL CAPACITY MODEL
               </Badge>
               <span className="text-xs font-mono text-cyan-300">
-                260 Top 1% Principal Engineers
+                Notional Architecture Profile
               </span>
               <span className="text-slate-500">·</span>
               <span className="text-xs font-mono text-slate-400">
@@ -252,11 +268,11 @@ export function PlanetScaleStressSimulator() {
               Planet-Scale Stress Simulator & Guild Readiness Matrix
             </h2>
             <p className="text-sm text-slate-300 leading-relaxed">
-              Stress-test Sunborn under extreme production load (up to{" "}
+              Model hypothetical performance under heavy simulated load (up to{" "}
               <strong className="text-cyan-300">1,000,000+ req/s</strong> across multi-region Kubernetes clusters).
               Observe direct comparative behavior between the Baseline single-node reference engine{" "}
               <code className="text-xs bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">b053a5b</code> and the{" "}
-              <strong className="text-emerald-400">260-Engineer Hardened Architecture</strong>.
+              <strong className="text-emerald-400">Hardened Multi-Tier Architecture</strong>.
             </p>
           </div>
 
@@ -287,12 +303,12 @@ export function PlanetScaleStressSimulator() {
               {isStressRunning ? (
                 <>
                   <Flame className="w-4 h-4 text-rose-400 animate-spin" />
-                  <span>CHAOS BURST ACTIVE ({formatNumber(effectiveReqs)} req/s)...</span>
+                  <span>BURST SIMULATION ACTIVE ({formatNumber(effectiveReqs)} req/s)...</span>
                 </>
               ) : (
                 <>
                   <Play className="w-4 h-4 fill-current" />
-                  <span>Execute Chaos Burst (2.4x Spike)</span>
+                  <span>Simulate Workload Burst (2.4x Math Spike)</span>
                 </>
               )}
             </button>

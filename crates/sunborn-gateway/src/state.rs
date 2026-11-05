@@ -170,24 +170,72 @@ impl AppState {
                 arr
             });
 
-        let key_provider_configuration_error = (kms_provider_type != "local-aead").then(|| {
-            format!(
-                "Unsupported SUNBORN_KMS_PROVIDER `{kms_provider_type}`: no remote KMS/HSM adapter is implemented. Use local-aead only for development; production readiness will reject it."
-            )
-        });
-        if key_provider_configuration_error.is_some() {
-            tracing::error!(
-                provider = %kms_provider_type,
-                "Unsupported KMS provider configuration; startup readiness will fail closed"
-            );
-        }
         let local_provider = match master_kek_seed {
             Some(seed) => sunborn_identity::LocalAeadKeyProvider::new(seed),
             None => sunborn_identity::LocalAeadKeyProvider::generate_random()
                 .expect("OS cryptographic entropy is required to initialize local key provider"),
         };
-        let kms_provider: Arc<dyn sunborn_identity::KeyManagementProvider> =
-            Arc::new(local_provider);
+
+        let (kms_provider, key_provider_configuration_error): (
+            Arc<dyn sunborn_identity::KeyManagementProvider>,
+            Option<String>,
+        ) = match kms_provider_type.as_str() {
+            "vault" => {
+                let vault_addr = std::env::var("SUNBORN_VAULT_ADDR")
+                    .or_else(|_| std::env::var("VAULT_ADDR"));
+                let vault_token = std::env::var("SUNBORN_VAULT_TOKEN")
+                    .or_else(|_| std::env::var("VAULT_TOKEN"));
+                let vault_key = std::env::var("SUNBORN_VAULT_KEY_NAME")
+                    .or_else(|_| std::env::var("VAULT_TRANSIT_KEY"))
+                    .unwrap_or_else(|_| "sunborn-tdek".to_string());
+
+                match (vault_addr, vault_token) {
+                    (Ok(addr), Ok(token)) => (
+                        Arc::new(sunborn_identity::RemoteVaultTransitKeyProvider::new(
+                            addr, vault_key, token,
+                        )),
+                        None,
+                    ),
+                    _ => (
+                        Arc::new(local_provider),
+                        Some("SUNBORN_KMS_PROVIDER=vault requires VAULT_ADDR and VAULT_TOKEN environment variables; no remote KMS/HSM adapter is implemented without valid credentials".to_string()),
+                    ),
+                }
+            }
+            "aws-kms" => {
+                let key_arn = std::env::var("SUNBORN_AWS_KMS_KEY_ARN")
+                    .or_else(|_| std::env::var("AWS_KMS_KEY_ARN"));
+                let region = std::env::var("SUNBORN_AWS_REGION")
+                    .or_else(|_| std::env::var("AWS_REGION"))
+                    .unwrap_or_else(|_| "us-east-1".to_string());
+
+                match key_arn {
+                    Ok(arn) => (
+                        Arc::new(sunborn_identity::RemoteAwsKmsKeyProvider::new(arn, region)),
+                        None,
+                    ),
+                    Err(_) => (
+                        Arc::new(local_provider),
+                        Some("SUNBORN_KMS_PROVIDER=aws-kms requires AWS_KMS_KEY_ARN environment variable; no remote KMS/HSM adapter is implemented without credentials".to_string()),
+                    ),
+                }
+            }
+            "local-aead" => (Arc::new(local_provider), None),
+            _ => (
+                Arc::new(local_provider),
+                Some(format!(
+                    "Unsupported SUNBORN_KMS_PROVIDER `{kms_provider_type}`: no remote KMS/HSM adapter is implemented. Use local-aead only for development; production readiness will reject it."
+                )),
+            ),
+        };
+
+        if let Some(ref err) = key_provider_configuration_error {
+            tracing::error!(
+                provider = %kms_provider_type,
+                error = %err,
+                "Unsupported or incomplete KMS provider configuration; startup readiness will fail closed"
+            );
+        }
 
         let crypto_registry = Arc::new(TenantCryptoRegistry::with_provider(kms_provider));
         let _ =
@@ -251,13 +299,7 @@ impl AppState {
         let learning_controller = Arc::new(crate::learning::PolicyPromotionController::default());
         let spend_velocity_controller = Arc::new(sunborn_core::SpendVelocityController::default());
 
-        let is_prod = std::env::var("SUNBORN_ENV")
-            .or_else(|_| std::env::var("ENVIRONMENT"))
-            .map(|v| {
-                let v = v.to_lowercase();
-                v == "production" || v == "prod"
-            })
-            .unwrap_or(false);
+        let is_prod = sunborn_core::is_production_mode();
 
         let learning_hmac_secret: Vec<u8> =
             if let Ok(secret) = std::env::var("SUNBORN_LEARNING_HMAC_SECRET") {
@@ -360,13 +402,7 @@ impl AppState {
     pub async fn verify_production_readiness(&self) -> Result<(), sunborn_core::SunbornError> {
         self.verify_key_provider_configuration()?;
 
-        let is_prod = std::env::var("SUNBORN_ENV")
-            .or_else(|_| std::env::var("ENVIRONMENT"))
-            .map(|v| {
-                let v = v.to_lowercase();
-                v == "production" || v == "prod"
-            })
-            .unwrap_or(false);
+        let is_prod = sunborn_core::is_production_mode();
 
         let cache_backend = std::env::var("SUNBORN_CACHE_BACKEND")
             .unwrap_or_else(|_| self.config.cache.backend.clone());

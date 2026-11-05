@@ -20,13 +20,7 @@ impl DragonflyCacheStore {
     pub fn new(connection_url: impl Into<String>) -> Self {
         let url_str = connection_url.into();
         let client = redis::Client::open(url_str.as_str()).ok();
-        let is_prod = std::env::var("SUNBORN_ENV")
-            .or_else(|_| std::env::var("ENVIRONMENT"))
-            .map(|v| {
-                let v = v.to_lowercase();
-                v == "production" || v == "prod"
-            })
-            .unwrap_or(false);
+        let is_prod = sunborn_core::is_production_mode();
         let strict = match sunborn_core::config::parse_bool_env("SUNBORN_CACHE_STRICT", false) {
             Ok(v) => {
                 v || is_prod

@@ -307,6 +307,120 @@ paths:
         '429':
           description: Too many failed login attempts; IP temporarily locked out
 
+  /v1/auth/credentials:
+    post:
+      summary: Create API Credential
+      description: Provisions and persists an API key for a tenant application. Requires admin authentication and dual-admin quorum.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tenant_id
+                - application_id
+              properties:
+                tenant_id:
+                  type: string
+                application_id:
+                  type: string
+                raw_key:
+                  type: string
+                allowed_models:
+                  type: array
+                  items:
+                    type: string
+                is_admin:
+                  type: boolean
+                rate_limit_rps:
+                  type: integer
+                expires_in_secs:
+                  type: integer
+      responses:
+        '200':
+          description: API credential created and registered
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - admin quorum required
+
+  /v1/auth/credentials/revoke:
+    post:
+      summary: Revoke API Credential
+      description: Revokes an active API credential or all tenant credentials in memory and durable storage. Requires admin quorum.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                key_hash:
+                  type: string
+                raw_key:
+                  type: string
+                tenant_id:
+                  type: string
+      responses:
+        '200':
+          description: API credential revoked successfully
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+  /v1/auth/credentials/rotate:
+    post:
+      summary: Rotate API Credential
+      description: Transactionally revokes an existing credential and provisions a replacement key. Requires admin quorum.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tenant_id
+                - application_id
+              properties:
+                old_key_hash:
+                  type: string
+                old_raw_key:
+                  type: string
+                tenant_id:
+                  type: string
+                application_id:
+                  type: string
+                new_raw_key:
+                  type: string
+                allowed_models:
+                  type: array
+                  items:
+                    type: string
+                is_admin:
+                  type: boolean
+                rate_limit_rps:
+                  type: integer
+                expires_in_secs:
+                  type: integer
+      responses:
+        '200':
+          description: API credential rotated successfully
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
   /v1/requests:
     post:
       summary: Semantic AI Request Execution

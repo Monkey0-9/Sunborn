@@ -183,7 +183,12 @@ export function evaluateProxySecurity(params: {
     return { allowed: true };
   }
 
-  // 4. Deny-by-default for all non-public endpoints regardless of HTTP method
+  // 4. Read-only token allowance for non-privileged GET endpoints (BFF-002)
+  if (telemetryKey && method.toUpperCase() === "GET" && !isPrivilegedRoute(normalizedPath)) {
+    return { allowed: true };
+  }
+
+  // 5. Deny-by-default for all non-public endpoints regardless of HTTP method
   if (!clientCredential) {
     return {
       allowed: false,

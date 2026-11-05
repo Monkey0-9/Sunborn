@@ -213,15 +213,27 @@ def verify_reproduction_certificate(
         return STATUS_INVALID
     print("  [✓] Canonical manifest SHA-256 digest verified.")
 
-    # 3. Raw artifact hash matching
+    # 3. Raw artifact hash matching (with cross-platform CRLF/LF fallback)
     prov = loaded_cert.get("provenance", {})
     with open(bench_path, "rb") as f_b_raw:
-        actual_bench_sha = hashlib.sha256(f_b_raw.read()).hexdigest()
+        bench_bytes = f_b_raw.read()
     with open(manifest_path, "rb") as f_m_raw:
-        actual_manifest_sha = hashlib.sha256(f_m_raw.read()).hexdigest()
+        manifest_bytes = f_m_raw.read()
 
+    actual_bench_sha = hashlib.sha256(bench_bytes).hexdigest()
+    actual_manifest_sha = hashlib.sha256(manifest_bytes).hexdigest()
     expected_bench_sha = prov.get("benchmark_run_sha256")
     expected_manifest_sha = prov.get("run_manifest_sha256")
+
+    if actual_bench_sha != expected_bench_sha:
+        norm_sha = hashlib.sha256(bench_bytes.replace(b"\r\n", b"\n")).hexdigest()
+        if norm_sha == expected_bench_sha:
+            actual_bench_sha = norm_sha
+
+    if actual_manifest_sha != expected_manifest_sha:
+        norm_sha = hashlib.sha256(manifest_bytes.replace(b"\r\n", b"\n")).hexdigest()
+        if norm_sha == expected_manifest_sha:
+            actual_manifest_sha = norm_sha
 
     if not expected_bench_sha or not hmac.compare_digest(actual_bench_sha, expected_bench_sha):
         print(f"FAIL: Benchmark artifact SHA-256 mismatch!\n  Actual  : {actual_bench_sha}\n  Expected: {expected_bench_sha}", file=sys.stderr)

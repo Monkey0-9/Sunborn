@@ -45,6 +45,7 @@ jobs:
         run: npm audit --audit-level=high --omit=dev
 
       - name: Semgrep Static Application Security Testing (SAST)
+        if: always()
         uses: returntocorp/semgrep-action@v1
         with:
           config: >-
@@ -53,4 +54,5 @@ jobs:
             p/owasp-top-ten
 
       - name: Kubernetes Manifest Security & Policy Verification
+        if: always()
         run: python3 scripts/check_k8s_manifests.py
