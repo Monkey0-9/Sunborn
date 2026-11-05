@@ -225,7 +225,7 @@ export default function OverviewPage() {
           </Badge>
         </div>
         <p className="text-xs text-slate-400 font-mono">
-          Dynamic runtime measurements emitted by active gateway ingress workers.
+          Dynamic runtime measurements emitted by active gateway ingress workers (process-local counters displayed; cluster-wide aggregation managed via Prometheus).
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
@@ -241,7 +241,7 @@ export default function OverviewPage() {
               <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Source:</span>
-                  <span className="text-slate-300">Gateway Ingress Counter</span>
+                  <span className="text-slate-300">Gateway Worker (Process-Local)</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Period:</span>

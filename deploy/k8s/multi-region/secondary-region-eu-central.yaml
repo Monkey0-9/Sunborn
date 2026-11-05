@@ -38,9 +38,11 @@ spec:
             - name: SUNBORN_CLUSTER_ROLE
               value: "standby"
             - name: SUNBORN_KMS_PROVIDER
-              value: "local-aead"
+              value: "aws-kms"
             - name: SUNBORN_AWS_REGION
               value: "eu-central-1"
+            - name: SUNBORN_AWS_KMS_KEY_ID
+              value: "arn:aws:kms:eu-central-1:123456789012:key/mrk-sunborn-master-eu-central"
             - name: SUNBORN_CACHE_BACKEND
               value: "dragonfly"
             - name: SUNBORN_DRAGONFLY_URL

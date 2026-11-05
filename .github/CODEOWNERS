@@ -1,0 +1,34 @@
+# Sunborn Code Ownership & Governance Specification
+# Compliance: NIST SSDF SP 800-218 v1.1, ISO/IEC 27001:2022
+# Every change to protected branches requires explicit approval from designated owning specialists.
+
+# Global default owners
+* @Monkey0-9 @sunborn-core-maintainers
+
+# Cryptography, Tenant Identity & Key Management (P0 Surface)
+crates/sunborn-identity/                @sunborn-security-specialists
+crates/sunborn-gateway/src/middleware/auth.rs @sunborn-security-specialists
+crates/sunborn-gateway/tests/adversarial_security_test.rs @sunborn-security-specialists
+crates/sunborn-gateway/tests/quorum_authorization_test.rs @sunborn-security-specialists
+
+# Database, Durability & Migrations (Authoritative System of Record)
+crates/sunborn-db/                      @sunborn-database-specialists
+migrations/                             @sunborn-database-specialists
+
+# Causal Invalidation, DAG Execution & Vector Clocks
+crates/sunborn-invalidation/            @sunborn-distributed-systems
+crates/sunborn-execution/               @sunborn-distributed-systems
+
+# Semantic AI, Conformal Prediction & Research Verification
+crates/sunborn-semantic/                @sunborn-ai-researchers
+research/                               @sunborn-ai-researchers
+
+# Gateway Control Plane, Routers & Handlers
+crates/sunborn-gateway/                 @sunborn-platform-engineers
+
+# Web Application, BFF Proxy & Frontend UI
+frontend/                               @sunborn-frontend-specialists
+
+# Infrastructure, Helm, Kubernetes & CI/CD Pipelines
+deploy/                                 @sunborn-sre-devops
+.github/                                @sunborn-sre-devops

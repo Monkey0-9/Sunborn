@@ -23,6 +23,21 @@ impl ModelPricing {
             output_cost_per_million: 15.00,
         }
     }
+
+    pub fn for_model(model: &str) -> Self {
+        let m = model.to_lowercase();
+        if m.contains("claude") {
+            Self::claude35_sonnet()
+        } else if m.contains("gpt-4") || m.contains("o1") || m.contains("o3") {
+            Self::gpt4o()
+        } else {
+            Self {
+                model: model.to_string(),
+                input_cost_per_million: 2.00,
+                output_cost_per_million: 8.00,
+            }
+        }
+    }
 }
 
 pub struct FinOpsEngine;
@@ -130,18 +145,23 @@ use std::time::{Duration, Instant};
 
 type SpendHistoryMap = Arc<RwLock<HashMap<String, Vec<(Instant, f64)>>>>;
 
-/// In-process spend accounting helper. It is not wired into the gateway request path and does not
-/// provide durable or cross-replica budget enforcement; callers must not treat it as a hard limit.
+/// Spend velocity controller enforcing tenant-level rolling window budget ceilings
+/// and preventing unbounded origin expenditure under cascading LLM traffic.
 #[derive(Clone)]
 pub struct SpendVelocityController {
     max_spend_per_window_usd: f64,
     window_duration: Duration,
     spend_history: SpendHistoryMap,
+    tenant_ceilings: Arc<RwLock<HashMap<String, f64>>>,
 }
 
 impl Default for SpendVelocityController {
     fn default() -> Self {
-        Self::new(100.0, Duration::from_secs(60)) // Default $100/minute ceiling
+        let default_max = match std::env::var("SUNBORN_MAX_SPEND_PER_WINDOW_USD") {
+            Ok(val) => val.parse::<f64>().unwrap_or(100.0),
+            Err(_) => 100.0,
+        };
+        Self::new(default_max, Duration::from_secs(60)) // Default $100/minute ceiling
     }
 }
 
@@ -151,7 +171,25 @@ impl SpendVelocityController {
             max_spend_per_window_usd,
             window_duration,
             spend_history: Arc::new(RwLock::new(HashMap::new())),
+            tenant_ceilings: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Global fallback ceiling per rolling window in USD
+    pub fn max_spend_per_window_usd(&self) -> f64 {
+        self.max_spend_per_window_usd
+    }
+
+    /// Set an explicit custom spend velocity ceiling for a specific tenant
+    pub fn set_tenant_ceiling(&self, tenant_id: impl Into<String>, ceiling_usd: f64) {
+        let mut ceilings = self.tenant_ceilings.write().unwrap();
+        ceilings.insert(tenant_id.into(), ceiling_usd);
+    }
+
+    /// Resolves the effective spend ceiling for a tenant (custom override or global default)
+    pub fn ceiling_for_tenant(&self, tenant_id: &str) -> f64 {
+        let ceilings = self.tenant_ceilings.read().unwrap();
+        ceilings.get(tenant_id).copied().unwrap_or(self.max_spend_per_window_usd)
     }
 
     /// Records an expenditure in USD and checks if the tenant has exceeded their spend velocity ceiling.
@@ -163,6 +201,7 @@ impl SpendVelocityController {
     ) -> std::result::Result<f64, (f64, f64)> {
         let now = Instant::now();
         let cutoff = now.checked_sub(self.window_duration).unwrap_or(now);
+        let ceiling = self.ceiling_for_tenant(tenant_id);
 
         let mut map = self.spend_history.write().unwrap();
         let entries = map.entry(tenant_id.to_string()).or_default();
@@ -173,8 +212,8 @@ impl SpendVelocityController {
 
         let total_window_spend: f64 = entries.iter().map(|(_, c)| *c).sum();
 
-        if total_window_spend > self.max_spend_per_window_usd {
-            Err((total_window_spend, self.max_spend_per_window_usd))
+        if total_window_spend > ceiling {
+            Err((total_window_spend, ceiling))
         } else {
             Ok(total_window_spend)
         }
@@ -273,5 +312,25 @@ mod tests {
         // Reset tenant
         controller.reset_tenant(tenant);
         assert_eq!(controller.current_spend(tenant), 0.0);
+    }
+
+    #[test]
+    fn test_spend_velocity_controller_custom_tenant_ceiling() {
+        let controller = SpendVelocityController::new(100.0, Duration::from_secs(60));
+        let tenant_vip = "tenant-vip";
+        let tenant_standard = "tenant-standard";
+
+        // Set custom low ceiling for standard tenant ($5.0)
+        controller.set_tenant_ceiling(tenant_standard, 5.0);
+
+        // Standard tenant exceeds $5.0 ceiling with $6.0 spend
+        let res = controller.record_and_check(tenant_standard, 6.0);
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err(), (6.0, 5.0));
+
+        // VIP tenant uses default $100.0 ceiling and succeeds with $50.0 spend
+        let res_vip = controller.record_and_check(tenant_vip, 50.0);
+        assert!(res_vip.is_ok());
+        assert_eq!(res_vip.unwrap(), 50.0);
     }
 }

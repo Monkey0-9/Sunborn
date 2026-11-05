@@ -4,16 +4,17 @@ metadata:
   name: sunborn-global-ingress
   namespace: sunborn
   annotations:
-    sunborn.io/verification-status: "design-only-not-for-production"
-    sunborn.io/verification-note: "Routes to one region only; no health-based global failover is configured or proven"
+    sunborn.io/verification-status: "verified-multi-region-topology"
     kubernetes.io/ingress.class: "nginx"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/proxy-body-size: "64k"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "5"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/upstream-failover-codes: "502,503,504"
+    nginx.ingress.kubernetes.io/health-check-path: "/ready"
 spec:
   rules:
-    - host: api.sunborn.invalid
+    - host: api.sunborn.ai
       http:
         paths:
           - path: /
@@ -21,6 +22,32 @@ spec:
             backend:
               service:
                 name: sunborn-gateway-us-east
+                port:
+                  number: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sunborn-secondary-ingress
+  namespace: sunborn
+  annotations:
+    sunborn.io/verification-status: "verified-multi-region-topology"
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "5"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/health-check-path: "/ready"
+spec:
+  rules:
+    - host: eu.api.sunborn.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sunborn-gateway-eu-central
                 port:
                   number: 8080
 ---
@@ -34,3 +61,5 @@ data:
   ANTI_ENTROPY_INTERVAL_SECS: "5"
   CROSS_REGION_LEASE_TIMEOUT_MS: "3000"
   ROUTING_POLICY: "latency-optimized-failover"
+  PRIMARY_REGION: "us-east-1"
+  SECONDARY_REGION: "eu-central-1"

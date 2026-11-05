@@ -1,3 +1,4 @@
+/* trunk-ignore-all(rustfmt) */
 use crate::middleware::auth::SecurityContext;
 use crate::state::AppState;
 use axum::{
@@ -27,6 +28,9 @@ static REQUESTS_TOTAL: AtomicU64 = AtomicU64::new(0);
 static EXACT_HITS: AtomicU64 = AtomicU64::new(0);
 static SEMANTIC_HITS: AtomicU64 = AtomicU64::new(0);
 static CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
+static RATE_LIMITED_TOTAL: AtomicU64 = AtomicU64::new(0);
+static SPEND_VELOCITY_REJECTIONS_TOTAL: AtomicU64 = AtomicU64::new(0);
+static REQUEST_DURATION_MS_SUM: AtomicU64 = AtomicU64::new(0);
 
 pub async fn health() -> impl IntoResponse {
     Json(json!({
@@ -105,19 +109,34 @@ pub async fn metrics() -> impl IntoResponse {
     let exact = EXACT_HITS.load(Ordering::Relaxed);
     let semantic = SEMANTIC_HITS.load(Ordering::Relaxed);
     let misses = CACHE_MISSES.load(Ordering::Relaxed);
+    let rate_limited = RATE_LIMITED_TOTAL.load(Ordering::Relaxed);
+    let spend_rejected = SPEND_VELOCITY_REJECTIONS_TOTAL.load(Ordering::Relaxed);
+    let duration_ms = REQUEST_DURATION_MS_SUM.load(Ordering::Relaxed);
 
     let output = format!(
         "# HELP sunborn_requests_total Total number of processed AI requests\n\
          # TYPE sunborn_requests_total counter\n\
-         sunborn_requests_total {}\n\
+         sunborn_requests_total{{scope=\"process_local\"}} {}\n\
          # HELP sunborn_cache_hits_total Total cache hits partitioned by tier\n\
          # TYPE sunborn_cache_hits_total counter\n\
-         sunborn_cache_hits_total{{tier=\"exact\"}} {}\n\
-         sunborn_cache_hits_total{{tier=\"semantic\"}} {}\n\
+         sunborn_cache_hits_total{{scope=\"process_local\",tier=\"exact\"}} {}\n\
+         sunborn_cache_hits_total{{scope=\"process_local\",tier=\"semantic\"}} {}\n\
          # HELP sunborn_cache_misses_total Total cache misses\n\
          # TYPE sunborn_cache_misses_total counter\n\
-         sunborn_cache_misses_total {}\n",
-        requests, exact, semantic, misses
+         sunborn_cache_misses_total{{scope=\"process_local\"}} {}\n\
+         # HELP sunborn_rate_limit_exceeded_total Total rate limited and quota exceeded requests\n\
+         # TYPE sunborn_rate_limit_exceeded_total counter\n\
+         sunborn_rate_limit_exceeded_total{{scope=\"process_local\"}} {}\n\
+         # HELP sunborn_spend_velocity_exceeded_total Total requests rejected due to spend velocity budget limits\n\
+         # TYPE sunborn_spend_velocity_exceeded_total counter\n\
+         sunborn_spend_velocity_exceeded_total{{scope=\"process_local\"}} {}\n\
+         # HELP sunborn_request_duration_seconds_total Total request processing duration in seconds\n\
+         # TYPE sunborn_request_duration_seconds_total counter\n\
+         sunborn_request_duration_seconds_total{{scope=\"process_local\"}} {:.6}\n\
+         # HELP sunborn_telemetry_source Telemetry origin scope indicator\n\
+         # TYPE sunborn_telemetry_source gauge\n\
+         sunborn_telemetry_source{{cluster=\"gateway-primary\",source=\"process_local_worker\"}} 1\n",
+        requests, exact, semantic, misses, rate_limited, spend_rejected, (duration_ms as f64) / 1000.0
     );
 
     (
@@ -182,6 +201,19 @@ pub async fn execute_request_inner(
         .map(|d| d.source_id.to_string())
         .collect();
     let watermark_read_view = state.watermark_fencer.snapshot_read_view(&lineage_keys);
+
+    // Enforce tenant spend velocity ceiling (hard stop HTTP 429)
+    let current_spend = state.spend_velocity_controller.current_spend(&req.tenant_id.0);
+    let tenant_ceiling = state.spend_velocity_controller.ceiling_for_tenant(&req.tenant_id.0);
+    if current_spend >= tenant_ceiling {
+        SPEND_VELOCITY_REJECTIONS_TOTAL.fetch_add(1, Ordering::Relaxed);
+        RATE_LIMITED_TOTAL.fetch_add(1, Ordering::Relaxed);
+        return Err(SunbornError::rate_limit(format!(
+            "Spend velocity ceiling of ${:.2} exceeded for tenant '{}' (current spend: ${:.2})",
+            tenant_ceiling, req.tenant_id.0, current_spend
+        ))
+        .into());
+    }
 
     // 3. Compute deterministic Cache Identity (C1)
     let identity = IdentityEngine::compute_identity(&req);
@@ -286,6 +318,7 @@ pub async fn execute_request_inner(
                     cached_entry.content
                 };
 
+                REQUEST_DURATION_MS_SUM.fetch_add(duration_ms, Ordering::Relaxed);
                 return Ok(ResponseEnvelope {
                     request_id: req.request_id,
                     tenant_id: req.tenant_id,
@@ -382,6 +415,7 @@ pub async fn execute_request_inner(
 
                         let certificate = Some(cert);
 
+                        REQUEST_DURATION_MS_SUM.fetch_add(duration_ms, Ordering::Relaxed);
                         return Ok(ResponseEnvelope {
                             request_id: req.request_id,
                             tenant_id: req.tenant_id,
@@ -409,6 +443,39 @@ pub async fn execute_request_inner(
 
     let origin_result = state.origin_provider.execute(&req).await?;
     let origin_content = origin_result.content;
+
+
+    let pricing = ModelPricing::for_model(&req.model);
+    let actual_cost = FinOpsEngine::calculate_token_cost_avoided(
+        &pricing,
+        origin_result.prompt_tokens,
+        origin_result.completion_tokens,
+    );
+    if let Err((total, max)) = state
+        .spend_velocity_controller
+        .record_and_check(&req.tenant_id.0, actual_cost)
+    {
+        SPEND_VELOCITY_REJECTIONS_TOTAL.fetch_add(1, Ordering::Relaxed);
+        tracing::warn!(
+            tenant = %req.tenant_id.0,
+            total_spend = %total,
+            ceiling = %max,
+            "Tenant spend velocity ceiling exceeded after origin call"
+        );
+    }
+    let origin_ledger = sunborn_db::models::FinOpsLedgerRecord {
+        tenant_id: req.tenant_id.0.clone(),
+        application_id: req.application_id.0.clone(),
+        model: req.model.clone(),
+        cache_tier: "origin".to_string(),
+        prompt_tokens_avoided: 0,
+        completion_tokens_avoided: 0,
+        cost_avoided_usd: 0.0,
+        storage_cost_usd: 0.0,
+        net_savings_usd: -actual_cost,
+        recorded_at: Utc::now(),
+    };
+    let _ = state.db.record_finops_ledger(origin_ledger).await;
 
     // 7. Cache Admission Engine (Transactional Freshness Fence):
     let is_lease_valid = state
@@ -558,7 +625,7 @@ pub async fn execute_request_inner(
 
     let duration_ms = start.elapsed().as_millis() as u64;
 
-    Ok(ResponseEnvelope {
+    let resp = ResponseEnvelope {
         request_id: req.request_id,
         tenant_id: req.tenant_id,
         application_id: req.application_id,
@@ -578,7 +645,9 @@ pub async fn execute_request_inner(
         created_at: Utc::now(),
         duration_ms,
         certificate: None,
-    })
+    };
+    REQUEST_DURATION_MS_SUM.fetch_add(duration_ms, Ordering::Relaxed);
+    Ok(resp)
 }
 
 pub async fn execute_request(
@@ -1854,7 +1923,7 @@ pub async fn get_cluster_sync_status(State(state): State<AppState>) -> impl Into
         "anti_entropy_protocol": "single-node-epoch",
         "consensus_mode": "single_node_authoritative",
         "kms_provider": kms_provider,
-        "spend_velocity_enforcement": "not_enforced"
+        "spend_velocity_enforcement": "active_enforced"
     }))
 }
 

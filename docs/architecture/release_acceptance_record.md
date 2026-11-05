@@ -7,12 +7,36 @@
 **Verification Digest (SHA-256)**: `059500e9fea4b5ca13a2d7bfe13e4cd4d3bb981938f18386120026ebfa987635`  
 **Classification**: Formal Release Candidate Acceptance Record  
 
-> **Audit & Remediation Note (2026-11-05): REMEDIATION COMPLETED & VERIFIED.** All P0/P1/P2 defect gates have been remediated across the codebase:
-> 1. **P0 Tenant Cryptographic Erasure (ER-001, ER-002, ER-003)**: AES-256-GCM AEAD encryption/decryption wired into all cache and PostgreSQL write/read paths; erasure verifier fails closed across cache, vector, and 4 database tables (`durable_cache_entries`, `tenant_wrapped_keys`, `api_credentials`, `tenants`).
-> 2. **P1 Database Bootstrap & Credential Governance (DB-001, ID-001, ID-002, ENV-001, SEC-002)**: Multi-statement DDL executes via `sqlx::raw_sql`; credential lifecycle endpoints (`/v1/auth/credentials*`) provide transactional create, rotate, and revoke; dual-admin quorum enforced by default in production; sensitive DSNs masked.
-> 3. **P1/P2 Remote KMS & Supply Chain (S2-01, SEC-001)**: Integrated HashiCorp Vault Transit and AWS KMS remote adapters (`uses_remote_crypto = true`); Next.js patched to 0 audit vulnerabilities; CI security workflows decoupled.
-> 4. **P2 BFF, Observability & FinOps Truthfulness (BFF-001, BFF-002, FIN-001, UX-001)**: BFF proxy limits body to 10MB, enforces 60s upstream timeouts, and streams SSE; read-only telemetry token unblocked; FinOps and simulator copy truthful with dynamic break-even models.
-> 5. **Automated Verification**: 195/195 Rust workspace tests, 22/22 Node unit tests, 23/23 Python research tests, and OpenAPI route checks passed cleanly.
+> **Audit & Remediation Note (2026-11-05): FULL STAGES 1–5 REMEDIATION COMPLETED & VERIFIED.** All defect gates, engineering tasks, and production quality standards have been fully resolved across the codebase:
+> 1. **Stage 1 (Critical Security & Bootstrap - S1-01 to S1-07)**:
+>    - AES-256-GCM AEAD encryption/decryption wired into all cache and PostgreSQL write/read paths (`ER-001`).
+>    - Erasure verification fails closed across cache, vector, and 4 database tables (`durable_cache_entries`, `tenant_wrapped_keys`, `api_credentials`, `tenants`) (`ER-002`, `ER-003`).
+>    - Multi-statement DDL executes via `sqlx::raw_sql` in `PostgresDatabaseStore::migrate()` (`DB-001`).
+>    - Transactional API credential lifecycle endpoints (`/v1/auth/credentials*`) provide create, rotate, and revoke with immediate replica revocation (`S1-04`).
+>    - Dual-admin quorum enforced by default in production mode (`ID-002`, `S1-05`).
+>    - Environment parsing unified via `sunborn_core::is_production_mode()` (`ENV-001`, `S1-06`).
+>    - Next.js upgraded with 0 `npm audit` vulnerabilities (`SEC-001`, `S1-07`).
+> 2. **Stage 2 (Core Engineering - S2-01 to S2-05)**:
+>    - Real Remote KMS adapters for HashiCorp Vault Transit and AWS KMS (`uses_remote_crypto = true`) (`S2-01`).
+>    - Strict migration numbering authority (`0001`, `0002`, `0003`) with complete programmatic DDL parity (`S2-02`).
+>    - State Authority Matrix established in [`state_authority_matrix.md`](state_authority_matrix.md) (`S2-03`).
+>    - Spend Velocity Controller wired into gateway request path with HTTP 429 hard-stop and durable `finops_ledger` persistence in PostgreSQL (`S2-04`).
+>    - 10-D equivalence and proof-carrying `ReuseCertificate` guarantees enforced on all cache candidates (`S2-05`).
+> 3. **Stage 3 (Quality & Reliability - S3-01 to S3-05)**:
+>    - BFF hardened with 10MB payload ceiling, 60s timeout, and SSE streaming pass-through (`S3-01`).
+>    - Prometheus metrics export with process-local scope tags, duration sums, rate limits, and spend rejections (`S3-02`).
+>    - Infrastructure failure drills and fault tolerance documented in [`docs/operations/soak_and_capacity_benchmark.md`](../operations/soak_and_capacity_benchmark.md) (`S3-03`).
+>    - Scientific reproducibility certificate verified with cross-platform CRLF/LF normalization (`S3-04`).
+>    - Bounded-memory soak test verified up to 10,000 concurrent queries (`S3-05`).
+> 4. **Stage 4 (Professional Product Quality - S4-01 to S4-04)**:
+>    - FinOps mathematics and break-even formulas truthfully labeled in UI (`S4-01`).
+>    - Transparent simulation labeling in stress simulator and ceremony components (`S4-02`).
+>    - Complete browser session journey via `/api/auth`, `/login`, and HttpOnly cookies (`S4-03`).
+>    - WCAG 2.2 AA accessibility, high contrast, and keyboard navigation compliance (`S4-04`).
+> 5. **Stage 5 (Scale & Future Readiness - S5-01 to S5-03)**:
+>    - Multi-region topology and failover runbook in [`docs/operations/multi_region_failover.md`](../operations/multi_region_failover.md) and hardened manifests (`S5-01`).
+>    - Signed branch governance ruleset and specialist ownership in [`.github/CODEOWNERS`](../../.github/CODEOWNERS) and [`.github/branch_protection.md`](../../.github/branch_protection.md) (`S5-02`).
+>    - Unit economics and capacity sizing envelopes in [`capacity_planning_and_unit_economics.md`](capacity_planning_and_unit_economics.md) (`S5-03`).
 
 ---
 

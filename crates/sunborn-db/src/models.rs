@@ -71,3 +71,17 @@ pub struct NewApiCredentialRecord {
     pub is_admin: bool,
     pub expires_at: Option<DateTime<Utc>>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FinOpsLedgerRecord {
+    pub tenant_id: String,
+    pub application_id: String,
+    pub model: String,
+    pub cache_tier: String,
+    pub prompt_tokens_avoided: i64,
+    pub completion_tokens_avoided: i64,
+    pub cost_avoided_usd: f64,
+    pub storage_cost_usd: f64,
+    pub net_savings_usd: f64,
+    pub recorded_at: DateTime<Utc>,
+}

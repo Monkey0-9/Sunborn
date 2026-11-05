@@ -1,4 +1,4 @@
-use crate::models::{AuditRecord, DurableCacheRecord, OutboxRecord, TenantRecord};
+use crate::models::{AuditRecord, DurableCacheRecord, FinOpsLedgerRecord, OutboxRecord, TenantRecord};
 use async_trait::async_trait;
 use chrono::Utc;
 use std::collections::HashMap;
@@ -17,6 +17,7 @@ pub trait DatabaseStore: Send + Sync {
     async fn fetch_pending_outbox_events(&self, limit: usize) -> Result<Vec<OutboxRecord>>;
     async fn mark_outbox_processed(&self, id: i64) -> Result<()>;
     async fn record_audit_event(&self, audit: AuditRecord) -> Result<()>;
+    async fn record_finops_ledger(&self, record: FinOpsLedgerRecord) -> Result<()>;
     async fn scan_cache_entries(
         &self,
         limit: usize,
@@ -33,6 +34,7 @@ pub struct MemoryDatabaseStore {
     cache_entries: Arc<RwLock<HashMap<String, DurableCacheRecord>>>,
     outbox: Arc<RwLock<Vec<OutboxRecord>>>,
     audits: Arc<RwLock<Vec<AuditRecord>>>,
+    finops_ledger: Arc<RwLock<Vec<FinOpsLedgerRecord>>>,
 }
 
 impl MemoryDatabaseStore {
@@ -42,6 +44,7 @@ impl MemoryDatabaseStore {
             cache_entries: Arc::new(RwLock::new(HashMap::new())),
             outbox: Arc::new(RwLock::new(Vec::new())),
             audits: Arc::new(RwLock::new(Vec::new())),
+            finops_ledger: Arc::new(RwLock::new(Vec::new())),
         }
     }
 }
@@ -107,6 +110,12 @@ impl DatabaseStore for MemoryDatabaseStore {
     async fn record_audit_event(&self, audit: AuditRecord) -> Result<()> {
         let mut audits = self.audits.write().await;
         audits.push(audit);
+        Ok(())
+    }
+
+    async fn record_finops_ledger(&self, record: FinOpsLedgerRecord) -> Result<()> {
+        let mut ledger = self.finops_ledger.write().await;
+        ledger.push(record);
         Ok(())
     }
 

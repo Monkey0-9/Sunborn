@@ -1,6 +1,6 @@
 use crate::models::{
-    AuditRecord, DurableApiCredentialRecord, DurableCacheRecord, NewApiCredentialRecord,
-    OutboxRecord, TenantRecord,
+    AuditRecord, DurableApiCredentialRecord, DurableCacheRecord, FinOpsLedgerRecord,
+    NewApiCredentialRecord, OutboxRecord, TenantRecord,
 };
 use crate::repository::{DatabaseStore, MemoryDatabaseStore};
 use async_trait::async_trait;
@@ -179,6 +179,45 @@ impl PostgresDatabaseStore {
 
             ALTER TABLE api_credentials ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
             ALTER TABLE api_credentials ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
+
+            CREATE TABLE IF NOT EXISTS finops_ledger (
+                id BIGSERIAL PRIMARY KEY,
+                tenant_id VARCHAR(128) NOT NULL,
+                application_id VARCHAR(128) NOT NULL,
+                model VARCHAR(128) NOT NULL,
+                cache_tier VARCHAR(32) NOT NULL,
+                prompt_tokens_avoided BIGINT NOT NULL DEFAULT 0,
+                completion_tokens_avoided BIGINT NOT NULL DEFAULT 0,
+                cost_avoided_usd NUMERIC(12, 6) NOT NULL DEFAULT 0.0,
+                storage_cost_usd NUMERIC(12, 6) NOT NULL DEFAULT 0.0,
+                net_savings_usd NUMERIC(12, 6) NOT NULL DEFAULT 0.0,
+                recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_finops_tenant_time ON finops_ledger(tenant_id, recorded_at DESC);
+
+            CREATE TABLE IF NOT EXISTS prefix_affinity_records (
+                prefix_hash VARCHAR(64) PRIMARY KEY,
+                prefix_text TEXT NOT NULL,
+                matched_tokens INTEGER NOT NULL,
+                affinity_node VARCHAR(128) NOT NULL,
+                access_count BIGINT NOT NULL DEFAULT 1,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                last_hit_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+
+            CREATE TABLE IF NOT EXISTS decision_records (
+                request_id UUID PRIMARY KEY,
+                tenant_id VARCHAR(128) NOT NULL,
+                application_id VARCHAR(128) NOT NULL,
+                action VARCHAR(32) NOT NULL,
+                cache_path VARCHAR(32) NOT NULL,
+                confidence REAL NOT NULL,
+                risk_score REAL NOT NULL,
+                reason_code VARCHAR(64) NOT NULL,
+                latency_saved_ms BIGINT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
             "#,
         )
         .execute(pool)
@@ -676,6 +715,49 @@ impl DatabaseStore for PostgresDatabaseStore {
         }
 
         self.fallback_store.record_audit_event(audit).await
+    }
+
+    async fn record_finops_ledger(&self, record: FinOpsLedgerRecord) -> Result<()> {
+        if let Some(pool) = self.get_pool().await {
+            let res = sqlx::query(
+                "INSERT INTO finops_ledger 
+                 (tenant_id, application_id, model, cache_tier, prompt_tokens_avoided, completion_tokens_avoided, cost_avoided_usd, storage_cost_usd, net_savings_usd, recorded_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+            )
+            .bind(&record.tenant_id)
+            .bind(&record.application_id)
+            .bind(&record.model)
+            .bind(&record.cache_tier)
+            .bind(record.prompt_tokens_avoided)
+            .bind(record.completion_tokens_avoided)
+            .bind(record.cost_avoided_usd)
+            .bind(record.storage_cost_usd)
+            .bind(record.net_savings_usd)
+            .bind(record.recorded_at)
+            .execute(&pool)
+            .await;
+
+            match res {
+                Ok(_) => {
+                    let _ = self.fallback_store.record_finops_ledger(record).await;
+                    return Ok(());
+                }
+                Err(err) => {
+                    tracing::error!(error = %err, "PostgreSQL record_finops_ledger failed");
+                    if self.strict_durability {
+                        return Err(sunborn_core::SunbornError::database(format!(
+                            "PostgreSQL record_finops_ledger failed: {err}"
+                        )));
+                    }
+                }
+            }
+        } else if self.strict_durability {
+            return Err(sunborn_core::SunbornError::database(
+                "PostgreSQL connection pool unavailable; fail-closed durability enforced",
+            ));
+        }
+
+        self.fallback_store.record_finops_ledger(record).await
     }
 
     async fn scan_cache_entries(
