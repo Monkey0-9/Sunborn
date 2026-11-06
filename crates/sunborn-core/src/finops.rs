@@ -189,7 +189,10 @@ impl SpendVelocityController {
     /// Resolves the effective spend ceiling for a tenant (custom override or global default)
     pub fn ceiling_for_tenant(&self, tenant_id: &str) -> f64 {
         let ceilings = self.tenant_ceilings.read().unwrap();
-        ceilings.get(tenant_id).copied().unwrap_or(self.max_spend_per_window_usd)
+        ceilings
+            .get(tenant_id)
+            .copied()
+            .unwrap_or(self.max_spend_per_window_usd)
     }
 
     /// Records an expenditure in USD and checks if the tenant has exceeded their spend velocity ceiling.

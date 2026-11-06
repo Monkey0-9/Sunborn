@@ -451,7 +451,7 @@ impl KeyManagementProvider for AwsKmsKeyProvider {
 /// Standard RFC 4648 Base64 encoder for remote KMS envelope payloads.
 pub fn base64_encode(input: &[u8]) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity((input.len() + 2) / 3 * 4);
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
     for chunk in input.chunks(3) {
         let b0 = chunk[0] as u32;
         let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
@@ -498,9 +498,21 @@ pub fn base64_decode(input: &str) -> Result<Vec<u8>, SunbornError> {
             break;
         }
         let b0 = decode_val(chunk[0])?;
-        let b1 = if chunk.len() > 1 { decode_val(chunk[1])? } else { 0 };
-        let b2 = if chunk.len() > 2 { decode_val(chunk[2])? } else { 0 };
-        let b3 = if chunk.len() > 3 { decode_val(chunk[3])? } else { 0 };
+        let b1 = if chunk.len() > 1 {
+            decode_val(chunk[1])?
+        } else {
+            0
+        };
+        let b2 = if chunk.len() > 2 {
+            decode_val(chunk[2])?
+        } else {
+            0
+        };
+        let b3 = if chunk.len() > 3 {
+            decode_val(chunk[3])?
+        } else {
+            0
+        };
         let triple = (b0 << 18) | (b1 << 12) | (b2 << 6) | b3;
 
         out.push(((triple >> 16) & 0xFF) as u8);
@@ -550,7 +562,10 @@ impl RemoteVaultTransitKeyProvider {
     }
 
     pub async fn health_check(&self) -> Result<(), SunbornError> {
-        let url = format!("{}/v1/transit/keys/{}", self.vault_addr, self.transit_key_name);
+        let url = format!(
+            "{}/v1/transit/keys/{}",
+            self.vault_addr, self.transit_key_name
+        );
         let resp = self
             .client
             .get(&url)
@@ -579,7 +594,10 @@ impl KeyManagementProvider for RemoteVaultTransitKeyProvider {
 
     fn wrap_key(&self, key: &ZeroizingKey) -> Result<Vec<u8>, SunbornError> {
         let b64 = base64_encode(key.as_bytes());
-        let url = format!("{}/v1/transit/encrypt/{}", self.vault_addr, self.transit_key_name);
+        let url = format!(
+            "{}/v1/transit/encrypt/{}",
+            self.vault_addr, self.transit_key_name
+        );
         let client = self.client.clone();
         let token = self.vault_token.clone();
 
@@ -591,17 +609,18 @@ impl KeyManagementProvider for RemoteVaultTransitKeyProvider {
                     .json(&serde_json::json!({ "plaintext": b64 }))
                     .send()
                     .await
-                    .map_err(|e| SunbornError::internal(format!("Remote Vault encrypt call failed: {e}")))?;
+                    .map_err(|e| {
+                        SunbornError::internal(format!("Remote Vault encrypt call failed: {e}"))
+                    })?;
                 if !resp.status().is_success() {
                     return Err(SunbornError::internal(format!(
                         "Vault encrypt error HTTP {}",
                         resp.status()
                     )));
                 }
-                let body: serde_json::Value = resp
-                    .json()
-                    .await
-                    .map_err(|e| SunbornError::internal(format!("Failed to parse Vault response: {e}")))?;
+                let body: serde_json::Value = resp.json().await.map_err(|e| {
+                    SunbornError::internal(format!("Failed to parse Vault response: {e}"))
+                })?;
                 let ciphertext = body["data"]["ciphertext"]
                     .as_str()
                     .ok_or_else(|| SunbornError::internal("Vault response missing ciphertext"))?;
@@ -611,9 +630,13 @@ impl KeyManagementProvider for RemoteVaultTransitKeyProvider {
     }
 
     fn unwrap_key(&self, wrapped: &[u8]) -> Result<ZeroizingKey, SunbornError> {
-        let ciphertext = std::str::from_utf8(wrapped)
-            .map_err(|e| SunbornError::forbidden(format!("Invalid wrapped ciphertext UTF-8: {e}")))?;
-        let url = format!("{}/v1/transit/decrypt/{}", self.vault_addr, self.transit_key_name);
+        let ciphertext = std::str::from_utf8(wrapped).map_err(|e| {
+            SunbornError::forbidden(format!("Invalid wrapped ciphertext UTF-8: {e}"))
+        })?;
+        let url = format!(
+            "{}/v1/transit/decrypt/{}",
+            self.vault_addr, self.transit_key_name
+        );
         let client = self.client.clone();
         let token = self.vault_token.clone();
 
@@ -625,23 +648,26 @@ impl KeyManagementProvider for RemoteVaultTransitKeyProvider {
                     .json(&serde_json::json!({ "ciphertext": ciphertext }))
                     .send()
                     .await
-                    .map_err(|e| SunbornError::internal(format!("Remote Vault decrypt call failed: {e}")))?;
+                    .map_err(|e| {
+                        SunbornError::internal(format!("Remote Vault decrypt call failed: {e}"))
+                    })?;
                 if !resp.status().is_success() {
                     return Err(SunbornError::forbidden(format!(
                         "Vault decrypt failed with HTTP {}",
                         resp.status()
                     )));
                 }
-                let body: serde_json::Value = resp
-                    .json()
-                    .await
-                    .map_err(|e| SunbornError::internal(format!("Failed to parse Vault response: {e}")))?;
+                let body: serde_json::Value = resp.json().await.map_err(|e| {
+                    SunbornError::internal(format!("Failed to parse Vault response: {e}"))
+                })?;
                 let plaintext_b64 = body["data"]["plaintext"]
                     .as_str()
                     .ok_or_else(|| SunbornError::forbidden("Vault response missing plaintext"))?;
                 let bytes = base64_decode(plaintext_b64)?;
                 if bytes.len() != 32 {
-                    return Err(SunbornError::forbidden("Vault unwrapped key length is not 32 bytes"));
+                    return Err(SunbornError::forbidden(
+                        "Vault unwrapped key length is not 32 bytes",
+                    ));
                 }
                 let mut raw = [0u8; 32];
                 raw.copy_from_slice(&bytes);
@@ -655,7 +681,10 @@ impl KeyManagementProvider for RemoteVaultTransitKeyProvider {
         tenant_id: &TenantId,
         salt: &[u8],
     ) -> Result<ZeroizingKey, SunbornError> {
-        let context = format!("vault:transit:{}:tenant:{}", self.transit_key_name, tenant_id.0);
+        let context = format!(
+            "vault:transit:{}:tenant:{}",
+            self.transit_key_name, tenant_id.0
+        );
         let mut hasher = Sha256::new();
         hasher.update(self.vault_addr.as_bytes());
         hasher.update(self.transit_key_name.as_bytes());
@@ -711,13 +740,18 @@ impl KeyManagementProvider for RemoteAwsKmsKeyProvider {
     fn unwrap_key(&self, wrapped: &[u8]) -> Result<ZeroizingKey, SunbornError> {
         let prefix = format!("awskms-remote:{}:{}:", self.region, self.key_arn);
         if !wrapped.starts_with(prefix.as_bytes()) {
-            return Err(SunbornError::forbidden("Invalid AWS KMS remote envelope header"));
+            return Err(SunbornError::forbidden(
+                "Invalid AWS KMS remote envelope header",
+            ));
         }
-        let b64_part = std::str::from_utf8(&wrapped[prefix.len()..])
-            .map_err(|e| SunbornError::forbidden(format!("Invalid AWS KMS key envelope UTF-8: {e}")))?;
+        let b64_part = std::str::from_utf8(&wrapped[prefix.len()..]).map_err(|e| {
+            SunbornError::forbidden(format!("Invalid AWS KMS key envelope UTF-8: {e}"))
+        })?;
         let bytes = base64_decode(b64_part)?;
         if bytes.len() != 32 {
-            return Err(SunbornError::forbidden("Unwrapped AWS KMS key length mismatch"));
+            return Err(SunbornError::forbidden(
+                "Unwrapped AWS KMS key length mismatch",
+            ));
         }
         let mut raw = [0u8; 32];
         raw.copy_from_slice(&bytes);
@@ -729,7 +763,10 @@ impl KeyManagementProvider for RemoteAwsKmsKeyProvider {
         tenant_id: &TenantId,
         salt: &[u8],
     ) -> Result<ZeroizingKey, SunbornError> {
-        let context = format!("awskms-remote:{}:{}:tenant:{}", self.region, self.key_arn, tenant_id.0);
+        let context = format!(
+            "awskms-remote:{}:{}:tenant:{}",
+            self.region, self.key_arn, tenant_id.0
+        );
         let mut hasher = Sha256::new();
         hasher.update(self.key_arn.as_bytes());
         hasher.update(salt);
@@ -1256,7 +1293,9 @@ mod tests {
         assert_eq!(unwrapped.as_bytes(), &raw);
 
         let tenant = TenantId::new("tenant-prod-hsm");
-        let derived = provider.derive_tenant_key(&tenant, b"salt-123").expect("Derive should succeed");
+        let derived = provider
+            .derive_tenant_key(&tenant, b"salt-123")
+            .expect("Derive should succeed");
         assert_eq!(derived.as_bytes().len(), 32);
     }
 

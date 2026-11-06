@@ -203,8 +203,12 @@ pub async fn execute_request_inner(
     let watermark_read_view = state.watermark_fencer.snapshot_read_view(&lineage_keys);
 
     // Enforce tenant spend velocity ceiling (hard stop HTTP 429)
-    let current_spend = state.spend_velocity_controller.current_spend(&req.tenant_id.0);
-    let tenant_ceiling = state.spend_velocity_controller.ceiling_for_tenant(&req.tenant_id.0);
+    let current_spend = state
+        .spend_velocity_controller
+        .current_spend(&req.tenant_id.0);
+    let tenant_ceiling = state
+        .spend_velocity_controller
+        .ceiling_for_tenant(&req.tenant_id.0);
     if current_spend >= tenant_ceiling {
         SPEND_VELOCITY_REJECTIONS_TOTAL.fetch_add(1, Ordering::Relaxed);
         RATE_LIMITED_TOTAL.fetch_add(1, Ordering::Relaxed);
@@ -302,13 +306,22 @@ pub async fn execute_request_inner(
                 let certificate = Some(cert);
 
                 // Authenticated Decryption on Read Path (ER-001)
-                let content = if let Some(env_val) = cached_entry.metadata.get("encrypted_envelope") {
-                    if let Ok(envelope) = serde_json::from_value::<EncryptedEnvelope>(env_val.clone()) {
+                let content = if let Some(env_val) = cached_entry.metadata.get("encrypted_envelope")
+                {
+                    if let Ok(envelope) =
+                        serde_json::from_value::<EncryptedEnvelope>(env_val.clone())
+                    {
                         match state.crypto_registry.decrypt(&envelope, "cache_admission") {
-                            Ok(plain_bytes) => String::from_utf8(plain_bytes).unwrap_or(cached_entry.content),
+                            Ok(plain_bytes) => {
+                                String::from_utf8(plain_bytes).unwrap_or(cached_entry.content)
+                            }
                             Err(err) => {
                                 tracing::warn!(tenant = %req.tenant_id.0, error = %err, "TDEK decryption failed or key shredded -> Rejecting cached entry");
-                                return Err(SunbornError::forbidden(format!("Tenant '{}' key shredded or unprovisioned", req.tenant_id.0)).into());
+                                return Err(SunbornError::forbidden(format!(
+                                    "Tenant '{}' key shredded or unprovisioned",
+                                    req.tenant_id.0
+                                ))
+                                .into());
                             }
                         }
                     } else {
@@ -444,7 +457,6 @@ pub async fn execute_request_inner(
     let origin_result = state.origin_provider.execute(&req).await?;
     let origin_content = origin_result.content;
 
-
     let pricing = ModelPricing::for_model(&req.model);
     let actual_cost = FinOpsEngine::calculate_token_cost_avoided(
         &pricing,
@@ -526,7 +538,11 @@ pub async fn execute_request_inner(
 
         // Authenticated Encryption on Write Path (ER-001)
         let maybe_envelope = if state.crypto_registry.is_active(&req.tenant_id) {
-            match state.crypto_registry.encrypt(&req.tenant_id, origin_content.as_bytes(), "cache_admission") {
+            match state.crypto_registry.encrypt(
+                &req.tenant_id,
+                origin_content.as_bytes(),
+                "cache_admission",
+            ) {
                 Ok(env) => Some(env),
                 Err(err) => {
                     tracing::warn!(tenant = %req.tenant_id.0, error = %err, "TDEK encryption failed on admission");
@@ -2149,7 +2165,11 @@ pub async fn create_api_credential(
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
 
     let raw_key = payload.raw_key.unwrap_or_else(|| {
-        format!("sb_live_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
+        format!(
+            "sb_live_{}{}",
+            Uuid::new_v4().simple(),
+            Uuid::new_v4().simple()
+        )
     });
     let key_hash = crate::middleware::auth::ApiKeyRegistry::hash_key(&raw_key);
     let expires_at = payload
@@ -2171,15 +2191,17 @@ pub async fn create_api_credential(
         .await
         .map_err(AppError::from)?;
 
-    state.api_key_registry.register_credential(crate::middleware::auth::ApiCredential {
-        tenant_id: TenantId::new(&payload.tenant_id),
-        application_id: sunborn_core::ApplicationId::new(&payload.application_id),
-        key_hash: key_hash.clone(),
-        rate_limit_rps: payload.rate_limit_rps as u32,
-        allowed_models: payload.allowed_models,
-        is_admin: payload.is_admin,
-        expires_at,
-    });
+    state
+        .api_key_registry
+        .register_credential(crate::middleware::auth::ApiCredential {
+            tenant_id: TenantId::new(&payload.tenant_id),
+            application_id: sunborn_core::ApplicationId::new(&payload.application_id),
+            key_hash: key_hash.clone(),
+            rate_limit_rps: payload.rate_limit_rps as u32,
+            allowed_models: payload.allowed_models,
+            is_admin: payload.is_admin,
+            expires_at,
+        });
 
     Ok(Json(json!({
         "status": "created",
@@ -2273,7 +2295,11 @@ pub async fn rotate_api_credential(
 
     // 2. Issue new credential
     let new_raw = payload.new_raw_key.unwrap_or_else(|| {
-        format!("sb_live_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
+        format!(
+            "sb_live_{}{}",
+            Uuid::new_v4().simple(),
+            Uuid::new_v4().simple()
+        )
     });
     let new_hash = crate::middleware::auth::ApiKeyRegistry::hash_key(&new_raw);
     let expires_at = payload
@@ -2295,15 +2321,17 @@ pub async fn rotate_api_credential(
         .await
         .map_err(AppError::from)?;
 
-    state.api_key_registry.register_credential(crate::middleware::auth::ApiCredential {
-        tenant_id: TenantId::new(&payload.tenant_id),
-        application_id: sunborn_core::ApplicationId::new(&payload.application_id),
-        key_hash: new_hash.clone(),
-        rate_limit_rps: payload.rate_limit_rps as u32,
-        allowed_models: payload.allowed_models,
-        is_admin: payload.is_admin,
-        expires_at,
-    });
+    state
+        .api_key_registry
+        .register_credential(crate::middleware::auth::ApiCredential {
+            tenant_id: TenantId::new(&payload.tenant_id),
+            application_id: sunborn_core::ApplicationId::new(&payload.application_id),
+            key_hash: new_hash.clone(),
+            rate_limit_rps: payload.rate_limit_rps as u32,
+            allowed_models: payload.allowed_models,
+            is_admin: payload.is_admin,
+            expires_at,
+        });
 
     Ok(Json(json!({
         "status": "rotated",

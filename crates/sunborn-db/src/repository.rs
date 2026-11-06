@@ -1,4 +1,6 @@
-use crate::models::{AuditRecord, DurableCacheRecord, FinOpsLedgerRecord, OutboxRecord, TenantRecord};
+use crate::models::{
+    AuditRecord, DurableCacheRecord, FinOpsLedgerRecord, OutboxRecord, TenantRecord,
+};
 use async_trait::async_trait;
 use chrono::Utc;
 use std::collections::HashMap;

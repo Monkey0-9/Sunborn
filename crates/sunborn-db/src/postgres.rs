@@ -852,7 +852,9 @@ impl DatabaseStore for PostgresDatabaseStore {
                 .await
                 .map_err(|err| {
                     tracing::error!(error = %err, "PostgreSQL delete durable_cache_entries failed");
-                    SunbornError::database(format!("PostgreSQL delete durable_cache_entries failed: {err}"))
+                    SunbornError::database(format!(
+                        "PostgreSQL delete durable_cache_entries failed: {err}"
+                    ))
                 })?;
             pg_deleted += cache_res.rows_affected() as usize;
 
@@ -863,7 +865,9 @@ impl DatabaseStore for PostgresDatabaseStore {
                 .await
                 .map_err(|err| {
                     tracing::error!(error = %err, "PostgreSQL delete tenant_wrapped_keys failed");
-                    SunbornError::database(format!("PostgreSQL delete tenant_wrapped_keys failed: {err}"))
+                    SunbornError::database(format!(
+                        "PostgreSQL delete tenant_wrapped_keys failed: {err}"
+                    ))
                 })?;
             pg_deleted += keys_res.rows_affected() as usize;
 
@@ -874,7 +878,9 @@ impl DatabaseStore for PostgresDatabaseStore {
                 .await
                 .map_err(|err| {
                     tracing::error!(error = %err, "PostgreSQL delete api_credentials failed");
-                    SunbornError::database(format!("PostgreSQL delete api_credentials failed: {err}"))
+                    SunbornError::database(format!(
+                        "PostgreSQL delete api_credentials failed: {err}"
+                    ))
                 })?;
             pg_deleted += creds_res.rows_affected() as usize;
 
@@ -907,19 +913,20 @@ impl DatabaseStore for PostgresDatabaseStore {
                     .fetch_one(&pool)
                     .await
                     .map_err(|err| {
-                        SunbornError::database(format!("PostgreSQL count durable_cache_entries failed: {err}"))
+                        SunbornError::database(format!(
+                            "PostgreSQL count durable_cache_entries failed: {err}"
+                        ))
                     })?;
             pg_count += cache_row.0 as usize;
 
             // Count tenant records
-            let tenant_row: (i64,) =
-                sqlx::query_as("SELECT COUNT(*) FROM tenants WHERE id = $1")
-                    .bind(tenant_id)
-                    .fetch_one(&pool)
-                    .await
-                    .map_err(|err| {
-                        SunbornError::database(format!("PostgreSQL count tenants failed: {err}"))
-                    })?;
+            let tenant_row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tenants WHERE id = $1")
+                .bind(tenant_id)
+                .fetch_one(&pool)
+                .await
+                .map_err(|err| {
+                    SunbornError::database(format!("PostgreSQL count tenants failed: {err}"))
+                })?;
             pg_count += tenant_row.0 as usize;
 
             // Count wrapped keys
@@ -929,7 +936,9 @@ impl DatabaseStore for PostgresDatabaseStore {
                     .fetch_one(&pool)
                     .await
                     .map_err(|err| {
-                        SunbornError::database(format!("PostgreSQL count tenant_wrapped_keys failed: {err}"))
+                        SunbornError::database(format!(
+                            "PostgreSQL count tenant_wrapped_keys failed: {err}"
+                        ))
                     })?;
             pg_count += keys_row.0 as usize;
 
@@ -940,7 +949,9 @@ impl DatabaseStore for PostgresDatabaseStore {
                     .fetch_one(&pool)
                     .await
                     .map_err(|err| {
-                        SunbornError::database(format!("PostgreSQL count api_credentials failed: {err}"))
+                        SunbornError::database(format!(
+                            "PostgreSQL count api_credentials failed: {err}"
+                        ))
                     })?;
             pg_count += creds_row.0 as usize;
         } else if self.strict_durability {

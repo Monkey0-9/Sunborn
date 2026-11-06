@@ -155,7 +155,10 @@ impl ApiKeyRegistry {
 
     /// Registers a pre-constructed ApiCredential directly into memory.
     pub fn register_credential(&self, cred: ApiCredential) {
-        self.credentials.write().unwrap().insert(cred.key_hash.clone(), cred);
+        self.credentials
+            .write()
+            .unwrap()
+            .insert(cred.key_hash.clone(), cred);
     }
 
     /// Revokes an API credential by its raw key string.

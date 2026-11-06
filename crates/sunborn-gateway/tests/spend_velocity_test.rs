@@ -110,7 +110,8 @@ async fn test_spend_velocity_hard_stop_and_tenant_isolation() {
     let json2: Value = serde_json::from_slice(&body2).unwrap();
     let detail = json2["detail"].as_str().unwrap_or("");
     assert!(
-        detail.contains("Spend velocity ceiling of $0.01 exceeded") || detail.contains("Spend velocity ceiling"),
+        detail.contains("Spend velocity ceiling of $0.01 exceeded")
+            || detail.contains("Spend velocity ceiling"),
         "Error detail must state spend velocity ceiling exceeded: {detail}"
     );
 
