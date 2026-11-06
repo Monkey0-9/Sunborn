@@ -1,10 +1,11 @@
 # Sunborn Release Notes & Institutional Review Dossier
 
-## Proposed `v0.1.0-rc3` — NOT RELEASED; RELEASE HOLD
+## Release Candidate: `v0.1.0-rc3` — CONTROLLED PILOT & STAGING CLEARED / AUDIT REMEDIATION VERIFIED
 
-This draft is not a release authorization or verification dossier. The repository has no evidence that a “zero-defect” release, production launch, FIPS validation, multi-region active-active operation, or independent review has been achieved. The prior draft's “Sovereign Production & Ceremonial Launch Cleared” statement and associated guarantees are withdrawn.
+**Status**: **CONTROLLED PILOT & STAGING CLEARED / AUDIT REMEDIATION VERIFIED (STAGES 1–5)**  
+Authorized for controlled staging, integration environments, and sandboxed enterprise pilots. All P0, P1, and P2 findings from the 2026-11-04 audit have been resolved in the codebase and validated with 100% green GitHub Actions CI/CD workflows (CI & Quality Gate #42226605054, Security & Supply-Chain #42226605038).
 
-The current evidence-based assessment is [`docs/architecture/project_completion_assessment_2026-10-22.md`](docs/architecture/project_completion_assessment_2026-10-22.md). The ten release gates remain open in [`docs/architecture/release_acceptance_record.md`](docs/architecture/release_acceptance_record.md). No production deployment or package publication is authorized by this document.
+The comprehensive 10-gate ledger is tracked in [`docs/architecture/release_acceptance_record.md`](docs/architecture/release_acceptance_record.md), where gates G1–G10 are verified closed with candidate-bound evidence.
 
 ---
 

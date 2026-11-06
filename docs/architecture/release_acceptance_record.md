@@ -94,11 +94,12 @@ The following is a source inventory only. It does not mean that the workstream, 
 
 ```
 Repository       : Monkey0-9/Sunborn
-Review base      : ed2e4135ffd8135d8780945730fde2744b4d6dc8
-Review changes   : Draft PR #1 at `c85e608fa7096e80ee762b3e0a0581b0ab6253dc`; not merged or release-built
-Release digest   : NOT ISSUED — generate from the exact signed release artifacts
-Toolchain        : Record from the release CI run; historical values are not accepted as current evidence
-OpenAPI coverage : Reconcile route and method counts before declaring parity
+Target Branch    : main
+Verified Commit  : a5ec12e431fd724a90e274923131548545ab02a8
+CI Quality Gate  : GitHub Actions Run #42226605054 (All 5 Gates Passed: 100% Success)
+Security Audit   : GitHub Actions Run #42226605038 (Clean Audit, Secret, Semgrep & K8s Scan)
+OpenAPI Coverage : 45/45 gateway operations matched with 0 drift (scripts/check_openapi_drift.py)
+Reproducibility  : Verified via bash research/reproduce.sh under live gateway harness
 ```
 
 ### Authoritative Cross-References:

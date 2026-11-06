@@ -24,3 +24,5 @@ research/results/capacity_soak_report.json
 *.egg-info/
 dist/
 .venv/
+.commandcode/
+frontend/pnpm-lock.yaml
