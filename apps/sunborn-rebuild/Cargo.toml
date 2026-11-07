@@ -1,9 +1,15 @@
 [package]
 name = "sunborn-rebuild"
+description = "Disaster recovery utility to rebuild discardable L2 DragonflyDB and Qdrant accelerators from authoritative PostgreSQL WAL"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+keywords = ["disaster-recovery", "rebuild", "cache-rebuild", "wal-hydration"]
+categories = ["command-line-utilities", "database"]
 
 [[bin]]
 name = "sunborn-rebuild"

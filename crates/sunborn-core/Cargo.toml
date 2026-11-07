@@ -1,8 +1,15 @@
 [package]
 name = "sunborn-core"
+description = "Core domain types, FinOps utility scoring, error primitives, and configuration models for Sunborn"
 version.workspace = true
 edition.workspace = true
+authors.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+keywords = ["sunborn", "core", "finops", "domain-types", "llm-gateway"]
+categories = ["data-structures", "development-tools"]
 
 [dependencies]
 serde.workspace = true

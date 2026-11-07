@@ -1,3 +1,19 @@
+//! # Sunborn Gateway
+//!
+//! High-throughput asynchronous Axum HTTP reverse proxy, OpenAI/Anthropic protocol translator,
+//! and multi-tenant semantic cache router for the Sunborn platform.
+//!
+//! ## Quick Start
+//!
+//! ```rust
+//! use sunborn_gateway::{create_router, AppState};
+//! use sunborn_core::AppConfig;
+//!
+//! let config = AppConfig::load_from_env();
+//! let state = AppState::new(config);
+//! let _router = create_router(state);
+//! ```
+
 pub mod autonomic;
 pub mod handlers;
 pub mod learning;

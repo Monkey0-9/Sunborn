@@ -1,8 +1,15 @@
 [package]
 name = "sunborn-cache"
+description = "Multi-tiered L1 in-memory and L2 DragonflyDB cache engine with FinOps GDSF eviction policies"
 version.workspace = true
 edition.workspace = true
+authors.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+keywords = ["cache", "lru", "gdsf", "dragonfly", "redis"]
+categories = ["caching", "data-structures"]
 
 [dependencies]
 sunborn-core = { path = "../sunborn-core" }

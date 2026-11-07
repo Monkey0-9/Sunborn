@@ -1,8 +1,15 @@
 [package]
 name = "sunborn-semantic"
+description = "Non-Exchangeable Conformal Risk Control, semantic drift tracking, vector search, and linguistic guardrails for Sunborn"
 version.workspace = true
 edition.workspace = true
+authors.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+keywords = ["conformal-prediction", "embeddings", "vector-search", "semantic-cache", "qdrant"]
+categories = ["science", "algorithms"]
 
 [dependencies]
 sunborn-core = { path = "../sunborn-core" }
@@ -16,4 +23,3 @@ tracing.workspace = true
 sha2.workspace = true
 hex.workspace = true
 reqwest.workspace = true
-

@@ -1,8 +1,15 @@
 [package]
 name = "sunborn-execution"
+description = "Deterministic Merkle DAG execution planner and sub-graph intermediate step reuse engine for Sunborn"
 version.workspace = true
 edition.workspace = true
+authors.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+keywords = ["merkle-dag", "execution-planner", "dag", "agentic", "reuse"]
+categories = ["algorithms", "development-tools"]
 
 [dependencies]
 sunborn-core = { path = "../sunborn-core" }

@@ -1,8 +1,15 @@
 [package]
 name = "sunborn-db"
+description = "Authoritative PostgreSQL durability engine, write-behind buffers, and audit log persistence for Sunborn"
 version.workspace = true
 edition.workspace = true
+authors.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+keywords = ["postgres", "sqlx", "durability", "database", "write-behind"]
+categories = ["database", "asynchronous"]
 
 [dependencies]
 sunborn-core = { path = "../sunborn-core" }

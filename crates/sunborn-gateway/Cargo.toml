@@ -1,8 +1,15 @@
 [package]
 name = "sunborn-gateway"
+description = "High-throughput asynchronous Axum HTTP reverse proxy and multi-tenant semantic router for Sunborn"
 version.workspace = true
 edition.workspace = true
+authors.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+keywords = ["gateway", "axum", "reverse-proxy", "llm-router", "multi-tenant"]
+categories = ["network-programming", "web-programming::http-server"]
 
 [[bin]]
 name = "sunborn-gateway"
@@ -33,7 +40,6 @@ sha2.workspace = true
 hex.workspace = true
 async-trait.workspace = true
 reqwest.workspace = true
-
 
 [dev-dependencies]
 http.workspace = true

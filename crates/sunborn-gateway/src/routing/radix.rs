@@ -105,7 +105,7 @@ impl RadixNode {
                 if let Some(sm) = sub_match {
                     if best
                         .as_ref()
-                        .is_none_or(|b| sm.matched_chars >= b.matched_chars)
+                        .map_or(true, |b| sm.matched_chars >= b.matched_chars)
                     {
                         best = Some(sm);
                     }

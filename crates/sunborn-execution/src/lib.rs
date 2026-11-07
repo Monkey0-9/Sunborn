@@ -1,3 +1,17 @@
+//! # Sunborn Execution
+//!
+//! Merkle DAG execution planner and intermediate sub-graph reuse engine for multi-step
+//! AI agent workflows, guaranteeing deterministic lineage and side-effect contamination boundaries.
+//!
+//! ## Quick Start
+//!
+//! ```rust
+//! use sunborn_execution::ExecutionPlan;
+//!
+//! let plan = ExecutionPlan::new();
+//! assert_eq!(plan.nodes.len(), 0);
+//! ```
+
 pub mod merkle;
 pub mod model;
 pub mod planner;

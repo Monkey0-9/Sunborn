@@ -1,3 +1,19 @@
+//! # Sunborn Core
+//!
+//! Foundational domain models, FinOps economic utility scoring, tenancy identifiers,
+//! error taxonomies, and configuration primitives for the Sunborn platform.
+//!
+//! ## Quick Start
+//!
+//! ```rust
+//! use sunborn_core::{TenantId, ApplicationId, RequestEnvelope};
+//!
+//! let req = RequestEnvelope::new("tenant-alpha", "app-1", "gpt-4o", "Explain quantum computing");
+//! assert_eq!(req.tenant_id, TenantId("tenant-alpha".to_string()));
+//! assert_eq!(req.application_id, ApplicationId("app-1".to_string()));
+//! assert_eq!(req.model, "gpt-4o");
+//! ```
+
 pub mod certificate;
 pub mod cluster;
 pub mod config;

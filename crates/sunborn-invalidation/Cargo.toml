@@ -1,8 +1,15 @@
 [package]
 name = "sunborn-invalidation"
+description = "Transitive dependency graph invalidation, Roaring Bitmap SIMD lineage, and transactional outbox event engine for Sunborn"
 version.workspace = true
 edition.workspace = true
+authors.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+keywords = ["invalidation", "roaring-bitmaps", "outbox", "dependency-graph", "cache-consistency"]
+categories = ["algorithms", "caching"]
 
 [dependencies]
 sunborn-core = { path = "../sunborn-core" }
@@ -16,6 +23,5 @@ chrono.workspace = true
 uuid.workspace = true
 tracing.workspace = true
 reqwest.workspace = true
-roaring = "0.10"
-dashmap = "6.1"
-
+roaring.workspace = true
+dashmap.workspace = true
