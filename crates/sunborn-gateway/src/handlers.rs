@@ -216,6 +216,15 @@ pub async fn execute_request_inner(
         .into());
     }
 
+    // Zero-trust cryptographic shredding enforcement: reject immediately if tenant is shredded
+    if state.crypto_registry.is_shredded(&req.tenant_id) {
+        return Err(SunbornError::forbidden(format!(
+            "Tenant '{}' has been cryptographically shredded; access is permanently decommissioned",
+            req.tenant_id.0
+        ))
+        .into());
+    }
+
     // 2. Validate payload boundaries and constraints
     req.validate().map_err(AppError::from)?;
 

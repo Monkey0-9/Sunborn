@@ -25,10 +25,7 @@ async fn test_tenant_key_durability_and_restart_recovery() {
                 .header("content-type", "application/json")
                 .header("x-api-key", "sunborn-admin-key")
                 .body(Body::from(
-                    serde_json::to_vec(&serde_json::json!({
-                        "tenant_id": target_tenant
-                    }))
-                    .unwrap(),
+                    serde_json::to_vec(&serde_json::json!({ "tenant_id": target_tenant })).unwrap(),
                 ))
                 .unwrap(),
         )
@@ -138,10 +135,7 @@ async fn test_semantic_cache_authenticated_decryption_and_shred_rejection() {
                 .header("content-type", "application/json")
                 .header("x-api-key", "sunborn-admin-key")
                 .body(Body::from(
-                    serde_json::to_vec(&serde_json::json!({
-                        "tenant_id": tenant
-                    }))
-                    .unwrap(),
+                    serde_json::to_vec(&serde_json::json!({ "tenant_id": tenant })).unwrap(),
                 ))
                 .unwrap(),
         )
@@ -394,4 +388,336 @@ async fn test_finops_atomic_reservation_and_spend_settlement() {
         0.0
     );
     assert_eq!(state.spend_velocity_controller.current_spend(tenant), 5.50);
+}
+
+#[tokio::test]
+async fn test_cross_tenant_cryptographic_and_cache_isolation() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state.clone());
+
+    let tenant_a = "tenant-isolation-alpha";
+    let tenant_b = "tenant-isolation-beta";
+    let app_id = "app-secure-rag";
+    let key_a = "key-tenant-alpha-secret";
+    let key_b = "key-tenant-beta-secret";
+
+    state.api_key_registry.register_key(
+        key_a,
+        TenantId::new(tenant_a),
+        sunborn_core::ApplicationId::new(app_id),
+        vec!["*".to_string()],
+        false,
+    );
+    state.api_key_registry.register_key(
+        key_b,
+        TenantId::new(tenant_b),
+        sunborn_core::ApplicationId::new(app_id),
+        vec!["*".to_string()],
+        false,
+    );
+
+    let prompt =
+        "Explain the cryptographic invariants of zero-knowledge rollups in financial ledgers.";
+
+    // 1. Tenant Alpha sends prompt -> Origin Miss (Cache Writeback under Alpha's TDEK)
+    let req_a = RequestEnvelope::new(tenant_a, app_id, "gpt-4o", prompt);
+    let res_a1 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", key_a)
+                .body(Body::from(serde_json::to_vec(&req_a).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res_a1.status(), StatusCode::OK);
+    let body_a1: ResponseEnvelope =
+        serde_json::from_slice(&res_a1.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert!(!body_a1.cached, "Tenant Alpha first request must be a MISS");
+    let key_a1 = body_a1.cache_key.expect("Must have cache key");
+    assert!(
+        key_a1.starts_with(&format!("sunborn:{tenant_a}:")),
+        "Alpha cache key must be scoped to tenant Alpha"
+    );
+
+    // 2. Tenant Beta sends the EXACT SAME prompt -> MUST NOT get a cache hit from Tenant Alpha!
+    let req_b = RequestEnvelope::new(tenant_b, app_id, "gpt-4o", prompt);
+    let res_b1 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", key_b)
+                .body(Body::from(serde_json::to_vec(&req_b).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res_b1.status(), StatusCode::OK);
+    let body_b1: ResponseEnvelope =
+        serde_json::from_slice(&res_b1.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert!(
+        !body_b1.cached,
+        "Tenant Beta must NEVER receive a cache hit from Tenant Alpha's data (strict tenant isolation)"
+    );
+    let key_b1 = body_b1.cache_key.expect("Must have cache key");
+    assert!(
+        key_b1.starts_with(&format!("sunborn:{tenant_b}:")),
+        "Beta cache key must be scoped to tenant Beta"
+    );
+    assert_ne!(
+        key_a1, key_b1,
+        "Cache keys between distinct tenants must never collide"
+    );
+
+    // 3. Tenant Alpha queries again -> Gets isolated EXACT HIT decrypted with Alpha's TDEK
+    let res_a2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", key_a)
+                .body(Body::from(serde_json::to_vec(&req_a).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res_a2.status(), StatusCode::OK);
+    let body_a2: ResponseEnvelope =
+        serde_json::from_slice(&res_a2.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert!(body_a2.cached, "Tenant Alpha must get an exact cache hit");
+    assert_eq!(body_a2.content, body_a1.content);
+    assert!(!body_a2.content.starts_with("sunborn:enc:v1:"));
+
+    // 4. Tenant Beta queries again -> Gets isolated EXACT HIT decrypted with Beta's TDEK
+    let res_b2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", key_b)
+                .body(Body::from(serde_json::to_vec(&req_b).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res_b2.status(), StatusCode::OK);
+    let body_b2: ResponseEnvelope =
+        serde_json::from_slice(&res_b2.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert!(body_b2.cached, "Tenant Beta must get an exact cache hit");
+    assert_eq!(body_b2.content, body_b1.content);
+    assert!(!body_b2.content.starts_with("sunborn:enc:v1:"));
+}
+
+#[tokio::test]
+async fn test_shredded_tenant_fail_closed_early_rejection() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state.clone());
+
+    let tenant = "tenant-shred-early-reject";
+    let app_id = "app-banking";
+    let api_key = "key-shred-early-test";
+
+    state.api_key_registry.register_key(
+        api_key,
+        TenantId::new(tenant),
+        sunborn_core::ApplicationId::new(app_id),
+        vec!["*".to_string()],
+        false,
+    );
+
+    // Initial successful request
+    let req = RequestEnvelope::new(
+        tenant,
+        app_id,
+        "gpt-4o",
+        "Analyze account transaction anomalies.",
+    );
+    let res1 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", api_key)
+                .body(Body::from(serde_json::to_vec(&req).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res1.status(), StatusCode::OK);
+
+    // Shred tenant
+    let res_shred = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/governance/shred")
+                .header("content-type", "application/json")
+                .header("x-api-key", "sunborn-admin-key")
+                .body(Body::from(
+                    serde_json::to_vec(&serde_json::json!({ "tenant_id": tenant })).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_shred.status(), StatusCode::OK);
+
+    // Request with tenant key -> 401 Unauthorized (credentials revoked)
+    let res_tenant = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", api_key)
+                .body(Body::from(serde_json::to_vec(&req).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_tenant.status(), StatusCode::UNAUTHORIZED);
+
+    // If an authenticated credential is created/restored for shredded tenant, ingress strictly fails closed with 403 Forbidden
+    let re_registered_key = "key-shred-re-registered-test";
+    state.api_key_registry.register_key(
+        re_registered_key,
+        TenantId::new(tenant),
+        sunborn_core::ApplicationId::new(app_id),
+        vec!["*".to_string()],
+        false,
+    );
+    let res_shredded = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", re_registered_key)
+                .body(Body::from(serde_json::to_vec(&req).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        res_shredded.status(),
+        StatusCode::FORBIDDEN,
+        "Shredded tenant must fail closed immediately on all ingress paths"
+    );
+}
+
+#[tokio::test]
+async fn test_cache_invalidation_lifecycle_and_freshness() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state.clone());
+
+    let tenant = "tenant-inval-lifecycle";
+    let app_id = "app-knowledge";
+    let api_key = "key-inval-lifecycle-test";
+
+    state.api_key_registry.register_key(
+        api_key,
+        TenantId::new(tenant),
+        sunborn_core::ApplicationId::new(app_id),
+        vec!["*".to_string()],
+        false,
+    );
+
+    let prompt = "What are the latest compliance protocols for autonomous AI agents?";
+    let req = RequestEnvelope::new(tenant, app_id, "gpt-4o", prompt);
+
+    // 1. Initial request -> Miss
+    let res1 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", api_key)
+                .body(Body::from(serde_json::to_vec(&req).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res1.status(), StatusCode::OK);
+    let body1: ResponseEnvelope =
+        serde_json::from_slice(&res1.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert!(!body1.cached);
+    let cache_key = body1.cache_key.expect("Must have cache key");
+
+    // 2. Second request -> Cache Hit
+    let res2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", api_key)
+                .body(Body::from(serde_json::to_vec(&req).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res2.status(), StatusCode::OK);
+    let body2: ResponseEnvelope =
+        serde_json::from_slice(&res2.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert!(body2.cached);
+
+    // 3. Invalidate cache entry via DELETE /v1/caches/{key} with admin key
+    let res_del = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/v1/caches/{}", cache_key))
+                .header("x-api-key", "sunborn-admin-key")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_del.status(), StatusCode::OK);
+
+    // 4. Third request -> Must be an Origin Miss post-invalidation!
+    let res3 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", api_key)
+                .body(Body::from(serde_json::to_vec(&req).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res3.status(), StatusCode::OK);
+    let body3: ResponseEnvelope =
+        serde_json::from_slice(&res3.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert!(
+        !body3.cached,
+        "Post-invalidation request must miss cache and fetch from origin"
+    );
 }
