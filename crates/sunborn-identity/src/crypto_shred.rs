@@ -9,7 +9,7 @@
 //! Zeroizing the TDEK instantly renders all stored ciphertext across L1, L2, vector stores,
 //! and audit logs unrecoverable white noise.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
@@ -980,6 +980,7 @@ pub struct EncryptedEnvelope {
 /// O(1) Tenant Cryptographic Shredder and Key Management Registry.
 pub struct TenantCryptoRegistry {
     keys: RwLock<HashMap<TenantId, (ZeroizingKey, u32)>>,
+    shredded: RwLock<HashSet<TenantId>>,
     provider: Arc<dyn KeyManagementProvider>,
 }
 
@@ -997,6 +998,7 @@ impl TenantCryptoRegistry {
         );
         Self {
             keys: RwLock::new(HashMap::new()),
+            shredded: RwLock::new(HashSet::new()),
             provider,
         }
     }
@@ -1004,6 +1006,7 @@ impl TenantCryptoRegistry {
     pub fn with_provider(provider: Arc<dyn KeyManagementProvider>) -> Self {
         Self {
             keys: RwLock::new(HashMap::new()),
+            shredded: RwLock::new(HashSet::new()),
             provider,
         }
     }
@@ -1051,6 +1054,10 @@ impl TenantCryptoRegistry {
 
     /// Register or provision a 256-bit Tenant Data Encryption Key (TDEK).
     pub fn provision_tenant(&self, tenant_id: TenantId, raw_key: [u8; 32]) {
+        {
+            let mut shredded = self.shredded.write().unwrap();
+            shredded.remove(&tenant_id);
+        }
         let mut map = self.keys.write().unwrap();
         map.insert(tenant_id, (ZeroizingKey::new(raw_key), 1));
     }
@@ -1069,6 +1076,26 @@ impl TenantCryptoRegistry {
     pub fn is_active(&self, tenant_id: &TenantId) -> bool {
         let map = self.keys.read().unwrap();
         map.contains_key(tenant_id)
+    }
+
+    /// Check if a tenant's key has been explicitly cryptographically shredded.
+    pub fn is_shredded(&self, tenant_id: &TenantId) -> bool {
+        let shredded = self.shredded.read().unwrap();
+        shredded.contains(tenant_id)
+    }
+
+    /// Ensures an active tenant has a provisioned TDEK if not explicitly shredded.
+    pub fn ensure_provisioned(&self, tenant_id: &TenantId) -> Result<(), SunbornError> {
+        if self.is_shredded(tenant_id) {
+            return Err(SunbornError::forbidden(format!(
+                "Tenant '{}' key shredded; data permanently unrecoverable",
+                tenant_id.0
+            )));
+        }
+        if !self.is_active(tenant_id) {
+            self.provision_tenant_secure(tenant_id.clone())?;
+        }
+        Ok(())
     }
 
     /// Encrypt plaintext under the tenant's TDEK with fresh 96-bit random nonce and AES-256-GCM AEAD.
@@ -1165,6 +1192,10 @@ impl TenantCryptoRegistry {
     /// Atomically removes and zeroizes the tenant's TDEK in memory in < 1 millisecond.
     pub fn shred_tenant(&self, tenant_id: &TenantId) -> Result<Duration, SunbornError> {
         let start = Instant::now();
+        {
+            let mut shredded = self.shredded.write().unwrap();
+            shredded.insert(tenant_id.clone());
+        }
         let mut map = self.keys.write().unwrap();
         if let Some((mut key, _)) = map.remove(tenant_id) {
             key.zeroize();

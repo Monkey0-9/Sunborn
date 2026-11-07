@@ -3,19 +3,29 @@
 -- High-concurrency zero-lock table and index structures
 -- ==============================================================================
 
--- 1. Tenant Data Encryption Keys (TDEK) Registry
-CREATE TABLE IF NOT EXISTS tenant_encryption_keys (
-    tenant_id VARCHAR(64) PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+-- 1. Tenant Data Encryption Keys (TDEK) Registry (Unified Schema Authority: tenant_wrapped_keys)
+CREATE TABLE IF NOT EXISTS tenant_wrapped_keys (
+    tenant_id VARCHAR(128) PRIMARY KEY,
     key_version INTEGER NOT NULL DEFAULT 1,
     wrapped_tdek BYTEA NOT NULL,
-    nonce BYTEA NOT NULL,
-    auth_tag BYTEA NOT NULL,
+    kms_provider VARCHAR(64) NOT NULL DEFAULT 'local-aead',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_tenant_wrapped_keys_provider ON tenant_wrapped_keys(kms_provider);
+
+-- Backward-compatibility view for tenant_encryption_keys
+CREATE TABLE IF NOT EXISTS tenant_encryption_keys (
+    tenant_id VARCHAR(128) PRIMARY KEY,
+    key_version INTEGER NOT NULL DEFAULT 1,
+    wrapped_tdek BYTEA NOT NULL,
+    nonce BYTEA NOT NULL DEFAULT '\x000000000000000000000000'::bytea,
+    auth_tag BYTEA NOT NULL DEFAULT '\x00000000000000000000000000000000'::bytea,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     shredded_at TIMESTAMPTZ
 );
-
-CREATE INDEX IF NOT EXISTS idx_tenant_keys_active ON tenant_encryption_keys(tenant_id) WHERE is_active = TRUE;
 
 -- 2. FinOps Accounting & Token Avoidance Ledger
 CREATE TABLE IF NOT EXISTS finops_ledger (

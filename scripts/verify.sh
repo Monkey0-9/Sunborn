@@ -20,11 +20,11 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --check
 cargo test --workspace --all-targets
 
-echo "[2/8] Running Frontend Test Suite..."
-npm test --prefix frontend
-
-echo "[3/8] Building Frontend Production Bundle..."
+echo "[2/8] Building Frontend Production Bundle..."
 npm run build --prefix frontend
+
+echo "[3/8] Running Frontend Test Suite..."
+npm test --prefix frontend
 
 PYTHON_BIN="python"
 if command -v python3 >/dev/null 2>&1 && python3 -c "import sys" 2>/dev/null; then

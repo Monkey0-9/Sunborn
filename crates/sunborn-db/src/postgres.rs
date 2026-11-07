@@ -22,12 +22,15 @@ pub fn redact_connection_url(url: &str) -> String {
     url.to_string()
 }
 
+type FallbackTdekMap = Arc<RwLock<std::collections::HashMap<String, (Vec<u8>, String)>>>;
+
 /// Production PostgreSQL database store adapter implementing DatabaseStore
 #[derive(Clone)]
 pub struct PostgresDatabaseStore {
     pub connection_url: String,
     pool: Arc<RwLock<Option<PgPool>>>,
     fallback_store: Arc<MemoryDatabaseStore>,
+    fallback_tdeks: FallbackTdekMap,
     pub strict_durability: bool,
 }
 
@@ -48,6 +51,7 @@ impl PostgresDatabaseStore {
             connection_url: url_str,
             pool: Arc::new(RwLock::new(None)),
             fallback_store: Arc::new(MemoryDatabaseStore::new()),
+            fallback_tdeks: Arc::new(RwLock::new(std::collections::HashMap::new())),
             strict_durability: strict,
         }
     }
@@ -58,6 +62,7 @@ impl PostgresDatabaseStore {
             connection_url: url_str,
             pool: Arc::new(RwLock::new(None)),
             fallback_store: Arc::new(MemoryDatabaseStore::new()),
+            fallback_tdeks: Arc::new(RwLock::new(std::collections::HashMap::new())),
             strict_durability: true,
         }
     }
@@ -233,6 +238,14 @@ impl PostgresDatabaseStore {
         wrapped_tdek: &[u8],
         kms_provider: &str,
     ) -> Result<()> {
+        {
+            let mut fb = self.fallback_tdeks.write().await;
+            fb.insert(
+                tenant_id.to_string(),
+                (wrapped_tdek.to_vec(), kms_provider.to_string()),
+            );
+        }
+
         if let Some(pool) = self.get_pool().await {
             let res = sqlx::query(
                 "INSERT INTO tenant_wrapped_keys (tenant_id, wrapped_tdek, kms_provider, updated_at)
@@ -279,7 +292,11 @@ impl PostgresDatabaseStore {
                 }
             }
         }
-        Ok(Vec::new())
+        let fb = self.fallback_tdeks.read().await;
+        Ok(fb
+            .iter()
+            .map(|(t, (w, k))| (t.clone(), w.clone(), k.clone()))
+            .collect())
     }
 
     /// Persists an API credential record into the durable PostgreSQL `api_credentials` table.
@@ -393,6 +410,37 @@ impl PostgresDatabaseStore {
             ));
         }
         Ok(())
+    }
+
+    /// Revokes all active API credentials for a specific tenant in PostgreSQL.
+    pub async fn revoke_tenant_credentials(&self, tenant_id: &str) -> Result<u64> {
+        if let Some(pool) = self.get_pool().await {
+            let res = sqlx::query(
+                "UPDATE api_credentials SET status = 'revoked', revoked_at = NOW() WHERE tenant_id = $1 AND status != 'revoked'",
+            )
+            .bind(tenant_id)
+            .execute(&pool)
+            .await;
+
+            match res {
+                Ok(result) => Ok(result.rows_affected()),
+                Err(e) => {
+                    tracing::error!(error = %e, "Failed to revoke tenant API credentials in PostgreSQL");
+                    if self.strict_durability {
+                        return Err(sunborn_core::SunbornError::database(format!(
+                            "Failed to revoke tenant API credentials: {e}"
+                        )));
+                    }
+                    Ok(0)
+                }
+            }
+        } else if self.strict_durability {
+            Err(sunborn_core::SunbornError::database(
+                "Cannot revoke tenant API credentials: PostgreSQL is unavailable",
+            ))
+        } else {
+            Ok(0)
+        }
     }
 }
 
@@ -894,10 +942,32 @@ impl DatabaseStore for PostgresDatabaseStore {
                     SunbornError::database(format!("PostgreSQL delete tenants failed: {err}"))
                 })?;
             pg_deleted += tenant_res.rows_affected() as usize;
+
+            // 5. Delete tenant FinOps ledger records
+            let _ = sqlx::query("DELETE FROM finops_ledger WHERE tenant_id = $1")
+                .bind(tenant_id)
+                .execute(&pool)
+                .await;
+
+            // 6. Delete tenant outbox events
+            let _ = sqlx::query("DELETE FROM outbox_events WHERE tenant_id = $1")
+                .bind(tenant_id)
+                .execute(&pool)
+                .await;
+
+            // 7. Delete tenant decision records
+            let _ = sqlx::query("DELETE FROM decision_records WHERE tenant_id = $1")
+                .bind(tenant_id)
+                .execute(&pool)
+                .await;
         } else if self.strict_durability {
             return Err(sunborn_core::SunbornError::database(
                 "PostgreSQL connection pool unavailable; fail-closed durability enforced",
             ));
+        }
+        {
+            let mut fb = self.fallback_tdeks.write().await;
+            fb.remove(tenant_id);
         }
         let mem_deleted = self.fallback_store.delete_tenant_data(tenant_id).await?;
         Ok(pg_deleted.max(mem_deleted))

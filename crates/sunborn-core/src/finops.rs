@@ -144,6 +144,8 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
 type SpendHistoryMap = Arc<RwLock<HashMap<String, Vec<(Instant, f64)>>>>;
+type TenantReservations = HashMap<uuid::Uuid, (Instant, f64)>;
+type ReservationMap = Arc<RwLock<HashMap<String, TenantReservations>>>;
 
 /// Spend velocity controller enforcing tenant-level rolling window budget ceilings
 /// and preventing unbounded origin expenditure under cascading LLM traffic.
@@ -153,6 +155,7 @@ pub struct SpendVelocityController {
     window_duration: Duration,
     spend_history: SpendHistoryMap,
     tenant_ceilings: Arc<RwLock<HashMap<String, f64>>>,
+    reservations: ReservationMap,
 }
 
 impl Default for SpendVelocityController {
@@ -172,6 +175,7 @@ impl SpendVelocityController {
             window_duration,
             spend_history: Arc::new(RwLock::new(HashMap::new())),
             tenant_ceilings: Arc::new(RwLock::new(HashMap::new())),
+            reservations: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -193,6 +197,96 @@ impl SpendVelocityController {
             .get(tenant_id)
             .copied()
             .unwrap_or(self.max_spend_per_window_usd)
+    }
+
+    /// Atomic pre-authorization reservation: checks if current spend + active reservations + estimated cost
+    /// respects the tenant's ceiling. Returns Ok(reservation_id) on success, or Err((total_committed, ceiling)).
+    pub fn reserve_spend(
+        &self,
+        tenant_id: &str,
+        estimated_cost: f64,
+    ) -> std::result::Result<uuid::Uuid, (f64, f64)> {
+        let now = Instant::now();
+        let cutoff = now.checked_sub(self.window_duration).unwrap_or(now);
+        let ceiling = self.ceiling_for_tenant(tenant_id);
+
+        let mut res_guard = self.reservations.write().unwrap();
+        let mut hist_guard = self.spend_history.write().unwrap();
+
+        // 1. Calculate active spend
+        let hist_entries = hist_guard.entry(tenant_id.to_string()).or_default();
+        hist_entries.retain(|(ts, _)| *ts >= cutoff);
+        let current_spend: f64 = hist_entries.iter().map(|(_, c)| *c).sum();
+
+        // 2. Calculate active in-flight reservations (prune reservations older than 60s)
+        let res_map = res_guard.entry(tenant_id.to_string()).or_default();
+        let res_cutoff = now.checked_sub(Duration::from_secs(60)).unwrap_or(now);
+        res_map.retain(|_, (ts, _)| *ts >= res_cutoff);
+        let current_res: f64 = res_map.values().map(|(_, c)| *c).sum();
+
+        let committed_before = current_spend + current_res;
+        if committed_before >= ceiling {
+            return Err((committed_before, ceiling));
+        }
+
+        let total_committed = committed_before + estimated_cost;
+        if committed_before > 0.0 && total_committed > ceiling {
+            return Err((total_committed, ceiling));
+        }
+
+        let res_id = uuid::Uuid::new_v4();
+        res_map.insert(res_id, (now, estimated_cost));
+        Ok(res_id)
+    }
+
+    /// Settles an in-flight reservation with the actual final cost. Releases the reservation
+    /// and atomically commits the actual spend to the rolling window history.
+    pub fn settle_spend(
+        &self,
+        tenant_id: &str,
+        reservation_id: uuid::Uuid,
+        actual_cost: f64,
+    ) -> f64 {
+        let now = Instant::now();
+        let cutoff = now.checked_sub(self.window_duration).unwrap_or(now);
+
+        let mut res_guard = self.reservations.write().unwrap();
+        if let Some(res_map) = res_guard.get_mut(tenant_id) {
+            res_map.remove(&reservation_id);
+        }
+        drop(res_guard);
+
+        let mut hist_guard = self.spend_history.write().unwrap();
+        let hist_entries = hist_guard.entry(tenant_id.to_string()).or_default();
+        hist_entries.retain(|(ts, _)| *ts >= cutoff);
+        hist_entries.push((now, actual_cost));
+        hist_entries.iter().map(|(_, c)| *c).sum()
+    }
+
+    /// Releases an unused reservation without billing spend (e.g. cache hit, aborted request).
+    pub fn release_reservation(&self, tenant_id: &str, reservation_id: uuid::Uuid) {
+        let mut res_guard = self.reservations.write().unwrap();
+        if let Some(res_map) = res_guard.get_mut(tenant_id) {
+            res_map.remove(&reservation_id);
+        }
+    }
+
+    /// Sum of all currently reserved in-flight funds for a tenant
+    pub fn current_reserved(&self, tenant_id: &str) -> f64 {
+        let now = Instant::now();
+        let res_cutoff = now.checked_sub(Duration::from_secs(60)).unwrap_or(now);
+        let mut res_guard = self.reservations.write().unwrap();
+        if let Some(res_map) = res_guard.get_mut(tenant_id) {
+            res_map.retain(|_, (ts, _)| *ts >= res_cutoff);
+            res_map.values().map(|(_, c)| *c).sum()
+        } else {
+            0.0
+        }
+    }
+
+    /// Total commitment (current window spend + active reservations)
+    pub fn current_total_commitment(&self, tenant_id: &str) -> f64 {
+        self.current_spend(tenant_id) + self.current_reserved(tenant_id)
     }
 
     /// Records an expenditure in USD and checks if the tenant has exceeded their spend velocity ceiling.
@@ -242,6 +336,8 @@ impl SpendVelocityController {
     pub fn reset_tenant(&self, tenant_id: &str) {
         let mut map = self.spend_history.write().unwrap();
         map.remove(tenant_id);
+        let mut res_map = self.reservations.write().unwrap();
+        res_map.remove(tenant_id);
     }
 }
 
@@ -335,5 +431,43 @@ mod tests {
         let res_vip = controller.record_and_check(tenant_vip, 50.0);
         assert!(res_vip.is_ok());
         assert_eq!(res_vip.unwrap(), 50.0);
+    }
+
+    #[test]
+    fn test_spend_velocity_controller_atomic_reservation_and_settlement() {
+        let controller = SpendVelocityController::new(10.0, Duration::from_secs(60));
+        let tenant = "tenant-reserve-test";
+
+        // Reserve 4.0 -> success
+        let r1 = controller
+            .reserve_spend(tenant, 4.0)
+            .expect("r1 should succeed");
+        assert_eq!(controller.current_reserved(tenant), 4.0);
+        assert_eq!(controller.current_spend(tenant), 0.0);
+        assert_eq!(controller.current_total_commitment(tenant), 4.0);
+
+        // Reserve another 5.0 -> success (4 + 5 = 9 <= 10)
+        let r2 = controller
+            .reserve_spend(tenant, 5.0)
+            .expect("r2 should succeed");
+        assert_eq!(controller.current_reserved(tenant), 9.0);
+
+        // Attempting to reserve 2.0 fails (9 + 2 = 11 > 10)
+        let r3_err = controller.reserve_spend(tenant, 2.0);
+        assert!(r3_err.is_err());
+        let (committed, ceiling) = r3_err.unwrap_err();
+        assert_eq!(committed, 11.0);
+        assert_eq!(ceiling, 10.0);
+
+        // Release r2 (e.g. cache hit) -> reserved drops back to 4.0
+        controller.release_reservation(tenant, r2);
+        assert_eq!(controller.current_reserved(tenant), 4.0);
+
+        // Settle r1 with actual cost 3.5
+        let total_spend = controller.settle_spend(tenant, r1, 3.5);
+        assert_eq!(total_spend, 3.5);
+        assert_eq!(controller.current_reserved(tenant), 0.0);
+        assert_eq!(controller.current_spend(tenant), 3.5);
+        assert_eq!(controller.current_total_commitment(tenant), 3.5);
     }
 }

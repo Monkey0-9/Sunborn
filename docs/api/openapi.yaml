@@ -307,6 +307,32 @@ paths:
         '429':
           description: Too many failed login attempts; IP temporarily locked out
 
+  /v1/auth/session:
+    get:
+      summary: Session Verification
+      description: Validates bearer session token or API key and returns authenticated security context.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Session valid and authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authenticated:
+                    type: boolean
+                  tenant_id:
+                    type: string
+                  application_id:
+                    type: string
+                  is_admin:
+                    type: boolean
+        '401':
+          description: Session invalid, expired, or missing
+
   /v1/auth/credentials:
     post:
       summary: Create API Credential

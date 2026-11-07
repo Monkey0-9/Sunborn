@@ -25,13 +25,13 @@ if ($LASTEXITCODE -ne 0) { throw "cargo fmt failed" }
 cargo test --workspace --all-targets
 if ($LASTEXITCODE -ne 0) { throw "cargo test failed" }
 
-Write-Host "[2/8] Running Frontend Test Suite..." -ForegroundColor Yellow
-npm test --prefix frontend
-if ($LASTEXITCODE -ne 0) { throw "npm test failed" }
-
-Write-Host "[3/8] Building Frontend Production Bundle..." -ForegroundColor Yellow
+Write-Host "[2/8] Building Frontend Production Bundle..." -ForegroundColor Yellow
 npm run build --prefix frontend
 if ($LASTEXITCODE -ne 0) { throw "npm run build failed" }
+
+Write-Host "[3/8] Running Frontend Test Suite..." -ForegroundColor Yellow
+npm test --prefix frontend
+if ($LASTEXITCODE -ne 0) { throw "npm test failed" }
 
 $PythonBin = "python"
 if (Get-Command python3 -ErrorAction SilentlyContinue) {

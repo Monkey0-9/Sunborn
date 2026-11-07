@@ -8,13 +8,36 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ authenticated: false }, { status: 200 });
   }
 
-  return NextResponse.json({
-    authenticated: true,
-    session: {
-      active: true,
-      cookie_protected: true,
-    },
-  });
+  try {
+    const gatewayRes = await fetch(`${GATEWAY_URL}/v1/auth/session`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`,
+      },
+    });
+
+    if (!gatewayRes.ok) {
+      return NextResponse.json({ authenticated: false }, { status: 200 });
+    }
+
+    const sessionData = await gatewayRes.json();
+    return NextResponse.json({
+      authenticated: true,
+      session: {
+        active: true,
+        cookie_protected: true,
+        tenant_id: sessionData.tenant_id,
+        application_id: sessionData.application_id,
+        is_admin: sessionData.is_admin,
+      },
+    });
+  } catch {
+    // Upstream gateway unreachable: fail-closed
+    return NextResponse.json(
+      { authenticated: false, error: 'Gateway authentication unavailable' },
+      { status: 200 }
+    );
+  }
 }
 
 export async function POST(req: NextRequest) {

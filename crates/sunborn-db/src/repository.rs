@@ -150,6 +150,9 @@ impl DatabaseStore for MemoryDatabaseStore {
         let mut outbox = self.outbox.write().await;
         outbox.retain(|e| e.tenant_id != tenant_id);
 
+        let mut finops = self.finops_ledger.write().await;
+        finops.retain(|r| r.tenant_id != tenant_id);
+
         let mut audits = self.audits.write().await;
         audits.push(AuditRecord {
             request_id: uuid::Uuid::new_v4(),

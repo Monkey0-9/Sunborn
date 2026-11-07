@@ -194,6 +194,7 @@ pub struct DecisionOutcome {
     pub matched_id: Option<String>,
     pub matched_certificate: Option<ReuseCertificate>,
     pub safety_evidence: Option<SafetyEvidenceRecord>,
+    pub matched_metadata: Option<serde_json::Value>,
 }
 
 pub struct DecisionEngine<E: EmbeddingProvider, V: VectorStore> {
@@ -326,6 +327,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                         matched_id: Some(best.entry.id.clone()),
                         matched_certificate: candidate_cert,
                         safety_evidence: Some(cascade_res.safety_evidence),
+                        matched_metadata: Some(best.entry.metadata.clone()),
                     });
                 }
             }
@@ -346,6 +348,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                     matched_id: Some(best.entry.id.clone()),
                     matched_certificate: candidate_cert,
                     safety_evidence: Some(cascade_res.safety_evidence),
+                    matched_metadata: Some(best.entry.metadata.clone()),
                 });
             }
 
@@ -366,6 +369,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                     matched_id: Some(best.entry.id.clone()),
                     matched_certificate: candidate_cert,
                     safety_evidence: Some(cascade_res.safety_evidence),
+                    matched_metadata: Some(best.entry.metadata.clone()),
                 });
             }
 
@@ -386,6 +390,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                     matched_id: Some(best.entry.id.clone()),
                     matched_certificate: candidate_cert,
                     safety_evidence: Some(cascade_res.safety_evidence),
+                    matched_metadata: Some(best.entry.metadata.clone()),
                 });
             }
 
@@ -405,6 +410,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                 matched_id: Some(best.entry.id.clone()),
                 matched_certificate: candidate_cert,
                 safety_evidence: Some(cascade_res.safety_evidence),
+                matched_metadata: Some(best.entry.metadata.clone()),
             })
         } else {
             // Semantic miss -> Execute origin
@@ -423,6 +429,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                 matched_id: None,
                 matched_certificate: None,
                 safety_evidence: None,
+                matched_metadata: None,
             })
         }
     }

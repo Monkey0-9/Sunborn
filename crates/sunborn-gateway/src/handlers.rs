@@ -146,6 +146,31 @@ pub async fn metrics() -> impl IntoResponse {
     )
 }
 
+pub fn parse_envelope_from_stored(content: &str) -> Option<EncryptedEnvelope> {
+    if let Some(hex_str) = content.strip_prefix("sunborn:enc:v1:") {
+        if let Ok(bytes) = hex::decode(hex_str) {
+            if let Ok(env) = serde_json::from_slice::<EncryptedEnvelope>(&bytes) {
+                return Some(env);
+            }
+        }
+    }
+    None
+}
+
+pub async fn verify_session(
+    Extension(sec_ctx): Extension<SecurityContext>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    if !sec_ctx.is_authenticated {
+        return Err(SunbornError::unauthorized("Unauthorized session").into());
+    }
+    Ok(Json(serde_json::json!({
+        "authenticated": true,
+        "tenant_id": sec_ctx.tenant_id.0,
+        "application_id": sec_ctx.application_id.0,
+        "is_admin": sec_ctx.is_admin,
+    })))
+}
+
 pub async fn execute_request_inner(
     state: &AppState,
     sec_ctx: &SecurityContext,
@@ -202,22 +227,31 @@ pub async fn execute_request_inner(
         .collect();
     let watermark_read_view = state.watermark_fencer.snapshot_read_view(&lineage_keys);
 
-    // Enforce tenant spend velocity ceiling (hard stop HTTP 429)
-    let current_spend = state
+    // Enforce tenant spend velocity ceiling via atomic pre-authorization reservation (K-007)
+    let pricing = ModelPricing::for_model(&req.model);
+    let estimated_prompt_tokens = req.prompt.split_whitespace().count() as u32;
+    let estimated_completion_tokens = 500u32;
+    let estimated_cost = FinOpsEngine::calculate_token_cost_avoided(
+        &pricing,
+        estimated_prompt_tokens,
+        estimated_completion_tokens,
+    );
+
+    let reservation_id = match state
         .spend_velocity_controller
-        .current_spend(&req.tenant_id.0);
-    let tenant_ceiling = state
-        .spend_velocity_controller
-        .ceiling_for_tenant(&req.tenant_id.0);
-    if current_spend >= tenant_ceiling {
-        SPEND_VELOCITY_REJECTIONS_TOTAL.fetch_add(1, Ordering::Relaxed);
-        RATE_LIMITED_TOTAL.fetch_add(1, Ordering::Relaxed);
-        return Err(SunbornError::rate_limit(format!(
-            "Spend velocity ceiling of ${:.2} exceeded for tenant '{}' (current spend: ${:.2})",
-            tenant_ceiling, req.tenant_id.0, current_spend
-        ))
-        .into());
-    }
+        .reserve_spend(&req.tenant_id.0, estimated_cost)
+    {
+        Ok(id) => id,
+        Err((committed, ceiling)) => {
+            SPEND_VELOCITY_REJECTIONS_TOTAL.fetch_add(1, Ordering::Relaxed);
+            RATE_LIMITED_TOTAL.fetch_add(1, Ordering::Relaxed);
+            return Err(SunbornError::rate_limit(format!(
+                "Spend velocity ceiling of ${:.2} exceeded for tenant '{}' (total committed: ${:.2})",
+                ceiling, req.tenant_id.0, committed
+            ))
+            .into());
+        }
+    };
 
     // 3. Compute deterministic Cache Identity (C1)
     let identity = IdentityEngine::compute_identity(&req);
@@ -249,6 +283,9 @@ pub async fn execute_request_inner(
                         cache_key = %identity.key,
                         "Exact cache entry lacks a valid cryptographic ReuseCertificate -> Abstaining to Revalidate"
                     );
+                    state
+                        .spend_velocity_controller
+                        .release_reservation(&req.tenant_id.0, reservation_id);
                     return Ok(ResponseEnvelope {
                         request_id: req.request_id,
                         tenant_id: req.tenant_id,
@@ -306,31 +343,45 @@ pub async fn execute_request_inner(
                 let certificate = Some(cert);
 
                 // Authenticated Decryption on Read Path (ER-001)
-                let content = if let Some(env_val) = cached_entry.metadata.get("encrypted_envelope")
-                {
-                    if let Ok(envelope) =
-                        serde_json::from_value::<EncryptedEnvelope>(env_val.clone())
-                    {
-                        match state.crypto_registry.decrypt(&envelope, "cache_admission") {
-                            Ok(plain_bytes) => {
-                                String::from_utf8(plain_bytes).unwrap_or(cached_entry.content)
-                            }
-                            Err(err) => {
-                                tracing::warn!(tenant = %req.tenant_id.0, error = %err, "TDEK decryption failed or key shredded -> Rejecting cached entry");
-                                return Err(SunbornError::forbidden(format!(
-                                    "Tenant '{}' key shredded or unprovisioned",
-                                    req.tenant_id.0
-                                ))
-                                .into());
-                            }
+                let envelope_opt = cached_entry
+                    .metadata
+                    .get("encrypted_envelope")
+                    .and_then(|v| serde_json::from_value::<EncryptedEnvelope>(v.clone()).ok())
+                    .or_else(|| parse_envelope_from_stored(&cached_entry.content));
+
+                let content = if let Some(envelope) = envelope_opt {
+                    match state.crypto_registry.decrypt(&envelope, "cache_admission") {
+                        Ok(plain_bytes) => {
+                            String::from_utf8(plain_bytes).unwrap_or(cached_entry.content)
                         }
-                    } else {
-                        cached_entry.content
+                        Err(err) => {
+                            tracing::warn!(tenant = %req.tenant_id.0, error = %err, "TDEK decryption failed or key shredded -> Rejecting cached entry");
+                            state
+                                .spend_velocity_controller
+                                .release_reservation(&req.tenant_id.0, reservation_id);
+                            return Err(SunbornError::forbidden(format!(
+                                "Tenant '{}' key shredded or unprovisioned",
+                                req.tenant_id.0
+                            ))
+                            .into());
+                        }
                     }
+                } else if cached_entry.content.starts_with("sunborn:enc:v1:") {
+                    state
+                        .spend_velocity_controller
+                        .release_reservation(&req.tenant_id.0, reservation_id);
+                    return Err(SunbornError::forbidden(format!(
+                        "Tenant '{}' key shredded or unprovisioned",
+                        req.tenant_id.0
+                    ))
+                    .into());
                 } else {
                     cached_entry.content
                 };
 
+                state
+                    .spend_velocity_controller
+                    .release_reservation(&req.tenant_id.0, reservation_id);
                 REQUEST_DURATION_MS_SUM.fetch_add(duration_ms, Ordering::Relaxed);
                 return Ok(ResponseEnvelope {
                     request_id: req.request_id,
@@ -428,13 +479,61 @@ pub async fn execute_request_inner(
 
                         let certificate = Some(cert);
 
+                        // Authenticated Decryption on Semantic Read Path (K-004)
+                        let envelope_opt = outcome
+                            .matched_metadata
+                            .as_ref()
+                            .and_then(|m| m.get("encrypted_envelope"))
+                            .and_then(|v| {
+                                serde_json::from_value::<EncryptedEnvelope>(v.clone()).ok()
+                            })
+                            .or_else(|| parse_envelope_from_stored(&content));
+
+                        let decrypted_content = if let Some(envelope) = envelope_opt {
+                            match state.crypto_registry.decrypt(&envelope, "cache_admission") {
+                                Ok(plain_bytes) => {
+                                    String::from_utf8(plain_bytes).unwrap_or(content)
+                                }
+                                Err(err) => {
+                                    tracing::warn!(
+                                        tenant = %req.tenant_id.0,
+                                        error = %err,
+                                        "TDEK decryption failed on semantic hit or key shredded -> Rejecting cached entry"
+                                    );
+                                    state
+                                        .spend_velocity_controller
+                                        .release_reservation(&req.tenant_id.0, reservation_id);
+                                    return Err(SunbornError::forbidden(format!(
+                                        "Tenant '{}' key shredded or unprovisioned",
+                                        req.tenant_id.0
+                                    ))
+                                    .into());
+                                }
+                            }
+                        } else if content.starts_with("sunborn:enc:v1:") {
+                            state
+                                .spend_velocity_controller
+                                .release_reservation(&req.tenant_id.0, reservation_id);
+                            return Err(SunbornError::forbidden(format!(
+                                "Tenant '{}' key shredded or unprovisioned",
+                                req.tenant_id.0
+                            ))
+                            .into());
+                        } else {
+                            content
+                        };
+
+                        state
+                            .spend_velocity_controller
+                            .release_reservation(&req.tenant_id.0, reservation_id);
+
                         REQUEST_DURATION_MS_SUM.fetch_add(duration_ms, Ordering::Relaxed);
                         return Ok(ResponseEnvelope {
                             request_id: req.request_id,
                             tenant_id: req.tenant_id,
                             application_id: req.application_id,
                             decision,
-                            content,
+                            content: decrypted_content,
                             cached: true,
                             cache_key: outcome.matched_id,
                             created_at: Utc::now(),
@@ -454,7 +553,15 @@ pub async fn execute_request_inner(
         "Cache MISS -> Forwarding to origin provider"
     );
 
-    let origin_result = state.origin_provider.execute(&req).await?;
+    let origin_result = match state.origin_provider.execute(&req).await {
+        Ok(res) => res,
+        Err(err) => {
+            state
+                .spend_velocity_controller
+                .release_reservation(&req.tenant_id.0, reservation_id);
+            return Err(err.into());
+        }
+    };
     let origin_content = origin_result.content;
 
     let pricing = ModelPricing::for_model(&req.model);
@@ -463,18 +570,11 @@ pub async fn execute_request_inner(
         origin_result.prompt_tokens,
         origin_result.completion_tokens,
     );
-    if let Err((total, max)) = state
+    // Settle the atomic reservation with actual origin cost
+    state
         .spend_velocity_controller
-        .record_and_check(&req.tenant_id.0, actual_cost)
-    {
-        SPEND_VELOCITY_REJECTIONS_TOTAL.fetch_add(1, Ordering::Relaxed);
-        tracing::warn!(
-            tenant = %req.tenant_id.0,
-            total_spend = %total,
-            ceiling = %max,
-            "Tenant spend velocity ceiling exceeded after origin call"
-        );
-    }
+        .settle_spend(&req.tenant_id.0, reservation_id, actual_cost);
+
     let origin_ledger = sunborn_db::models::FinOpsLedgerRecord {
         tenant_id: req.tenant_id.0.clone(),
         application_id: req.application_id.0.clone(),
@@ -536,8 +636,14 @@ pub async fn execute_request_inner(
             &state.learning_hmac_secret,
         );
 
-        // Authenticated Encryption on Write Path (ER-001)
-        let maybe_envelope = if state.crypto_registry.is_active(&req.tenant_id) {
+        // Authenticated Encryption on Write Path (K-003: Fail-closed on encryption failure)
+        let maybe_envelope = if state.crypto_registry.is_shredded(&req.tenant_id) {
+            tracing::warn!(tenant = %req.tenant_id.0, "Tenant key shredded -> Aborting cache writeback (fail-closed)");
+            None
+        } else {
+            if !state.crypto_registry.is_active(&req.tenant_id) {
+                let _ = state.crypto_registry.ensure_provisioned(&req.tenant_id);
+            }
             match state.crypto_registry.encrypt(
                 &req.tenant_id,
                 origin_content.as_bytes(),
@@ -545,97 +651,96 @@ pub async fn execute_request_inner(
             ) {
                 Ok(env) => Some(env),
                 Err(err) => {
-                    tracing::warn!(tenant = %req.tenant_id.0, error = %err, "TDEK encryption failed on admission");
+                    tracing::warn!(tenant = %req.tenant_id.0, error = %err, "TDEK encryption failed on admission -> Aborting cache writeback (fail-closed)");
                     None
                 }
             }
-        } else {
-            None
         };
 
-        let (stored_content, envelope_meta) = if let Some(ref env) = maybe_envelope {
-            (
-                format!("sunborn:enc:v1:{}", hex::encode(&env.ciphertext)),
-                serde_json::to_value(env).ok(),
-            )
-        } else {
-            (origin_content.clone(), None)
-        };
+        if let Some(env) = maybe_envelope {
+            let stored_content = format!(
+                "sunborn:enc:v1:{}",
+                hex::encode(serde_json::to_vec(&env).unwrap_or_default())
+            );
+            let envelope_meta = serde_json::to_value(&env).ok();
 
-        // a) Save in exact cache with embedded certificate metadata
-        let mut entry = CacheEntry::new(
-            &identity.key,
-            &stored_content,
-            Some(state.config.cache.default_ttl_secs),
-        );
-        if let Ok(cert_val) = serde_json::to_value(&admission_cert) {
-            entry.metadata["certificate"] = cert_val;
-        }
-        if let Some(ref env_val) = envelope_meta {
-            entry.metadata["encrypted_envelope"] = env_val.clone();
-        }
-        let _ = state.cache.set(entry).await;
-
-        // b) Admit into semantic vector store
-        if let Ok(vector) = state.selected_embedder.embed(&req.prompt).await {
-            let mut meta = serde_json::json!({
-                "model": req.model,
-                "certificate": serde_json::to_value(&admission_cert).unwrap_or_default(),
-            });
-            if let Some(ref env_val) = envelope_meta {
-                meta["encrypted_envelope"] = env_val.clone();
+            // a) Save in exact cache with embedded certificate metadata
+            let mut entry = CacheEntry::new(
+                &identity.key,
+                &stored_content,
+                Some(state.config.cache.default_ttl_secs),
+            );
+            if let Ok(cert_val) = serde_json::to_value(&admission_cert) {
+                entry.metadata["certificate"] = cert_val;
             }
-            let _ = state
-                .vector_store
-                .insert(VectorEntry {
-                    id: identity.key.clone(),
-                    tenant_id: req.tenant_id.clone(),
-                    application_id: req.application_id.clone(),
-                    prompt: req.prompt.clone(),
+            if let Some(ref env_val) = envelope_meta {
+                entry.metadata["encrypted_envelope"] = env_val.clone();
+            }
+            let _ = state.cache.set(entry).await;
+
+            // b) Admit into semantic vector store
+            if let Ok(vector) = state.selected_embedder.embed(&req.prompt).await {
+                let mut meta = serde_json::json!({
+                    "model": req.model,
+                    "certificate": serde_json::to_value(&admission_cert).unwrap_or_default(),
+                });
+                if let Some(ref env_val) = envelope_meta {
+                    meta["encrypted_envelope"] = env_val.clone();
+                }
+                let _ = state
+                    .vector_store
+                    .insert(VectorEntry {
+                        id: identity.key.clone(),
+                        tenant_id: req.tenant_id.clone(),
+                        application_id: req.application_id.clone(),
+                        prompt: req.prompt.clone(),
+                        content: stored_content.clone(),
+                        vector,
+                        metadata: meta,
+                        created_at: Utc::now(),
+                    })
+                    .await;
+            }
+
+            // c) Save to authoritative PostgreSQL system of record
+            let db_res = state
+                .db
+                .insert_cache_entry(sunborn_db::models::DurableCacheRecord {
+                    key: identity.key.clone(),
+                    tenant_id: req.tenant_id.0.clone(),
+                    application_id: req.application_id.0.clone(),
+                    model: req.model.clone(),
+                    policy_version: "v1".to_string(),
+                    hash: identity.hash.clone(),
+                    prompt_canonical: req.prompt.clone(),
                     content: stored_content.clone(),
-                    vector,
-                    metadata: meta,
+                    hit_count: 0,
                     created_at: Utc::now(),
+                    expires_at: Some(
+                        Utc::now()
+                            + chrono::Duration::seconds(state.config.cache.default_ttl_secs as i64),
+                    ),
+                    last_accessed_at: Utc::now(),
                 })
                 .await;
-        }
 
-        // c) Save to authoritative PostgreSQL system of record
-        let db_res = state
-            .db
-            .insert_cache_entry(sunborn_db::models::DurableCacheRecord {
-                key: identity.key.clone(),
-                tenant_id: req.tenant_id.0.clone(),
-                application_id: req.application_id.0.clone(),
-                model: req.model.clone(),
-                policy_version: "v1".to_string(),
-                hash: identity.hash.clone(),
-                prompt_canonical: req.prompt.clone(),
-                content: stored_content.clone(),
-                hit_count: 0,
-                created_at: Utc::now(),
-                expires_at: Some(
-                    Utc::now()
-                        + chrono::Duration::seconds(state.config.cache.default_ttl_secs as i64),
-                ),
-                last_accessed_at: Utc::now(),
-            })
-            .await;
-
-        if let Err(e) = db_res {
-            tracing::error!(
-                key = %identity.key,
-                tenant = %req.tenant_id.0,
-                error = %e,
-                "Authoritative database persistence failed on cache admission"
-            );
-            let is_prod = sunborn_core::is_production_mode();
-            if is_prod && state.config.cache.strict_durability {
-                return Err(SunbornError::database(format!(
-                    "Strict durability violation: failed to persist authoritative cache entry to database: {e}"
-                ))
-                .into());
+            if let Err(e) = db_res {
+                tracing::error!(
+                    key = %identity.key,
+                    tenant = %req.tenant_id.0,
+                    error = %e,
+                    "Authoritative database persistence failed on cache admission"
+                );
+                let is_prod = sunborn_core::is_production_mode();
+                if is_prod && state.config.cache.strict_durability {
+                    return Err(SunbornError::database(format!(
+                        "Strict durability violation: failed to persist authoritative cache entry to database: {e}"
+                    ))
+                    .into());
+                }
             }
+        } else {
+            tracing::info!(tenant = %req.tenant_id.0, "Cache admission skipped: encryption unavailable, fail-closed enforced");
         }
     }
 
@@ -1554,6 +1659,11 @@ pub async fn trigger_rebuild(
         if let Ok(cert_val) = serde_json::to_value(&restored_cert) {
             entry.metadata["certificate"] = cert_val.clone();
         }
+        if let Some(env) = parse_envelope_from_stored(&record.content) {
+            if let Ok(env_val) = serde_json::to_value(&env) {
+                entry.metadata["encrypted_envelope"] = env_val;
+            }
+        }
         if state.cache.set(entry).await.is_ok() {
             exact_restored += 1;
         }
@@ -1564,6 +1674,15 @@ pub async fn trigger_rebuild(
             .embed(&record.prompt_canonical)
             .await
         {
+            let mut meta = serde_json::json!({
+                "model": record.model,
+                "certificate": serde_json::to_value(&restored_cert).unwrap_or_default(),
+            });
+            if let Some(env) = parse_envelope_from_stored(&record.content) {
+                if let Ok(env_val) = serde_json::to_value(&env) {
+                    meta["encrypted_envelope"] = env_val;
+                }
+            }
             let ventry = VectorEntry {
                 id: record.key.clone(),
                 tenant_id: TenantId::new(record.tenant_id),
@@ -1571,10 +1690,7 @@ pub async fn trigger_rebuild(
                 prompt: record.prompt_canonical,
                 content: record.content,
                 vector: vec,
-                metadata: serde_json::json!({
-                    "model": record.model,
-                    "certificate": serde_json::to_value(&restored_cert).unwrap_or_default(),
-                }),
+                metadata: meta,
                 created_at: record.created_at,
             };
             if state.vector_store.insert(ventry).await.is_ok() {
@@ -1670,12 +1786,29 @@ pub async fn provision_tenant(
     let tenant = TenantId::new(&payload.tenant_id);
     state
         .crypto_registry
-        .provision_tenant_secure(tenant)
+        .provision_tenant_secure(tenant.clone())
         .map_err(|e| AppError::from(SunbornError::internal(format!("Provisioning failed: {e}"))))?;
+
+    // Wrap the tenant key under the active KMS provider
+    let wrapped_tdek = state
+        .crypto_registry
+        .wrap_tenant_key(&tenant)
+        .map_err(|e| AppError::from(SunbornError::internal(format!("Wrapping failed: {e}"))))?;
+
+    let provider_name = state.crypto_registry.provider().provider_name();
+
+    // Persist durable wrapped TDEK to PostgreSQL WAL
+    state
+        .postgres_db
+        .persist_wrapped_tdek(&payload.tenant_id, &wrapped_tdek, provider_name)
+        .await
+        .map_err(AppError::from)?;
 
     Ok(Json(serde_json::json!({
         "status": "provisioned",
         "tenant_id": payload.tenant_id,
+        "kms_provider": provider_name,
+        "durable_persistence": true,
     })))
 }
 
@@ -2230,11 +2363,16 @@ pub async fn revoke_api_credential(
     if let Some(tenant_id) = payload.tenant_id {
         let tid = TenantId::new(&tenant_id);
         let revoked_in_mem = state.api_key_registry.revoke_tenant_keys(&tid);
-        let _ = state.db.delete_tenant_data(&tenant_id).await;
+        let db_revoked = state
+            .postgres_db
+            .revoke_tenant_credentials(&tenant_id)
+            .await
+            .map_err(AppError::from)?;
         return Ok(Json(json!({
             "status": "revoked_tenant_credentials",
             "tenant_id": tenant_id,
-            "revoked_count": revoked_in_mem
+            "revoked_count": revoked_in_mem,
+            "durable_revoked_count": db_revoked
         })));
     }
 

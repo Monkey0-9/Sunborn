@@ -69,6 +69,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/ready", get(handlers::ready))
         .route("/metrics", get(handlers::metrics))
         .route("/v1/auth/login", post(handlers::login))
+        .route("/v1/auth/session", get(handlers::verify_session))
         .route(
             "/v1/auth/credentials",
             post(handlers::create_api_credential),
