@@ -17,6 +17,8 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Sunborn Team"]
 license = "Apache-2.0"
+repository = "https://github.com/sunborn-ai/sunborn"
+rust-version = "1.80"
 
 [workspace.dependencies]
 tokio = { version = "1.40", features = ["full"] }
@@ -43,4 +45,9 @@ sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio",
 redis = { version = "0.27", features = ["tokio-comp", "connection-manager", "aio"] }
 hmac = "0.12"
 subtle = "2.6"
+aes-gcm = "0.10"
+zeroize = "1.9.1"
+regex = "1.10"
+aws-config = { version = "1.5", default-features = false, features = ["rt-tokio", "rustls"] }
+aws-sdk-kms = { version = "1.52", default-features = false, features = ["rt-tokio", "rustls"] }
 
