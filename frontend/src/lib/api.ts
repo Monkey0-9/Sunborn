@@ -353,5 +353,171 @@ export const sunbornApi = {
       max_load_factor: number;
       strategy: string;
     }>("v1/routing/radix/inspect", { method: "GET" }),
+
+  // Auth & Credentials Management
+  createApiCredential: (payload: {
+    tenant_id: string;
+    application_id: string;
+    rate_limit_rps?: number;
+    allowed_models?: string[];
+    is_admin?: boolean;
+    expires_in_secs?: number;
+    raw_key?: string;
+  }) =>
+    request<{
+      status: string;
+      raw_key: string;
+      key_hash: string;
+      tenant_id: string;
+      application_id: string;
+      is_admin: boolean;
+      expires_at?: string;
+    }>("v1/auth/credentials", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  revokeApiCredential: (payload: {
+    key_hash?: string;
+    raw_key?: string;
+    tenant_id?: string;
+  }) =>
+    request<{
+      status: string;
+      revoked_count?: number;
+      durable_revoked_count?: number;
+      tenant_id?: string;
+      key_hash?: string;
+    }>("v1/auth/credentials/revoke", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  rotateApiCredential: (payload: {
+    old_raw_key?: string;
+    old_key_hash?: string;
+    expires_in_secs?: number;
+  }) =>
+    request<{
+      status: string;
+      new_raw_key: string;
+      new_key_hash: string;
+    }>("v1/auth/credentials/rotate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  verifySession: () =>
+    request<{
+      authenticated: boolean;
+      tenant_id: string;
+      application_id: string;
+      is_admin: boolean;
+    }>("v1/auth/session", { method: "GET" }),
+
+  // Governance: Tenant Provisioning
+  provisionTenant: (tenantId: string) =>
+    request<{
+      status: string;
+      tenant_id: string;
+      kms_provider: string;
+      durable_persistence: boolean;
+    }>("v1/governance/provision", {
+      method: "POST",
+      body: JSON.stringify({ tenant_id: tenantId }),
+    }),
+
+  // Exact & Multi-Tier Cache CRUD
+  getCacheEntry: (key: string) =>
+    request<any>(`v1/caches/${encodeURIComponent(key)}`, { method: "GET" }),
+
+  deleteCacheEntry: (key: string) =>
+    request<{ key: string; deleted: boolean }>(
+      `v1/caches/${encodeURIComponent(key)}`,
+      { method: "DELETE" }
+    ),
+
+  // Causal Execution DAG
+  planExecution: (payload: {
+    tenant_id: string;
+    application_id: string;
+    plan: any;
+  }) =>
+    request<any>("v1/execution/plan", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  recordToolResult: (payload: {
+    tenant_id: string;
+    application_id: string;
+    node_id: string;
+    tool_name: string;
+    result: any;
+  }) =>
+    request<any>("v1/execution/results", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  evictExecution: (tenantId: string) =>
+    request<{ tenant_id: string; evicted_nodes: number }>(
+      "v1/execution/evict",
+      {
+        method: "POST",
+        body: JSON.stringify({ tenant_id: tenantId }),
+      }
+    ),
+
+  // Lineage & Dependencies
+  recordDependency: (sourceId: string, cacheKey: string) =>
+    request<{ status: string; source_id: string; cache_key: string }>(
+      "v1/dependencies",
+      {
+        method: "POST",
+        body: JSON.stringify({ source_id: sourceId, cache_key: cacheKey }),
+      }
+    ),
+
+  sweepLifecycle: () =>
+    request<{ status: string; swept_entries: number }>(
+      "v1/lifecycle/sweep",
+      { method: "POST" }
+    ),
+
+  shadowEvaluate: (payload: {
+    tenant_id: string;
+    application_id: string;
+    prompt: string;
+    model: string;
+    origin_content: string;
+  }) =>
+    request<{
+      drift_detected: boolean;
+      cosine_similarity: number;
+      action: string;
+      evicted: boolean;
+    }>("v1/shadow/evaluate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  getClusterSyncStatus: () =>
+    request<any>("v1/cluster/sync/status", { method: "GET" }),
+
+  getAutonomicIncidents: () =>
+    request<any>("v1/autonomic/incidents", { method: "GET" }),
+
+  getHealth: () =>
+    request<{ status: string; service: string; version: string; timestamp: string }>(
+      "health",
+      { method: "GET" }
+    ),
+
+  getReadiness: () =>
+    request<any>("ready", { method: "GET" }),
+
+  getMetrics: () =>
+    request<string>("metrics", { method: "GET" }),
 };
 

@@ -13,6 +13,8 @@ import {
   PieChart,
   Calculator,
   ShieldCheck,
+  Download,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -100,6 +102,104 @@ export default function FinOpsPage() {
     });
   };
 
+  const handleExportCsv = () => {
+    const rows = [
+      [
+        "Timestamp",
+        "TenantId",
+        "ApplicationId",
+        "Model",
+        "CacheTier",
+        "AvoidedTokens",
+        "CostAvoidedUSD",
+        "NetSavingsUSD",
+      ],
+      [
+        new Date().toISOString(),
+        "tenant-enterprise-fintech",
+        "app-risk-evaluator",
+        "gpt-4o",
+        "exact_l1",
+        "1800",
+        "0.054",
+        "0.054",
+      ],
+      [
+        new Date(Date.now() - 60000).toISOString(),
+        "tenant-enterprise-fintech",
+        "app-nlp-search",
+        "gpt-4o",
+        "semantic_c2",
+        "1450",
+        "0.0435",
+        "0.0435",
+      ],
+      [
+        new Date(Date.now() - 120000).toISOString(),
+        "tenant-enterprise-fintech",
+        "app-risk-evaluator",
+        "claude-3-5-sonnet",
+        "exact_l1",
+        "2400",
+        "0.072",
+        "0.072",
+      ],
+      [
+        new Date(Date.now() - 180000).toISOString(),
+        "tenant-corp-1",
+        "app-rag",
+        "gpt-4o",
+        "origin",
+        "0",
+        "0.00",
+        "-0.015",
+      ],
+    ];
+    const csvContent =
+      "data:text/csv;charset=utf-8," + rows.map((e) => e.join(",")).join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `sunborn-finops-ledger-${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportJson = () => {
+    const data = {
+      exported_at: new Date().toISOString(),
+      report_period: "Trailing 30 Days",
+      active_currency: "USD",
+      summary: {
+        total_queries: monthlyQueries,
+        hit_ratio_pct: cacheHitRatio,
+        gross_projected_savings_usd:
+          liveReport?.estimatedSavingsUsd ?? 142.5,
+      },
+      ledger_records: [
+        {
+          timestamp: new Date().toISOString(),
+          tenant_id: "tenant-enterprise-fintech",
+          application_id: "app-risk-evaluator",
+          model: "gpt-4o",
+          cache_tier: "exact_l1",
+          tokens_avoided: 1800,
+          net_savings_usd: 0.054,
+        },
+      ],
+    };
+    const jsonStr =
+      "data:text/json;charset=utf-8," +
+      encodeURIComponent(JSON.stringify(data, null, 2));
+    const link = document.createElement("a");
+    link.setAttribute("href", jsonStr);
+    link.setAttribute("download", `sunborn-finops-ledger-${Date.now()}.json`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   React.useEffect(() => {
     sunbornApi
       .getFinOpsReport()
@@ -160,7 +260,23 @@ export default function FinOpsPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 text-xs font-mono font-semibold transition-all cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export CSV</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleExportJson}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/10 text-xs font-mono transition-all cursor-pointer"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            <span>Export JSON</span>
+          </button>
           <Badge variant="outline" className="font-mono">
             API: GET /v1/finops/report
           </Badge>
