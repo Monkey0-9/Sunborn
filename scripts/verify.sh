@@ -4,7 +4,8 @@
 # Runs all checks across Rust workspace, Next.js frontend, Python SDK, Helm,
 # container stacks, and empirical research reproducibility.
 # ==============================================================================
-set -euo pipefail
+set -eu
+(set -o pipefail 2>/dev/null) && set -o pipefail || true
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
