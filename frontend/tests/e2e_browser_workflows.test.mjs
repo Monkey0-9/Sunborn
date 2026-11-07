@@ -39,12 +39,11 @@ before(async () => {
   }
 
   // Start Next.js in production mode
-  const nextBin = path.join(frontendDir, 'node_modules', '.bin', 'next');
-  nextProcess = spawn(nextBin, ['start', '-p', `${TEST_PORT}`], {
+  const nextJsBin = path.join(frontendDir, 'node_modules', 'next', 'dist', 'bin', 'next');
+  nextProcess = spawn(process.execPath, [nextJsBin, 'start', '-p', `${TEST_PORT}`, '-H', '127.0.0.1'], {
     cwd: frontendDir,
     env: { ...process.env, PORT: `${TEST_PORT}`, NODE_ENV: 'production' },
     stdio: 'ignore',
-    detached: true,
   });
 
   // Wait for health check
@@ -107,7 +106,11 @@ after(async () => {
   }
   if (nextProcess && nextProcess.pid) {
     try {
-      process.kill(-nextProcess.pid, 'SIGKILL');
+      if (process.platform === 'win32') {
+        execSync(`taskkill /F /T /PID ${nextProcess.pid}`, { stdio: 'ignore' });
+      } else {
+        process.kill(-nextProcess.pid, 'SIGKILL');
+      }
     } catch {
       try {
         nextProcess.kill('SIGKILL');

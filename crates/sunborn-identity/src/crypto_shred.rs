@@ -16,6 +16,9 @@ use std::time::{Duration, Instant};
 use aes_gcm::aead::rand_core::{OsRng, RngCore};
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
+use aws_config::Region;
+use aws_sdk_kms::primitives::Blob;
+use aws_sdk_kms::Client as KmsClient;
 use sha2::{Digest, Sha256};
 use sunborn_core::{SunbornError, TenantId};
 use zeroize::Zeroize;
@@ -178,6 +181,12 @@ pub trait KeyManagementProvider: Send + Sync {
     /// Local envelope simulations must retain the default `false` value.
     fn uses_remote_crypto(&self) -> bool {
         false
+    }
+
+    /// Verifies live remote KMS connectivity, least-privilege IAM permissions, and key readiness
+    /// by executing an active cryptographic roundtrip probe.
+    fn canary_roundtrip(&self) -> Result<(), SunbornError> {
+        Ok(())
     }
 
     /// Wraps/encrypts a plaintext Tenant Data Encryption Key (TDEK) under the Key Encryption Key (KEK).
@@ -526,6 +535,45 @@ pub fn base64_decode(input: &str) -> Result<Vec<u8>, SunbornError> {
     Ok(out)
 }
 
+// ============================================================================
+// Safe Synchronous Bridge for Async Remote Key Providers (DEF-001)
+// Executes asynchronous AWS KMS and Vault requests safely across:
+// 1. Multi-threaded Tokio runtimes (via block_in_place)
+// 2. Single-threaded / current-thread Tokio runtimes (via isolated thread)
+// 3. Non-Tokio synchronous contexts / tests (via local current-thread runtime)
+// ============================================================================
+fn run_blocking_async<F, T>(future: F) -> T
+where
+    F: std::future::Future<Output = T> + Send + 'static,
+    T: Send + 'static,
+{
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) => match handle.runtime_flavor() {
+            tokio::runtime::RuntimeFlavor::MultiThread => {
+                tokio::task::block_in_place(|| handle.block_on(future))
+            }
+            _ => std::thread::scope(|s| {
+                s.spawn(|| {
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .expect("failed to initialize auxiliary tokio runtime");
+                    rt.block_on(future)
+                })
+                .join()
+                .expect("auxiliary runtime thread panicked")
+            }),
+        },
+        Err(_) => {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("failed to initialize auxiliary tokio runtime");
+            rt.block_on(future)
+        }
+    }
+}
+
 /// Authenticated Remote HashiCorp Vault Transit Engine KMS Provider.
 /// Delegates all cryptographic envelope operations to external Vault Transit HSM/KMS.
 pub struct RemoteVaultTransitKeyProvider {
@@ -592,6 +640,33 @@ impl KeyManagementProvider for RemoteVaultTransitKeyProvider {
         true
     }
 
+    fn canary_roundtrip(&self) -> Result<(), SunbornError> {
+        let test_tdek = ZeroizingKey::new([0x5au8; 32]);
+        let wrapped = self.wrap_key(&test_tdek).map_err(|e| {
+            SunbornError::configuration_error(format!(
+                "Vault transit canary encryption probe failed for key '{}' at '{}': {e}",
+                self.transit_key_name, self.vault_addr
+            ))
+        })?;
+        let unwrapped = self.unwrap_key(&wrapped).map_err(|e| {
+            SunbornError::configuration_error(format!(
+                "Vault transit canary decryption probe failed for key '{}' at '{}': {e}",
+                self.transit_key_name, self.vault_addr
+            ))
+        })?;
+        if !constant_time_compare(test_tdek.as_bytes(), unwrapped.as_bytes()) {
+            return Err(SunbornError::configuration_error(
+                "Vault transit canary roundtrip verification failed: decrypted key mismatch",
+            ));
+        }
+        tracing::info!(
+            transit_key = %self.transit_key_name,
+            vault_addr = %self.vault_addr,
+            "HashiCorp Vault Transit remote cryptographic capability verified successfully"
+        );
+        Ok(())
+    }
+
     fn wrap_key(&self, key: &ZeroizingKey) -> Result<Vec<u8>, SunbornError> {
         let b64 = base64_encode(key.as_bytes());
         let url = format!(
@@ -601,31 +676,29 @@ impl KeyManagementProvider for RemoteVaultTransitKeyProvider {
         let client = self.client.clone();
         let token = self.vault_token.clone();
 
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async move {
-                let resp = client
-                    .post(&url)
-                    .header("X-Vault-Token", token)
-                    .json(&serde_json::json!({ "plaintext": b64 }))
-                    .send()
-                    .await
-                    .map_err(|e| {
-                        SunbornError::internal(format!("Remote Vault encrypt call failed: {e}"))
-                    })?;
-                if !resp.status().is_success() {
-                    return Err(SunbornError::internal(format!(
-                        "Vault encrypt error HTTP {}",
-                        resp.status()
-                    )));
-                }
-                let body: serde_json::Value = resp.json().await.map_err(|e| {
-                    SunbornError::internal(format!("Failed to parse Vault response: {e}"))
+        run_blocking_async(async move {
+            let resp = client
+                .post(&url)
+                .header("X-Vault-Token", token)
+                .json(&serde_json::json!({ "plaintext": b64 }))
+                .send()
+                .await
+                .map_err(|e| {
+                    SunbornError::internal(format!("Remote Vault encrypt call failed: {e}"))
                 })?;
-                let ciphertext = body["data"]["ciphertext"]
-                    .as_str()
-                    .ok_or_else(|| SunbornError::internal("Vault response missing ciphertext"))?;
-                Ok(ciphertext.as_bytes().to_vec())
-            })
+            if !resp.status().is_success() {
+                return Err(SunbornError::internal(format!(
+                    "Vault encrypt error HTTP {}",
+                    resp.status()
+                )));
+            }
+            let body: serde_json::Value = resp.json().await.map_err(|e| {
+                SunbornError::internal(format!("Failed to parse Vault response: {e}"))
+            })?;
+            let ciphertext = body["data"]["ciphertext"]
+                .as_str()
+                .ok_or_else(|| SunbornError::internal("Vault response missing ciphertext"))?;
+            Ok(ciphertext.as_bytes().to_vec())
         })
     }
 
@@ -633,6 +706,7 @@ impl KeyManagementProvider for RemoteVaultTransitKeyProvider {
         let ciphertext = std::str::from_utf8(wrapped).map_err(|e| {
             SunbornError::forbidden(format!("Invalid wrapped ciphertext UTF-8: {e}"))
         })?;
+        let ciphertext = ciphertext.to_string();
         let url = format!(
             "{}/v1/transit/decrypt/{}",
             self.vault_addr, self.transit_key_name
@@ -640,39 +714,37 @@ impl KeyManagementProvider for RemoteVaultTransitKeyProvider {
         let client = self.client.clone();
         let token = self.vault_token.clone();
 
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async move {
-                let resp = client
-                    .post(&url)
-                    .header("X-Vault-Token", token)
-                    .json(&serde_json::json!({ "ciphertext": ciphertext }))
-                    .send()
-                    .await
-                    .map_err(|e| {
-                        SunbornError::internal(format!("Remote Vault decrypt call failed: {e}"))
-                    })?;
-                if !resp.status().is_success() {
-                    return Err(SunbornError::forbidden(format!(
-                        "Vault decrypt failed with HTTP {}",
-                        resp.status()
-                    )));
-                }
-                let body: serde_json::Value = resp.json().await.map_err(|e| {
-                    SunbornError::internal(format!("Failed to parse Vault response: {e}"))
+        run_blocking_async(async move {
+            let resp = client
+                .post(&url)
+                .header("X-Vault-Token", token)
+                .json(&serde_json::json!({ "ciphertext": ciphertext }))
+                .send()
+                .await
+                .map_err(|e| {
+                    SunbornError::internal(format!("Remote Vault decrypt call failed: {e}"))
                 })?;
-                let plaintext_b64 = body["data"]["plaintext"]
-                    .as_str()
-                    .ok_or_else(|| SunbornError::forbidden("Vault response missing plaintext"))?;
-                let bytes = base64_decode(plaintext_b64)?;
-                if bytes.len() != 32 {
-                    return Err(SunbornError::forbidden(
-                        "Vault unwrapped key length is not 32 bytes",
-                    ));
-                }
-                let mut raw = [0u8; 32];
-                raw.copy_from_slice(&bytes);
-                Ok(ZeroizingKey::new(raw))
-            })
+            if !resp.status().is_success() {
+                return Err(SunbornError::forbidden(format!(
+                    "Vault decrypt failed with HTTP {}",
+                    resp.status()
+                )));
+            }
+            let body: serde_json::Value = resp.json().await.map_err(|e| {
+                SunbornError::internal(format!("Failed to parse Vault response: {e}"))
+            })?;
+            let plaintext_b64 = body["data"]["plaintext"]
+                .as_str()
+                .ok_or_else(|| SunbornError::forbidden("Vault response missing plaintext"))?;
+            let bytes = base64_decode(plaintext_b64)?;
+            if bytes.len() != 32 {
+                return Err(SunbornError::forbidden(
+                    "Vault unwrapped key length is not 32 bytes",
+                ));
+            }
+            let mut raw = [0u8; 32];
+            raw.copy_from_slice(&bytes);
+            Ok(ZeroizingKey::new(raw))
         })
     }
 
@@ -696,17 +768,61 @@ impl KeyManagementProvider for RemoteVaultTransitKeyProvider {
 }
 
 /// Authenticated Remote AWS KMS Provider.
-/// Delegates envelope key encryption and decryption to AWS KMS HSM boundaries.
+/// Delegates envelope key encryption and decryption to AWS KMS HSM boundaries via official AWS SDK.
+#[derive(Clone)]
 pub struct RemoteAwsKmsKeyProvider {
     key_arn: String,
     region: String,
+    client: KmsClient,
+    endpoint_url: Option<String>,
 }
 
 impl RemoteAwsKmsKeyProvider {
     pub fn new(key_arn: impl Into<String>, region: impl Into<String>) -> Self {
+        let ep = std::env::var("SUNBORN_AWS_KMS_ENDPOINT_URL")
+            .or_else(|_| std::env::var("AWS_ENDPOINT_URL"))
+            .ok();
+        Self::with_endpoint(key_arn, region, ep)
+    }
+
+    pub fn with_endpoint(
+        key_arn: impl Into<String>,
+        region: impl Into<String>,
+        endpoint_url: Option<String>,
+    ) -> Self {
+        let key_arn = key_arn.into();
+        let region_str = region.into();
+        let region_obj = Region::new(region_str.clone());
+        let ep_opt = endpoint_url.clone();
+
+        let client = run_blocking_async(async move {
+            let mut config_loader =
+                aws_config::defaults(aws_config::BehaviorVersion::latest()).region(region_obj);
+            if let Some(ref ep) = ep_opt {
+                config_loader = config_loader.endpoint_url(ep);
+            }
+            let sdk_config = config_loader.load().await;
+            KmsClient::new(&sdk_config)
+        });
+
+        Self {
+            key_arn,
+            region: region_str,
+            client,
+            endpoint_url,
+        }
+    }
+
+    pub fn with_client(
+        key_arn: impl Into<String>,
+        region: impl Into<String>,
+        client: KmsClient,
+    ) -> Self {
         Self {
             key_arn: key_arn.into(),
             region: region.into(),
+            client,
+            endpoint_url: None,
         }
     }
 
@@ -716,6 +832,14 @@ impl RemoteAwsKmsKeyProvider {
 
     pub fn region(&self) -> &str {
         &self.region
+    }
+
+    pub fn client(&self) -> &KmsClient {
+        &self.client
+    }
+
+    pub fn endpoint_url(&self) -> Option<&str> {
+        self.endpoint_url.as_deref()
     }
 }
 
@@ -728,9 +852,56 @@ impl KeyManagementProvider for RemoteAwsKmsKeyProvider {
         true
     }
 
+    fn canary_roundtrip(&self) -> Result<(), SunbornError> {
+        let test_tdek = ZeroizingKey::new([0x37u8; 32]);
+        let wrapped = self.wrap_key(&test_tdek).map_err(|e| {
+            SunbornError::configuration_error(format!(
+                "AWS KMS canary encryption probe failed for key '{}' in region '{}': {e}",
+                self.key_arn, self.region
+            ))
+        })?;
+        let unwrapped = self.unwrap_key(&wrapped).map_err(|e| {
+            SunbornError::configuration_error(format!(
+                "AWS KMS canary decryption probe failed for key '{}' in region '{}': {e}",
+                self.key_arn, self.region
+            ))
+        })?;
+        if !constant_time_compare(test_tdek.as_bytes(), unwrapped.as_bytes()) {
+            return Err(SunbornError::configuration_error(
+                "AWS KMS canary roundtrip verification failed: decrypted key mismatch",
+            ));
+        }
+        tracing::info!(
+            key_arn = %self.key_arn,
+            region = %self.region,
+            "AWS KMS remote cryptographic capability and IAM permissions verified successfully"
+        );
+        Ok(())
+    }
+
     fn wrap_key(&self, key: &ZeroizingKey) -> Result<Vec<u8>, SunbornError> {
+        let client = self.client.clone();
+        let key_arn = self.key_arn.clone();
+        let plaintext_blob = Blob::new(key.as_bytes().to_vec());
+
+        let ciphertext_bytes = run_blocking_async(async move {
+            let resp = client
+                .encrypt()
+                .key_id(&key_arn)
+                .plaintext(plaintext_blob)
+                .send()
+                .await
+                .map_err(|e| {
+                    SunbornError::internal(format!("AWS KMS remote Encrypt call failed: {e}"))
+                })?;
+            let blob = resp.ciphertext_blob().ok_or_else(|| {
+                SunbornError::internal("AWS KMS Encrypt response missing ciphertext blob")
+            })?;
+            Ok(blob.as_ref().to_vec())
+        })?;
+
         let header = format!("awskms-remote:{}:{}:", self.region, self.key_arn);
-        let b64 = base64_encode(key.as_bytes());
+        let b64 = base64_encode(&ciphertext_bytes);
         let mut out = Vec::with_capacity(header.len() + b64.len());
         out.extend_from_slice(header.as_bytes());
         out.extend_from_slice(b64.as_bytes());
@@ -741,20 +912,40 @@ impl KeyManagementProvider for RemoteAwsKmsKeyProvider {
         let prefix = format!("awskms-remote:{}:{}:", self.region, self.key_arn);
         if !wrapped.starts_with(prefix.as_bytes()) {
             return Err(SunbornError::forbidden(
-                "Invalid AWS KMS remote envelope header",
+                "Invalid AWS KMS remote envelope header or key ARN mismatch",
             ));
         }
         let b64_part = std::str::from_utf8(&wrapped[prefix.len()..]).map_err(|e| {
             SunbornError::forbidden(format!("Invalid AWS KMS key envelope UTF-8: {e}"))
         })?;
-        let bytes = base64_decode(b64_part)?;
-        if bytes.len() != 32 {
+        let ciphertext_bytes = base64_decode(b64_part)?;
+        let client = self.client.clone();
+        let key_arn = self.key_arn.clone();
+        let blob = Blob::new(ciphertext_bytes);
+
+        let plaintext_bytes = run_blocking_async(async move {
+            let resp = client
+                .decrypt()
+                .key_id(&key_arn)
+                .ciphertext_blob(blob)
+                .send()
+                .await
+                .map_err(|e| {
+                    SunbornError::forbidden(format!("AWS KMS remote Decrypt call failed: {e}"))
+                })?;
+            let plain_blob = resp.plaintext().ok_or_else(|| {
+                SunbornError::forbidden("AWS KMS Decrypt response missing plaintext blob")
+            })?;
+            Ok(plain_blob.as_ref().to_vec())
+        })?;
+
+        if plaintext_bytes.len() != 32 {
             return Err(SunbornError::forbidden(
-                "Unwrapped AWS KMS key length mismatch",
+                "Unwrapped AWS KMS key length is not 32 bytes",
             ));
         }
         let mut raw = [0u8; 32];
-        raw.copy_from_slice(&bytes);
+        raw.copy_from_slice(&plaintext_bytes);
         Ok(ZeroizingKey::new(raw))
     }
 
@@ -1275,14 +1466,72 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_remote_aws_kms_key_provider_lifecycle() {
-        let provider = RemoteAwsKmsKeyProvider::new(
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_remote_aws_kms_key_provider_lifecycle() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (tx, mut rx) = tokio::sync::oneshot::channel::<()>();
+
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    _ = &mut rx => break,
+                    accept_res = listener.accept() => {
+                        let Ok((mut socket, _)) = accept_res else { break; };
+                        tokio::spawn(async move {
+                            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                            let mut buf = [0u8; 8192];
+                            let Ok(n) = socket.read(&mut buf).await else { return; };
+                            let req_str = String::from_utf8_lossy(&buf[..n]);
+
+                            let (body, status) = if req_str.contains("TrentService.Encrypt") {
+                                let b64 = if let Some(idx) = req_str.find("\"Plaintext\":\"") {
+                                    let rest = &req_str[idx + 13..];
+                                    let end = rest.find('"').unwrap_or(0);
+                                    &rest[..end]
+                                } else {
+                                    ""
+                                };
+                                (format!("{{\"CiphertextBlob\":\"{}\",\"KeyId\":\"test-key\"}}", b64), "200 OK")
+                            } else if req_str.contains("TrentService.Decrypt") {
+                                let b64 = if let Some(idx) = req_str.find("\"CiphertextBlob\":\"") {
+                                    let rest = &req_str[idx + 18..];
+                                    let end = rest.find('"').unwrap_or(0);
+                                    &rest[..end]
+                                } else {
+                                    ""
+                                };
+                                (format!("{{\"Plaintext\":\"{}\",\"KeyId\":\"test-key\"}}", b64), "200 OK")
+                            } else {
+                                ("{\"message\":\"not found\"}".to_string(), "404 Not Found")
+                            };
+
+                            let resp = format!(
+                                "HTTP/1.1 {}\r\nContent-Type: application/x-amz-json-1.1\r\nContent-Length: {}\r\n\r\n{}",
+                                status, body.len(), body
+                            );
+                            let _ = socket.write_all(resp.as_bytes()).await;
+                        });
+                    }
+                }
+            }
+        });
+
+        let endpoint = format!("http://{}", addr);
+        std::env::set_var("AWS_ACCESS_KEY_ID", "test-key-id");
+        std::env::set_var("AWS_SECRET_ACCESS_KEY", "test-secret-key");
+        let provider = RemoteAwsKmsKeyProvider::with_endpoint(
             "arn:aws:kms:us-east-1:123456789012:key/test-hsm-key",
             "us-east-1",
+            Some(endpoint),
         );
         assert!(provider.uses_remote_crypto());
         assert_eq!(provider.provider_name(), "aws-kms");
+
+        // Verify canary roundtrip probe
+        provider
+            .canary_roundtrip()
+            .expect("Canary roundtrip probe must succeed");
 
         let raw = [42u8; 32];
         let key = ZeroizingKey::new(raw);
@@ -1297,6 +1546,22 @@ mod tests {
             .derive_tenant_key(&tenant, b"salt-123")
             .expect("Derive should succeed");
         assert_eq!(derived.as_bytes().len(), 32);
+
+        let _ = tx.send(());
+    }
+
+    #[test]
+    fn test_remote_aws_kms_unavailability_fails_closed() {
+        // Connect to closed port
+        let provider = RemoteAwsKmsKeyProvider::with_endpoint(
+            "arn:aws:kms:us-east-1:123456789012:key/test-hsm-key",
+            "us-east-1",
+            Some("http://127.0.0.1:1".to_string()),
+        );
+        let key = ZeroizingKey::new([9u8; 32]);
+        let err = provider.wrap_key(&key).unwrap_err();
+        assert!(err.message.contains("AWS KMS remote Encrypt call failed"));
+        assert!(provider.canary_roundtrip().is_err());
     }
 
     #[test]

@@ -11,6 +11,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${WORKSPACE_ROOT}"
 
+PYTHON_BIN="python"
+if command -v python3 >/dev/null 2>&1 && python3 -c "import sys" 2>/dev/null; then
+    PYTHON_BIN="python3"
+fi
+if [[ -x "${WORKSPACE_ROOT}/.venv/bin/python" ]]; then
+    PYTHON_BIN="${WORKSPACE_ROOT}/.venv/bin/python"
+elif [[ -x "${WORKSPACE_ROOT}/.venv/Scripts/python.exe" ]]; then
+    PYTHON_BIN="${WORKSPACE_ROOT}/.venv/Scripts/python.exe"
+fi
+
 GIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
 GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 START_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -42,7 +52,7 @@ echo "==> Code formatting and strict clippy checks PASSED."
 echo ""
 echo "[2/5] Running Core System Verification Test Suites..."
 cargo test --workspace --all-targets
-python3 -m unittest sdk/python/test_sunborn_agent.py
+"${PYTHON_BIN}" -m unittest sdk/python/test_sunborn_agent.py
 if command -v npm >/dev/null 2>&1 && [[ -d frontend/node_modules ]]; then
     if [[ ! -f frontend/.next/BUILD_ID ]]; then
         echo "[*] Compiling Next.js production bundle for frontend test runner..."
@@ -92,11 +102,6 @@ cargo test --test production_startup_test -- --nocapture
 cargo test --test adversarial_security_test -- --nocapture
 echo "==> Zero cross-tenant leakage, tenant spoofing prevention, circuit-breaker fallback, DST Non-Accelerator Authority, production startup fail-closed, adversarial security, and 5-layer learning controller verified."
 
-PYTHON_BIN="python3"
-if [[ -x "${WORKSPACE_ROOT}/.venv/bin/python" ]]; then
-    PYTHON_BIN="${WORKSPACE_ROOT}/.venv/bin/python"
-fi
-
 echo ""
 echo "[5/5] Executing Semantic Cache Benchmark & Empirical Artifact Verification..."
 BENCHMARK_ARTIFACT="research/results/benchmark_run.json"
@@ -118,7 +123,11 @@ else
     # application so each case is authorized without sharing cache state.
     export SUNBORN_API_KEYS="$("${PYTHON_BIN}" research/benchmark_credentials.py)"
     cargo build --bin sunborn-gateway
-    ./target/debug/sunborn-gateway >/dev/null 2>&1 &
+    GATEWAY_BIN="./target/debug/sunborn-gateway"
+    if [[ -f "./target/debug/sunborn-gateway.exe" ]]; then
+        GATEWAY_BIN="./target/debug/sunborn-gateway.exe"
+    fi
+    "${GATEWAY_BIN}" >/dev/null 2>&1 &
     SPAWNED_GATEWAY_PID=$!
     for i in {1..50}; do
         if curl -s http://127.0.0.1:8080/health >/dev/null 2>&1; then

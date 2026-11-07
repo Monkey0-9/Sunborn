@@ -628,6 +628,9 @@ impl AppState {
                 self.crypto_registry.provider().provider_name()
             )));
         }
+        if self.crypto_registry.provider().uses_remote_crypto() {
+            self.crypto_registry.provider().canary_roundtrip()?;
+        }
         Ok(())
     }
 }

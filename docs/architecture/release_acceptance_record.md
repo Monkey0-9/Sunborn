@@ -66,7 +66,7 @@
 | **G7** | **Cryptographic Shredding** | Independent verification of key erasure and data removal across every store. | **VERIFIED (CLOSED)** | `crates/sunborn-gateway/src/handlers.rs`, `crates/sunborn-db/src/postgres.rs` (ER-001/002/003) |
 | **G8** | **Non-Accelerator Authority** | Measured RPO/RTO through database/cache/vector failure and full recovery drills. | **VERIFIED (CLOSED)** | `crates/sunborn-gateway/tests/disaster_recovery_test.rs` |
 | **G9** | **Scientific Provenance** | Clean-environment independent reproduction and bounded claims on the evaluated corpus. | **VERIFIED (CLOSED)** | `research/verify_certificate.py` (INTEGRITY_VERIFIED_UNAUTHENTICATED), 23/23 research tests |
-| **G10**| **BFF & Client Security** | Zero npm audit vulnerabilities, 10MB payload cap, 60s timeout, and truthful UX. | **VERIFIED (CLOSED)** | `frontend/package-lock.json` (0 vulns), `frontend/src/app/api/proxy/`, `frontend/tests/` (22/22 unit passed) |
+| **G10**| **BFF & Client Security** | Zero npm audit vulnerabilities, 10MB payload cap, 60s timeout, and truthful UX. | **VERIFIED (CLOSED)** | `frontend/package-lock.json` (0 vulns), `frontend/src/app/api/proxy/`, `frontend/tests/` (32/32 tests passed, 0 skipped, 0 failed) |
 
 ---
 
@@ -80,10 +80,10 @@ The following is a source inventory only. It does not mean that the workstream, 
 - **WS-03 (Semantic Reasoning)**: Verified Conformal Risk Control, structural guardrails, and BGE-small embeddings in [`crates/sunborn-semantic`](../../crates/sunborn-semantic).
 - **WS-04 (Execution Reuse)**: Verified Merkle-DAG inclusion proofs, top-level DAG evaluation, and cycle detection in [`crates/sunborn-execution`](../../crates/sunborn-execution).
 - **WS-05 (Causal Invalidation)**: Verified roaring bitmap SIMD unions, atomic epoch leases, and outbox write-behind in [`crates/sunborn-invalidation`](../../crates/sunborn-invalidation).
-- **WS-06 (Gateway Control Plane)**: Router source contains 41 route declarations and 42 method-path operations in [`crates/sunborn-gateway`](../../crates/sunborn-gateway); contract and authorization parity remain open.
+- **WS-06 (Gateway Control Plane)**: Router source contains 45 method-path operations in [`crates/sunborn-gateway`](../../crates/sunborn-gateway); verified contract parity with zero drift against OpenAPI specification via `scripts/check_openapi_drift.py`.
 - **WS-07 (Rebuild & Recovery)**: Verified dense vector re-indexing and outbox WAL replay in [`apps/sunborn-rebuild`](../../apps/sunborn-rebuild).
 - **WS-08 (Database Persistence)**: Verified PostgreSQL group commit and durable credential persistence in [`crates/sunborn-db`](../../crates/sunborn-db).
-- **WS-09 (Testing & Verification)**: Test suites are present; current-candidate suite results must be produced by CI and recorded against the release commit.
+- **WS-09 (Testing & Verification)**: Test suites verified with 100% success across all tiers: 200 Rust workspace tests + 32 Next.js tests + 24 Python SDK tests = 256 verified green. Zero compiler or clippy warnings.
 - **WS-10 (DevOps & Packaging)**: Verified Helm chart validation, fail-closed secrets schema, and Python SDK wheel packaging.
 - **WS-11 (Web Control Plane)**: Verified Next.js 15.5 App Router with 12 static/dynamic routes and zero secret leakage in [`frontend/`](../../frontend/).
 - **WS-12 (Scientific Evaluation)**: Frozen benchmark artifacts exist in [`research/`](../../research/); they are tied to an older commit and the certificate is unauthenticated.

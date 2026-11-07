@@ -31,7 +31,11 @@ VIRTUAL_ENV="${TEMP_VENV}" uv pip install "${WHEEL_FILE}"
 echo "  ✓ Installed package cleanly from wheel"
 
 echo "=== [4/4] Executing Clean-Environment Smoke Test ==="
-(cd "${TEMP_VENV}" && "${TEMP_VENV}/bin/python" -c "
+PYTHON_EXE="${TEMP_VENV}/bin/python"
+if [[ -f "${TEMP_VENV}/Scripts/python.exe" ]]; then
+    PYTHON_EXE="${TEMP_VENV}/Scripts/python.exe"
+fi
+(cd "${TEMP_VENV}" && "${PYTHON_EXE}" -c "
 import sunborn
 from sunborn import Sunborn, AsyncSunborn, SunbornClient, AsyncSunbornClient
 from sunborn.exceptions import (
