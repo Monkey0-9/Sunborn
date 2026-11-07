@@ -16,27 +16,34 @@ import {
   Radio,
   Lock,
   GitBranch,
+  UserCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { CommandMenu } from "@/components/ui/command-menu";
 import { API_BASE_URL } from "@/lib/api";
 
 export function Header() {
   const pathname = usePathname();
   const [gatewayStatus, setGatewayStatus] = useState<"live" | "offline">("offline");
+  const [pingMs, setPingMs] = useState<number | null>(null);
   const [epoch, setEpoch] = useState<number>(1);
   const [activeTenant, setActiveTenant] = useState<string>("tenant-enterprise-fintech");
+  const [sessionAuth, setSessionAuth] = useState<boolean>(false);
 
   useEffect(() => {
     // Check local gateway status & live vector clock
     const checkGateway = async () => {
+      const start = performance.now();
       try {
         const res = await fetch(`${API_BASE_URL.replace(/\/+$/, "")}/health`, {
           cache: "no-store",
           signal: AbortSignal.timeout(1500),
         });
+        const elapsed = Math.round((performance.now() - start) * 10) / 10;
         if (res.ok) {
           setGatewayStatus("live");
+          setPingMs(elapsed);
           try {
             const clusterRes = await fetch(`${API_BASE_URL.replace(/\/+$/, "")}/v1/cluster/status`, {
               cache: "no-store",
@@ -51,12 +58,28 @@ export function Header() {
           } catch {}
         } else {
           setGatewayStatus("offline");
+          setPingMs(null);
         }
       } catch {
         setGatewayStatus("offline");
+        setPingMs(null);
       }
     };
+
+    const checkSession = async () => {
+      try {
+        const res = await fetch("/api/auth", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          setSessionAuth(!!data.authenticated);
+        }
+      } catch {
+        setSessionAuth(false);
+      }
+    };
+
     checkGateway();
+    checkSession();
     const interval = setInterval(checkGateway, 10000);
     return () => clearInterval(interval);
   }, []);
@@ -118,7 +141,11 @@ export function Header() {
                     gatewayStatus === "live" ? "text-emerald-400" : "text-amber-400"
                   )}
                 >
-                  {gatewayStatus === "live" ? "ACTIVE 8080" : "OFFLINE"}
+                  {gatewayStatus === "live"
+                    ? pingMs !== null
+                      ? `ACTIVE 8080 (${pingMs}ms)`
+                      : "ACTIVE 8080"
+                    : "OFFLINE"}
                 </span>
               </div>
 
@@ -163,6 +190,9 @@ export function Header() {
 
           {/* Right Controls */}
           <div className="flex items-center gap-3">
+            {/* Global Command Menu */}
+            <CommandMenu />
+
             {/* Tenant Selector */}
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-white/10 text-xs font-mono">
               <span className="text-slate-400">TENANT:</span>
@@ -183,6 +213,22 @@ export function Header() {
                 </option>
               </select>
             </div>
+
+            {/* Session / Login Link */}
+            <Link
+              href="/login"
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-mono transition-colors",
+                sessionAuth
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20"
+                  : "bg-white/[0.04] border-white/10 text-slate-400 hover:text-white hover:bg-white/[0.08]"
+              )}
+            >
+              <UserCheck className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden sm:inline">
+                {sessionAuth ? "SESSION ACTIVE" : "LOGIN"}
+              </span>
+            </Link>
           </div>
         </div>
       </div>

@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   PieChart,
   Calculator,
+  ShieldCheck,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,71 @@ export default function FinOpsPage() {
     requestsTotal: number;
     estimatedSavingsUsd: number;
   } | null>(null);
+
+  // K-007 Spend Velocity Controller Interactive Workbench State
+  const [velocityCeiling, setVelocityCeiling] = useState<number>(10.0);
+  const [reserveAmount, setReserveAmount] = useState<number>(4.5);
+  const [reservationState, setReservationState] = useState<{
+    status: "IDLE" | "RESERVED" | "SETTLED" | "OVERSPEND_BLOCKED";
+    reservationId: string | null;
+    currentSpend: number;
+    currentReserved: number;
+    totalCommitted: number;
+    message: string;
+  }>({
+    status: "IDLE",
+    reservationId: null,
+    currentSpend: 0.0,
+    currentReserved: 0.0,
+    totalCommitted: 0.0,
+    message: "Ready to test atomic pre-authorization reservation & settlement.",
+  });
+
+  const handleReserve = (amt: number) => {
+    const totalIfReserved = reservationState.currentSpend + reservationState.currentReserved + amt;
+    if (totalIfReserved > velocityCeiling) {
+      setReservationState((prev) => ({
+        ...prev,
+        status: "OVERSPEND_BLOCKED",
+        message: `ATOMIC REJECTION: In-flight reservation of $${amt.toFixed(2)} would commit $${totalIfReserved.toFixed(2)}, exceeding the $${velocityCeiling.toFixed(2)} tenant ceiling!`,
+      }));
+    } else {
+      const resId = `res_${Math.random().toString(36).substring(2, 9)}-${Date.now().toString(36)}`;
+      setReservationState({
+        status: "RESERVED",
+        reservationId: resId,
+        currentSpend: reservationState.currentSpend,
+        currentReserved: reservationState.currentReserved + amt,
+        totalCommitted: reservationState.currentSpend + reservationState.currentReserved + amt,
+        message: `RESERVED: Atomic pre-auth lock acquired for $${amt.toFixed(2)}. In-flight overspend race eliminated (K-007).`,
+      });
+    }
+  };
+
+  const handleSettle = (actual: number) => {
+    if (!reservationState.reservationId) return;
+    const newSpend = reservationState.currentSpend + actual;
+    setReservationState({
+      status: "SETTLED",
+      reservationId: null,
+      currentSpend: +newSpend.toFixed(2),
+      currentReserved: 0.0,
+      totalCommitted: +newSpend.toFixed(2),
+      message: `SETTLED: Pre-authorization settled with actual spend of $${actual.toFixed(2)}. Reservation released.`,
+    });
+  };
+
+  const handleRelease = () => {
+    if (!reservationState.reservationId) return;
+    setReservationState({
+      status: "IDLE",
+      reservationId: null,
+      currentSpend: reservationState.currentSpend,
+      currentReserved: 0.0,
+      totalCommitted: reservationState.currentSpend,
+      message: "RELEASED: In-flight reservation cleared without spend attribution.",
+    });
+  };
 
   React.useEffect(() => {
     sunbornApi
@@ -318,6 +384,156 @@ export default function FinOpsPage() {
           </Card>
         </div>
       </div>
+
+      {/* K-007 Atomic Spend Velocity Controller & Concurrency Workbench */}
+      <Card glow="cyan">
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                <span>K-007 Atomic Spend Velocity & Concurrency Governor</span>
+              </CardTitle>
+              <CardDescription>
+                Interactive demonstration of Sunborn&apos;s two-phase atomic pre-authorization reservation (reserve_spend) and settlement (settle_spend) preventing concurrent overspend races.
+              </CardDescription>
+            </div>
+            <Badge
+              variant={
+                reservationState.status === "OVERSPEND_BLOCKED"
+                  ? "danger"
+                  : reservationState.status === "RESERVED"
+                  ? "warning"
+                  : "cyan"
+              }
+            >
+              STATUS: {reservationState.status}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 font-mono text-xs">
+            <div className="p-3 rounded-xl bg-slate-900 border border-white/10 space-y-1">
+              <span className="text-[10px] text-slate-500">TENANT CEILING</span>
+              <div className="text-sm font-bold text-white">${velocityCeiling.toFixed(2)}</div>
+              <span className="text-[10px] text-slate-400">Fixed Budget Cap</span>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-900 border border-white/10 space-y-1">
+              <span className="text-[10px] text-slate-500">CURRENT SPEND (SETTLED)</span>
+              <div className="text-sm font-bold text-emerald-400">
+                ${reservationState.currentSpend.toFixed(2)}
+              </div>
+              <span className="text-[10px] text-slate-400">Durable Ledger</span>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-900 border border-white/10 space-y-1">
+              <span className="text-[10px] text-slate-500">IN-FLIGHT RESERVED</span>
+              <div className="text-sm font-bold text-amber-400">
+                ${reservationState.currentReserved.toFixed(2)}
+              </div>
+              <span className="text-[10px] text-slate-400">Atomic Lock Active</span>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-900 border border-white/10 space-y-1">
+              <span className="text-[10px] text-slate-500">TOTAL COMMITMENT</span>
+              <div className="text-sm font-bold text-cyan-300">
+                ${reservationState.totalCommitted.toFixed(2)} / ${velocityCeiling.toFixed(2)}
+              </div>
+              <span className="text-[10px] text-slate-400">
+                {((reservationState.totalCommitted / velocityCeiling) * 100).toFixed(0)}% Utilized
+              </span>
+            </div>
+          </div>
+
+          {/* Commitment Progress Bar */}
+          <div className="space-y-1.5 font-mono text-xs">
+            <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <span>Budget Commitment Gauge (Spend + In-Flight Reservations):</span>
+              <span className="text-cyan-300 font-bold">
+                {((reservationState.totalCommitted / velocityCeiling) * 100).toFixed(1)}%
+              </span>
+            </div>
+            <div className="w-full h-3 rounded-full bg-slate-950 border border-white/10 overflow-hidden flex">
+              <div
+                className="h-full bg-emerald-500 transition-all duration-300"
+                style={{
+                  width: `${Math.min(
+                    100,
+                    (reservationState.currentSpend / velocityCeiling) * 100
+                  )}%`,
+                }}
+              />
+              <div
+                className="h-full bg-amber-500 transition-all duration-300"
+                style={{
+                  width: `${Math.min(
+                    100 - (reservationState.currentSpend / velocityCeiling) * 100,
+                    (reservationState.currentReserved / velocityCeiling) * 100
+                  )}%`,
+                }}
+              />
+            </div>
+            <div className="flex items-center gap-4 text-[10px] text-slate-500 pt-1">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span>Settled Spend</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                <span>In-Flight Pre-Authorization (K-007)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-slate-800" />
+                <span>Available Headroom</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Interactive Actions Grid */}
+          <div className="p-4 rounded-xl bg-slate-950/80 border border-white/10 space-y-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => handleReserve(reserveAmount)}
+                className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-mono text-xs font-semibold shadow-lg shadow-cyan-900/30 transition-all cursor-pointer"
+              >
+                1. Pre-Authorize (${reserveAmount.toFixed(2)})
+              </button>
+              <button
+                type="button"
+                onClick={() => handleReserve(7.0)}
+                className="px-4 py-2 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 font-mono text-xs font-semibold transition-all cursor-pointer"
+              >
+                2. Test Concurrent Collision (Attempt +$7.00)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSettle(4.2)}
+                disabled={!reservationState.reservationId}
+                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:pointer-events-none text-white font-mono text-xs font-semibold shadow-lg shadow-emerald-900/30 transition-all cursor-pointer"
+              >
+                3. Settle Spend ($4.20)
+              </button>
+              <button
+                type="button"
+                onClick={handleRelease}
+                disabled={!reservationState.reservationId}
+                className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none text-slate-300 font-mono text-xs transition-all cursor-pointer"
+              >
+                Release Without Spend
+              </button>
+            </div>
+
+            <div className="p-3 rounded-lg bg-slate-900 border border-white/5 font-mono text-xs space-y-1">
+              <div className="text-slate-400 text-[10px]">CONTROLLER LOG:</div>
+              <div className="text-slate-200">{reservationState.message}</div>
+              {reservationState.reservationId && (
+                <div className="text-cyan-400 text-[10px]">
+                  RESERVATION UUID: {reservationState.reservationId}
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

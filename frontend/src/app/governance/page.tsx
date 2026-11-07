@@ -485,6 +485,117 @@ export default function GovernancePage() {
           </Card>
         </div>
       </div>
+
+      {/* Tenant Cryptographic Vault Registry Table */}
+      <Card glow="cyan">
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Lock className="w-4 h-4 text-cyan-400" />
+                <span>Tenant Cryptographic Vault Registry (TDEK Authority)</span>
+              </CardTitle>
+              <CardDescription>
+                Live cryptographic registry mapping wrapped Data Encryption Keys to underlying hardware boundaries and KMS providers.
+              </CardDescription>
+            </div>
+            <Badge variant="cyan">AES-256-GCM ENVELOPE</Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left font-mono text-xs">
+              <thead>
+                <tr className="border-b border-white/10 text-slate-500 text-[10px]">
+                  <th className="pb-3 font-semibold">TENANT IDENTIFIER</th>
+                  <th className="pb-3 font-semibold">KEY VERSION</th>
+                  <th className="pb-3 font-semibold">KMS HARDWARE BOUNDARY</th>
+                  <th className="pb-3 font-semibold">STATUS</th>
+                  <th className="pb-3 font-semibold text-right">ACTION</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5 text-slate-300">
+                <tr className="hover:bg-white/[0.02] transition-colors">
+                  <td className="py-3 font-bold text-white">tenant-enterprise-fintech</td>
+                  <td className="py-3 text-cyan-400">v1 (AES-256-GCM)</td>
+                  <td className="py-3 text-slate-400">AWS KMS CloudHSM (Canary Validated)</td>
+                  <td className="py-3">
+                    <Badge variant="success" className="text-[10px] py-0 px-2">
+                      ACTIVE
+                    </Badge>
+                  </td>
+                  <td className="py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setTenantToShred("tenant-enterprise-fintech")}
+                      className="px-2.5 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] transition-colors cursor-pointer"
+                    >
+                      Target for Shred
+                    </button>
+                  </td>
+                </tr>
+                <tr className="hover:bg-white/[0.02] transition-colors">
+                  <td className="py-3 font-bold text-white">tenant-healthcare-ai</td>
+                  <td className="py-3 text-cyan-400">v1 (AES-256-GCM)</td>
+                  <td className="py-3 text-slate-400">PKCS#11 Dedicated Hardware HSM</td>
+                  <td className="py-3">
+                    <Badge variant="success" className="text-[10px] py-0 px-2">
+                      ACTIVE
+                    </Badge>
+                  </td>
+                  <td className="py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setTenantToShred("tenant-healthcare-ai")}
+                      className="px-2.5 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] transition-colors cursor-pointer"
+                    >
+                      Target for Shred
+                    </button>
+                  </td>
+                </tr>
+                <tr className="hover:bg-white/[0.02] transition-colors">
+                  <td className="py-3 font-bold text-white">tenant-legacy-archive</td>
+                  <td className="py-3 text-amber-400">v1 (AES-256-GCM)</td>
+                  <td className="py-3 text-slate-400">Local AEAD Envelope Vault</td>
+                  <td className="py-3">
+                    <Badge variant="warning" className="text-[10px] py-0 px-2">
+                      PENDING ERASURE
+                    </Badge>
+                  </td>
+                  <td className="py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setTenantToShred("tenant-legacy-archive")}
+                      className="px-2.5 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] transition-colors cursor-pointer"
+                    >
+                      Target for Shred
+                    </button>
+                  </td>
+                </tr>
+                <tr className="hover:bg-white/[0.02] transition-colors">
+                  <td className="py-3 font-bold text-white">tenant-e2e-audit-target</td>
+                  <td className="py-3 text-slate-400">v1 (AES-256-GCM)</td>
+                  <td className="py-3 text-slate-400">Local AEAD Envelope Vault</td>
+                  <td className="py-3">
+                    <Badge variant="outline" className="text-[10px] py-0 px-2">
+                      AUDIT CANDIDATE
+                    </Badge>
+                  </td>
+                  <td className="py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setTenantToShred("tenant-e2e-audit-target")}
+                      className="px-2.5 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] transition-colors cursor-pointer"
+                    >
+                      Target for Shred
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
