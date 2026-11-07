@@ -313,3 +313,85 @@ async fn test_session_verification_endpoint() {
 
     assert_eq!(res_anon.status(), StatusCode::UNAUTHORIZED);
 }
+
+#[tokio::test]
+async fn test_finops_atomic_reservation_and_spend_settlement() {
+    let state = AppState::new(AppConfig::default());
+    let tenant = "tenant-finops-concurrency-vault";
+
+    // Configure tenant ceiling to $10.00
+    state
+        .spend_velocity_controller
+        .set_tenant_ceiling(tenant, 10.0);
+
+    // 1. Initial reservation for $6.00 succeeds
+    let res1 = state
+        .spend_velocity_controller
+        .reserve_spend(tenant, 6.0)
+        .expect("First reservation of $6.00 against $10.00 ceiling must succeed");
+
+    assert_eq!(
+        state.spend_velocity_controller.current_reserved(tenant),
+        6.0
+    );
+    assert_eq!(state.spend_velocity_controller.current_spend(tenant), 0.0);
+    assert_eq!(
+        state
+            .spend_velocity_controller
+            .current_total_commitment(tenant),
+        6.0
+    );
+
+    // 2. Concurrent reservation for $5.00 fails closed (6.0 + 5.0 = 11.0 > 10.0 ceiling)
+    let res2_err = state.spend_velocity_controller.reserve_spend(tenant, 5.0);
+
+    assert!(
+        res2_err.is_err(),
+        "Concurrent reservation exceeding ceiling must be rejected"
+    );
+    let (committed, ceiling) = res2_err.unwrap_err();
+    assert_eq!(committed, 11.0);
+    assert_eq!(ceiling, 10.0);
+
+    // 3. Settle first reservation with actual spend of $5.50
+    let settled = state
+        .spend_velocity_controller
+        .settle_spend(tenant, res1, 5.50);
+    assert_eq!(settled, 5.50);
+
+    assert_eq!(
+        state.spend_velocity_controller.current_reserved(tenant),
+        0.0
+    );
+    assert_eq!(state.spend_velocity_controller.current_spend(tenant), 5.50);
+    assert_eq!(
+        state
+            .spend_velocity_controller
+            .current_total_commitment(tenant),
+        5.50
+    );
+
+    // 4. Subsequent reservation for $4.00 now succeeds (5.50 + 4.00 = 9.50 <= 10.0)
+    let res3 = state
+        .spend_velocity_controller
+        .reserve_spend(tenant, 4.0)
+        .expect("Reservation under ceiling post-settlement must succeed");
+
+    assert_eq!(
+        state
+            .spend_velocity_controller
+            .current_total_commitment(tenant),
+        9.50
+    );
+
+    // 5. Release reservation without spend
+    state
+        .spend_velocity_controller
+        .release_reservation(tenant, res3);
+
+    assert_eq!(
+        state.spend_velocity_controller.current_reserved(tenant),
+        0.0
+    );
+    assert_eq!(state.spend_velocity_controller.current_spend(tenant), 5.50);
+}
