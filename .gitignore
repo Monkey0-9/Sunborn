@@ -26,3 +26,4 @@ dist/
 .venv/
 .commandcode/
 frontend/pnpm-lock.yaml
+*.png

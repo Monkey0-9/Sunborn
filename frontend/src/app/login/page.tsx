@@ -205,6 +205,33 @@ export default function LoginPage() {
                 </div>
               </div>
 
+              {/* Quick Fill Preset Pills */}
+              <div className="pt-1 flex items-center gap-2">
+                <span className="text-[11px] font-mono text-slate-500">Quick Fill:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClientId("enterprise-admin");
+                    setClientSecret("admin-secret-dev-key");
+                    setTenantId("tenant-enterprise-fintech");
+                  }}
+                  className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 transition-colors"
+                >
+                  Platform Admin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClientId("risk-analyst");
+                    setClientSecret("sb_live_standard_key");
+                    setTenantId("tenant-enterprise-fintech");
+                  }}
+                  className="px-2 py-0.5 rounded text-[10px] font-mono bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/10 transition-colors"
+                >
+                  Standard Tenant
+                </button>
+              </div>
+
               <button
                 type="submit"
                 disabled={isLoading}

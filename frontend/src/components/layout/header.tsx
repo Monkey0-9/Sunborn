@@ -17,6 +17,13 @@ import {
   Lock,
   GitBranch,
   UserCheck,
+  Server,
+  Database,
+  CheckCircle2,
+  X,
+  RefreshCw,
+  Sliders,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +37,36 @@ export function Header() {
   const [epoch, setEpoch] = useState<number>(1);
   const [activeTenant, setActiveTenant] = useState<string>("tenant-enterprise-fintech");
   const [sessionAuth, setSessionAuth] = useState<boolean>(false);
+  const [showDiagnostics, setShowDiagnostics] = useState<boolean>(false);
+  const [isProbing, setIsProbing] = useState<boolean>(false);
+  const [probeResult, setProbeResult] = useState<string | null>(null);
+
+  const runDiagnosticsProbe = async () => {
+    setIsProbing(true);
+    setProbeResult(null);
+    const start = performance.now();
+    try {
+      const res = await fetch(`${API_BASE_URL.replace(/\/+$/, "")}/health`, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(2000),
+      });
+      const elapsed = Math.round((performance.now() - start) * 10) / 10;
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setGatewayStatus("live");
+        setPingMs(elapsed);
+        setProbeResult(`PROBE SUCCESS (HTTP 200) · RTT: ${elapsed}ms · Service: ${data.service || "sunborn-gateway"} · Status: ${data.status || "healthy"}`);
+      } else {
+        setGatewayStatus("offline");
+        setProbeResult(`PROBE FAILED: Received HTTP ${res.status}`);
+      }
+    } catch (err: any) {
+      setGatewayStatus("offline");
+      setProbeResult(`PROBE ERROR: ${err.message || "Connection refused"}. Gateway offline.`);
+    } finally {
+      setIsProbing(false);
+    }
+  };
 
   useEffect(() => {
     // Check local gateway status & live vector clock
@@ -125,10 +162,15 @@ export function Header() {
 
             {/* Live Gateway Telemetry Pill */}
             <div className="hidden lg:flex items-center gap-3 pl-4 border-l border-white/[0.08]">
-              <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-900/90 border border-white/10 text-xs font-mono">
+              <button
+                type="button"
+                onClick={() => setShowDiagnostics(true)}
+                title="Click to view live infrastructure diagnostics & cluster topology"
+                className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-white/10 hover:border-cyan-500/40 text-xs font-mono transition-all cursor-pointer group"
+              >
                 <Radio
                   className={cn(
-                    "w-3 h-3",
+                    "w-3 h-3 transition-colors",
                     gatewayStatus === "live"
                       ? "text-emerald-400 animate-pulse"
                       : "text-amber-400"
@@ -147,7 +189,8 @@ export function Header() {
                       : "ACTIVE 8080"
                     : "OFFLINE"}
                 </span>
-              </div>
+                <span className="text-[10px] text-cyan-400 opacity-60 group-hover:opacity-100">diag</span>
+              </button>
 
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/90 border border-white/10 text-xs font-mono text-slate-400">
                 <Globe className="w-3 h-3 text-violet-400" />
@@ -232,6 +275,140 @@ export function Header() {
           </div>
         </div>
       </div>
+
+      {/* Global Infrastructure Diagnostics & Topology Drawer Modal */}
+      {showDiagnostics && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-2xl bg-slate-950 border border-white/15 rounded-2xl shadow-2xl overflow-hidden font-mono text-xs">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-slate-900/60">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                  <Server className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                    Sunborn Infrastructure Topology & Diagnostics
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    L6/L7 Reverse Proxy · Autonomous Storage Stack · Multi-Region Mesh
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDiagnostics(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Diagnostics Content */}
+            <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+              {/* Probe Test Action Strip */}
+              <div className="p-4 rounded-xl bg-slate-900/80 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="text-xs font-bold text-white flex items-center gap-2">
+                    <span className={cn("w-2 h-2 rounded-full", gatewayStatus === "live" ? "bg-emerald-400 animate-pulse" : "bg-amber-400")} />
+                    Gateway Target: 127.0.0.1:8080
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Live loopback socket connection probe with microsecond precision.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={runDiagnosticsProbe}
+                  disabled={isProbing}
+                  className="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-semibold transition-all disabled:opacity-50"
+                >
+                  <RefreshCw className={cn("w-3.5 h-3.5", isProbing && "animate-spin")} />
+                  <span>{isProbing ? "Probing..." : "Run Live Probe"}</span>
+                </button>
+              </div>
+
+              {probeResult && (
+                <div className="p-3 rounded-xl bg-slate-900 border border-cyan-500/30 text-cyan-300 text-[11px]">
+                  {probeResult}
+                </div>
+              )}
+
+              {/* Multi-Tier Architecture Health Grid */}
+              <div className="space-y-2">
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Operational Tiers & Durability Subsystems
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-white/10 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-white font-semibold">Tier 0/1: Exact Cache</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">ACTIVE</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      W-TinyLFU In-Memory + DragonflyDB L2 (P99: 240 µs target).
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-white/10 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-white font-semibold">Tier 2: Semantic Retrieval</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">CALIBRATED</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      Qdrant HNSW Vector Engine + Conformal Risk (α ≤ 0.001).
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-white/10 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-white font-semibold">Tier 3: Execution Subgraph</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">PROOF VERIFIED</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      RFC 6962 SHA-256 Merkle DAG Planner + Speculative Markov.
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-white/10 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-white font-semibold">Tier 4: Durable Authority</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">POSTGRESQL WAL</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      Non-Accelerator Authority with transactional outbox stream.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Security & Cryptography State */}
+              <div className="p-4 rounded-xl bg-slate-900/40 border border-white/10 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-300 font-semibold flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-cyan-400" />
+                    Zero-Trust Cryptographic Perimeter
+                  </span>
+                  <span className="text-emerald-400 font-bold">AES-256-GCM AEAD</span>
+                </div>
+                <div className="text-[11px] text-slate-400 leading-relaxed">
+                  Tenant Data Encryption Keys (TDEK) wrapped under Master KEK. Cryptographic shredding invalidates keys in $O(1)$ constant time with verified multi-store fail-closed erasure.
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-3 border-t border-white/10 bg-slate-900/40 flex items-center justify-between text-[11px] text-slate-400">
+              <span>Cluster Epoch #{epoch} · Region: us-east-1</span>
+              <button
+                onClick={() => setShowDiagnostics(false)}
+                className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-white transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

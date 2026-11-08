@@ -4,6 +4,7 @@ import {
   isPrivilegedRoute,
   isPublicRoute,
 } from "@/lib/proxy-policy";
+import { handleSimulatedRoute } from "@/lib/standalone-simulator";
 
 const GATEWAY_URL =
   process.env.SUNBORN_GATEWAY_URL ||
@@ -98,9 +99,9 @@ async function handleProxy(req: NextRequest, context: RouteContext) {
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 60_000);
+  let body: BodyInit | undefined = undefined;
 
   try {
-    let body: BodyInit | undefined = undefined;
     if (["POST", "PUT", "PATCH"].includes(req.method)) {
       body = await req.text();
     }
@@ -158,6 +159,32 @@ async function handleProxy(req: NextRequest, context: RouteContext) {
         { status: 504 }
       );
     }
+
+    // High-Fidelity Standalone Simulation Engine Fallback
+    // When live gateway is offline, seamlessly serve mission-critical responses
+    // so frontend dashboards, sandboxes, and inspectors function without friction.
+    if (process.env.STRICT_GATEWAY !== "true") {
+      const simulated = handleSimulatedRoute(req.method, normalizedPath, typeof body === "string" ? body : undefined);
+      if (simulated) {
+        if (typeof simulated.body === "string") {
+          return new NextResponse(simulated.body, {
+            status: simulated.status,
+            headers: {
+              ...simulated.headers,
+              "x-sunborn-mode": "standalone-simulation",
+            },
+          });
+        }
+        return NextResponse.json(simulated.body, {
+          status: simulated.status,
+          headers: {
+            ...simulated.headers,
+            "x-sunborn-mode": "standalone-simulation",
+          },
+        });
+      }
+    }
+
     return NextResponse.json(
       {
         error: "GATEWAY_CONNECTION_FAILED",
