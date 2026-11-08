@@ -48,8 +48,8 @@ subtle = "2.6"
 aes-gcm = "0.10"
 zeroize = "1.9.1"
 regex = "1.10"
-aws-config = { version = "1.5", default-features = false, features = ["rt-tokio", "rustls"] }
-aws-sdk-kms = { version = "1.52", default-features = false, features = ["rt-tokio", "rustls"] }
+aws-config = { version = "1.5", default-features = false, features = ["rt-tokio", "default-https-client"] }
+aws-sdk-kms = { version = "1.52", default-features = false, features = ["rt-tokio", "default-https-client"] }
 roaring = "0.10"
 dashmap = "6.1"
 
