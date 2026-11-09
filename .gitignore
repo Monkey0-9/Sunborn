@@ -15,15 +15,12 @@ __pycache__/
 *.pyc
 .vscode/
 .trunk/
-frontend/.agents/
 data/
 **/data/
 system_inventory.md
-.serena/
 research/results/capacity_soak_report.json
 *.egg-info/
 dist/
 .venv/
-.commandcode/
 frontend/pnpm-lock.yaml
 *.png
