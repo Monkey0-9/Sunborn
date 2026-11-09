@@ -17,6 +17,7 @@
 pub mod bitmap_lineage;
 pub mod epoch;
 pub mod graph;
+pub mod graph_cache;
 pub mod outbox;
 pub mod watermark;
 
@@ -26,5 +27,6 @@ pub use graph::{
     DependencyGraph, DocumentVersion, InMemoryGraphStore, KnowledgeGraphStore, KnowledgeSource,
     MockNeo4jCypherStore, Neo4jCypherGraphStore,
 };
+pub use graph_cache::GraphMemoryCache;
 pub use outbox::{InvalidationEngine, InvalidationEvent};
 pub use watermark::{LineageWatermark, ReadView, WatermarkLineageFencer};
