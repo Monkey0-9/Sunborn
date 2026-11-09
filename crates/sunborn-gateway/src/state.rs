@@ -12,7 +12,9 @@ use sunborn_core::AppConfig;
 use sunborn_db::MemoryDatabaseStore;
 use sunborn_execution::MemoryExecutionCacheStore;
 use sunborn_identity::crypto_shred::TenantCryptoRegistry;
-use sunborn_invalidation::{DependencyGraph, InvalidationEngine};
+use sunborn_invalidation::{
+    CompressedLineageGraph, DependencyGraph, GraphMemoryCache, InvalidationEngine,
+};
 use sunborn_semantic::{
     DecisionConfig, DecisionEngine, DeterministicEmbeddingProvider, MemoryVectorStore,
 };
@@ -56,6 +58,7 @@ pub struct AppState {
     pub learning_hmac_secret: Vec<u8>,
     pub spend_velocity_controller: Arc<sunborn_core::SpendVelocityController>,
     pub key_provider_configuration_error: Option<String>,
+    pub graph_memory_cache: Option<Arc<GraphMemoryCache>>,
 }
 
 impl AppState {
@@ -315,6 +318,24 @@ impl AppState {
                 b"sunborn-insecure-dev-hmac-secret-change-in-production".to_vec()
             };
 
+        let is_graph_cache_enabled = config.cache.graph_dependency_cache_enabled
+            || sunborn_core::config::parse_bool_env(
+                "SUNBORN_GRAPH_DEPENDENCY_CACHE_ENABLED",
+                false,
+            )
+            .unwrap_or(false);
+
+        let graph_memory_cache = if is_graph_cache_enabled {
+            let lineage_graph = Arc::new(CompressedLineageGraph::new());
+            Some(Arc::new(GraphMemoryCache::new(
+                selected_cache.clone(),
+                dependency_graph.clone(),
+                lineage_graph,
+            )))
+        } else {
+            None
+        };
+
         Self {
             config,
             cache: selected_cache,
@@ -347,6 +368,7 @@ impl AppState {
             learning_hmac_secret,
             spend_velocity_controller,
             key_provider_configuration_error,
+            graph_memory_cache,
         }
     }
 

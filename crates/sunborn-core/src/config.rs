@@ -29,6 +29,8 @@ pub struct CacheConfig {
     pub master_kek: Option<String>,
     #[serde(default)]
     pub strict_durability: bool,
+    #[serde(default)]
+    pub graph_dependency_cache_enabled: bool,
 }
 
 impl Default for CacheConfig {
@@ -45,6 +47,7 @@ impl Default for CacheConfig {
             postgres_url: "postgres://postgres:postgres@localhost:5432/sunborn".to_string(),
             master_kek: None,
             strict_durability: false,
+            graph_dependency_cache_enabled: false,
         }
     }
 }
@@ -158,6 +161,8 @@ impl AppConfig {
             .or_else(|_| std::env::var("MASTER_KEK"))
             .ok();
         let strict_durability = parse_bool_env("SUNBORN_STRICT_DURABILITY", false)?;
+        let graph_dependency_cache_enabled =
+            parse_bool_env("SUNBORN_GRAPH_DEPENDENCY_CACHE_ENABLED", false)?;
 
         let exact_cache_enabled = if parse_bool_env("SUNBORN_DISABLE_EXACT_CACHE", false)? {
             false
@@ -191,6 +196,7 @@ impl AppConfig {
                 postgres_url,
                 master_kek,
                 strict_durability,
+                graph_dependency_cache_enabled,
             },
             auth: AuthConfig {
                 enforce_auth,
