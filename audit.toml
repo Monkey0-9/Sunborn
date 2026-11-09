@@ -7,4 +7,10 @@ ignore = [
     # Transitive optional dependency in unused sqlx-mysql package; Sunborn exclusively targets PostgreSQL.
     # No upstream fix is available from rsa maintainers (unfixable upstream).
     "RUSTSEC-2023-0071",
+
+    # RUSTSEC-2026-0459: libsqlite3-sys via C SQLite CVE-2026-119375.
+    # Transitive optional dependency pulled by sqlx-macros-core / sqlx-sqlite;
+    # Sunborn exclusively targets PostgreSQL (features = ["postgres"]) and never links or executes SQLite queries.
+    # Upstream sqlx 0.8 lockfile pins libsqlite3-sys <0.31; no non-breaking upstream patch released yet.
+    "RUSTSEC-2026-0459",
 ]
