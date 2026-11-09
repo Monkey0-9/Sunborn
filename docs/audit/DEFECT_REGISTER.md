@@ -13,9 +13,9 @@
 | :--- | :--- | :--- | :--- | :--- |
 | **P0 - Critical Blocker** | 3 | 1 | 2 | 0 |
 | **P1 - High Priority** | 4 | 2 | 2 | 0 |
-| **P2 - Medium Priority** | 8 | 3 | 5 | 0 |
-| **P3 - Low Priority / Polish** | 12 | 1 | 9 | 2 |
-| **Total Items** | **27** | **7** | **18** | **2** |
+| **P2 - Medium Priority** | 8 | 7 | 1 | 0 |
+| **P3 - Low Priority / Polish** | 12 | 5 | 5 | 2 |
+| **Total Items** | **27** | **15** | **10** | **2** |
 
 ---
 
@@ -130,29 +130,29 @@
 ### DEF-011: Missing Security Headers in Ingress Configurations
 - **Severity**: P2
 - **Confidence**: High
-- **Location**: `deploy/helm/sunborn/templates/ingress.yaml`
+- **Location**: `deploy/helm/sunborn/values.yaml`, `frontend/next.config.mjs`
 - **Expected Behavior**: Ingress reverse proxy injects CSP, HSTS, X-Frame-Options, and X-Content-Type-Options.
-- **Actual Behavior**: Security headers missing from default Helm chart annotations.
-- **Remediation Workstream**: Workstream 8 (Security). Add headers to Helm values and BFF proxy middleware.
-- **Current Status**: **Open** (Scheduled for Stage 1).
+- **Actual Behavior**: Security headers were missing from default Helm chart annotations.
+- **Remediation**: Injected HSTS, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Referrer-Policy, and Permissions-Policy into `frontend/next.config.mjs` and Helm values.yaml.
+- **Current Status**: **Verified Resolved**.
 
 ### DEF-012: Invalidation Pipeline Backpressure & Dead Letter Queue
 - **Severity**: P2
-- **Confidence**: Medium
+- **Confidence**: High
 - **Location**: `crates/sunborn-invalidation/src/outbox.rs`
 - **Expected Behavior**: Event pipeline applies backpressure and preserves unprocessable events in DLQ.
-- **Actual Behavior**: Unbounded channel can drop invalidation notifications under extreme burst loads.
-- **Remediation Workstream**: Workstream 2. Introduce bounded Tokio mpsc channels and DLQ table.
-- **Current Status**: **Open** (Scheduled for Stage 2).
+- **Actual Behavior**: Previously unbounded/unhandled channel could drop invalidation notifications under burst load.
+- **Remediation**: Implemented bounded Tokio mpsc channel with 10ms backpressure reserve timeout, `DeadLetterItem` capturing failed events, `get_dlq()`, and `retry_dlq()` replay capability.
+- **Current Status**: **Verified Resolved** (13/13 unit tests passing including `test_invalidation_channel_backpressure` and `test_invalidation_dlq_capture_and_retry`).
 
 ### DEF-013: Database Circuit Breakers & Connection Timeouts
 - **Severity**: P2
-- **Confidence**: Medium
+- **Confidence**: High
 - **Location**: `crates/sunborn-db/src/postgres.rs`
 - **Expected Behavior**: Connection pool trips circuit breaker upon sustained PostgreSQL outage to preserve gateway responsiveness.
-- **Actual Behavior**: 2-second acquire timeout configured, but lacks circuit breaker tripping.
-- **Remediation Workstream**: Workstream 7 (Database Engineering).
-- **Current Status**: **Open** (Scheduled for Stage 4).
+- **Actual Behavior**: 2-second acquire timeout configured, but lacked circuit breaker tripping.
+- **Remediation**: Implemented `DbCircuitBreaker` (Closed/Open/HalfOpen) with 3-failure threshold, 5-second cooldown, and fast-fail bypass (<50ms).
+- **Current Status**: **Verified Resolved** (Tested in `test_db_circuit_breaker_transitions` and `test_postgres_store_circuit_breaker_fast_fail`).
 
 ### DEF-014: Frontend Mobile Viewport Clipping & Inconsistent Loading States
 - **Severity**: P2
@@ -184,7 +184,8 @@
 ### DEF-017: React Error Boundaries
 - **Severity**: P3
 - **Location**: `frontend/src/app/`
-- **Status**: **Open** (Scheduled for Stage 7).
+- **Remediation**: Implemented client-side boundary `frontend/src/app/error.tsx` with fault digest reporting and retry action, and root HTML fallback `frontend/src/app/global-error.tsx`.
+- **Status**: **Verified Resolved**.
 
 ### DEF-018: Property-Based Testing via `proptest`
 - **Severity**: P3
@@ -213,13 +214,15 @@
 
 ### DEF-023: Step-by-Step Developer Quickstart Guide
 - **Severity**: P3
-- **Location**: `docs/`
-- **Status**: **Open** (Scheduled for Stage 12).
+- **Location**: `docs/QUICKSTART.md`
+- **Remediation**: Authored end-to-end `docs/QUICKSTART.md` covering prerequisites, env configuration, test commands, and multi-service launching.
+- **Status**: **Verified Resolved**.
 
 ### DEF-024: Operational Troubleshooting Runbook
 - **Severity**: P3
-- **Location**: `docs/runbooks/`
-- **Status**: **Open** (Scheduled for Stage 12).
+- **Location**: `docs/runbooks/troubleshooting.md`
+- **Remediation**: Authored `docs/runbooks/troubleshooting.md` covering database circuit breaker resets, invalidation DLQ inspection, KMS authorization, and conformal drift recalibration.
+- **Status**: **Verified Resolved**.
 
 ### DEF-025: Architecture Diagrams in Documentation
 - **Severity**: P3
@@ -229,7 +232,8 @@
 ### DEF-026: VS Code Devcontainer Setup
 - **Severity**: P3
 - **Location**: `.devcontainer/`
-- **Status**: **Open** (Scheduled for Stage 12).
+- **Remediation**: Created `.devcontainer/devcontainer.json` and `.devcontainer/Dockerfile` configuring Rust 1.80+, Node.js 20, Python 3.11, PostgreSQL client, and VS Code extensions.
+- **Status**: **Verified Resolved**.
 
 ### DEF-027: Root Makefile Task Automation
 - **Severity**: P3

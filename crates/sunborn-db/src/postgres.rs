@@ -6,7 +6,7 @@ use crate::repository::{DatabaseStore, MemoryDatabaseStore};
 use async_trait::async_trait;
 use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use sunborn_core::{Result, SunbornError};
 use tokio::sync::RwLock;
 
@@ -24,6 +24,60 @@ pub fn redact_connection_url(url: &str) -> String {
 
 type FallbackTdekMap = Arc<RwLock<std::collections::HashMap<String, (Vec<u8>, String)>>>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DbCircuitState {
+    Closed,
+    Open,
+    HalfOpen,
+}
+
+#[derive(Debug, Clone)]
+pub struct DbCircuitBreaker {
+    consecutive_failures: u32,
+    failure_threshold: u32,
+    cooldown_secs: u64,
+    last_failure_at: Option<Instant>,
+}
+
+impl DbCircuitBreaker {
+    pub fn new(failure_threshold: u32, cooldown_secs: u64) -> Self {
+        Self {
+            consecutive_failures: 0,
+            failure_threshold,
+            cooldown_secs,
+            last_failure_at: None,
+        }
+    }
+
+    pub fn state(&self) -> DbCircuitState {
+        if self.consecutive_failures >= self.failure_threshold {
+            if let Some(last) = self.last_failure_at {
+                if last.elapsed() > Duration::from_secs(self.cooldown_secs) {
+                    return DbCircuitState::HalfOpen;
+                }
+            }
+            DbCircuitState::Open
+        } else {
+            DbCircuitState::Closed
+        }
+    }
+
+    pub fn record_success(&mut self) {
+        self.consecutive_failures = 0;
+        self.last_failure_at = None;
+    }
+
+    pub fn record_failure(&mut self) {
+        self.consecutive_failures = self.consecutive_failures.saturating_add(1);
+        self.last_failure_at = Some(Instant::now());
+    }
+
+    pub fn reset(&mut self) {
+        self.consecutive_failures = 0;
+        self.last_failure_at = None;
+    }
+}
+
 /// Production PostgreSQL database store adapter implementing DatabaseStore
 #[derive(Clone)]
 pub struct PostgresDatabaseStore {
@@ -32,6 +86,7 @@ pub struct PostgresDatabaseStore {
     fallback_store: Arc<MemoryDatabaseStore>,
     fallback_tdeks: FallbackTdekMap,
     pub strict_durability: bool,
+    circuit_breaker: Arc<RwLock<DbCircuitBreaker>>,
 }
 
 impl PostgresDatabaseStore {
@@ -53,6 +108,7 @@ impl PostgresDatabaseStore {
             fallback_store: Arc::new(MemoryDatabaseStore::new()),
             fallback_tdeks: Arc::new(RwLock::new(std::collections::HashMap::new())),
             strict_durability: strict,
+            circuit_breaker: Arc::new(RwLock::new(DbCircuitBreaker::new(3, 5))),
         }
     }
 
@@ -64,7 +120,20 @@ impl PostgresDatabaseStore {
             fallback_store: Arc::new(MemoryDatabaseStore::new()),
             fallback_tdeks: Arc::new(RwLock::new(std::collections::HashMap::new())),
             strict_durability: true,
+            circuit_breaker: Arc::new(RwLock::new(DbCircuitBreaker::new(3, 5))),
         }
+    }
+
+    /// Returns the current state of the database connection circuit breaker.
+    pub async fn circuit_state(&self) -> DbCircuitState {
+        let cb = self.circuit_breaker.read().await;
+        cb.state()
+    }
+
+    /// Explicitly resets the circuit breaker to closed state.
+    pub async fn reset_circuit_breaker(&self) {
+        let mut cb = self.circuit_breaker.write().await;
+        cb.reset();
     }
 
     /// Actively validates PostgreSQL connection pool and executes a health query (SELECT 1).
@@ -93,24 +162,47 @@ impl PostgresDatabaseStore {
             }
         }
 
-        if let Ok(pool) = PgPoolOptions::new()
+        // Fast-fail if database circuit breaker is open
+        {
+            let cb = self.circuit_breaker.read().await;
+            if cb.state() == DbCircuitState::Open {
+                tracing::debug!(
+                    "PostgreSQL connection circuit breaker OPEN; failing fast without acquire"
+                );
+                return None;
+            }
+        }
+
+        match PgPoolOptions::new()
             .max_connections(20)
             .acquire_timeout(Duration::from_secs(2))
             .connect(&self.connection_url)
             .await
         {
-            if let Err(err) = self.migrate(&pool).await {
-                tracing::error!(error = %err, "PostgreSQL schema auto-migration failed");
-                if self.strict_durability {
-                    return None;
+            Ok(pool) => {
+                if let Err(err) = self.migrate(&pool).await {
+                    tracing::error!(error = %err, "PostgreSQL schema auto-migration failed");
+                    if self.strict_durability {
+                        let mut cb = self.circuit_breaker.write().await;
+                        cb.record_failure();
+                        return None;
+                    }
                 }
+                {
+                    let mut cb = self.circuit_breaker.write().await;
+                    cb.record_success();
+                }
+                let mut guard = self.pool.write().await;
+                *guard = Some(pool.clone());
+                Some(pool)
             }
-            let mut guard = self.pool.write().await;
-            *guard = Some(pool.clone());
-            return Some(pool);
+            Err(err) => {
+                tracing::warn!(error = %err, "Failed to connect to PostgreSQL; recording failure in circuit breaker");
+                let mut cb = self.circuit_breaker.write().await;
+                cb.record_failure();
+                None
+            }
         }
-
-        None
     }
 
     async fn migrate(&self, pool: &PgPool) -> std::result::Result<(), sqlx::Error> {
@@ -1095,5 +1187,56 @@ impl DatabaseStore for PostgresDatabaseStore {
         }
         let mem_count = self.fallback_store.count_tenant_entries(tenant_id).await?;
         Ok(pg_count.max(mem_count))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_db_circuit_breaker_transitions() {
+        let mut cb = DbCircuitBreaker::new(3, 1);
+        assert_eq!(cb.state(), DbCircuitState::Closed);
+
+        cb.record_failure();
+        cb.record_failure();
+        assert_eq!(cb.state(), DbCircuitState::Closed);
+
+        // 3rd failure trips the breaker to Open
+        cb.record_failure();
+        assert_eq!(cb.state(), DbCircuitState::Open);
+
+        // Reset restores Closed
+        cb.reset();
+        assert_eq!(cb.state(), DbCircuitState::Closed);
+    }
+
+    #[tokio::test]
+    async fn test_postgres_store_circuit_breaker_fast_fail() {
+        // Points to unreachable port so connection fails immediately
+        let store = PostgresDatabaseStore::new(
+            "postgres://invalid_user:invalid_pass@127.0.0.1:54321/nonexistent",
+        );
+
+        assert_eq!(store.circuit_state().await, DbCircuitState::Closed);
+
+        // Trigger failures until circuit trips
+        for _ in 0..3 {
+            let _ = store.get_pool().await;
+        }
+
+        assert_eq!(store.circuit_state().await, DbCircuitState::Open);
+
+        // Next call must fast-fail without waiting
+        let start = std::time::Instant::now();
+        let pool = store.get_pool().await;
+        let elapsed = start.elapsed();
+
+        assert!(pool.is_none());
+        assert!(
+            elapsed < Duration::from_millis(50),
+            "Circuit breaker must fail fast under 50ms"
+        );
     }
 }
