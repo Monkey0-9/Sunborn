@@ -447,7 +447,7 @@ certificate['attestation'] = {
     'hmac_sha256_signature': sig
 }
 
-with open('${CERTIFICATE_ARTIFACT}', 'w') as f_cert:
+with open('${CERTIFICATE_ARTIFACT}', 'w', encoding='utf-8', newline='\n') as f_cert:
     json.dump(certificate, f_cert, indent=2)
 
 print(f\"  Certificate Generated    : ${CERTIFICATE_ARTIFACT} ({attestation_type})\")

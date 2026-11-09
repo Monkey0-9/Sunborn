@@ -348,6 +348,7 @@ class NegativeVerifierTests(unittest.TestCase):
         # Mutate all queries to reused=False (degenerate zero-reuse cache)
         for tr in bench_data["b3_evaluation_trace"]:
             tr["reused"] = False
+            tr["b3_reused"] = False
         self._sync_cert_hashes(bench_data=bench_data)
 
         outcome = verify_reproduction_certificate(
@@ -357,6 +358,8 @@ class NegativeVerifierTests(unittest.TestCase):
             check_git=True,
             require_live=True,
         )
+        self.assertEqual(outcome, STATUS_INVALID)
+
     def test_tampered_b2_summary_in_benchmark_is_strictly_rejected(self):
         with open(self.bench_copy, "r", encoding="utf-8") as f:
             bench_data = json.load(f)

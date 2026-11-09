@@ -20,6 +20,7 @@ import math
 import hashlib
 import platform
 import argparse
+import subprocess
 import statistics
 from datetime import datetime, timezone
 
@@ -608,8 +609,12 @@ def run_benchmark(
     b0_cost = baselines["B0_NoCache"]["cost"]
 
     dataset_fingerprint = hashlib.sha256(json.dumps(BENCHMARK_SUITE, sort_keys=True).encode("utf-8")).hexdigest()
-    git_commit_sha = os.popen("git rev-parse HEAD 2>/dev/null || echo unknown").read().strip()
-    git_tree_sha = os.popen("git rev-parse HEAD^{tree} 2>/dev/null || echo unknown").read().strip()
+    try:
+        git_commit_sha = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+        git_tree_sha = subprocess.run(["git", "rev-parse", "HEAD^{tree}"], capture_output=True, text=True, check=True).stdout.strip()
+    except Exception:
+        git_commit_sha = "unknown"
+        git_tree_sha = "unknown"
     with open(__file__, "rb") as f_bench:
         benchmark_code_sha = hashlib.sha256(f_bench.read()).hexdigest()
 
@@ -704,7 +709,7 @@ def run_benchmark(
     target_path = output_path or os.environ.get("SUNBORN_BENCHMARK_OUTPUT") or os.path.join(results_dir, "benchmark_run.json")
 
     if not dry_run:
-        with open(target_path, "w", encoding="utf-8") as f:
+        with open(target_path, "w", encoding="utf-8", newline="\n") as f:
             json.dump(report_data, f, indent=2)
         print(f"Artifact written to: {os.path.relpath(target_path)}")
     else:

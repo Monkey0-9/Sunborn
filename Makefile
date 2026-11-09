@@ -1,3 +1,8 @@
+PYTHON ?= python3
+ifeq ($(OS),Windows_NT)
+  PYTHON := python
+endif
+
 .PHONY: all build test check fmt lint run clean help docker-up docker-down test-frontend build-frontend test-sdk lint-helm verify-stack reproduce verify-all
 
 all: check test
@@ -33,11 +38,11 @@ build-frontend:
 	npm run build --prefix frontend
 
 test-sdk:
-	PYTHONPATH=sdk/python python3 -m unittest sdk/python/test_sunborn_agent.py
-	PYTHONPATH=sdk/python python3 -m unittest sdk/python/tests/test_sdk_package.py
+	$(PYTHON) -m unittest sdk/python/test_sunborn_agent.py
+	$(PYTHON) -m unittest sdk/python/tests/test_sdk_package.py
 
 lint-helm:
-	helm lint deploy/helm/sunborn
+	helm lint deploy/helm/sunborn --set secrets.existingSecret="ci-validation"
 
 verify-stack:
 	bash deploy/verify_live_stack.sh

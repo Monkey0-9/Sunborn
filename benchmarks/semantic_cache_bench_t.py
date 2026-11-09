@@ -28,6 +28,7 @@ import math
 import hashlib
 import platform
 import argparse
+import subprocess
 import statistics
 from datetime import datetime, timezone
 
@@ -613,8 +614,12 @@ def run_temporal_benchmark(output_path: str = None, dry_run: bool = False, use_f
     b0_cost = baselines["B0_NoCache"]["cost"]
 
     # Manifest report data
-    git_commit_sha = os.popen("git rev-parse HEAD 2>/dev/null || echo unknown").read().strip()
-    git_tree_sha = os.popen("git rev-parse HEAD^{tree} 2>/dev/null || echo unknown").read().strip()
+    try:
+        git_commit_sha = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+        git_tree_sha = subprocess.run(["git", "rev-parse", "HEAD^{tree}"], capture_output=True, text=True, check=True).stdout.strip()
+    except Exception:
+        git_commit_sha = "unknown"
+        git_tree_sha = "unknown"
     with open(__file__, "rb") as f_bench:
         benchmark_code_sha = hashlib.sha256(f_bench.read()).hexdigest()
 
@@ -698,7 +703,7 @@ def run_temporal_benchmark(output_path: str = None, dry_run: bool = False, use_f
     target_path = output_path or os.environ.get("SUNBORN_TEMPORAL_OUTPUT") or os.path.join(results_dir, "run_manifest.json")
 
     if not dry_run:
-        with open(target_path, "w", encoding="utf-8") as f:
+        with open(target_path, "w", encoding="utf-8", newline="\n") as f:
             json.dump(report_data, f, indent=2)
         print(f"Immutable Run Manifest written to: {os.path.relpath(target_path)}")
     else:

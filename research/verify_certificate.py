@@ -229,11 +229,19 @@ def verify_reproduction_certificate(
         norm_sha = hashlib.sha256(bench_bytes.replace(b"\r\n", b"\n")).hexdigest()
         if norm_sha == expected_bench_sha:
             actual_bench_sha = norm_sha
+        else:
+            crlf_sha = hashlib.sha256(bench_bytes.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")).hexdigest()
+            if crlf_sha == expected_bench_sha:
+                actual_bench_sha = crlf_sha
 
     if actual_manifest_sha != expected_manifest_sha:
         norm_sha = hashlib.sha256(manifest_bytes.replace(b"\r\n", b"\n")).hexdigest()
         if norm_sha == expected_manifest_sha:
             actual_manifest_sha = norm_sha
+        else:
+            crlf_sha = hashlib.sha256(manifest_bytes.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")).hexdigest()
+            if crlf_sha == expected_manifest_sha:
+                actual_manifest_sha = crlf_sha
 
     if not expected_bench_sha or not hmac.compare_digest(actual_bench_sha, expected_bench_sha):
         print(f"FAIL: Benchmark artifact SHA-256 mismatch!\n  Actual  : {actual_bench_sha}\n  Expected: {expected_bench_sha}", file=sys.stderr)
