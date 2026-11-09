@@ -134,6 +134,37 @@ export default function LoginPage() {
             <CardTitle className="text-base text-white">Sign In to Sunborn Console</CardTitle>
           </CardHeader>
           <CardContent>
+            {/* Quick Demo Credentials */}
+            <div className="mb-4 p-3 rounded-xl bg-slate-900/80 border border-white/10 space-y-2">
+              <span className="text-[11px] font-mono text-slate-400 block uppercase tracking-wider">
+                Quick Demo Credentials:
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClientId("admin-operator");
+                    setClientSecret("admin-secret-dev-key");
+                    setTenantId("tenant-enterprise-fintech");
+                  }}
+                  className="px-2.5 py-1 rounded bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 text-xs font-mono transition-colors cursor-pointer"
+                >
+                  Admin Operator (Superuser)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClientId("app-risk-evaluator");
+                    setClientSecret("sb_live_fintech_eval_key");
+                    setTenantId("tenant-enterprise-fintech");
+                  }}
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 text-xs font-mono transition-colors cursor-pointer"
+                >
+                  Fintech App Tenant
+                </button>
+              </div>
+            </div>
+
             {error && (
               <div
                 role="alert"

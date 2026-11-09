@@ -603,6 +603,11 @@ impl AppState {
         }
 
         if is_prod {
+            if self.origin_provider.is_mock() {
+                return Err(sunborn_core::SunbornError::configuration_error(
+                    "Production startup refused: origin_provider is configured with MockOriginProvider. Production requires a live authenticated LLM origin.",
+                ));
+            }
             self.origin_provider.health_check().await?;
             self.selected_embedder.health_check().await?;
         }

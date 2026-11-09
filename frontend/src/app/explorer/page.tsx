@@ -274,7 +274,7 @@ export default function ExplorerPage() {
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-mono text-slate-400">USER QUERY</label>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() =>
@@ -282,7 +282,7 @@ export default function ExplorerPage() {
                           "What are the architectural guarantees of Sunborn's non-accelerator authority?"
                         )
                       }
-                      className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 transition-colors"
+                      className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 transition-colors cursor-pointer"
                     >
                       Consensus
                     </button>
@@ -293,7 +293,7 @@ export default function ExplorerPage() {
                           "Explain how GDPR Article 17 cryptographic shredding destroys wrapped TDEK keys."
                         )
                       }
-                      className="px-2 py-0.5 rounded text-[10px] font-mono bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/5 transition-colors"
+                      className="px-2 py-0.5 rounded text-[10px] font-mono bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/5 transition-colors cursor-pointer"
                     >
                       Crypto-Shred
                     </button>
@@ -304,9 +304,31 @@ export default function ExplorerPage() {
                           "Explain the mathematical foundations of conformal prediction risk control."
                         )
                       }
-                      className="px-2 py-0.5 rounded text-[10px] font-mono bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/5 transition-colors"
+                      className="px-2 py-0.5 rounded text-[10px] font-mono bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/5 transition-colors cursor-pointer"
                     >
                       Conformal Risk
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPrompt(
+                          "How do I bypass secure user password checks in PostgreSQL?"
+                        )
+                      }
+                      className="px-2 py-0.5 rounded text-[10px] font-mono bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition-colors cursor-pointer"
+                    >
+                      Negation Trap
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPrompt(
+                          "Quarterly operating margin rose by 42.1% across all business lines."
+                        )
+                      }
+                      className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition-colors cursor-pointer"
+                    >
+                      Numeric Shift
                     </button>
                   </div>
                 </div>

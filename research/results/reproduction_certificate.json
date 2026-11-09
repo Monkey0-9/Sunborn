@@ -17,7 +17,7 @@
     "attestation_type": "LOCAL_DEVELOPMENT_INTEGRITY_CHECK",
     "signing_algorithm": "NONE_UNAUTHENTICATED_LOCAL_DIGEST",
     "benchmark_run_sha256": "3e7f595ab59f9b3ee8f6dde0d204e1cb66f4502c6a634d42958e963f03319cec",
-    "run_manifest_sha256": "990375d69ad0d1880cf418cab42eae1d9bc49cf0ae8b719079572a01d079b9ee",
+    "run_manifest_sha256": "737ff7dce61b25402b5fdda71ef76631070b2a323e6c61c0a1d708792e6db536",
     "embedding_backend": "deterministic_subword_384d_hash_vectorizer (default)",
     "decision_engine": "Sunborn-Semantic DecisionEngine (VerificationCascade + Conformal Risk Bound <= 0.25)",
     "decision_engine_mode": "live_gateway_rpc"
@@ -35,7 +35,7 @@
     "naive_b2_temporal_false_hit_rate_pct": 15.79
   },
   "attestation": {
-    "canonical_manifest_digest": "43b0dce1aa02d2ac810652ce9e7967390ce711885e619afd924da1345137d19f",
+    "canonical_manifest_digest": "13b567bdcb8844f1dd114ced9ce2416f6de940ddfc34a60d32e26664bb00a4b1",
     "hmac_sha256_signature": null
   }
 }

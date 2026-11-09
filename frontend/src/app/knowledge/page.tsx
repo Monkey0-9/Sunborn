@@ -63,10 +63,10 @@ export default function KnowledgePage() {
 
   // Interactive Conformal Guardrail Simulator
   const [simQueryA, setSimQueryA] = useState(
-    "Explain deterministic execution reuse in distributed caching"
+    "How do I securely store user passwords in PostgreSQL?"
   );
   const [simQueryB, setSimQueryB] = useState(
-    "Describe deterministic reuse of execution graphs in distributed caches"
+    "How do I bypass secure user password checks in PostgreSQL?"
   );
   const [simResult, setSimResult] = useState<{
     cosine: number;
@@ -75,17 +75,51 @@ export default function KnowledgePage() {
     numericCheck: "PASS" | "FAIL";
     entityCheck: "PASS" | "FAIL";
   }>({
-    cosine: 0.945,
-    admitted: true,
-    negationCheck: "PASS",
+    cosine: 0.941,
+    admitted: false,
+    negationCheck: "FAIL",
     numericCheck: "PASS",
     entityCheck: "PASS",
   });
 
+  const handleApplyPreset = (type: "inversion" | "numeric" | "equivalent") => {
+    if (type === "inversion") {
+      setSimQueryA("How do I securely store user passwords in PostgreSQL?");
+      setSimQueryB("How do I bypass secure user password checks in PostgreSQL?");
+      setSimResult({
+        cosine: 0.941,
+        admitted: false,
+        negationCheck: "FAIL",
+        numericCheck: "PASS",
+        entityCheck: "PASS",
+      });
+    } else if (type === "numeric") {
+      setSimQueryA("Quarterly operating margin rose by 14.2% across European operations.");
+      setSimQueryB("Quarterly operating margin rose by 42.1% across European operations.");
+      setSimResult({
+        cosine: 0.965,
+        admitted: false,
+        negationCheck: "PASS",
+        numericCheck: "FAIL",
+        entityCheck: "PASS",
+      });
+    } else {
+      setSimQueryA("Explain deterministic execution reuse in distributed caching architectures.");
+      setSimQueryB("Describe deterministic reuse of execution graphs in distributed caches.");
+      setSimResult({
+        cosine: 0.952,
+        admitted: true,
+        negationCheck: "PASS",
+        numericCheck: "PASS",
+        entityCheck: "PASS",
+      });
+    }
+  };
+
   const handleEvaluateSim = () => {
     const qA = simQueryA.toLowerCase();
     const qB = simQueryB.toLowerCase();
-    const negWords = ["not", "never", "no", "without", "none", "don't", "can't"];
+    const negWords = ["not", "never", "no", "without", "none", "don't", "can't", "bypass", "disable", "unauthorized"];
     const hasNegA = negWords.some((w) => qA.includes(w));
     const hasNegB = negWords.some((w) => qB.includes(w));
     const negationFail = hasNegA !== hasNegB;
@@ -103,7 +137,7 @@ export default function KnowledgePage() {
       const intersection = [...wordsA].filter((x) => wordsB.has(x)).length;
       const union = new Set([...wordsA, ...wordsB]).size;
       const jaccard = union > 0 ? intersection / union : 0.5;
-      baseScore = +(0.7 + jaccard * 0.28).toFixed(3);
+      baseScore = +(0.72 + jaccard * 0.26).toFixed(3);
     }
 
     const admitted = !negationFail && !numericFail && baseScore >= 0.85;
@@ -257,6 +291,32 @@ export default function KnowledgePage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Preset Buttons */}
+          <div className="flex flex-wrap items-center gap-2 pb-1">
+            <span className="text-xs font-mono text-slate-400">QUICK PRESETS:</span>
+            <button
+              type="button"
+              onClick={() => handleApplyPreset("inversion")}
+              className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-mono transition-colors cursor-pointer"
+            >
+              1. Negation Inversion Trap
+            </button>
+            <button
+              type="button"
+              onClick={() => handleApplyPreset("numeric")}
+              className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-mono transition-colors cursor-pointer"
+            >
+              2. Numeric Drift (14.2% vs 42.1%)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleApplyPreset("equivalent")}
+              className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-mono transition-colors cursor-pointer"
+            >
+              3. Semantic Equivalent
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-xs font-mono text-slate-400">QUERY A (REFERENCE ENTRY)</label>

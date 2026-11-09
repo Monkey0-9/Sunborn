@@ -223,6 +223,52 @@ impl PostgresDatabaseStore {
                 latency_saved_ms BIGINT,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
+
+            CREATE TABLE IF NOT EXISTS applications (
+                id VARCHAR(64) NOT NULL,
+                tenant_id VARCHAR(128) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                name VARCHAR(255) NOT NULL,
+                api_key_hash VARCHAR(128) NOT NULL,
+                status VARCHAR(32) NOT NULL DEFAULT 'active',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (tenant_id, id)
+            );
+
+            CREATE TABLE IF NOT EXISTS knowledge_sources (
+                id UUID PRIMARY KEY,
+                tenant_id VARCHAR(128) NOT NULL,
+                name VARCHAR(255) NOT NULL,
+                uri TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+
+            CREATE TABLE IF NOT EXISTS document_versions (
+                id UUID PRIMARY KEY,
+                source_id UUID NOT NULL REFERENCES knowledge_sources(id) ON DELETE CASCADE,
+                version_tag VARCHAR(64) NOT NULL,
+                content_hash VARCHAR(64) NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+
+            CREATE TABLE IF NOT EXISTS dependency_edges (
+                source_id UUID NOT NULL REFERENCES knowledge_sources(id) ON DELETE CASCADE,
+                cache_key VARCHAR(512) NOT NULL REFERENCES durable_cache_entries(key) ON DELETE CASCADE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (source_id, cache_key)
+            );
+
+            CREATE TABLE IF NOT EXISTS invalidation_outbox (
+                id BIGSERIAL PRIMARY KEY,
+                tenant_id VARCHAR(128) NOT NULL,
+                entity_type VARCHAR(64) NOT NULL,
+                entity_id VARCHAR(255) NOT NULL,
+                action VARCHAR(32) NOT NULL,
+                payload JSONB NOT NULL,
+                status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                retry_count INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                processed_at TIMESTAMPTZ
+            );
             "#,
         )
         .execute(pool)
@@ -957,6 +1003,24 @@ impl DatabaseStore for PostgresDatabaseStore {
 
             // 7. Delete tenant decision records
             let _ = sqlx::query("DELETE FROM decision_records WHERE tenant_id = $1")
+                .bind(tenant_id)
+                .execute(&pool)
+                .await;
+
+            // 8. Delete tenant knowledge sources (cascades to document_versions and dependency_edges)
+            let _ = sqlx::query("DELETE FROM knowledge_sources WHERE tenant_id = $1")
+                .bind(tenant_id)
+                .execute(&pool)
+                .await;
+
+            // 9. Delete tenant applications
+            let _ = sqlx::query("DELETE FROM applications WHERE tenant_id = $1")
+                .bind(tenant_id)
+                .execute(&pool)
+                .await;
+
+            // 10. Delete tenant invalidation outbox
+            let _ = sqlx::query("DELETE FROM invalidation_outbox WHERE tenant_id = $1")
                 .bind(tenant_id)
                 .execute(&pool)
                 .await;

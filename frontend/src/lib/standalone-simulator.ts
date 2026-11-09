@@ -355,13 +355,293 @@ export function handleSimulatedRoute(
     };
   }
 
-  // 12. Cache entry deletion
+  // 12. Cache entry CRUD
   if (norm.startsWith("v1/caches/")) {
+    const key = normalizedPath.replace(/^v1\/caches\//, "");
+    if (method.toUpperCase() === "DELETE") {
+      return {
+        status: 200,
+        body: {
+          deleted: true,
+          key,
+        },
+      };
+    }
     return {
       status: 200,
       body: {
-        deleted: true,
-        key: normalizedPath.replace(/^v1\/caches\//, ""),
+        key,
+        tier: "exact",
+        created_at: new Date(Date.now() - 3600000).toISOString(),
+        ttl_remaining_secs: 3200,
+        content: "Verified execution reuse from Sunborn DragonflyDB exact tier.",
+        encryption: "AES-256-GCM AEAD",
+        nonce: "4f8a12e9b3c4d5e6f7a8b9c0",
+      },
+    };
+  }
+
+  // 13. Cluster Sync Status
+  if (norm === "v1/cluster/sync/status") {
+    return {
+      status: 200,
+      body: {
+        status: "synchronized",
+        vector_clock: {
+          epoch: 4194,
+          "node-us-east-1": 4194,
+          "node-eu-central-1": 4194,
+          "node-ap-southeast-1": 4194,
+        },
+        drift_delta: 0,
+        last_anti_entropy_sync: new Date().toISOString(),
+        protocol: "Merkle Tree Differential Gossip",
+      },
+    };
+  }
+
+  // 14. Autonomic Health & Incident Management
+  if (norm === "v1/autonomic/status") {
+    return {
+      status: 200,
+      body: {
+        autonomic_health: "HEALTHY",
+        remediation_mode: "AUTONOMOUS_CLOSED_LOOP",
+        circuit_breaker_status: "CLOSED",
+        total_incidents_resolved: 19,
+        recent_incidents: [
+          {
+            incident_id: "inc_0428",
+            component: "ConformalRiskController",
+            trigger_reason: "Dynamic OOD distribution drift detected in financial queries",
+            recovery_action: "Threshold auto-calibrated to 0.89; coverage verified at 99.9%",
+            resolved_at: new Date(Date.now() - 180000).toISOString(),
+          },
+        ],
+      },
+    };
+  }
+
+  if (norm === "v1/autonomic/incidents") {
+    return {
+      status: 200,
+      body: [
+        {
+          id: "inc_0428",
+          severity: "MEDIUM",
+          component: "ConformalRiskController",
+          message: "Dynamic OOD distribution drift auto-calibrated",
+          action_taken: "RECALIBRATED_CONFORMAL_THRESHOLD",
+          timestamp: new Date(Date.now() - 180000).toISOString(),
+          status: "RESOLVED",
+        },
+        {
+          id: "inc_0427",
+          severity: "LOW",
+          component: "RadixRouter",
+          message: "Prefill KV cache affinity node rebalanced",
+          action_taken: "AFFINITY_REEVALUATED",
+          timestamp: new Date(Date.now() - 940000).toISOString(),
+          status: "RESOLVED",
+        },
+      ],
+    };
+  }
+
+  // 15. Radix Routing & Prefix KV Cache Affinity
+  if (norm === "v1/routing/radix/route") {
+    let parsed: any = {};
+    try {
+      if (rawBody) parsed = JSON.parse(rawBody);
+    } catch {}
+    const promptLen = (parsed.prompt || "").length;
+    const hasAffinity = promptLen > 20;
+
+    return {
+      status: 200,
+      body: {
+        selected_node: "node-us-east-1a",
+        is_kv_affinity_hit: hasAffinity,
+        matched_tokens: hasAffinity ? Math.min(256, Math.floor(promptLen / 4)) : 0,
+        estimated_prefill_savings_pct: hasAffinity ? 74.2 : 0.0,
+      },
+    };
+  }
+
+  if (norm === "v1/routing/radix/inspect") {
+    return {
+      status: 200,
+      body: {
+        status: "active",
+        backend_nodes: ["node-us-east-1a", "node-us-east-1b", "node-eu-central-1a"],
+        min_affinity_tokens: 32,
+        max_load_factor: 0.85,
+        strategy: "longest_prefix_match",
+      },
+    };
+  }
+
+  // 16. Auth & Credentials Management
+  if (norm === "v1/auth/credentials") {
+    let parsed: any = {};
+    try {
+      if (rawBody) parsed = JSON.parse(rawBody);
+    } catch {}
+
+    const tid = parsed.tenant_id || "tenant-enterprise-fintech";
+    const app = parsed.application_id || "app-rag-vault";
+    const isAdmin = !!parsed.is_admin;
+    const rawKey = `sb_live_${Math.random().toString(36).substring(2, 10)}${Date.now().toString(36)}`;
+
+    return {
+      status: 200,
+      body: {
+        status: "created",
+        raw_key: rawKey,
+        key_hash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        tenant_id: tid,
+        application_id: app,
+        is_admin: isAdmin,
+        expires_at: new Date(Date.now() + 86400 * 30 * 1000).toISOString(),
+      },
+    };
+  }
+
+  if (norm === "v1/auth/credentials/revoke") {
+    let parsed: any = {};
+    try {
+      if (rawBody) parsed = JSON.parse(rawBody);
+    } catch {}
+
+    return {
+      status: 200,
+      body: {
+        status: "revoked",
+        revoked_count: 1,
+        durable_revoked_count: 1,
+        tenant_id: parsed.tenant_id || "tenant-enterprise-fintech",
+        key_hash: parsed.key_hash || "e3b0c442...",
+      },
+    };
+  }
+
+  if (norm === "v1/auth/credentials/rotate") {
+    return {
+      status: 200,
+      body: {
+        status: "rotated",
+        new_raw_key: `sb_live_rot_${Math.random().toString(36).substring(2, 10)}`,
+        new_key_hash: "a4b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8",
+      },
+    };
+  }
+
+  if (norm === "v1/auth/session") {
+    return {
+      status: 200,
+      body: {
+        authenticated: true,
+        tenant_id: "tenant-enterprise-fintech",
+        application_id: "console-admin",
+        is_admin: true,
+      },
+    };
+  }
+
+  // 17. Governance: Tenant Provisioning
+  if (norm === "v1/governance/provision") {
+    let parsed: any = {};
+    try {
+      if (rawBody) parsed = JSON.parse(rawBody);
+    } catch {}
+
+    return {
+      status: 200,
+      body: {
+        status: "provisioned",
+        tenant_id: parsed.tenant_id || "tenant-new",
+        kms_provider: "local-aead",
+        durable_persistence: true,
+      },
+    };
+  }
+
+  // 18. Execution DAG Lifecycle
+  if (norm === "v1/execution/plan") {
+    return {
+      status: 200,
+      body: {
+        plan_id: `plan_${Math.random().toString(36).substring(2, 8)}`,
+        status: "compiled",
+        reusable_nodes: 3,
+        total_nodes: 5,
+        estimated_speedup_factor: 8.4,
+      },
+    };
+  }
+
+  if (norm === "v1/execution/results") {
+    return {
+      status: 200,
+      body: {
+        status: "recorded",
+        memoized: true,
+      },
+    };
+  }
+
+  if (norm === "v1/execution/evict") {
+    let parsed: any = {};
+    try {
+      if (rawBody) parsed = JSON.parse(rawBody);
+    } catch {}
+
+    return {
+      status: 200,
+      body: {
+        tenant_id: parsed.tenant_id || "tenant-enterprise-fintech",
+        evicted_nodes: 12,
+      },
+    };
+  }
+
+  // 19. Dependency & Lifecycle Operations
+  if (norm === "v1/dependencies") {
+    let parsed: any = {};
+    try {
+      if (rawBody) parsed = JSON.parse(rawBody);
+    } catch {}
+
+    return {
+      status: 200,
+      body: {
+        status: "registered",
+        source_id: parsed.source_id || "src-doc-01",
+        cache_key: parsed.cache_key || "key-01",
+      },
+    };
+  }
+
+  if (norm === "v1/lifecycle/sweep") {
+    return {
+      status: 200,
+      body: {
+        status: "completed",
+        swept_entries: 48,
+        freed_bytes: 198420,
+      },
+    };
+  }
+
+  // 20. Shadow Evaluation & Drift Detection
+  if (norm === "v1/shadow/evaluate") {
+    return {
+      status: 200,
+      body: {
+        drift_detected: false,
+        cosine_similarity: 0.984,
+        action: "RETAIN_CACHE_ENTRY",
+        evicted: false,
       },
     };
   }

@@ -202,43 +202,45 @@ export default function ExecutionDAGPage() {
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 relative">
           {nodes.map((node, idx) => {
             const isSelected = selectedNode === node.id;
             return (
               <div
                 key={node.id}
                 onClick={() => setSelectedNode(node.id)}
-                className={`relative rounded-2xl p-5 border transition-all cursor-pointer backdrop-blur-xl ${
+                className={`relative rounded-2xl p-4 border transition-all cursor-pointer backdrop-blur-xl flex flex-col justify-between ${
                   isSelected
-                    ? "border-emerald-500 bg-slate-900/90 shadow-glow-emerald"
-                    : "border-white/[0.08] bg-slate-950/70 hover:border-white/20"
+                    ? "border-emerald-500 bg-slate-900/90 shadow-glow-emerald ring-1 ring-emerald-500/50"
+                    : "border-white/[0.08] bg-slate-950/70 hover:border-white/20 hover:bg-slate-900/50"
                 }`}
               >
                 {/* Node Step Marker */}
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[10px] font-mono font-bold text-slate-500">
-                    STEP 0{idx + 1}
-                  </span>
-                  <Badge
-                    variant={node.reused ? "success" : "outline"}
-                    className="text-[10px] py-0"
-                  >
-                    {node.reused ? "REUSED" : "ORIGIN"}
-                  </Badge>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-mono font-bold text-slate-500">
+                      STEP 0{idx + 1}
+                    </span>
+                    <Badge
+                      variant={node.reused ? "success" : "outline"}
+                      className="text-[10px] py-0"
+                    >
+                      {node.reused ? "REUSED" : "ORIGIN"}
+                    </Badge>
+                  </div>
+
+                  <h3 className="text-xs font-bold text-white tracking-tight truncate">
+                    {node.name}
+                  </h3>
+                  <div className="text-[10px] font-mono text-cyan-400 mt-0.5 truncate">
+                    {node.category}
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1.5 font-mono leading-relaxed line-clamp-2">
+                    {node.description}
+                  </p>
                 </div>
 
-                <h3 className="text-sm font-bold text-white tracking-tight truncate">
-                  {node.name}
-                </h3>
-                <p className="text-[11px] font-mono text-cyan-400 mt-1">
-                  {node.category}
-                </p>
-                <p className="text-[11px] text-slate-400 mt-2 font-mono leading-relaxed line-clamp-2">
-                  {node.description}
-                </p>
-
-                <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs font-mono">
+                <div className="mt-3 pt-2.5 border-t border-white/10 flex items-center justify-between text-[11px] font-mono">
                   <span className="text-slate-500">Latency:</span>
                   <span className={node.reused ? "text-emerald-400 font-bold" : "text-slate-300 font-bold"}>
                     {node.latency}

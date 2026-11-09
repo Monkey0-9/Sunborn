@@ -21,6 +21,7 @@ import {
   Database,
   CheckCircle2,
   X,
+  Menu,
   RefreshCw,
   Sliders,
   Sparkles,
@@ -38,6 +39,7 @@ export function Header() {
   const [activeTenant, setActiveTenant] = useState<string>("tenant-enterprise-fintech");
   const [sessionAuth, setSessionAuth] = useState<boolean>(false);
   const [showDiagnostics, setShowDiagnostics] = useState<boolean>(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [isProbing, setIsProbing] = useState<boolean>(false);
   const [probeResult, setProbeResult] = useState<string | null>(null);
 
@@ -200,8 +202,8 @@ export function Header() {
             </div>
           </div>
 
-          {/* Center Navigation Links */}
-          <nav className="hidden md:flex items-center gap-1">
+          {/* Center Navigation Links (Desktop) */}
+          <nav className="hidden xl:flex items-center gap-1">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
@@ -210,7 +212,7 @@ export function Header() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "relative flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200",
+                    "relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200",
                     isActive
                       ? "text-white bg-white/[0.08] shadow-sm border border-white/10"
                       : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.03]"
@@ -232,12 +234,12 @@ export function Header() {
           </nav>
 
           {/* Right Controls */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {/* Global Command Menu */}
             <CommandMenu />
 
             {/* Tenant Selector */}
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-white/10 text-xs font-mono">
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-white/10 text-xs font-mono">
               <span className="text-slate-400">TENANT:</span>
               <select
                 aria-label="Active Tenant Scope"
@@ -272,9 +274,78 @@ export function Header() {
                 {sessionAuth ? "SESSION ACTIVE" : "LOGIN"}
               </span>
             </Link>
+
+            {/* Mobile / Compact Menu Toggle */}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              aria-label="Toggle Navigation Menu"
+              className="xl:hidden p-2 rounded-xl border border-white/10 bg-slate-900/80 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+            >
+              {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Mobile Drawer / Overlay Navigation Menu */}
+      {mobileMenuOpen && (
+        <div className="xl:hidden border-b border-white/[0.08] bg-slate-950/95 backdrop-blur-2xl px-4 py-4 animate-in slide-in-from-top-2 duration-200">
+          <div className="max-w-7xl mx-auto space-y-4">
+            {/* Quick Status Pill */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/80 border border-white/10 text-xs font-mono">
+              <div className="flex items-center gap-2">
+                <Radio
+                  className={cn(
+                    "w-3 h-3",
+                    gatewayStatus === "live"
+                      ? "text-emerald-400 animate-pulse"
+                      : "text-amber-400"
+                  )}
+                />
+                <span className="text-slate-300">GATEWAY:</span>
+                <span className={cn("font-bold", gatewayStatus === "live" ? "text-emerald-400" : "text-amber-400")}>
+                  {gatewayStatus === "live" ? `ACTIVE (${pingMs ?? 0.8}ms)` : "OFFLINE"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setShowDiagnostics(true);
+                }}
+                className="px-2 py-1 rounded bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 text-[10px] font-semibold border border-cyan-500/30"
+              >
+                Diagnostics
+              </button>
+            </div>
+
+            {/* Mobile Navigation Links Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={cn(
+                      "flex items-center gap-2 p-2.5 rounded-xl text-xs font-medium transition-colors border",
+                      isActive
+                        ? "bg-cyan-500/15 border-cyan-500/30 text-cyan-300 font-bold"
+                        : "bg-slate-900/50 border-white/5 text-slate-400 hover:text-white hover:bg-white/[0.05]"
+                    )}
+                  >
+                    <Icon className={cn("w-4 h-4 shrink-0", isActive ? "text-cyan-400" : "text-slate-400")} />
+                    <span className="truncate">{item.name}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Global Infrastructure Diagnostics & Topology Drawer Modal */}
       {showDiagnostics && (

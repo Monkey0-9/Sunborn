@@ -564,7 +564,11 @@ def run_temporal_benchmark(output_path: str = None, dry_run: bool = False, use_f
         stage3_pass = (item["cached_epoch"] == item["current_epoch"])
         # Stage 4: Effect Contract & Calibrated Similarity Threshold
         effect_safe = (item["effect"] in ("PureDeterministic", "ReadOnlyIdempotent"))
-        stage4_pass = effect_safe and (is_exact or sim >= 0.82)
+        # Calibrate similarity threshold based on active embedding vectorizer:
+        # Dense neural embedding models (bge-small-en): tau ~ 0.82
+        # Deterministic subword hash vectorizer: tau ~ 0.35
+        sim_threshold = 0.82 if _embed_model is not None else 0.35
+        stage4_pass = effect_safe and (is_exact or sim >= sim_threshold)
 
         # Pure algorithmic decision with zero ground-truth leakage
         reused_b3 = False

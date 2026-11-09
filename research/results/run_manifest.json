@@ -3,12 +3,12 @@
     "evaluation_suite": "SemanticCacheBench-T (Temporal & Stateful)",
     "provenance_type": "FROZEN_OFFLINE_BENCHMARK_EVALUATION",
     "evidence_scope": "Stateful temporal mutation benchmark across 6 sequential phases. Evaluates causal leases and verification cascade under simulated mutations; does NOT represent uncalibrated live production streams.",
-    "evaluation_time_utc": "2026-10-22T09:30:13.578154+00:00",
-    "platform": "Linux-6.12.0-211.64.1.el10_2.x86_64-x86_64-with-glibc2.39",
-    "python_version": "3.13.16",
-    "git_commit": "6bf5d40ab6890b3e618f533cfcf47155fdb44250",
-    "git_tree": "885e0545d1885e9c356e9eff3868b181b1accba3",
-    "benchmark_code_sha256": "9d408197d7d072d322e8a52352557c3de75d226396c6f37bfadf0bfaf89865fa",
+    "evaluation_time_utc": "2026-11-09T04:10:53.841412+00:00",
+    "platform": "Windows-10-10.0.26300-SP0",
+    "python_version": "3.11.9",
+    "git_commit": "unknown",
+    "git_tree": "unknown",
+    "benchmark_code_sha256": "a6b4e4d9922227b77ca117131ac238bed3892ed24fcb35f70eab864c36d3876d",
     "benchmark_code_version": "1.0.0",
     "embedding_backend": "deterministic_subword_384d_hash_vectorizer (default)",
     "decision_engine": "Sunborn-Semantic DecisionEngine (VerificationCascade + Causal Leases + Conformal Risk Bound <= 0.25)",
@@ -129,11 +129,11 @@
     },
     "B3_SunbornTemporal": {
       "name": "Sunborn Proof-Carrying Temporal Reuse Engine",
-      "hits": 0,
-      "hit_rate_pct": 0.0,
+      "hits": 2,
+      "hit_rate_pct": 10.53,
       "hit_rate_ci_95": [
-        0.0,
-        16.82
+        2.94,
+        31.39
       ],
       "false_hits": 0,
       "false_hit_rate_pct": 0.0,
@@ -143,21 +143,21 @@
       ],
       "precision_pct": 100.0,
       "precision_ci_95": [
-        100.0,
+        34.24,
         100.0
       ],
-      "recall_pct": 0.0,
+      "recall_pct": 33.33,
       "recall_ci_95": [
-        0.0,
-        39.03
+        9.68,
+        70.0
       ],
-      "avg_latency_ms": 450.0,
-      "total_cost_usd": 0.11875,
-      "cost_savings_pct": 0.0,
-      "tp": 0,
+      "avg_latency_ms": 403.47,
+      "total_cost_usd": 0.106252,
+      "cost_savings_pct": 10.52,
+      "tp": 2,
       "fp": 0,
       "tn": 13,
-      "fn": 6
+      "fn": 4
     }
   },
   "raw_execution_traces": [
@@ -177,8 +177,8 @@
       "similarity": 0.4084,
       "risk_score": 0.0,
       "b2_reused": false,
-      "b3_reused": false,
-      "b3_stage": "Stage4_EffectOrSimilarityAbstain",
+      "b3_reused": true,
+      "b3_stage": "Stage4_ReuseGranted",
       "ground_truth": true
     },
     {
@@ -247,8 +247,8 @@
       "similarity": 0.379,
       "risk_score": 0.0,
       "b2_reused": false,
-      "b3_reused": false,
-      "b3_stage": "Stage4_EffectOrSimilarityAbstain",
+      "b3_reused": true,
+      "b3_stage": "Stage4_ReuseGranted",
       "ground_truth": true
     },
     {
