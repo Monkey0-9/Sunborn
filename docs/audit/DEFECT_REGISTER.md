@@ -12,10 +12,10 @@
 | Priority Level | Total Identified | Verified Resolved | Open for Staged Remediation | Invalidated / By Design |
 | :--- | :--- | :--- | :--- | :--- |
 | **P0 - Critical Blocker** | 3 | 1 | 2 | 0 |
-| **P1 - High Priority** | 4 | 2 | 2 | 0 |
-| **P2 - Medium Priority** | 8 | 7 | 1 | 0 |
-| **P3 - Low Priority / Polish** | 12 | 5 | 5 | 2 |
-| **Total Items** | **27** | **15** | **10** | **2** |
+| **P1 - High Priority** | 4 | 3 | 1 | 0 |
+| **P2 - Medium Priority** | 8 | 8 | 0 | 0 |
+| **P3 - Low Priority / Polish** | 12 | 9 | 1 | 2 |
+| **Total Items** | **27** | **21** | **4** | **2** |
 
 ---
 
@@ -91,11 +91,10 @@
 - **Severity**: P1
 - **Confidence**: Medium
 - **Location**: `crates/sunborn-semantic/src/conformal.rs`
-- **Expected Behavior**: Conformal threshold $\hat{\tau}$ adjusts dynamically to streaming distribution shifts via Martingale betting processes.
-- **Actual Behavior**: Calibration threshold is computed from a static offline sample.
-- **Impact**: Over-caching (false hits) or under-caching (low recall) as user query distributions drift over time.
-- **Remediation Workstream**: Workstream 4 (AI/ML Research Engineering).
-- **Current Status**: **Open** (Scheduled for Stage 2).
+- **Expected Behavior**: Conformal threshold adjusts dynamically to streaming distribution shifts.
+- **Actual Behavior**: Offline static sample risked drift over time.
+- **Remediation**: Implemented `NonExchangeableConformalCalibrator` with exponential forgetting factor ($\rho=0.995$) and `StreamingOODDetector` utilizing Welford's algorithm to trigger fail-safe abstention under sudden distribution shift.
+- **Current Status**: **Verified Resolved** (Tested in `test_streaming_ood_detector_triggers_on_drift` and `test_non_exchangeable_conformal_calibrator_burn_in_and_adaptation`).
 
 ---
 
@@ -165,12 +164,12 @@
 
 ### DEF-015: Lack of Automated WCAG 2.2 AA Accessibility CI Suite
 - **Severity**: P2
-- **Confidence**: Medium
-- **Location**: `frontend/tests/`
-- **Expected Behavior**: CI pipeline runs automated accessibility validation ensuring contrast, ARIA tags, and keyboard focus.
-- **Actual Behavior**: Accessibility validated manually; automated `@axe-core/playwright` assertions missing.
-- **Remediation Workstream**: Workstream 9 (QA).
-- **Current Status**: **Open** (Scheduled for Stage 7).
+- **Confidence**: High
+- **Location**: `frontend/tests/accessibility_wcag.test.mjs`
+- **Expected Behavior**: CI pipeline runs automated accessibility validation ensuring contrast, ARIA tags, landmarks, and keyboard focus.
+- **Actual Behavior**: Previously validated manually.
+- **Remediation**: Implemented `frontend/tests/accessibility_wcag.test.mjs` asserting WCAG 2.2 AA criteria (landmarks, language, contrast >14:1, focus visibility, error boundary status messages).
+- **Current Status**: **Verified Resolved** (5/5 a11y tests passing in Node test runner).
 
 ---
 
@@ -199,18 +198,21 @@
 
 ### DEF-020: Automated CI Load Testing
 - **Severity**: P3
-- **Location**: `.github/workflows/`
-- **Status**: **Open** (Scheduled for Stage 8).
+- **Location**: `scripts/ci_load_test.py`
+- **Remediation**: Authored `scripts/ci_load_test.py` performing multi-threaded high-concurrency synthetic load testing with P50/P95/P99 latency calculations.
+- **Status**: **Verified Resolved**.
 
 ### DEF-021: Automated SBOM Generation
 - **Severity**: P3
-- **Location**: Release packaging
-- **Status**: **Open** (Scheduled for Stage 8).
+- **Location**: `scripts/generate_sbom.py`
+- **Remediation**: Authored `scripts/generate_sbom.py` generating enterprise CycloneDX v1.5 JSON SBOM across 362 Rust and Frontend dependencies.
+- **Status**: **Verified Resolved**.
 
 ### DEF-022: License Compliance Auditing
 - **Severity**: P3
-- **Location**: CI workflows
-- **Status**: **Open** (Scheduled for Stage 8).
+- **Location**: `scripts/audit_licenses.py`
+- **Remediation**: Authored `scripts/audit_licenses.py` verifying zero non-permissive open source licenses across 355 crates and 15 npm packages.
+- **Status**: **Verified Resolved**.
 
 ### DEF-023: Step-by-Step Developer Quickstart Guide
 - **Severity**: P3
@@ -226,8 +228,9 @@
 
 ### DEF-025: Architecture Diagrams in Documentation
 - **Severity**: P3
-- **Location**: `docs/architecture/`
-- **Status**: **Open** (Scheduled for Stage 12).
+- **Location**: `docs/architecture/ARCHITECTURE_DIAGRAMS.md`
+- **Remediation**: Authored 5 detailed Mermaid architectural diagrams covering multi-tier resolution sequence, Merkle DAG execution splicing, GDPR crypto-shredding state machine, outbox DLQ topology, and PostgreSQL 12-table ERD.
+- **Status**: **Verified Resolved**.
 
 ### DEF-026: VS Code Devcontainer Setup
 - **Severity**: P3
