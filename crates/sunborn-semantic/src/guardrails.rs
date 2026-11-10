@@ -332,7 +332,7 @@ impl StructuralFingerprint {
         let mut quantifier_scope_tokens: Vec<String> = Vec::new();
         for (i, w) in clean_tokens.iter().enumerate() {
             if QUANTIFIERS.contains(&w.as_str()) {
-                let start = if i >= 4 { i - 4 } else { 0 };
+                let start = i.saturating_sub(4);
                 let end = (i + 5).min(clean_tokens.len());
                 for (j_offset, other_token) in clean_tokens[start..end].iter().enumerate() {
                     let j = start + j_offset;
