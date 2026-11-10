@@ -1,0 +1,525 @@
+{
+  "summary": {
+    "A_ExactMatch": {
+      "reused": 0,
+      "tp": 0,
+      "fp": 0,
+      "tn": 30,
+      "fn": 9,
+      "precision": 100.0,
+      "recall": 0.0,
+      "false_hit_rate": 0.0,
+      "fp_wilson_ci": [
+        0.0,
+        11.35
+      ],
+      "rec_wilson_ci": [
+        0.0,
+        29.92
+      ]
+    },
+    "B_ConventionalCosine": {
+      "reused": 24,
+      "tp": 2,
+      "fp": 22,
+      "tn": 8,
+      "fn": 7,
+      "precision": 8.33,
+      "recall": 22.22,
+      "false_hit_rate": 73.33,
+      "fp_wilson_ci": [
+        55.55,
+        85.82
+      ],
+      "rec_wilson_ci": [
+        6.32,
+        54.74
+      ]
+    },
+    "C_StructuralOnly": {
+      "reused": 12,
+      "tp": 0,
+      "fp": 12,
+      "tn": 18,
+      "fn": 9,
+      "precision": 0.0,
+      "recall": 0.0,
+      "false_hit_rate": 40.0,
+      "fp_wilson_ci": [
+        24.59,
+        57.68
+      ],
+      "rec_wilson_ci": [
+        0.0,
+        29.92
+      ]
+    },
+    "D_StructuralPlusConformal": {
+      "reused": 5,
+      "tp": 0,
+      "fp": 5,
+      "tn": 25,
+      "fn": 9,
+      "precision": 0.0,
+      "recall": 0.0,
+      "false_hit_rate": 16.67,
+      "fp_wilson_ci": [
+        7.34,
+        33.56
+      ],
+      "rec_wilson_ci": [
+        0.0,
+        29.92
+      ]
+    },
+    "E_CompleteSunborn": {
+      "reused": 0,
+      "tp": 0,
+      "fp": 0,
+      "tn": 30,
+      "fn": 9,
+      "precision": 100.0,
+      "recall": 0.0,
+      "false_hit_rate": 0.0,
+      "fp_wilson_ci": [
+        0.0,
+        11.35
+      ],
+      "rec_wilson_ci": [
+        0.0,
+        29.92
+      ]
+    }
+  },
+  "traces": [
+    {
+      "id": "ADV-NEG-01",
+      "cat": "negation_inversion",
+      "sim": 0.9661,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-NEG-02",
+      "cat": "negation_inversion",
+      "sim": 0.9586,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-NEG-03",
+      "cat": "negation_inversion",
+      "sim": 0.8974,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-DBL-01",
+      "cat": "double_negation",
+      "sim": 0.9535,
+      "equivalent": true,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-DBL-02",
+      "cat": "double_negation",
+      "sim": 0.8603,
+      "equivalent": true,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-SCP-01",
+      "cat": "scope_negation",
+      "sim": 0.9687,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-SCP-02",
+      "cat": "scope_negation",
+      "sim": 1.0,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": true,
+      "reuse_D": true,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-NUM-01",
+      "cat": "numeric_shift",
+      "sim": 0.9806,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-NUM-02",
+      "cat": "numeric_shift",
+      "sim": 0.9798,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-NUM-03",
+      "cat": "numeric_shift",
+      "sim": 0.9,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-TRP-01",
+      "cat": "entity_transposition",
+      "sim": 1.0,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": true,
+      "reuse_D": true,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-TRP-02",
+      "cat": "entity_transposition",
+      "sim": 1.0,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": true,
+      "reuse_D": true,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-TRP-03",
+      "cat": "entity_transposition",
+      "sim": 1.0,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": true,
+      "reuse_D": true,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-DT-01",
+      "cat": "dates_timezones",
+      "sim": 0.9697,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-DT-02",
+      "cat": "dates_timezones",
+      "sim": 0.95,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-CUR-01",
+      "cat": "currency_units",
+      "sim": 0.9286,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": true,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-CUR-02",
+      "cat": "currency_units",
+      "sim": 0.879,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": true,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-CUR-03",
+      "cat": "currency_units",
+      "sim": 0.9231,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": true,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-SUB-01",
+      "cat": "entity_substitution",
+      "sim": 0.9826,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": true,
+      "reuse_D": true,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-SUB-02",
+      "cat": "entity_substitution",
+      "sim": 0.8303,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": true,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-SUB-03",
+      "cat": "entity_substitution",
+      "sim": 0.913,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": true,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-CTR-01",
+      "cat": "contradictory",
+      "sim": 0.5581,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": false,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-CTR-02",
+      "cat": "contradictory",
+      "sim": 0.3607,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": false,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-TMP-01",
+      "cat": "temporal_mutation",
+      "sim": 0.7505,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": false,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-TMP-02",
+      "cat": "temporal_mutation",
+      "sim": 0.6975,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": false,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-LIN-01",
+      "cat": "lineage_mutation",
+      "sim": 0.9706,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-AMB-01",
+      "cat": "ambiguous",
+      "sim": 0.6658,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": false,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-ML-01",
+      "cat": "multilingual",
+      "sim": 0.6663,
+      "equivalent": true,
+      "reuse_A": false,
+      "reuse_B": false,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-ML-02",
+      "cat": "multilingual",
+      "sim": 0.5379,
+      "equivalent": true,
+      "reuse_A": false,
+      "reuse_B": false,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-PAR-01",
+      "cat": "true_paraphrase",
+      "sim": 0.4743,
+      "equivalent": true,
+      "reuse_A": false,
+      "reuse_B": false,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-PAR-02",
+      "cat": "true_paraphrase",
+      "sim": 0.5611,
+      "equivalent": true,
+      "reuse_A": false,
+      "reuse_B": false,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-PAR-03",
+      "cat": "true_paraphrase",
+      "sim": 0.3123,
+      "equivalent": true,
+      "reuse_A": false,
+      "reuse_B": false,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-PAR-04",
+      "cat": "true_paraphrase",
+      "sim": 0.5252,
+      "equivalent": true,
+      "reuse_A": false,
+      "reuse_B": false,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-PAR-05",
+      "cat": "true_paraphrase",
+      "sim": 0.6634,
+      "equivalent": true,
+      "reuse_A": false,
+      "reuse_B": false,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-CTX-01",
+      "cat": "context_dependent",
+      "sim": 0.8087,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": false,
+      "reuse_C": true,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-SEC-01",
+      "cat": "security_action",
+      "sim": 0.6088,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": false,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-SEC-02",
+      "cat": "security_action",
+      "sim": 0.5446,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": false,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-SURF-01",
+      "cat": "surface_trap",
+      "sim": 0.9868,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": false,
+      "reuse_D": false,
+      "reuse_E": false
+    },
+    {
+      "id": "ADV-SURF-02",
+      "cat": "surface_trap",
+      "sim": 0.9091,
+      "equivalent": false,
+      "reuse_A": false,
+      "reuse_B": true,
+      "reuse_C": true,
+      "reuse_D": false,
+      "reuse_E": false
+    }
+  ]
+}
