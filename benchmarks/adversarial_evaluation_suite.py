@@ -190,12 +190,29 @@ def extract_c15_fingerprint(text: str) -> Dict[str, Any]:
             prev_word = words[i-1].lower() if i > 0 else ""
             number_pairs.append(f"{prev_word}:{clean}")
 
+    # 6. Quantifier-Negation Scope Detection (Mirroring Gap 1 Remediation)
+    quantifiers = {"every", "all", "each", "any", "none", "no"}
+    quantifier_scopes = []
+    for i, w in enumerate(clean_words):
+        if w in quantifiers:
+            for j in range(max(0, i-4), min(len(clean_words), i+5)):
+                if i != j and clean_words[j] in NEGATION_VOCAB:
+                    quantifier_scopes.append(f"{clean_words[j]}_before_{w}" if j < i else f"{w}_before_{clean_words[j]}")
+    quantifier_scopes.sort()
+
+    # 7. Significant content tokens for single-keyword entity/topic replacement detection (Mirroring Rust C1.5)
+    stopwords = {"what", "how", "why", "show", "list", "explain", "describe", "is", "the", "for", "in", "of", "and", "a", "an", "are", "do", "does", "safe", "handling", "procedures"}
+    content_tokens = [w for w in clean_words if len(w) >= 3 and w not in stopwords]
+    content_tokens.sort()
+
     return {
         "numbers": numbers,
         "negation_tokens": neg_tokens,
         "temporal_tokens": temp_tokens,
         "units": units,
         "number_pairs": number_pairs,
+        "quantifier_scopes": quantifier_scopes,
+        "content_tokens": content_tokens,
         "has_negation": len(neg_tokens) > 0,
     }
 
@@ -209,15 +226,28 @@ def c15_matches_naive(fp1: Dict[str, Any], fp2: Dict[str, Any]) -> bool:
     )
 
 def c15_matches_hardened(fp1: Dict[str, Any], fp2: Dict[str, Any]) -> bool:
-    """Hardened C1.5 check incorporating units and order-sensitive number-entity associations."""
-    return (
-        fp1["numbers"] == fp2["numbers"] and
-        fp1["has_negation"] == fp2["has_negation"] and
-        fp1["negation_tokens"] == fp2["negation_tokens"] and
-        fp1["temporal_tokens"] == fp2["temporal_tokens"] and
-        fp1["units"] == fp2["units"] and
-        fp1["number_pairs"] == fp2["number_pairs"]
-    )
+    """Hardened C1.5 check incorporating units, order-sensitive number-entity associations, and quantifier scopes."""
+    if (
+        fp1["numbers"] != fp2["numbers"] or
+        fp1["has_negation"] != fp2["has_negation"] or
+        fp1["negation_tokens"] != fp2["negation_tokens"] or
+        fp1["temporal_tokens"] != fp2["temporal_tokens"] or
+        fp1["units"] != fp2["units"] or
+        fp1["number_pairs"] != fp2["number_pairs"] or
+        fp1["quantifier_scopes"] != fp2["quantifier_scopes"]
+    ):
+        return False
+
+    # Detect single-keyword entity/topic replacements (e.g. ethanol -> methanol) exactly like Rust C1.5
+    set1, set2 = set(fp1["content_tokens"]), set(fp2["content_tokens"])
+    diff1 = set1 - set2
+    diff2 = set2 - set1
+    if len(diff1) == 1 and len(diff2) == 1:
+        w1, w2 = list(diff1)[0], list(diff2)[0]
+        if not w1.startswith(w2) and not w2.startswith(w1):
+            return False
+
+    return True
 
 # ---------------------------------------------------------------------------
 # Simulation of the 5 Candidate Baselines

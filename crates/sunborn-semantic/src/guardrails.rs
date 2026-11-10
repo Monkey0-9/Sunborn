@@ -19,6 +19,8 @@ pub struct StructuralFingerprint {
     pub entity_tokens: Vec<String>,
     #[serde(default)]
     pub content_tokens: Vec<String>,
+    #[serde(default)]
+    pub quantifier_scope_tokens: Vec<String>,
     pub token_count: usize,
     pub fingerprint_hash: String,
 }
@@ -325,7 +327,30 @@ impl StructuralFingerprint {
         content_tokens.sort();
         content_tokens.dedup();
 
-        // 6. Deterministic fingerprint hash
+        // 6. Quantifier-Negation Scope Detection
+        const QUANTIFIERS: &[&str] = &["every", "all", "each", "any", "none", "no"];
+        let mut quantifier_scope_tokens: Vec<String> = Vec::new();
+        for (i, w) in clean_tokens.iter().enumerate() {
+            if QUANTIFIERS.contains(&w.as_str()) {
+                let start = if i >= 4 { i - 4 } else { 0 };
+                let end = (i + 5).min(clean_tokens.len());
+                for (j_offset, other_token) in clean_tokens[start..end].iter().enumerate() {
+                    let j = start + j_offset;
+                    if j != i && neg_tokens.contains(other_token) {
+                        let scope = if j < i {
+                            format!("{}_before_{}", other_token, w)
+                        } else {
+                            format!("{}_before_{}", w, other_token)
+                        };
+                        quantifier_scope_tokens.push(scope);
+                    }
+                }
+            }
+        }
+        quantifier_scope_tokens.sort();
+        quantifier_scope_tokens.dedup();
+
+        // 7. Deterministic fingerprint hash
         let mut hasher = Sha256::new();
         for num in &numbers {
             hasher.update(num.as_bytes());
@@ -343,6 +368,10 @@ impl StructuralFingerprint {
             hasher.update(ent.as_bytes());
             hasher.update(b",");
         }
+        for q in &quantifier_scope_tokens {
+            hasher.update(q.as_bytes());
+            hasher.update(b",");
+        }
         let fingerprint_hash = hex::encode(hasher.finalize());
 
         Self {
@@ -352,6 +381,7 @@ impl StructuralFingerprint {
             temporal_tokens: temp_tokens,
             entity_tokens,
             content_tokens,
+            quantifier_scope_tokens,
             token_count,
             fingerprint_hash,
         }
@@ -363,6 +393,11 @@ impl StructuralFingerprint {
             return false;
         }
         if self.negation_antonym_tokens != other.negation_antonym_tokens {
+            return false;
+        }
+
+        // Quantifier-negation scopes must match exactly
+        if self.quantifier_scope_tokens != other.quantifier_scope_tokens {
             return false;
         }
 
@@ -652,6 +687,18 @@ mod tests {
         assert!(
             !fp5.matches(&fp6),
             "2024 vs 2025 fiscal year shift must be rejected"
+        );
+    }
+
+    #[test]
+    fn test_structural_guardrails_detects_quantifier_scope_shifts() {
+        let p1 = "Verify that every production engineer is not authorized to export keys";
+        let p2 = "Verify that not every production engineer is authorized to export keys";
+        let fp1 = StructuralFingerprint::extract(p1);
+        let fp2 = StructuralFingerprint::extract(p2);
+        assert!(
+            !fp1.matches(&fp2),
+            "Quantifier-negation scope inversion ('every ... not' vs 'not every') must be rejected"
         );
     }
 
