@@ -8,7 +8,6 @@ import {
   Layers,
   Search,
   Zap,
-  ShieldAlert,
   Cpu,
   BarChart3,
   Flame,
@@ -18,13 +17,13 @@ import {
   GitBranch,
   UserCheck,
   Server,
-  Database,
-  CheckCircle2,
   X,
   Menu,
   RefreshCw,
-  Sliders,
   Sparkles,
+  ShieldCheck,
+  Sliders,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -57,7 +56,9 @@ export function Header() {
         const data = await res.json().catch(() => ({}));
         setGatewayStatus("live");
         setPingMs(elapsed);
-        setProbeResult(`PROBE SUCCESS (HTTP 200) · RTT: ${elapsed}ms · Service: ${data.service || "sunborn-gateway"} · Status: ${data.status || "healthy"}`);
+        setProbeResult(
+          `PROBE SUCCESS (HTTP 200) · RTT: ${elapsed}ms · Service: ${data.service || "sunborn-gateway"} · Status: ${data.status || "healthy"}`
+        );
       } else {
         setGatewayStatus("offline");
         setProbeResult(`PROBE FAILED: Received HTTP ${res.status}`);
@@ -71,7 +72,6 @@ export function Header() {
   };
 
   useEffect(() => {
-    // Check local gateway status & live vector clock
     const checkGateway = async () => {
       const start = performance.now();
       try {
@@ -136,49 +136,56 @@ export function Header() {
   ];
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-white/[0.08] bg-slate-950/80 backdrop-blur-2xl">
+    <header role="banner" className="sticky top-0 z-50 w-full border-b border-white/[0.08] bg-[#020617]/85 backdrop-blur-3xl shadow-glass transition-all">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Left Brand Identity */}
-          <div className="flex items-center gap-6">
-            <Link href="/" className="flex items-center gap-3 group">
-              <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 via-indigo-600 to-violet-600 shadow-glow p-0.5 transition-transform duration-300 group-hover:scale-105">
-                <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-                  <Zap className="w-4 h-4 text-cyan-400 fill-cyan-400/20" />
+          {/* Left Brand Emblem */}
+          <div className="flex items-center gap-5">
+            <Link href="/" className="flex items-center gap-3 group focus-visible:ring-2 focus-visible:ring-cyan-400 rounded-xl p-1">
+              <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 via-indigo-600 to-violet-600 shadow-glow p-0.5 transition-transform duration-300 group-hover:scale-105">
+                <div className="w-full h-full bg-[#030712] rounded-[10px] flex items-center justify-center">
+                  <Zap className="w-5 h-5 text-cyan-400 fill-cyan-400/25 group-hover:scale-110 transition-transform" />
                 </div>
               </div>
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-base tracking-tight text-white group-hover:text-cyan-300 transition-colors">
+                  <span className="font-extrabold text-base tracking-tight text-white group-hover:text-cyan-300 transition-colors">
                     SUNBORN
                   </span>
-                  <Badge variant="cyan" className="px-1.5 py-0 text-[10px]">
-                    L6/L7 Autonomic
-                  </Badge>
+                  <span className="px-1.5 py-0.2 rounded-md bg-cyan-950/80 border border-cyan-500/40 text-[10px] font-mono font-bold text-cyan-300 shadow-inner">
+                    L6/L7 PROXY
+                  </span>
                 </div>
-                <span className="text-[10px] font-mono text-slate-400">
-                  Semantic Execution Platform
+                <span className="text-[10px] font-mono text-slate-400 tracking-tight">
+                  Autonomous AI Gateway
                 </span>
               </div>
             </Link>
 
-            {/* Live Gateway Telemetry Pill */}
-            <div className="hidden lg:flex items-center gap-3 pl-4 border-l border-white/[0.08]">
+            {/* Live Telemetry Pill */}
+            <div className="hidden lg:flex items-center gap-2 pl-4 border-l border-white/[0.08]">
               <button
                 type="button"
                 onClick={() => setShowDiagnostics(true)}
                 title="Click to view live infrastructure diagnostics & cluster topology"
-                className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-white/10 hover:border-cyan-500/40 text-xs font-mono transition-all cursor-pointer group"
+                aria-label="Open cluster diagnostics and infrastructure health telemetry"
+                className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/90 hover:bg-slate-800/90 border border-white/10 hover:border-cyan-500/40 text-xs font-mono transition-all cursor-pointer group focus-visible:ring-2 focus-visible:ring-cyan-400"
               >
-                <Radio
-                  className={cn(
-                    "w-3 h-3 transition-colors",
-                    gatewayStatus === "live"
-                      ? "text-emerald-400 animate-pulse"
-                      : "text-amber-400"
-                  )}
-                />
-                <span className="text-slate-300">GATEWAY:</span>
+                <span className="relative flex h-2 w-2">
+                  <span
+                    className={cn(
+                      "radar-ping-ring absolute inline-flex h-full w-full rounded-full opacity-75",
+                      gatewayStatus === "live" ? "bg-emerald-400" : "bg-amber-400"
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "relative inline-flex rounded-full h-2 w-2",
+                      gatewayStatus === "live" ? "bg-emerald-500" : "bg-amber-500"
+                    )}
+                  />
+                </span>
+                <span className="text-slate-400">GW:</span>
                 <span
                   className={cn(
                     "font-bold",
@@ -187,14 +194,16 @@ export function Header() {
                 >
                   {gatewayStatus === "live"
                     ? pingMs !== null
-                      ? `ACTIVE 8080 (${pingMs}ms)`
-                      : "ACTIVE 8080"
-                    : "OFFLINE"}
+                      ? `8080 (${pingMs}ms)`
+                      : "ACTIVE"
+                    : "STANDBY"}
                 </span>
-                <span className="text-[10px] text-cyan-400 opacity-60 group-hover:opacity-100">diag</span>
+                <span className="text-[10px] px-1 py-0.2 rounded bg-white/5 text-cyan-400 font-semibold group-hover:bg-cyan-500/20">
+                  HUD
+                </span>
               </button>
 
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/90 border border-white/10 text-xs font-mono text-slate-400">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/70 border border-white/10 text-xs font-mono text-slate-400">
                 <Globe className="w-3 h-3 text-violet-400" />
                 <span>EPOCH:</span>
                 <span className="text-white font-semibold">#{epoch}</span>
@@ -203,7 +212,7 @@ export function Header() {
           </div>
 
           {/* Center Navigation Links (Desktop) */}
-          <nav className="hidden xl:flex items-center gap-1">
+          <nav role="navigation" aria-label="Main Navigation" className="hidden xl:flex items-center gap-1 bg-white/[0.02] border border-white/[0.06] p-1 rounded-xl backdrop-blur-md">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
@@ -212,21 +221,21 @@ export function Header() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200",
+                    "relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 focus-visible:ring-2 focus-visible:ring-cyan-400",
                     isActive
-                      ? "text-white bg-white/[0.08] shadow-sm border border-white/10"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.03]"
+                      ? "text-white bg-white/[0.12] shadow-sm font-semibold border border-white/10"
+                      : "text-slate-400 hover:text-slate-100 hover:bg-white/[0.04]"
                   )}
                 >
                   <Icon
                     className={cn(
-                      "w-3.5 h-3.5",
+                      "w-3.5 h-3.5 transition-colors",
                       isActive ? "text-cyan-400" : "text-slate-400"
                     )}
                   />
                   <span>{item.name}</span>
                   {isActive && (
-                    <span className="absolute -bottom-[17px] left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent" />
+                    <span className="absolute -bottom-1 left-3 right-3 h-0.5 bg-gradient-to-r from-cyan-400 to-indigo-500 rounded-full" />
                   )}
                 </Link>
               );
@@ -238,74 +247,68 @@ export function Header() {
             {/* Global Command Menu */}
             <CommandMenu />
 
-            {/* Tenant Selector */}
-            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-white/10 text-xs font-mono">
+            {/* Tenant Selector Dropdown */}
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/80 border border-white/10 text-xs font-mono hover:border-white/20 transition-colors">
               <span className="text-slate-400">TENANT:</span>
               <select
-                aria-label="Active Tenant Scope"
+                aria-label="Active Multi-Tenant Scope"
                 value={activeTenant}
                 onChange={(e) => setActiveTenant(e.target.value)}
-                className="bg-transparent text-cyan-300 font-semibold focus:outline-none cursor-pointer"
+                className="bg-transparent text-cyan-300 font-semibold focus:outline-none cursor-pointer focus-visible:ring-1 focus-visible:ring-cyan-400 rounded"
               >
-                <option value="tenant-enterprise-fintech" className="bg-slate-950 text-white">
+                <option value="tenant-enterprise-fintech" className="bg-[#030712] text-white">
                   fintech-prod
                 </option>
-                <option value="tenant-healthcare-ai" className="bg-slate-950 text-white">
+                <option value="tenant-healthcare-ai" className="bg-[#030712] text-white">
                   healthcare-prod
                 </option>
-                <option value="tenant-autonomous-agent" className="bg-slate-950 text-white">
+                <option value="tenant-autonomous-agent" className="bg-[#030712] text-white">
                   agent-cluster
                 </option>
               </select>
             </div>
 
-            {/* Session / Login Link */}
+            {/* Session / Authentication Pill */}
             <Link
               href="/login"
+              aria-label="Account and Authentication Session Status"
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-mono transition-colors",
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-mono transition-all focus-visible:ring-2 focus-visible:ring-cyan-400",
                 sessionAuth
-                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20"
-                  : "bg-white/[0.04] border-white/10 text-slate-400 hover:text-white hover:bg-white/[0.08]"
+                  ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 shadow-glow-emerald"
+                  : "bg-white/[0.04] border-white/10 text-slate-300 hover:text-white hover:bg-white/[0.08]"
               )}
             >
               <UserCheck className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="hidden sm:inline">
+              <span className="hidden sm:inline font-semibold">
                 {sessionAuth ? "SESSION ACTIVE" : "LOGIN"}
               </span>
             </Link>
 
-            {/* Mobile / Compact Menu Toggle */}
+            {/* Mobile Menu Button */}
             <button
               type="button"
               onClick={() => setMobileMenuOpen((prev) => !prev)}
-              aria-label="Toggle Navigation Menu"
-              className="xl:hidden p-2 rounded-xl border border-white/10 bg-slate-900/80 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+              aria-label="Toggle Mobile Navigation Menu"
+              aria-expanded={mobileMenuOpen}
+              className="xl:hidden p-2 rounded-xl border border-white/10 bg-slate-900/80 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400"
             >
-              {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Mobile Drawer / Overlay Navigation Menu */}
+      {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
-        <div className="xl:hidden border-b border-white/[0.08] bg-slate-950/95 backdrop-blur-2xl px-4 py-4 animate-in slide-in-from-top-2 duration-200">
+        <div className="xl:hidden border-b border-white/[0.08] bg-[#030712]/98 backdrop-blur-3xl px-4 py-5 animate-in slide-in-from-top-2 duration-200">
           <div className="max-w-7xl mx-auto space-y-4">
-            {/* Quick Status Pill */}
-            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/80 border border-white/10 text-xs font-mono">
+            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/90 border border-white/10 text-xs font-mono">
               <div className="flex items-center gap-2">
-                <Radio
-                  className={cn(
-                    "w-3 h-3",
-                    gatewayStatus === "live"
-                      ? "text-emerald-400 animate-pulse"
-                      : "text-amber-400"
-                  )}
-                />
-                <span className="text-slate-300">GATEWAY:</span>
+                <span className={cn("w-2 h-2 rounded-full", gatewayStatus === "live" ? "bg-emerald-400" : "bg-amber-400")} />
+                <span className="text-slate-400">GATEWAY STATUS:</span>
                 <span className={cn("font-bold", gatewayStatus === "live" ? "text-emerald-400" : "text-amber-400")}>
-                  {gatewayStatus === "live" ? `ACTIVE (${pingMs ?? 0.8}ms)` : "OFFLINE"}
+                  {gatewayStatus === "live" ? `ONLINE (${pingMs ?? 0.8}ms)` : "STANDBY"}
                 </span>
               </div>
               <button
@@ -314,13 +317,12 @@ export function Header() {
                   setMobileMenuOpen(false);
                   setShowDiagnostics(true);
                 }}
-                className="px-2 py-1 rounded bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 text-[10px] font-semibold border border-cyan-500/30"
+                className="px-2.5 py-1 rounded-lg bg-cyan-500/20 text-cyan-300 text-xs font-bold border border-cyan-500/30"
               >
-                Diagnostics
+                HUD View
               </button>
             </div>
 
-            {/* Mobile Navigation Links Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {navItems.map((item) => {
                 const Icon = item.icon;
@@ -331,10 +333,10 @@ export function Header() {
                     href={item.href}
                     onClick={() => setMobileMenuOpen(false)}
                     className={cn(
-                      "flex items-center gap-2 p-2.5 rounded-xl text-xs font-medium transition-colors border",
+                      "flex items-center gap-2.5 p-3 rounded-xl text-xs font-medium transition-colors border",
                       isActive
-                        ? "bg-cyan-500/15 border-cyan-500/30 text-cyan-300 font-bold"
-                        : "bg-slate-900/50 border-white/5 text-slate-400 hover:text-white hover:bg-white/[0.05]"
+                        ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-300 font-bold"
+                        : "bg-slate-900/60 border-white/5 text-slate-300 hover:text-white hover:bg-white/[0.06]"
                     )}
                   >
                     <Icon className={cn("w-4 h-4 shrink-0", isActive ? "text-cyan-400" : "text-slate-400")} />
@@ -347,44 +349,44 @@ export function Header() {
         </div>
       )}
 
-      {/* Global Infrastructure Diagnostics & Topology Drawer Modal */}
+      {/* Global Infrastructure Diagnostics & Topology Modal */}
       {showDiagnostics && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="relative w-full max-w-2xl bg-slate-950 border border-white/15 rounded-2xl shadow-2xl overflow-hidden font-mono text-xs">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-slate-900/60">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl animate-in fade-in duration-200">
+          <div className="relative w-full max-w-2xl bg-[#050814] border border-white/20 rounded-2xl shadow-2xl overflow-hidden font-mono text-xs">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-slate-900/80">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
-                  <Server className="w-4 h-4" />
+                <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+                  <Server className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white tracking-tight">
                     Sunborn Infrastructure Topology & Diagnostics
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    L6/L7 Reverse Proxy · Autonomous Storage Stack · Multi-Region Mesh
+                    L6/L7 Reverse Proxy · Non-Accelerator Authority · Multi-Region Mesh
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowDiagnostics(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                aria-label="Close diagnostics dialog"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Diagnostics Content */}
-            <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
-              {/* Probe Test Action Strip */}
-              <div className="p-4 rounded-xl bg-slate-900/80 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            {/* Modal Body */}
+            <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+              <div className="p-4 rounded-xl bg-slate-900/90 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="space-y-0.5">
                   <div className="text-xs font-bold text-white flex items-center gap-2">
                     <span className={cn("w-2 h-2 rounded-full", gatewayStatus === "live" ? "bg-emerald-400 animate-pulse" : "bg-amber-400")} />
-                    Gateway Target: 127.0.0.1:8080
+                    Gateway Address: 127.0.0.1:8080
                   </div>
                   <div className="text-[11px] text-slate-400">
-                    Live loopback socket connection probe with microsecond precision.
+                    High-precision loopback probe targeting authoritative proxy endpoint.
                   </div>
                 </div>
                 <button
@@ -394,87 +396,87 @@ export function Header() {
                   className="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-semibold transition-all disabled:opacity-50"
                 >
                   <RefreshCw className={cn("w-3.5 h-3.5", isProbing && "animate-spin")} />
-                  <span>{isProbing ? "Probing..." : "Run Live Probe"}</span>
+                  <span>{isProbing ? "Probing..." : "Run Active Probe"}</span>
                 </button>
               </div>
 
               {probeResult && (
-                <div className="p-3 rounded-xl bg-slate-900 border border-cyan-500/30 text-cyan-300 text-[11px]">
+                <div className="p-3 rounded-xl bg-slate-900 border border-cyan-500/40 text-cyan-300 text-[11px]">
                   {probeResult}
                 </div>
               )}
 
-              {/* Multi-Tier Architecture Health Grid */}
+              {/* Subsystem Tiers */}
               <div className="space-y-2">
-                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
                   Operational Tiers & Durability Subsystems
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="p-3 rounded-xl bg-slate-900/60 border border-white/10 space-y-1">
+                  <div className="p-3.5 rounded-xl bg-slate-900/70 border border-white/10 space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="text-white font-semibold">Tier 0/1: Exact Cache</span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">ACTIVE</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">ACTIVE</span>
                     </div>
                     <div className="text-[11px] text-slate-400">
-                      W-TinyLFU In-Memory + DragonflyDB L2 (P99: 240 µs target).
+                      W-TinyLFU RAM + DragonflyDB (P99: Sub-ms target).
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-slate-900/60 border border-white/10 space-y-1">
+                  <div className="p-3.5 rounded-xl bg-slate-900/70 border border-white/10 space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-white font-semibold">Tier 2: Semantic Retrieval</span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">CALIBRATED</span>
+                      <span className="text-white font-semibold">Tier 2: Semantic Vector</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">CALIBRATED</span>
                     </div>
                     <div className="text-[11px] text-slate-400">
-                      Qdrant HNSW Vector Engine + Conformal Risk (α ≤ 0.001).
+                      Qdrant HNSW + Non-Exchangeable Conformal Risk (α ≤ 0.001).
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-slate-900/60 border border-white/10 space-y-1">
+                  <div className="p-3.5 rounded-xl bg-slate-900/70 border border-white/10 space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-white font-semibold">Tier 3: Execution Subgraph</span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">PROOF VERIFIED</span>
+                      <span className="text-white font-semibold">Tier 3: Execution DAG</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">PROOF ATTESTED</span>
                     </div>
                     <div className="text-[11px] text-slate-400">
-                      RFC 6962 SHA-256 Merkle DAG Planner + Speculative Markov.
+                      RFC 6962 SHA-256 Merkle Inclusion Proofs.
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-slate-900/60 border border-white/10 space-y-1">
+                  <div className="p-3.5 rounded-xl bg-slate-900/70 border border-white/10 space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="text-white font-semibold">Tier 4: Durable Authority</span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">POSTGRESQL WAL</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">POSTGRESQL WAL</span>
                     </div>
                     <div className="text-[11px] text-slate-400">
-                      Non-Accelerator Authority with transactional outbox stream.
+                      RPO=0 Transactional Outbox + Rebuild Hydration Engine.
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Security & Cryptography State */}
-              <div className="p-4 rounded-xl bg-slate-900/40 border border-white/10 space-y-2">
+              {/* Security Boundary */}
+              <div className="p-4 rounded-xl bg-slate-900/50 border border-white/10 space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-300 font-semibold flex items-center gap-1.5">
+                  <span className="text-white font-semibold flex items-center gap-1.5">
                     <Lock className="w-3.5 h-3.5 text-cyan-400" />
-                    Zero-Trust Cryptographic Perimeter
+                    Zero-Trust Cryptographic Envelope
                   </span>
                   <span className="text-emerald-400 font-bold">AES-256-GCM AEAD</span>
                 </div>
                 <div className="text-[11px] text-slate-400 leading-relaxed">
-                  Tenant Data Encryption Keys (TDEK) wrapped under Master KEK. Cryptographic shredding invalidates keys in $O(1)$ constant time with verified multi-store fail-closed erasure.
+                  Tenant Data Encryption Keys (TDEK) wrapped under master KEK. Cryptographic shredding executes in O(1) time under GDPR Article 17.
                 </div>
               </div>
             </div>
 
-            {/* Footer */}
-            <div className="px-6 py-3 border-t border-white/10 bg-slate-900/40 flex items-center justify-between text-[11px] text-slate-400">
-              <span>Cluster Epoch #{epoch} · Region: us-east-1</span>
+            {/* Modal Footer */}
+            <div className="px-6 py-3.5 border-t border-white/10 bg-slate-900/60 flex items-center justify-between text-[11px] text-slate-400">
+              <span>Cluster Epoch #{epoch} · Multi-Region Mesh</span>
               <button
                 onClick={() => setShowDiagnostics(false)}
-                className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-white transition-colors"
+                className="px-4 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white transition-colors font-semibold"
               >
-                Close
+                Close HUD
               </button>
             </div>
           </div>

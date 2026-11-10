@@ -5,10 +5,165 @@
 :root {
   --background: #020617;
   --foreground: #f8fafc;
+  --panel-bg: rgba(9, 14, 30, 0.75);
+  --panel-border: rgba(255, 255, 255, 0.08);
+  --panel-border-hover: rgba(0, 240, 255, 0.35);
+  --neon-cyan: #00f0ff;
+  --neon-emerald: #10b981;
+  --neon-violet: #8b5cf6;
+  --neon-amber: #f59e0b;
 }
 
+/* Base Body & High-Contrast Typography */
 body {
   color: var(--foreground);
-  background: var(--background);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--background);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: -0.012em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* Custom Precision Thin Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(2, 6, 23, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 240, 255, 0.4);
+}
+
+/* Accessibility Focus Visible */
+*:focus-visible {
+  outline: 2px solid #00f0ff;
+  outline-offset: 2px;
+}
+
+/* Apple & NVIDIA-Grade Glassmorphism Panels */
+@layer components {
+  .glass-panel {
+    background: linear-gradient(
+      135deg,
+      rgba(11, 17, 34, 0.78) 0%,
+      rgba(5, 8, 20, 0.88) 100%
+    );
+    backdrop-filter: blur(24px) saturate(190%);
+    -webkit-backdrop-filter: blur(24px) saturate(190%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.6), inset 0 1px 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .glass-panel-interactive {
+    background: linear-gradient(
+      135deg,
+      rgba(11, 17, 34, 0.78) 0%,
+      rgba(5, 8, 20, 0.88) 100%
+    );
+    backdrop-filter: blur(24px) saturate(190%);
+    -webkit-backdrop-filter: blur(24px) saturate(190%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.6), inset 0 1px 1px 0 rgba(255, 255, 255, 0.1);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .glass-panel-interactive:hover {
+    border-color: rgba(255, 255, 255, 0.18);
+    transform: translateY(-2px);
+    box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.75), inset 0 1px 1px 0 rgba(255, 255, 255, 0.16);
+  }
+
+  .glass-glow-cyan:hover {
+    border-color: rgba(0, 240, 255, 0.45);
+    box-shadow: 0 0 35px -5px rgba(0, 240, 255, 0.25), 0 20px 48px -10px rgba(0, 0, 0, 0.7);
+  }
+
+  .glass-glow-emerald:hover {
+    border-color: rgba(16, 185, 129, 0.45);
+    box-shadow: 0 0 35px -5px rgba(16, 185, 129, 0.25), 0 20px 48px -10px rgba(0, 0, 0, 0.7);
+  }
+
+  .glass-glow-violet:hover {
+    border-color: rgba(139, 92, 246, 0.45);
+    box-shadow: 0 0 35px -5px rgba(139, 92, 246, 0.25), 0 20px 48px -10px rgba(0, 0, 0, 0.7);
+  }
+
+  .glass-glow-amber:hover {
+    border-color: rgba(245, 158, 11, 0.45);
+    box-shadow: 0 0 35px -5px rgba(245, 158, 11, 0.25), 0 20px 48px -10px rgba(0, 0, 0, 0.7);
+  }
+
+  .glass-glow-rose:hover {
+    border-color: rgba(244, 63, 94, 0.45);
+    box-shadow: 0 0 35px -5px rgba(244, 63, 94, 0.25), 0 20px 48px -10px rgba(0, 0, 0, 0.7);
+  }
+
+  /* Sleek Gradient Text Accents */
+  .text-gradient-cyan {
+    background: linear-gradient(135deg, #ffffff 10%, #38bdf8 60%, #00f0ff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .text-gradient-emerald {
+    background: linear-gradient(135deg, #ffffff 15%, #34d399 65%, #059669 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .text-gradient-violet {
+    background: linear-gradient(135deg, #ffffff 10%, #a78bfa 60%, #8b5cf6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .text-gradient-solar {
+    background: linear-gradient(135deg, #ffffff 15%, #fbbf24 65%, #f59e0b 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .text-gradient-flagship {
+    background: linear-gradient(135deg, #ffffff 20%, #7dd3fc 50%, #c084fc 80%, #34d399 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+/* Aerospace Technical Grid & Subtle Radar Radial Masks */
+.bg-aerospace-grid {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+}
+
+.radar-ping-ring {
+  animation: radar-wave 2.8s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+
+@keyframes radar-wave {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.9;
+  }
+  75% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
 }
