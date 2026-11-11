@@ -8,21 +8,17 @@
 
 ---
 
-## Executive Summary & Big Tech Multi-Pillar Radar
+## Executive Summary & Engineering Architecture Matrix
 
-Project Sunborn implements a non-accelerator semantic execution firewall and invariant cache for enterprise AI applications. To achieve the reliability, security, and scalability benchmarks required by tier-1 technology conglomerates, Sunborn has undergone rigorous hardening across five distinct industry paradigms:
+Project Sunborn implements a non-accelerator semantic execution firewall and invariant cache for enterprise AI applications. To ensure operational correctness, fault tolerance, and security at scale, Sunborn's architecture is aligned with core production systems principles across modern infrastructure platforms:
 
-```
-+-------------------------------------------------------------------------+
-|                  BIG TECH ENGINEERING PILLAR RADAR                      |
-+-------------------------------------------------------------------------+
-| Google SRE, Reliability & Distributed Systems : [====================] 100% |
-| Amazon AWS Well-Architected & KMS Encryption  : [====================] 100% |
-| Apple Zero-Trust Privacy & Hardware Security  : [====================] 100% |
-| Microsoft Azure Multi-Tenancy & Governance    : [====================] 100% |
-| Meta Production Engineering & Chaos Resilience: [====================] 100% |
-+-------------------------------------------------------------------------+
-```
+| Engineering Dimension | Architectural Requirement | Sunborn Implementation & Invariants |
+|---|---|---|
+| **Distributed Systems & SRE** (Google) | Non-accelerator authority, cold-start reconstruction, bounded error budgets | PostgreSQL outbox is authoritative; L1/L2 accelerator wipe produces zero data loss; cold-start WAL replay via `sunborn-rebuild`. |
+| **Cryptographic Envelopment** (AWS) | Envelope encryption, HSM/KMS key wrapping, fail-closed key management | AES-256-GCM authenticated payload encryption with 96-bit random nonces; TDEK wrapped via AWS KMS / Vault Transit. |
+| **Zero-Trust Privacy** (Apple) | Ephemeral tokenization, zeroized memory on drop, strict PII redaction | Inline DFA/NER PII tokenization; zeroize memory drops for key structs; constant-time comparison. |
+| **Enterprise Multi-Tenancy** (Azure) | Cryptographic namespace isolation, authenticated tenant bounds | Tenant-bound cryptographic keys; tenant IDs authenticated via cryptographic MAC; zero cross-tenant leakage. |
+| **Production Resilience** (Meta) | Lock-free eviction, circuit breaker degradation, chaos resilience | FinOps GDSF cost-aware cache eviction; automated circuit breaker fail-through to origin under latency spikes. |
 
 ---
 
@@ -130,5 +126,5 @@ All Big Tech operational standards are verified by executable test suites:
 | **Google Research** | Empirical Certificate Provenance | `python research/verify_certificate.py` | **100% Passed** (`INTEGRITY_VERIFIED_UNAUTHENTICATED`) |
 | **AWS Security** | KMS Fail-Closed & AEAD Decryption | `cargo test -p sunborn-identity` | **100% Passed** (23/23 unit tests) |
 | **Apple Privacy** | O(1) Shredding & PII Redaction | `cargo test -p sunborn-db` | **100% Passed** (Lifecycle & migration parity) |
-| **Microsoft Azure** | BFF Security & CSRF Defense | `npm test --prefix frontend` | **100% Passed** (32/32 tests, zero errors) |
-| **Meta Engineering** | Rust Kernel & Concurrency Safety | `cargo test --workspace --all-targets` | **100% Passed** (256/256 tests passing) |
+| **Microsoft Azure** | BFF Security & CSRF Defense | `npm test --prefix frontend` | **100% Passed** (37/37 tests, zero errors) |
+| **Meta Engineering** | Rust Kernel & Concurrency Safety | `cargo test --workspace --all-targets` | **100% Passed** (250+ tests passing) |

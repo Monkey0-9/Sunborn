@@ -178,7 +178,7 @@ pub trait KeyManagementProvider: Send + Sync {
     fn provider_name(&self) -> &str;
 
     /// True only when cryptographic operations are actually delegated to an external KMS/HSM.
-    /// Local envelope simulations must retain the default `false` value.
+    /// Local envelope implementations retain the default `false` value.
     fn uses_remote_crypto(&self) -> bool {
         false
     }

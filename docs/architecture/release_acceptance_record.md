@@ -66,7 +66,7 @@
 | **G7** | **Cryptographic Shredding** | Independent verification of key erasure and data removal across every store. | **VERIFIED (CLOSED)** | `crates/sunborn-gateway/src/handlers.rs`, `crates/sunborn-db/src/postgres.rs` (ER-001/002/003) |
 | **G8** | **Non-Accelerator Authority** | Measured RPO/RTO through database/cache/vector failure and full recovery drills. | **VERIFIED (CLOSED)** | `crates/sunborn-gateway/tests/disaster_recovery_test.rs` |
 | **G9** | **Scientific Provenance** | Clean-environment independent reproduction and bounded claims on the evaluated corpus. | **VERIFIED (CLOSED)** | `research/verify_certificate.py` (INTEGRITY_VERIFIED_UNAUTHENTICATED), 23/23 research tests |
-| **G10**| **BFF & Client Security** | Zero npm audit vulnerabilities, 10MB payload cap, 60s timeout, and truthful UX. | **VERIFIED (CLOSED)** | `frontend/package-lock.json` (0 vulns), `frontend/src/app/api/proxy/`, `frontend/tests/` (32/32 tests passed, 0 skipped, 0 failed) |
+| **G10**| **BFF & Client Security** | Zero npm audit vulnerabilities, 10MB payload cap, 60s timeout, and truthful UX. | **VERIFIED (CLOSED)** | `frontend/package-lock.json` (0 vulns), `frontend/src/app/api/proxy/`, `frontend/tests/` (37/37 tests passed, 0 skipped, 0 failed) |
 
 ---
 

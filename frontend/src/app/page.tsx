@@ -844,7 +844,7 @@ export default function OverviewPage() {
         </div>
       </section>
  
-      {/* 260-Engineer Planet-Scale Stress Simulator & Guild Readiness Matrix */}
+      {/* Multi-Region High-Throughput Cluster Capacity Modeler */}
       <PlanetScaleStressSimulator />
 
       {/* 4-Tier Reference Architecture Visualizer */}

@@ -26,10 +26,10 @@ import { Badge } from "@/components/ui/badge";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { formatNumber, formatCurrency } from "@/lib/utils";
 
-interface GuildInfo {
+interface SubsystemFleetInfo {
   id: string;
   name: string;
-  headcount: number;
+  allocatedUnits: number;
   initialScore: number;
   hardenedScore: number;
   targetGate: string;
@@ -38,11 +38,11 @@ interface GuildInfo {
   accentColor: string;
 }
 
-const GUILD_DATA: GuildInfo[] = [
+const SUBSYSTEM_FLEET_DATA: SubsystemFleetInfo[] = [
   {
-    id: "guild-1",
-    name: "Data-Plane & Gateway Core",
-    headcount: 40,
+    id: "subsystem-1",
+    name: "Data-Plane & Gateway Ingress",
+    allocatedUnits: 40,
     initialScore: 68,
     hardenedScore: 94,
     targetGate: "100% OpenAI & Anthropic wire proxy, HTTP/3 + gRPC, simd-json, Gradient2 concurrency",
@@ -51,9 +51,9 @@ const GUILD_DATA: GuildInfo[] = [
     accentColor: "from-cyan-500 to-blue-500",
   },
   {
-    id: "guild-2",
-    name: "Distributed Cache & Memory Kernel",
-    headcount: 35,
+    id: "subsystem-2",
+    name: "Distributed Cache & Memory Tier",
+    allocatedUnits: 35,
     initialScore: 74,
     hardenedScore: 91,
     targetGate: "S3-FIFO lock-free eviction, io_uring NVMe L3 hybrid tier, Maglev consistent hashing",
@@ -62,9 +62,9 @@ const GUILD_DATA: GuildInfo[] = [
     accentColor: "from-blue-500 to-indigo-500",
   },
   {
-    id: "guild-3",
+    id: "subsystem-3",
     name: "Applied ML & Vector Retrieval",
-    headcount: 40,
+    allocatedUnits: 40,
     initialScore: 70,
     hardenedScore: 92,
     targetGate: "1-bit Binary Quantized HNSW (VPOPCNT) → Matryoshka Int8 rescoring → ONNX Cross-Encoder",
@@ -73,9 +73,9 @@ const GUILD_DATA: GuildInfo[] = [
     accentColor: "from-indigo-500 to-violet-500",
   },
   {
-    id: "guild-4",
+    id: "subsystem-4",
     name: "Agent Compiler & DAG Runtime",
-    headcount: 30,
+    allocatedUnits: 30,
     initialScore: 78,
     hardenedScore: 95,
     targetGate: "Speculative parallel branch execution, wasmtime sandboxed pure tools, Saga idempotency",
@@ -84,9 +84,9 @@ const GUILD_DATA: GuildInfo[] = [
     accentColor: "from-violet-500 to-purple-500",
   },
   {
-    id: "guild-5",
-    name: "Storage Kernel & CDC Lineage",
-    headcount: 30,
+    id: "subsystem-5",
+    name: "Storage Engine & CDC Lineage",
+    allocatedUnits: 30,
     initialScore: 65,
     hardenedScore: 93,
     targetGate: "UUIDv7 hourly table partitioning, Postgres pgoutput WAL stream, 64-bit Roaring Bitmaps",
@@ -95,9 +95,9 @@ const GUILD_DATA: GuildInfo[] = [
     accentColor: "from-purple-500 to-pink-500",
   },
   {
-    id: "guild-6",
+    id: "subsystem-6",
     name: "Cryptography, Privacy & Trust",
-    headcount: 25,
+    allocatedUnits: 25,
     initialScore: 76,
     hardenedScore: 97,
     targetGate: "Inline DFA/NER PII vault redaction, KMS-wrapped AEAD TDEKs, Merkle tamper-evident audit",
@@ -106,20 +106,20 @@ const GUILD_DATA: GuildInfo[] = [
     accentColor: "from-pink-500 to-rose-500",
   },
   {
-    id: "guild-7",
+    id: "subsystem-7",
     name: "Frontend Control Plane & DX SDKs",
-    headcount: 30,
+    allocatedUnits: 30,
     initialScore: 62,
     hardenedScore: 92,
-    targetGate: "60 FPS WebGL/Canvas live telemetry, Planet-Scale Stress Simulator, native SDKs",
+    targetGate: "60 FPS live telemetry, capacity sizing modeling, native Python/Node SDKs",
     keyDeliverable: "Next.js 15 App Router suite with zero token leaks and live architectural modeling",
     status: "Hardened",
     accentColor: "from-rose-500 to-amber-500",
   },
   {
-    id: "guild-8",
+    id: "subsystem-8",
     name: "SRE, Chaos, eBPF & Verification",
-    headcount: 30,
+    allocatedUnits: 30,
     initialScore: 82,
     hardenedScore: 98,
     targetGate: "OpenTelemetry tracing, eBPF continuous profiling, formal proofs, SLSA-3 build gates",
@@ -200,13 +200,13 @@ export function PlanetScaleStressSimulator() {
     const dailyOriginCostHardened = hardenedMisses * 86400 * 0.000003;
     const dailySavingsUsd = Math.round(dailyOriginCostBaseline - dailyOriginCostHardened);
 
-    // 7. Overall Guild Composite Score
-    const totalHeadcount = GUILD_DATA.reduce((acc, g) => acc + g.headcount, 0);
+    // 7. Overall Subsystem Reliability Composite Score
+    const totalUnits = SUBSYSTEM_FLEET_DATA.reduce((acc, g) => acc + g.allocatedUnits, 0);
     const baselineAvgScore = Math.round(
-      GUILD_DATA.reduce((acc, g) => acc + g.initialScore * g.headcount, 0) / totalHeadcount
+      SUBSYSTEM_FLEET_DATA.reduce((acc, g) => acc + g.initialScore * g.allocatedUnits, 0) / totalUnits
     );
     const hardenedAvgScore = Math.round(
-      GUILD_DATA.reduce((acc, g) => acc + g.hardenedScore * g.headcount, 0) / totalHeadcount
+      SUBSYSTEM_FLEET_DATA.reduce((acc, g) => acc + g.hardenedScore * g.allocatedUnits, 0) / totalUnits
     );
 
     return {
@@ -223,7 +223,7 @@ export function PlanetScaleStressSimulator() {
       dailySavingsUsd,
       baselineAvgScore,
       hardenedAvgScore,
-      totalHeadcount,
+      totalUnits,
     };
   }, [effectiveReqs, cacheMissRate, docChurnPerHour, multiRegions]);
 
@@ -260,19 +260,19 @@ export function PlanetScaleStressSimulator() {
               </span>
               <span className="text-slate-500">·</span>
               <span className="text-xs font-mono text-slate-400">
-                8 Infrastructure Guilds
+                8 Distributed Subsystems
               </span>
             </div>
 
             <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Planet-Scale Stress Simulator & Guild Readiness Matrix
+              Cluster Sizing & High-Throughput Capacity Modeler
             </h2>
             <p className="text-sm text-slate-300 leading-relaxed">
-              Model hypothetical performance under heavy simulated load (up to{" "}
-              <strong className="text-cyan-300">1,000,000+ req/s</strong> across multi-region Kubernetes clusters).
+              Model hypothetical throughput and latency under high cluster load (up to{" "}
+              <strong className="text-cyan-300">1,000,000+ req/s</strong> across multi-region Kubernetes deployments).
               Observe direct comparative behavior between the Baseline single-node reference engine{" "}
               <code className="text-xs bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">b053a5b</code> and the{" "}
-              <strong className="text-emerald-400">Hardened Multi-Tier Architecture</strong>.
+              <strong className="text-emerald-400">Hardened Multi-Tier Distributed Architecture</strong>.
             </p>
           </div>
 
@@ -437,7 +437,7 @@ export function PlanetScaleStressSimulator() {
               <span>Head-to-Head Architectural Stress Behavior</span>
             </h3>
             <p className="text-xs text-slate-400 font-mono">
-              Comparing Baseline Single-Node (b053a5b) against the 260-Engineer Hardened Architecture at {formatNumber(effectiveReqs)} req/s
+              Comparing Baseline Single-Node (b053a5b) against Hardened Distributed Multi-Tier Architecture at {formatNumber(effectiveReqs)} req/s
             </p>
           </div>
           <div className="flex items-center gap-4 text-xs font-mono">
@@ -447,7 +447,7 @@ export function PlanetScaleStressSimulator() {
             </span>
             <span className="flex items-center gap-1.5 text-emerald-400">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
-              260-Eng Hardened
+              Hardened Multi-Tier
             </span>
           </div>
         </div>
@@ -609,62 +609,62 @@ export function PlanetScaleStressSimulator() {
         </div>
       </section>
 
-      {/* 260-Engineer 8-Guild Readiness Grid */}
+      {/* 8-Subsystem Cluster Fleet Readiness Grid */}
       <section className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
               <Boxes className="w-5 h-5 text-indigo-400" />
-              <span>260-Person Engineering Organization: 8-Guild Ownership & Target Gates</span>
+              <span>Multi-Region Cluster Architecture: 8 Distributed Subsystems & Sizing Gates</span>
             </h3>
             <p className="text-xs text-slate-400 font-mono">
-              Composite Organization Score:{" "}
+              Composite Reliability Index:{" "}
               <span className="text-rose-400 font-bold">{simulation.baselineAvgScore}/100</span>{" "}
               (Baseline) →{" "}
               <span className="text-emerald-400 font-bold">{simulation.hardenedAvgScore}/100</span>{" "}
-              (Hardened Top 1% Gate)
+              (Hardened Multi-Tier Gate)
             </p>
           </div>
           <Badge variant="cyan" dot>
-            {simulation.totalHeadcount} PRINCIPAL ENGINEERS DEPLOYED
+            {simulation.totalUnits} REPLICA UNITS ALLOCATED
           </Badge>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {GUILD_DATA.map((guild) => (
+          {SUBSYSTEM_FLEET_DATA.map((subsystem) => (
             <div
-              key={guild.id}
+              key={subsystem.id}
               className="rounded-2xl border border-white/10 bg-slate-950/70 p-5 space-y-3 backdrop-blur-xl relative overflow-hidden flex flex-col justify-between hover:border-white/20 transition-all"
             >
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-mono text-slate-400 font-bold uppercase tracking-wider">
-                    {guild.headcount} Engineers
+                    {subsystem.allocatedUnits} Cluster Pods
                   </span>
                   <Badge
-                    variant={guild.status === "Verified" ? "emerald" : "cyan"}
+                    variant={subsystem.status === "Verified" ? "emerald" : "cyan"}
                     className="text-[10px]"
                   >
-                    {guild.status}
+                    {subsystem.status}
                   </Badge>
                 </div>
 
                 <h4 className="text-sm font-bold text-white leading-tight">
-                  {guild.name}
+                  {subsystem.name}
                 </h4>
 
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs font-mono">
-                    <span className="text-slate-500">Readiness Score:</span>
+                    <span className="text-slate-500">Reliability Index:</span>
                     <span className="font-bold text-slate-200">
-                      <span className="text-rose-400">{guild.initialScore}</span> →{" "}
-                      <span className="text-emerald-400">{guild.hardenedScore}</span>/100
+                      <span className="text-rose-400">{subsystem.initialScore}</span> →{" "}
+                      <span className="text-emerald-400">{subsystem.hardenedScore}</span>/100
                     </span>
                   </div>
                   <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
                     <div
                       className="bg-gradient-to-r from-emerald-500 to-cyan-400 h-full rounded-full"
-                      style={{ width: `${guild.hardenedScore}%` }}
+                      style={{ width: `${subsystem.hardenedScore}%` }}
                     />
                   </div>
                 </div>
@@ -674,14 +674,14 @@ export function PlanetScaleStressSimulator() {
                     Target Gate:
                   </span>
                   <p className="text-[11px] font-mono text-slate-300 leading-snug">
-                    {guild.targetGate}
+                    {subsystem.targetGate}
                   </p>
                 </div>
               </div>
 
               <div className="pt-2 border-t border-white/5">
                 <span className="text-[10px] font-mono text-cyan-300/90 font-medium">
-                  Deliverable: {guild.keyDeliverable}
+                  Deliverable: {subsystem.keyDeliverable}
                 </span>
               </div>
             </div>

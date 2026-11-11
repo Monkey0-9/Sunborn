@@ -115,7 +115,7 @@
 - **Expected Behavior**: Offline development simulator handles all 46 OpenAPI routes without returning 502 errors.
 - **Actual Behavior**: 16 OpenAPI operations unhandled, causing 502 Bad Gateway when evaluating credentials, routing, or DAG planning offline.
 - **Remediation**: Implemented simulated route handlers for all 16 operations in `standalone-simulator.ts`.
-- **Current Status**: **Verified Resolved** (32/32 frontend tests passing; all 46 operations covered).
+- **Current Status**: **Verified Resolved** (37/37 frontend tests passing; all 46 operations covered).
 
 ### DEF-010: RSS Memory Growth Under Sustained High-Load Soak
 - **Severity**: P2

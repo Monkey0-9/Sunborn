@@ -30,7 +30,7 @@
 | **Gate 5: Performance & Endurance Soak** | Verified $> 10,000\,\text{req/s}$, $< 5.0\,\text{ms}$ P99, and $< 10\%$ RSS heap growth under soak. | **FAILED HISTORICAL SLO** (2,500 req/s, 10.3ms P99, +86.68% RSS) | No (Traffic throttled to 1k req/s) | **YES** |
 | **Gate 6: High Availability & Disaster Recovery** | Automated database failover, Redis clustering, and tested RTO $< 5\,\text{min}$. | **HELD** (Single-node deployment; DR WAL replay verified) | No (Single-node pilot) | **YES** |
 | **Gate 7: FinOps Pre-Execution Budget Controls** | Atomic reserve-execute-settle spend concurrency protection. | **IN PROGRESS** (Post-execution ledger verified; pre-reservation in progress) | No | **YES** |
-| **Gate 8: Frontend Integrity & BFF Security** | Deny-by-default RBAC, CSRF protection, responsive mobile layout, zero dead buttons. | **CLEARED** (32/32 tests pass; 15/15 routes compiled) | No | No |
+| **Gate 8: Frontend Integrity & BFF Security** | Deny-by-default RBAC, CSRF protection, responsive mobile layout, zero dead buttons. | **CLEARED** (37/37 tests pass; 15/15 routes compiled) | No | No |
 | **Gate 9: CI/CD, Supply Chain & Security Scan** | 0 high/critical CVEs, deterministic lockfiles, no deployable credentials in manifests. | **CLEARED** (All manifests clean; clippy and lint clean) | No | No |
 | **Gate 10: Truthful Product Claims & Governance** | All marketing claims match verified artifacts; dual-admin approval enforced. | **CLEARED** (Baseline reconciliation published; quorum verified) | No | No |
 

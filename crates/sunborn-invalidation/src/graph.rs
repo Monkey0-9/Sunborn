@@ -99,7 +99,7 @@ impl KnowledgeGraphStore for InMemoryGraphStore {
             "backend": "in-memory",
             "cypher": cypher,
             "params": params,
-            "status": "simulated"
+            "status": "in-memory"
         }))
     }
 

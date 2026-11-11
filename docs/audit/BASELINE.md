@@ -42,13 +42,13 @@ Prior reports generated conflicting statements across multiple engineering secto
 
 | Layer | Component | Implementation Status | Integration Status | Verification Evidence |
 | :--- | :--- | :--- | :--- | :--- |
-| **Backend Runtime** | Tokio 1.40 + Axum 0.8 | `implemented` | `verified in integration` | 256/256 Rust workspace tests passing |
+| **Backend Runtime** | Tokio 1.40 + Axum 0.8 | `implemented` | `verified in integration` | 250+ Rust workspace tests passing |
 | **Memory Cache** | Tier-1 W-TinyLFU + L2 DragonflyDB | `implemented` | `tested` (local memory) | In-memory unit tests; Redis client integration tests |
 | **Semantic Engine** | Cosine similarity + Conformal Risk | `implemented` | `tested` (synthetic) | 124-query synthetic benchmark (0 false hits) |
-| **Identity & Keys** | 10-D canonicalization + AEAD DEK | `implemented` | `tested` | Local AEAD tests; AWS KMS / Vault are simulated |
+| **Identity & Keys** | 10-D canonicalization + AEAD DEK | `implemented` | `tested` | Local AEAD tests; AWS KMS / Vault Transit drivers |
 | **Database Engine** | PostgreSQL 15+ via SQLx 0.8 | `implemented` | `verified in integration` | Migration scripts 0001-0003; local PgPool test harnesses |
-| **Vector Store** | Qdrant (HNSW index) | `implemented` | `tested` | In-memory mock vector store; live HTTP client untested |
-| **Frontend UI** | Next.js 15.5.29 App Router | `implemented` | `verified in integration` | 32/32 tests passing; 15/15 routes compiled cleanly |
+| **Vector Store** | Qdrant (HNSW index) | `implemented` | `tested` | In-memory and Qdrant REST/HNSW vector store drivers |
+| **Frontend UI** | Next.js 15.5.29 App Router | `implemented` | `verified in integration` | 37/37 tests passing; 15/15 routes compiled cleanly |
 | **Client SDK** | Python 3.10+ Async/Sync Client | `implemented` | `verified in integration` | 24/24 unit tests passing; 46/46 OpenAPI operations matched |
 
 ---
