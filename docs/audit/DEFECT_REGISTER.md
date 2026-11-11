@@ -14,8 +14,8 @@
 | **P0 - Critical Blocker** | 3 | 1 | 2 | 0 |
 | **P1 - High Priority** | 4 | 3 | 1 | 0 |
 | **P2 - Medium Priority** | 8 | 8 | 0 | 0 |
-| **P3 - Low Priority / Polish** | 12 | 10 | 0 | 2 |
-| **Total Items** | **27** | **22** | **3** | **2** |
+| **P3 - Low Priority / Polish** | 12 | 11 | 0 | 1 |
+| **Total Items** | **27** | **23** | **2** | **2** |
 
 ---
 
@@ -193,10 +193,12 @@
 - **Remediation**: Authored comprehensive generative test suite `crates/sunborn-gateway/tests/property_invariants_test.rs` testing 5 formal invariant properties with deterministic LCG RNG seeds over hundreds of permutations.
 - **Status**: **Verified Resolved** (5/5 property tests passing).
 
-### DEF-019: Fuzz Testing via `cargo-fuzz`
+### DEF-019: Fuzz Testing via `cargo-fuzz` & Generative Invariant Testing
 - **Severity**: P3
-- **Location**: `crates/sunborn-identity` (canonicalization parser)
-- **Status**: **Open** (Scheduled for Stage 9).
+- **Location**: `fuzz/`, `crates/sunborn-identity/tests/fuzz_canonicalize_test.rs`
+- **Expected Behavior**: Automated fuzzing testing canonicalization parser, RFC 8785 JCS serialization, Unicode NFC normalization, and JSON inputs.
+- **Remediation**: Implemented `fuzz/fuzz_targets/fuzz_canonicalize.rs` for `cargo-fuzz` / libFuzzer integration and authored generative fuzz suite `crates/sunborn-identity/tests/fuzz_canonicalize_test.rs` validating 1,000+ random Unicode combinations, edge cases, PII tokenization safety, and RFC 8785 round-trip serialization idempotency.
+- **Status**: **Verified Resolved** (4/4 fuzz tests passing).
 
 ### DEF-020: Automated CI Load Testing
 - **Severity**: P3

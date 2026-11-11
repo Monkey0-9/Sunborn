@@ -5,7 +5,7 @@
 [![Rust 1.80+ / 1.96 Verified](https://img.shields.io/badge/Rust-1.80%2B%20%7C%201.96-orange?style=flat-square&logo=rust)](Cargo.toml)
 [![Next.js 15](https://img.shields.io/badge/Next.js-15.5.29%20App%20Router-black?style=flat-square&logo=next.js)](frontend)
 [![Python SDK](https://img.shields.io/badge/Python%20SDK-OpenAI%20%7C%20Claude%20%7C%20Async-3776ab?style=flat-square&logo=python)](sdk/python)
-[![Verified Suite](https://img.shields.io/badge/Verified%20Suite-334%20Tests%20Passing-brightgreen?style=flat-square)](docs/engineering/CLAIM_AND_EVIDENCE_REGISTER.md)
+[![Verified Suite](https://img.shields.io/badge/Verified%20Suite-338%20Tests%20Passing-brightgreen?style=flat-square)](docs/engineering/CLAIM_AND_EVIDENCE_REGISTER.md)
 [![Semantic Safety](https://img.shields.io/badge/Semantic%20Safety-0.0%25%20False%20Hits%20(46%20Traps)-success?style=flat-square)](docs/engineering/SEMANTIC_EVALUATION.md)
 
 > **Sunborn** is an open-source autonomic semantic cache, knowledge dependency invalidator, and execution attestation gateway for AI agents and generative LLM platforms. Operating under disciplines practiced by mature infrastructure teams at Google, Apple, Meta, OpenAI, Microsoft, and NVIDIA, Sunborn transforms probabilistic vector caching into a mathematically bounded, provably safe, and concurrency-fenced execution perimeter. Performance, correctness, cryptographic boundaries, and distributed failure invariants have been independently verified across live gateway artifacts and test harnesses.
@@ -42,7 +42,7 @@ Sunborn is governed by an exhaustive 8-stage engineering program establishing in
 ### Core Engineering Specifications ([`docs/engineering/`](docs/engineering/))
 1. **Master Plan:** [`MASTER_ENGINEERING_MATURITY_PLAN.md`](docs/engineering/MASTER_ENGINEERING_MATURITY_PLAN.md) — 8-stage roadmap with severity, impact, root cause, and acceptance criteria.
 2. **Architecture Review:** [`ARCHITECTURE_REVIEW.md`](docs/engineering/ARCHITECTURE_REVIEW.md) — Crate topology, request lifecycle, multi-tenant boundaries, and trade-offs.
-3. **Claim & Evidence Register:** [`CLAIM_AND_EVIDENCE_REGISTER.md`](docs/engineering/CLAIM_AND_EVIDENCE_REGISTER.md) — Reconciliation of 334 tests and 70-scenario held-out datasets.
+3. **Claim & Evidence Register:** [`CLAIM_AND_EVIDENCE_REGISTER.md`](docs/engineering/CLAIM_AND_EVIDENCE_REGISTER.md) — Reconciliation of 338 tests and 70-scenario held-out datasets.
 4. **Semantic Evaluation:** [`SEMANTIC_EVALUATION.md`](docs/engineering/SEMANTIC_EVALUATION.md) — 13-dimension evaluation across Baselines A–E with Wilson 95% CIs.
 5. **Distributed Graph Design:** [`DISTRIBUTED_GRAPH_DESIGN.md`](docs/engineering/DISTRIBUTED_GRAPH_DESIGN.md) — Typed nodes, bidirectional indexing, and Roaring Treemaps vs CSR at 1M edges.
 6. **Graph Consistency & Failures:** [`GRAPH_CONSISTENCY_AND_FAILURES.md`](docs/engineering/GRAPH_CONSISTENCY_AND_FAILURES.md) — Causal consistency, monotonic epoch leases, and $N$ vs $N+1$ mutation proofs.
@@ -106,7 +106,7 @@ To eliminate ambiguity between modeled projections and independently measured te
 | **Graph Storage Footprint** | **2.15 MB total** ($1.8\text{ B/edge}$) | [`benchmarks/graph_invalidation_deep_benchmark.py`](benchmarks/graph_invalidation_deep_benchmark.py) | Roaring Bitmaps at 1,000,000 edges | 1,000,000 dynamic edges | $11\times$ reduction over hash sets ($23.76\text{ MB}$) | Roaring Treemaps support real-time edge mutations, unlike CSR which requires full rebuild. |
 | **Stale Writeback Immunity** | **0.00% stale writes** (0/250) | [`tests/graph_concurrency_race_audit.py`](tests/graph_concurrency_race_audit.py) | Version mutation race ($N$ vs $N+1$) | 100 concurrent workers, 250 write races | 0 stale writebacks admitted | Monotonic epoch lease fences reject writes when upstream document mutates during inference. |
 | **Certificate Authenticity** | `INTEGRITY_VERIFIED_UNAUTHENTICATED` | [`research/verify_certificate.py`](research/verify_certificate.py) | Local development certificate trace | 1 certificate trace | SHA-256 digest trace integrity verified | Signer authenticity requires external AWS KMS or Sigstore key binding (`--require-auth`). |
-| **Active Codebase Test Inventory** | **334 verified tests** passing | [`docs/engineering/CLAIM_AND_EVIDENCE_REGISTER.md`](docs/engineering/CLAIM_AND_EVIDENCE_REGISTER.md) | Multi-language test matrix | 244 Cargo + 53 Python + 37 Frontend | 100% Passing across all targets | Cargo workspace executes 244 unit/integration tests; 90 additional tests in Python & Next.js. |
+| **Active Codebase Test Inventory** | **338 verified tests** passing | [`docs/engineering/CLAIM_AND_EVIDENCE_REGISTER.md`](docs/engineering/CLAIM_AND_EVIDENCE_REGISTER.md) | Multi-language test matrix | 248 Cargo + 53 Python + 37 Frontend | 100% Passing across all targets | Cargo workspace executes 248 unit/integration tests; 90 additional tests in Python & Next.js. |
 
 ### 1.2 Project completion and release status
 
@@ -656,9 +656,9 @@ The platform provides a consolidated 8-stage verification pipeline that runs the
 bash scripts/verify.sh
 ```
 
-### 2. Run Individual Verification Test Suites (334 Tests Across Polyglot Codebase)
+### 2. Run Individual Verification Test Suites (338 Tests Across Polyglot Codebase)
 ```bash
-# Complete Rust workspace quality gate (244 tests passing)
+# Complete Rust workspace quality gate (248 tests passing)
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets --all-features
