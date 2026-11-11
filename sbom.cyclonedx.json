@@ -1,10 +1,10 @@
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
-  "serialNumber": "urn:uuid:d8e95807-e905-430f-ad2b-ee2462d8fd30",
+  "serialNumber": "urn:uuid:89ee182d-975f-4947-b640-5904299612a9",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-11-11T15:11:40.156621+00:00",
+    "timestamp": "2026-11-11T16:35:39.040303+00:00",
     "component": {
       "type": "application",
       "name": "sunborn",
