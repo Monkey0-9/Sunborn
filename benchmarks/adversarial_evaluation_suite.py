@@ -141,7 +141,7 @@ def compute_deterministic_embedding(text: str, dim: int = 384) -> List[float]:
     return [x / norm for x in vec]
 
 def cosine_similarity(v1: List[float], v2: List[float]) -> float:
-    return sum(a * b for a, b in zip(v1, v2))
+    return sum(a * b for a, b in zip(v1, v2, strict=False))
 
 # ---------------------------------------------------------------------------
 # Structural Fingerprint Extractor (Faithful Python Port of Rust C1.5)

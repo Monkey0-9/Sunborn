@@ -54,7 +54,7 @@ def get_canonical_benchmark_metadata(dataset_path: str = None) -> dict[str, dict
                                 for elt in node.value.elts:
                                     if isinstance(elt, ast.Dict):
                                         qid, cat, eq = None, None, None
-                                        for k, v in zip(elt.keys, elt.values):
+                                        for k, v in zip(elt.keys, elt.values, strict=False):
                                             if isinstance(k, ast.Constant):
                                                 if k.value == "id" and isinstance(v, ast.Constant):
                                                     qid = v.value
@@ -84,7 +84,7 @@ def get_canonical_benchmark_metadata(dataset_path: str = None) -> dict[str, dict
             for item in BENCHMARK_SUITE
         }
     except Exception as e:
-        raise RuntimeError(f"Could not derive canonical metadata from dataset at {dataset_path}: {e}")
+        raise RuntimeError(f"Could not derive canonical metadata from dataset at {dataset_path}: {e}") from e
 
 def get_expected_query_ids(dataset_path: str = None) -> set[str]:
     """Derives the expected query ID set from the versioned benchmark dataset."""
@@ -332,9 +332,9 @@ def verify_reproduction_certificate(
             )
             return STATUS_INVALID
 
-        print(f"  [✓] Query completeness verified: exact 124-query ID set matches versioned dataset (zero missing, unexpected, or duplicate IDs).")
-        print(f"  [✓] Canonical dataset metadata verified: all 124 traces match category and ground_truth contracts.")
-        print(f"  [✓] Live gateway decision path verified: all 124 queries executed via live_gateway_rpc.")
+        print("  [✓] Query completeness verified: exact 124-query ID set matches versioned dataset (zero missing, unexpected, or duplicate IDs).")
+        print("  [✓] Canonical dataset metadata verified: all 124 traces match category and ground_truth contracts.")
+        print("  [✓] Live gateway decision path verified: all 124 queries executed via live_gateway_rpc.")
 
     # 5. Git provenance checks
     if check_git:
@@ -543,8 +543,8 @@ def verify_reproduction_certificate(
                 return STATUS_INVALID
 
     print(f"  [✓] Empirical metrics recomputed from raw traces: B3 TP={derived_b3['tp']}, FP={derived_b3['fp']}, Prec={derived_b3['precision_pct']}%, Savings={derived_b3['cost_savings_pct']}%; Naive B2 Precision={derived_b2['precision_pct']}%, FalseHits={derived_b2['fp']} ({derived_b2['false_hit_rate_pct']}%).")
-    print(f"  [✓] All 12 baseline summary fields verified across B3 and B2 in benchmark_run.json and temporal B3 and B2 in run_manifest.json.")
-    print(f"  [✓] All 10 certificate empirical metrics cross-checked against independently recomputed metrics with zero-tolerance exact equality.")
+    print("  [✓] All 12 baseline summary fields verified across B3 and B2 in benchmark_run.json and temporal B3 and B2 in run_manifest.json.")
+    print("  [✓] All 10 certificate empirical metrics cross-checked against independently recomputed metrics with zero-tolerance exact equality.")
 
     # 7. Attestation & Signature Verification (Explicit 4-State Outcome Evaluation)
     signing_algo = prov.get("signing_algorithm")

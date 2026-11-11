@@ -233,7 +233,7 @@ def get_embedding(text: str) -> list[float]:
     return [x / norm if norm > 0 else 0.0 for x in vec]
 
 def cosine_similarity(v1: list[float], v2: list[float]) -> float:
-    dot = sum(x * y for x, y in zip(v1, v2))
+    dot = sum(x * y for x, y in zip(v1, v2, strict=False))
     n1 = math.sqrt(sum(x * x for x in v1))
     n2 = math.sqrt(sum(x * x for x in v2))
     if n1 > 0 and n2 > 0:

@@ -279,7 +279,7 @@ for node in tree_ds.body:
             if isinstance(target, ast.Name) and target.id == 'BENCHMARK_SUITE':
                 for elt in node.value.elts:
                     qid, cat, eq = None, None, None
-                    for k, v in zip(elt.keys, elt.values):
+                    for k, v in zip(elt.keys, elt.values, strict=False):
                         if isinstance(k, ast.Constant):
                             if k.value == 'id' and isinstance(v, ast.Constant):
                                 qid = v.value
