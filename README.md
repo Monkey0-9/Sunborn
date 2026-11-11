@@ -299,11 +299,41 @@ Sunborn/
 │   ├── sunborn-invalidation/        # Roaring Bitmap lineage, monotonic epoch lease fencing, outbox
 │   ├── sunborn-db/                  # Authoritative PostgreSQL WAL engine & write-behind buffers
 │   └── sunborn-gateway/             # Axum HTTP reverse proxy, multi-tenant routing, FinOps gates
+├── docs/master/                     # Canonical 20-Deliverable Staff Systems Engineering Suite
 ├── frontend/                        # Next.js 15 App Router enterprise control plane & BFF
 ├── deploy/                          # Production Helm chart, Kubernetes manifests, Docker Compose
 ├── research/                        # Benchmark datasets, empirical research artifacts, verification
 └── sdk/python/                      # Python SDK supporting sync and async agent runtimes
 ```
+
+---
+
+## 🏛️ Master Systems Engineering Deliverables (`docs/master/`)
+
+Sunborn is thoroughly documented across 20 canonical Staff/Principal Systems Engineering deliverables establishing empirical evidence, threat modeling, distributed consistency, and production readiness:
+
+| Deliverable | Title & Core Subject | Key Technical Focus |
+| :--- | :--- | :--- |
+| [**01**](docs/master/01_MASTER_ENGINEERING_AUDIT.md) | **Master Engineering Audit** | Full codebase census, architectural triage & flaw catalog |
+| [**02**](docs/master/02_REPOSITORY_INVENTORY.md) | **Repository Inventory** | Exhaustive census across all 354+ tracked repository files |
+| [**03**](docs/master/03_SYSTEM_ARCHITECTURE.md) | **System Architecture** | 5-tier reverse proxy, memory tiers & execution pipeline |
+| [**04**](docs/master/04_DATA_FLOW_AND_TRUST_BOUNDARIES.md) | **Data Flow & Trust Boundaries** | Cryptographic envelope encryption & ingress/egress boundaries |
+| [**05**](docs/master/05_ENGINEERING_FINDINGS_REGISTER.md) | **Engineering Findings Register** | P0-P3 defect remediation log and resolution proofs |
+| [**06**](docs/master/06_SECURITY_THREAT_MODEL.md) | **Security & Threat Model** | STRIDE threat model, side-channel defense, crypto-shredding |
+| [**07**](docs/master/07_DISTRIBUTED_SYSTEMS_REVIEW.md) | **Distributed Systems Review** | Monotonic epoch fencing, transactional outbox & DLQ semantics |
+| [**08**](docs/master/08_SEMANTIC_SAFETY_AND_FRESHNESS_REVIEW.md) | **Semantic Safety & Freshness** | Conformal risk control ($\alpha \le 0.001$) & Cross-Encoder NLI |
+| [**09**](docs/master/09_DATABASE_AND_DATA_INTEGRITY_REVIEW.md) | **Database & Integrity Review** | PostgreSQL WAL authority, write-behind & rebuild recovery |
+| [**10**](docs/master/10_PERFORMANCE_AND_BENCHMARK_REPORT.md) | **Performance & Benchmarks** | Microbenchmarks (571k req/s), gateway socket & memory profile |
+| [**11**](docs/master/11_FRONTEND_UX_ACCESSIBILITY_REVIEW.md) | **Frontend UX & Accessibility** | Next.js 15 BFF proxy, WCAG AAA accessibility & fleet modeler |
+| [**12**](docs/master/12_TESTING_AND_VERIFICATION_MATRIX.md) | **Testing & Verification Matrix** | 338+ automated tests, 11 verification gates & property tests |
+| [**13**](docs/master/13_DEPLOYMENT_AND_SRE_REVIEW.md) | **Deployment & SRE Operations** | Distroless container, Kubernetes, Helm & SRE playbooks |
+| [**14**](docs/master/14_SDK_AND_DEVELOPER_EXPERIENCE_REVIEW.md) | **Python SDK & Developer Experience** | Zero-dependency sync/async client & `@sunborn_tool` Merkle DAG |
+| [**15**](docs/master/15_DOCUMENTATION_AUDIT.md) | **Documentation Audit & SSOT** | Path integrity verification, drift audit & single source of truth |
+| [**16**](docs/master/16_ARCHITECTURE_DECISION_RECORDS.md) | **ADR Register (ADR-001–012)** | Formal Michael Nygard ADRs covering major trade-offs |
+| [**17**](docs/master/17_IMPLEMENTATION_ROADMAP.md) | **Implementation Roadmap** | 8-wave phased systems transformation & promotion gates |
+| [**18**](docs/master/18_RELEASE_READINESS_REPORT.md) | **Release Readiness Report** | Gate A through G production sign-off evaluation |
+| [**19**](docs/master/19_INTERVIEW_DEFENCE_GUIDE.md) | **Interview Defense Playbook** | FAANG Staff/Principal defense scripts & top 10 deep-dives |
+| [**20**](docs/master/20_KNOWN_LIMITATIONS_AND_RISKS.md) | **Known Limitations & Risks** | Transparent disclosure of operational boundaries & trade-offs |
 
 ---
 
