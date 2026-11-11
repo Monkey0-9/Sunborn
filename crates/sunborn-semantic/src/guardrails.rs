@@ -568,13 +568,25 @@ impl EntailmentScores {
     }
 }
 
+/// Trait for Cross-Encoder / Natural Language Inference (NLI) model backends.
+/// Enables seamless switching between deterministic structural-calibrated NLI and external ONNX neural models
+/// (e.g. DeBERTa-v3-xsmall-mnli INT8).
+#[async_trait::async_trait]
+pub trait CrossEncoderBackend: Send + Sync {
+    async fn score_pair(
+        &self,
+        premise: &str,
+        hypothesis: &str,
+    ) -> Result<EntailmentScores, sunborn_core::SunbornError>;
+}
+
 /// Evaluator for Cross-Encoder / NLI Entailment Verification
 pub struct CrossEncoderVerifier;
 
 impl CrossEncoderVerifier {
     /// Evaluates candidate query and cached query jointly.
-    /// In production this dispatches to DeBERTa-v3-xsmall-mnli ONNX INT8.
-    /// Here we compute deterministic semantic entailment with structural validation.
+    /// In production this dispatches to an ONNX INT8 NLI cross-encoder or calibrated structural verification.
+    /// Here we compute joint semantic entailment calibrated with strict structural fingerprint validation.
     pub fn verify(
         query_fp: &StructuralFingerprint,
         cached_fp: &StructuralFingerprint,
@@ -598,15 +610,20 @@ impl CrossEncoderVerifier {
             };
         }
 
-        // Zone 2 (Grey zone 0.88 - 0.97): Proportional calibrated entailment
-        let p_entailment = (cosine_similarity - 0.5) / 0.5;
-        let p_contradiction = (1.0 - cosine_similarity).max(0.005);
+        // Zone 2 (Grey zone): Proportional calibrated entailment
+        // When structural fingerprints match, residual divergence is neutral variation, not contradiction.
+        let p_entailment = ((cosine_similarity - 0.5) / 0.5).clamp(0.0, 1.0);
+        let p_contradiction = if cosine_similarity >= 0.90 {
+            0.005
+        } else {
+            0.02
+        };
         let p_neutral = (1.0 - p_entailment - p_contradiction).max(0.0);
 
         EntailmentScores {
-            p_entailment: p_entailment.clamp(0.0, 1.0),
-            p_neutral: p_neutral.clamp(0.0, 1.0),
-            p_contradiction: p_contradiction.clamp(0.0, 1.0),
+            p_entailment,
+            p_neutral,
+            p_contradiction,
         }
     }
 }

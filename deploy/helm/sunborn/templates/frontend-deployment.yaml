@@ -59,6 +59,8 @@ spec:
               value: "http://{{ include "sunborn.fullname" . }}-gateway:{{ .Values.gateway.service.port }}"
             - name: SUNBORN_GATEWAY_URL
               value: "http://{{ include "sunborn.fullname" . }}-gateway:{{ .Values.gateway.service.port }}"
+            - name: STRICT_GATEWAY
+              value: "true"
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
           livenessProbe:

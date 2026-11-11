@@ -20,4 +20,4 @@ tokio.workspace = true
 chrono.workspace = true
 uuid.workspace = true
 tracing.workspace = true
-sqlx.workspace = true
+sqlx = { workspace = true, default-features = false }

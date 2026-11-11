@@ -462,12 +462,30 @@ pub async fn execute_request_inner(
                             }
                         };
 
+                        // 1. Authoritative Server-Side Multi-Source Lease Check (Finding 2)
+                        let is_fresh = state
+                            .epoch_lease_manager
+                            .validate_multi_source_leases(&cert.source_snapshots)
+                            .await;
+                        if !is_fresh {
+                            tracing::warn!(
+                                request_id = %req.request_id.0,
+                                "Semantic cache candidate dependencies modified in authoritative epoch registry -> Treating as MISS and falling through to origin"
+                            );
+                            break 'semantic_eval;
+                        }
+
                         // Runtime proof-carrying admissibility check:
-                        let source_epochs: Vec<(uuid::Uuid, u64)> = req
+                        let mut source_epochs: Vec<(uuid::Uuid, u64)> = req
                             .dependency_snapshots
                             .iter()
                             .map(|s| (s.source_id, s.snapshot_epoch))
                             .collect();
+                        for snap in &cert.source_snapshots {
+                            if !source_epochs.iter().any(|(id, _)| *id == snap.source_id) {
+                                source_epochs.push((snap.source_id, snap.snapshot_epoch));
+                            }
+                        }
                         if let Err(admissibility_err) = cert.verify_admissibility(
                             &state.learning_hmac_secret,
                             &req.tenant_id,

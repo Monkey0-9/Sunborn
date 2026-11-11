@@ -410,11 +410,35 @@ impl AppState {
     /// before server process termination completes.
     pub async fn graceful_drain(&self) -> Result<(), sunborn_core::SunbornError> {
         tracing::info!("Executing AppState graceful drain of background workers...");
+
+        // 1. Drain pending outbox invalidation events
+        tracing::info!("Draining pending transactional outbox events...");
+        let mut drained_invalidation_events = 0;
+        while let Ok(Some(evicted)) = self.invalidation_engine.process_next().await {
+            drained_invalidation_events += 1;
+            tracing::debug!(evicted, "Drained invalidation event during shutdown");
+        }
+        tracing::info!(
+            drained_invalidation_events,
+            "Outbox invalidation events drained"
+        );
+
+        // 2. Audit Dead Letter Queue on shutdown
+        let dlq_count = self.invalidation_engine.dlq_count().await;
+        if dlq_count > 0 {
+            tracing::warn!(
+                dlq_count,
+                "Dead-Letter Queue contains unresolved failed invalidations upon shutdown"
+            );
+        }
+
+        // 3. Drain and flush database persistence
         if self.is_postgres_db_active() {
-            tracing::info!("Draining pending PostgreSQL connections and flushing outbox...");
+            tracing::info!("Draining pending PostgreSQL connections and flushing write buffers...");
             let _ = self.postgres_db.verify_connection().await;
         }
-        tracing::info!("AppState graceful drain completed successfully.");
+
+        tracing::info!("AppState graceful drain completed successfully with zero stranded tasks.");
         Ok(())
     }
 

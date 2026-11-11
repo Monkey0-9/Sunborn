@@ -112,6 +112,7 @@ services:
       NODE_ENV: production
       SUNBORN_GATEWAY_URL: "http://gateway:8080"
       SUNBORN_READ_ONLY_TOKEN: "${SUNBORN_READ_ONLY_TOKEN:-}"
+      STRICT_GATEWAY: "true"
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:

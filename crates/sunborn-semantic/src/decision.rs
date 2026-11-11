@@ -1,6 +1,6 @@
 use crate::conformal::{StreamingOODDetector, TaskStratifiedConformalCalibrator, TaskStratum};
 use crate::embedding::EmbeddingProvider;
-use crate::guardrails::StructuralFingerprint;
+use crate::guardrails::{CrossEncoderVerifier, StructuralFingerprint};
 use crate::vector_store::VectorStore;
 use serde::{Deserialize, Serialize};
 use sunborn_core::certificate::SafetyEvidenceRecord;
@@ -124,12 +124,18 @@ impl VerificationCascade {
             heuristic_risk_score: risk,
         };
 
-        if !structural_match || risk > 0.25 {
+        // Cross-encoder entailment evaluation
+        let entailment = CrossEncoderVerifier::verify(&query_fp, &candidate_fp, similarity);
+        let entailment_valid = entailment.is_safe_entailment(0.50, 0.20);
+
+        if !structural_match || !entailment_valid || risk > 0.25 {
             return VerificationCascadeResult {
                 passed_stage: CascadeStage::Stage2StructuralGuardrails,
                 is_eligible_for_reuse: false,
                 reason_code: if !structural_match {
                     "STAGE2_STRUCTURAL_GUARDRAIL_VIOLATION".to_string()
+                } else if !entailment_valid {
+                    "STAGE2_CROSS_ENCODER_CONTRADICTION_DETECTED".to_string()
                 } else {
                     "STAGE2_HIGH_RISK_BUDGET_EXCEEDED".to_string()
                 },
@@ -295,10 +301,34 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                 .get("certificate")
                 .and_then(|v| serde_json::from_value(v.clone()).ok());
 
+            // Independent Causal Freshness Verification:
+            // Check candidate's source snapshots against request snapshots and knowledge epoch
+            let mut causal_snapshots_valid = true;
+            if let Some(ref cert) = candidate_cert {
+                for req_snap in &req.dependency_snapshots {
+                    for cand_snap in &cert.source_snapshots {
+                        if req_snap.source_id == cand_snap.source_id
+                            && req_snap.snapshot_epoch > cand_snap.snapshot_epoch
+                        {
+                            causal_snapshots_valid = false;
+                            break;
+                        }
+                    }
+                    if !causal_snapshots_valid {
+                        break;
+                    }
+                }
+                if let Some(req_ke) = req.knowledge_epoch {
+                    if req_ke > cert.validity_window.monotonic_epoch_lease {
+                        causal_snapshots_valid = false;
+                    }
+                }
+            }
+
             // Execute Verification Cascade
             let cascade_res = self
                 .cascade
-                .verify(req, &best.entry.prompt, similarity, true)
+                .verify(req, &best.entry.prompt, similarity, causal_snapshots_valid)
                 .await;
 
             // Tier C2 Context-Lineage Binding Verification:

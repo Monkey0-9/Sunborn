@@ -161,9 +161,11 @@ async function handleProxy(req: NextRequest, context: RouteContext) {
     }
 
     // High-Fidelity Standalone Simulation Engine Fallback
-    // When live gateway is offline, seamlessly serve mission-critical responses
-    // so frontend dashboards, sandboxes, and inspectors function without friction.
-    if (process.env.STRICT_GATEWAY !== "true") {
+    // ONLY permitted in local development mode for non-privileged inspection routes.
+    // In production or strict mode, or on privileged mutating operations, strictly fail closed.
+    const isStrict = process.env.STRICT_GATEWAY === "true" || process.env.NODE_ENV === "production";
+    const isPrivileged = isPrivilegedRoute(normalizedPath);
+    if (!isStrict && !isPrivileged) {
       const simulated = handleSimulatedRoute(req.method, normalizedPath, typeof body === "string" ? body : undefined);
       if (simulated) {
         if (typeof simulated.body === "string") {
@@ -172,6 +174,7 @@ async function handleProxy(req: NextRequest, context: RouteContext) {
             headers: {
               ...simulated.headers,
               "x-sunborn-mode": "standalone-simulation",
+              "x-sunborn-simulated": "true",
             },
           });
         }
@@ -180,6 +183,7 @@ async function handleProxy(req: NextRequest, context: RouteContext) {
           headers: {
             ...simulated.headers,
             "x-sunborn-mode": "standalone-simulation",
+            "x-sunborn-simulated": "true",
           },
         });
       }

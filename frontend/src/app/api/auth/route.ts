@@ -32,22 +32,26 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch {
-    if (process.env.STRICT_GATEWAY !== "true" && sessionToken) {
+    const isStrict = process.env.STRICT_GATEWAY === "true" || process.env.NODE_ENV === "production";
+    if (!isStrict && sessionToken) {
       return NextResponse.json({
         authenticated: true,
         session: {
           active: true,
           cookie_protected: true,
-          tenant_id: "tenant-enterprise-fintech",
-          application_id: "console-admin",
-          is_admin: sessionToken.toLowerCase().includes("admin"),
+          tenant_id: "dev-sandbox-tenant",
+          application_id: "dev-console",
+          is_admin: false,
+          simulated: true,
         },
+      }, {
+        headers: { "X-Sunborn-Simulated": "true" }
       });
     }
-    // Upstream gateway unreachable: fail-closed
+    // Upstream gateway unreachable: fail-closed in production
     return NextResponse.json(
       { authenticated: false, error: 'Gateway authentication unavailable' },
-      { status: 200 }
+      { status: 502 }
     );
   }
 }
@@ -146,17 +150,20 @@ export async function POST(req: NextRequest) {
 
       return res;
     } catch (err: any) {
-      if (process.env.STRICT_GATEWAY !== "true" && client_id && client_secret) {
-        const isAdmin = client_id.toLowerCase().includes("admin") || client_secret.toLowerCase().includes("admin");
-        const tid = tenant_id || "tenant-enterprise-fintech";
-        const app = "console-admin";
+      const isStrict = process.env.STRICT_GATEWAY === "true" || process.env.NODE_ENV === "production";
+      if (!isStrict && client_id && client_secret) {
+        // Offline development sandbox ONLY - never allowed in production
+        const tid = tenant_id || "dev-sandbox-tenant";
+        const app = "dev-console";
         const res = NextResponse.json({
           success: true,
           tenant_id: tid,
           application_id: app,
-          is_admin: isAdmin,
+          is_admin: false,
           expires_in: 86400,
           simulated: true,
+        }, {
+          headers: { "X-Sunborn-Simulated": "true" }
         });
         res.cookies.set('sunborn_session', client_secret, {
           httpOnly: true,
