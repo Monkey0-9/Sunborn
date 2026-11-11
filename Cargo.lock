@@ -2846,6 +2846,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "dashmap",
+ "redis",
  "reqwest",
  "roaring",
  "serde",

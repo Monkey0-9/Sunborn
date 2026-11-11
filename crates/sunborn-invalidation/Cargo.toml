@@ -25,3 +25,4 @@ tracing.workspace = true
 reqwest.workspace = true
 roaring.workspace = true
 dashmap.workspace = true
+redis.workspace = true

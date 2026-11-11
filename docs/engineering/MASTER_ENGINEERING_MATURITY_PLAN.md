@@ -161,7 +161,7 @@ flowchart LR
 
 ### Stage 8: Engineering Quality, Ergonomics & Clean Developer Setup
 - **Severity / Priority:** High (Maintainability)
-- **Impact:** Allows a new distributed systems engineer to clone the repository, run one setup command, and pass all 323 tests in $< 3\text{ minutes}$.
+- **Impact:** Allows a new distributed systems engineer to clone the repository, run one setup command, and pass all 334 tests in $< 3\text{ minutes}$.
 - **Dependencies:** Makefile, devcontainer, Python UV.
 - **Files Affected:**
   - `Makefile` / `scripts/dev_setup.sh`

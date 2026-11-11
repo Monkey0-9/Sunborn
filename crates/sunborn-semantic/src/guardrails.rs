@@ -21,6 +21,10 @@ pub struct StructuralFingerprint {
     pub content_tokens: Vec<String>,
     #[serde(default)]
     pub quantifier_scope_tokens: Vec<String>,
+    #[serde(default)]
+    pub role_bound_numeric_tokens: Vec<String>,
+    #[serde(default)]
+    pub ordered_numeric_sequence: Vec<String>,
     pub token_count: usize,
     pub fingerprint_hash: String,
 }
@@ -321,7 +325,11 @@ impl StructuralFingerprint {
 
         let mut content_tokens: Vec<String> = clean_tokens
             .iter()
-            .filter(|w| w.len() >= 3 && !STOPWORDS.contains(&w.as_str()))
+            .filter(|w| {
+                w.len() >= 3
+                    && !STOPWORDS.contains(&w.as_str())
+                    && !w.chars().all(|c| c.is_ascii_digit())
+            })
             .cloned()
             .collect();
         content_tokens.sort();
@@ -350,7 +358,96 @@ impl StructuralFingerprint {
         quantifier_scope_tokens.sort();
         quantifier_scope_tokens.dedup();
 
-        // 7. Deterministic fingerprint hash
+        // 7. Role-bound numeric tokens and ordered numeric associations (Gap 2: Transposition Defense)
+        const ROLE_MARKERS: &[&str] = &[
+            "from",
+            "to",
+            "at",
+            "for",
+            "into",
+            "between",
+            "before",
+            "after",
+            "by",
+            "with",
+            "source",
+            "src",
+            "destination",
+            "dst",
+            "account",
+            "port",
+            "task",
+            "worker",
+            "tenant",
+            "user",
+            "client",
+            "node",
+            "cluster",
+            "shard",
+            "server",
+            "host",
+            "table",
+            "column",
+            "version",
+            "step",
+            "stage",
+            "job",
+            "id",
+            "usd",
+            "dollar",
+            "amount",
+        ];
+
+        let mut role_bound_numeric_tokens = Vec::new();
+        let mut ordered_numeric_sequence = Vec::new();
+
+        for (i, word) in words.iter().enumerate() {
+            let cleaned: String = word
+                .chars()
+                .filter(|c| c.is_ascii_digit() || *c == '.')
+                .collect();
+            if !cleaned.is_empty() && cleaned.chars().any(|c| c.is_ascii_digit()) {
+                let start = i.saturating_sub(3);
+                let window = &words[start..i];
+                let found_roles: Vec<String> = window
+                    .iter()
+                    .filter_map(|w| {
+                        let w_clean: String = w
+                            .to_lowercase()
+                            .chars()
+                            .filter(|c| c.is_alphanumeric())
+                            .collect();
+                        if ROLE_MARKERS.contains(&w_clean.as_str()) {
+                            Some(w_clean)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                let primary_role = if !found_roles.is_empty() {
+                    found_roles.join("_")
+                } else if i > 0 {
+                    words[i - 1]
+                        .to_lowercase()
+                        .chars()
+                        .filter(|c| c.is_alphanumeric())
+                        .collect()
+                } else {
+                    "start".to_string()
+                };
+
+                ordered_numeric_sequence.push(format!("{}:{}", primary_role, cleaned));
+                role_bound_numeric_tokens.push(format!("{}:{}", primary_role, cleaned));
+                for r in &found_roles {
+                    role_bound_numeric_tokens.push(format!("{}:{}", r, cleaned));
+                }
+            }
+        }
+        role_bound_numeric_tokens.sort();
+        role_bound_numeric_tokens.dedup();
+
+        // 8. Deterministic fingerprint hash
         let mut hasher = Sha256::new();
         for num in &numbers {
             hasher.update(num.as_bytes());
@@ -372,6 +469,14 @@ impl StructuralFingerprint {
             hasher.update(q.as_bytes());
             hasher.update(b",");
         }
+        for r in &role_bound_numeric_tokens {
+            hasher.update(r.as_bytes());
+            hasher.update(b",");
+        }
+        for o in &ordered_numeric_sequence {
+            hasher.update(o.as_bytes());
+            hasher.update(b",");
+        }
         let fingerprint_hash = hex::encode(hasher.finalize());
 
         Self {
@@ -382,6 +487,8 @@ impl StructuralFingerprint {
             entity_tokens,
             content_tokens,
             quantifier_scope_tokens,
+            role_bound_numeric_tokens,
+            ordered_numeric_sequence,
             token_count,
             fingerprint_hash,
         }
@@ -398,6 +505,20 @@ impl StructuralFingerprint {
 
         // Quantifier-negation scopes must match exactly
         if self.quantifier_scope_tokens != other.quantifier_scope_tokens {
+            return false;
+        }
+
+        // Role-bound numeric tokens and ordered sequence must match (Gap 2: Transposition Defense)
+        if !self.role_bound_numeric_tokens.is_empty()
+            && !other.role_bound_numeric_tokens.is_empty()
+            && self.role_bound_numeric_tokens != other.role_bound_numeric_tokens
+        {
+            return false;
+        }
+        if !self.ordered_numeric_sequence.is_empty()
+            && !other.ordered_numeric_sequence.is_empty()
+            && self.ordered_numeric_sequence != other.ordered_numeric_sequence
+        {
             return false;
         }
 
@@ -544,7 +665,16 @@ mod tests {
 
         // Sorted numbers match
         assert_eq!(fp1.sorted_numeric_literals, vec!["102", "5000", "889"]);
-        assert!(fp1.matches(&fp2));
+        // Gap 2 Hardening: Role-bound numeric transposition must be rejected!
+        assert!(
+            !fp1.matches(&fp2),
+            "Account numeric transposition ('from 102 to 889' vs 'from 889 to 102') must be rejected"
+        );
+
+        // Legitimate query with identical role bindings matches
+        let p_legit = "Transfer 5000 from Account 102 to Account 889";
+        let fp_legit = StructuralFingerprint::extract(p_legit);
+        assert!(fp1.matches(&fp_legit));
 
         // When numbers differ:
         let p3 = "Transfer $7,500 from Account 102 to Account 889";
@@ -552,6 +682,26 @@ mod tests {
         assert!(
             !fp1.matches(&fp3),
             "Different amount must reject structural match"
+        );
+
+        // ADV-TRP-02: Worker and task transposition
+        let w1 = "Assign worker 12 to task 45 and worker 13 to task 99";
+        let w2 = "Assign worker 12 to task 99 and worker 13 to task 45";
+        let fp_w1 = StructuralFingerprint::extract(w1);
+        let fp_w2 = StructuralFingerprint::extract(w2);
+        assert!(
+            !fp_w1.matches(&fp_w2),
+            "Worker-task transposition must be rejected"
+        );
+
+        // ADV-TRP-03: Tenant and port transposition
+        let port1 = "Route tenant 88 traffic to port 8080 and tenant 99 to port 9090";
+        let port2 = "Route tenant 88 traffic to port 9090 and tenant 99 to port 8080";
+        let fp_port1 = StructuralFingerprint::extract(port1);
+        let fp_port2 = StructuralFingerprint::extract(port2);
+        assert!(
+            !fp_port1.matches(&fp_port2),
+            "Tenant-port transposition must be rejected"
         );
     }
 

@@ -12,13 +12,13 @@
 ### Test Suite Inventory Reconciliation
 | Test Scope / Environment | Previous / Cited Count | Actual Verified Count | Discrepancy Analysis & Explanation |
 |:---|:---:|:---:|:---|
-| **Cargo Workspace Tests** | 256 tests *(cited in Big Tech audit)* | **238 individual tests** | The earlier audit cited 256 tests by conflating Rust unit/integration tests with external Python test cases (238 Rust + 19 Python SDK = 257). The exact output of `cargo test --workspace --all-targets --all-features` is **238 tests** (0 failed, 0 ignored). |
-| **Python SDK Unit Tests** | Unstated / bundled | **19 tests** | Defined in [`sdk/python/test_sunborn_agent.py`](file:///C:/Sunborn/sdk/python/test_sunborn_agent.py). All 19 pass via `python -m unittest`. |
+| **Cargo Workspace Tests** | 256 tests *(cited in Big Tech audit)* | **244 individual tests** | The exact output of `cargo test --workspace --all-targets` across all 9 crates and 22 test suites is **244 tests** (0 failed, 0 ignored, including property-based tests). |
+| **Python SDK Unit Tests** | Unstated / bundled | **24 tests** | Defined in [`sdk/python/test_sunborn_agent.py`](file:///C:/Sunborn/sdk/python/test_sunborn_agent.py) and `sdk/python/tests/test_sdk_package.py`. |
 | **Verifier Negative Tests** | Unstated | **23 tests** | Defined in [`research/tests/test_verifier_negative.py`](file:///C:/Sunborn/research/tests/test_verifier_negative.py). All 23 pass via `python -m unittest`. |
 | **Benchmark Credentials Tests**| Unstated | **1 test** | Defined in [`research/tests/test_benchmark_credentials.py`](file:///C:/Sunborn/research/tests/test_benchmark_credentials.py). |
 | **Concurrency Race Audit Tests**| Unstated | **5 tests** | High-concurrency stress suite in [`tests/graph_concurrency_race_audit.py`](file:///C:/Sunborn/tests/graph_concurrency_race_audit.py). |
 | **Frontend Web Tests** | Unstated | **37 tests** | Defined in [`frontend/tests/`](file:///C:/Sunborn/frontend/tests/). Covers BFF security, CSRF defense, and WCAG 2.2 AA accessibility via `npm test`. |
-| **Grand Total Codebase Tests** | ~256 | **323 verified tests** | **100% Passing across all targets.** |
+| **Grand Total Codebase Tests** | ~256 | **334 verified tests** | **100% Passing across all targets.** |
 
 ### Evaluation Datasets Reconciliation
 | Dataset Identifier | Item Count | Breakdown / Methodology | Ground Truth & Purpose | Primary Artifact Location |

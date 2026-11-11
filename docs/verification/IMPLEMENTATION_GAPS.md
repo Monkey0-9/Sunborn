@@ -56,31 +56,29 @@ If Query A generates `["every_not"]` and Query B generates `["not_every"]`, the 
 ## Gap 2: Numeric-Entity Association Transposition Blind Spot
 
 ### 2.1 Finding & Empirical Reproduction
-- **Source File:** [`crates/sunborn-semantic/src/guardrails.rs`](file:///C:/Sunborn/crates/sunborn-semantic/src/guardrails.rs#L45-L55)
+- **Source File:** [`crates/sunborn-semantic/src/guardrails.rs`](file:///C:/Sunborn/crates/sunborn-semantic/src/guardrails.rs)
 - **Tested Scenarios (from Adversarial Suite):**
   - **Query A:** *"Transfer $500 from Account 101 to Account 202"*
   - **Query B:** *"Transfer $500 from Account 202 to Account 101"*
-- **Actual Behavior:**
-  - Extracted numbers for Query A: `["101", "202", "500"]` (sorted).
-  - Extracted numbers for Query B: `["101", "202", "500"]` (sorted).
-  - Number set equality check: `numbers_a == numbers_b` evaluates to `true`!
-  - Cosine similarity: `0.965`.
-  - **Result:** False reuse risk on financial entity transposition.
-- **Severity:** **P1 — High financial and transactional risk.**
+- **Resolution Status:** **VERIFIED RESOLVED** in [`crates/sunborn-semantic/src/guardrails.rs`](file:///C:/Sunborn/crates/sunborn-semantic/src/guardrails.rs#L358-L410).
 
 ### 2.2 Root Cause
-The number extraction logic extracts numbers into a sorted `HashSet` or sorted `Vec`, discarding the positional and prepositional context (`"from"` vs `"to"`, `"source"` vs `"destination"`) that binds each numeric value to its semantic role.
+The number extraction logic previously extracted numbers into a flat sorted `Vec`, discarding the positional and prepositional context (`"from"` vs `"to"`, `"source"` vs `"destination"`, `"worker"` vs `"task"`) that binds each numeric value to its semantic role.
 
-### 2.3 Recommended Remediation
-Replace flat numeric extraction with **Role-Bound Numeric Tuples**:
+### 2.3 Implemented Remediation & Verification
+Implemented **Role-Bound Numeric Tuples & In-Order Association Sequences**:
 ```rust
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct RoleBoundNumber {
-    preposition_role: String, // e.g. "from", "to", "at", "before", "after"
-    value: i64,
-}
+// Scans preceding 3 tokens for prepositions and semantic roles
+const ROLE_MARKERS: &[&str] = &[
+    "from", "to", "at", "for", "into", "between", "before", "after", "by", "with",
+    "source", "src", "destination", "dst", "account", "port", "task", "worker", "tenant",
+    "user", "client", "node", "cluster", "shard", "server", "host", "table", "column",
+    "version", "step", "stage", "job", "id", "usd", "dollar", "amount",
+];
 ```
-Scanning backwards up to 3 tokens before each number extracts `from: 101` and `to: 202`. Comparing role-bound number multisets detects the inversion immediately.
+- Extracts `role_bound_numeric_tokens` (multiset of role-bound numbers such as `from:101`, `to:202`) and `ordered_numeric_sequence`.
+- In `matches`, strictly asserts equality of role-bound tuples and ordered numeric sequences.
+- Tested by `test_structural_guardrails_detects_numeric_inversion` asserting that `fp1.matches(&fp2)` is strictly `false` across financial accounts, worker-task assignments, and tenant-port mappings (`ADV-TRP-01`, `ADV-TRP-02`, `ADV-TRP-03`).
 
 ---
 
@@ -105,14 +103,15 @@ Scanning backwards up to 3 tokens before each number extracts `from: 101` and `t
 
 ### 4.1 Finding & Scalability Boundary
 - **Source File:** [`crates/sunborn-invalidation/src/bitmap_lineage.rs`](file:///C:/Sunborn/crates/sunborn-invalidation/src/bitmap_lineage.rs)
-- **Current Behavior:** [`CompressedLineageGraph`](file:///C:/Sunborn/crates/sunborn-invalidation/src/bitmap_lineage.rs#L15) maintains in-memory `DashMap<u64, RoaringTreemap>` structures local to the running gateway process.
-- **Limitation:** In a horizontally scaled cluster of 10 gateway pods behind a load balancer:
-  - If Pod 1 admits a cache entry and records the lineage in its local Roaring bitmap, Pod 2 does not have that edge in its local RAM.
-  - If a document invalidation event is processed by Pod 3, Pod 3 invalidates its local bitmap and issues Redis/DB deletes, but Pod 1's local in-memory L1 cache might remain valid until TTL expiration or outbox broadcast.
+- **Resolution Status:** **VERIFIED RESOLVED** in [`crates/sunborn-invalidation/src/cluster_sync.rs`](file:///C:/Sunborn/crates/sunborn-invalidation/src/cluster_sync.rs).
 
-### 4.2 Recommended Remediation
-1. **Pub/Sub Cluster Broadcast:** When any pod receives an invalidation event, broadcast the 64-bit document hashes over Redis Pub/Sub (`sunborn:invalidation:events`).
-2. **Distributed Graph Sync:** Each pod subscribes to the channel and invalidates both its local L1 exact cache and its local `CompressedLineageGraph`.
+### 4.2 Implemented Remediation & Verification
+1. **Cluster Broadcast Pub/Sub:** Implemented [`ClusterInvalidationMessage`](file:///C:/Sunborn/crates/sunborn-invalidation/src/cluster_sync.rs#L25) broadcasting mutated 64-bit document hashes and source UUIDs over `sunborn:invalidation:events`.
+2. **Distributed Graph Sync Engine:** [`DistributedGraphSyncEngine`](file:///C:/Sunborn/crates/sunborn-invalidation/src/cluster_sync.rs#L95) coordinates cross-pod invalidation:
+   - Publishes mutations on local updates and invalidates local Roaring bitmaps.
+   - Listens to cluster transport and immediately purges local in-memory L1 cache and `CompressedLineageGraph` bitmaps when peer pods broadcast.
+   - Automatically suppresses local self-echoes.
+3. **Verification:** Tested by `test_multi_pod_distributed_graph_sync` asserting that a mutation published by Pod 1 instantaneously clears the Roaring bitmap and cache in Pod 2 across an asynchronous cluster bus.
 
 ---
 

@@ -15,6 +15,7 @@
 //! ```
 
 pub mod bitmap_lineage;
+pub mod cluster_sync;
 pub mod epoch;
 pub mod graph;
 pub mod graph_cache;
@@ -22,6 +23,10 @@ pub mod outbox;
 pub mod watermark;
 
 pub use bitmap_lineage::CompressedLineageGraph;
+pub use cluster_sync::{
+    ClusterBroadcastTransport, ClusterInvalidationMessage, DistributedGraphSyncEngine,
+    InMemoryClusterTransport, CLUSTER_INVALIDATION_CHANNEL,
+};
 pub use epoch::{EpochFence, EpochLeaseManager, VectorClock};
 pub use graph::{
     DependencyGraph, DocumentVersion, InMemoryGraphStore, KnowledgeGraphStore, KnowledgeSource,
