@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "sunborn-latex": {
+      "command": "uv",
+      "args": ["run", "--directory", "integrations/latex-mcp", "sunborn-latex-mcp"],
+      "timeout": 30000,
+      "trust": false,
+      "includeTools": [
+        "latex_workspace_list",
+        "latex_read_file",
+        "latex_create_file",
+        "latex_update_file",
+        "latex_validate_project",
+        "latex_compile_pdf"
+      ]
+    }
+  }
+}
