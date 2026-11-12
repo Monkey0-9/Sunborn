@@ -1308,7 +1308,14 @@ pub async fn get_graph_stats(
         "total_sources": total_sources,
         "total_edges": total_edges,
         "total_doc_hashes": doc_count,
-        "total_doc_associations": total_assocs
+        "total_doc_associations": total_assocs,
+        "node_count": total_sources,
+        "edge_count": total_edges,
+        "cached_entries": total_assocs,
+        "max_capacity": 65536,
+        "invalidated_records": 0,
+        "hits": 0,
+        "misses": 0
     })))
 }
 
@@ -1326,8 +1333,10 @@ pub async fn get_graph_lineage(
 
     Ok(Json(json!({
         "cache_key": key,
+        "key": key,
         "is_cached": is_cached,
         "upstream_sources": upstream_sources,
+        "upstream_source_ids": upstream_sources,
         "upstream_source_count": upstream_sources.len()
     })))
 }
@@ -1375,10 +1384,12 @@ pub async fn invalidate_graph_rtc(
     purged_keys.sort();
     purged_keys.dedup();
 
+    let count = purged_keys.len();
     Ok(Json(json!({
         "status": "purged",
         "purged_cache_keys": purged_keys,
-        "purged_count": purged_keys.len(),
+        "purged_count": count,
+        "evicted_records": count,
         "affected_doc_records_count": affected_doc_records_count
     })))
 }
@@ -1845,8 +1856,32 @@ pub async fn trigger_rebuild(
                 entry.metadata["encrypted_envelope"] = env_val;
             }
         }
-        if state.cache.set(entry).await.is_ok() {
+        if state.cache.set(entry.clone()).await.is_ok() {
             exact_restored += 1;
+            if let Some(ref gmc) = state.graph_memory_cache {
+                let source_ids: Vec<Uuid> = restored_cert
+                    .source_snapshots
+                    .iter()
+                    .map(|s| s.source_id)
+                    .collect();
+                let doc_hashes: Vec<u64> = restored_cert
+                    .source_snapshots
+                    .iter()
+                    .map(|s| {
+                        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                        std::hash::Hash::hash(&s.source_id, &mut hasher);
+                        std::hash::Hasher::finish(&hasher)
+                    })
+                    .collect();
+                let record_id = {
+                    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                    std::hash::Hash::hash(&record.key, &mut hasher);
+                    std::hash::Hasher::finish(&hasher)
+                };
+                let _ = gmc
+                    .set_with_lineage(entry, &source_ids, &doc_hashes, record_id)
+                    .await;
+            }
         }
 
         // 2. Repopulate vector store

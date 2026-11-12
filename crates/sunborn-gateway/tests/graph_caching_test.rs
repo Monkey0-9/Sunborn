@@ -113,6 +113,9 @@ async fn test_graph_caching_request_admission_and_rtc_invalidation() {
     assert_eq!(stats_json["graph_dependency_cache_enabled"], true);
     assert!(stats_json["total_sources"].as_u64().unwrap() >= 2);
     assert!(stats_json["total_edges"].as_u64().unwrap() >= 2);
+    assert!(stats_json["node_count"].as_u64().unwrap() >= 2);
+    assert!(stats_json["edge_count"].as_u64().unwrap() >= 2);
+    assert_eq!(stats_json["max_capacity"], 65536);
 
     // 4. Query Graph Lineage API for this cache key
     let lineage_res = app
@@ -132,7 +135,10 @@ async fn test_graph_caching_request_admission_and_rtc_invalidation() {
     let lineage_bytes = lineage_res.into_body().collect().await.unwrap().to_bytes();
     let lineage_json: Value = serde_json::from_slice(&lineage_bytes).unwrap();
     assert_eq!(lineage_json["is_cached"], true);
+    assert_eq!(lineage_json["key"], cache_key);
     let sources = lineage_json["upstream_sources"].as_array().unwrap();
+    let upstream_ids = lineage_json["upstream_source_ids"].as_array().unwrap();
+    assert_eq!(sources, upstream_ids);
     let source_strings: Vec<String> = sources
         .iter()
         .map(|v| v.as_str().unwrap().to_string())
@@ -150,10 +156,7 @@ async fn test_graph_caching_request_admission_and_rtc_invalidation() {
                 .header("content-type", "application/json")
                 .header("x-api-key", "sunborn-admin-key")
                 .body(Body::from(
-                    serde_json::to_vec(&serde_json::json!({
-                        "source_ids": [src_1]
-                    }))
-                    .unwrap(),
+                    serde_json::to_vec(&serde_json::json!({ "source_ids": [src_1] })).unwrap(),
                 ))
                 .unwrap(),
         )
@@ -164,6 +167,8 @@ async fn test_graph_caching_request_admission_and_rtc_invalidation() {
     let rtc_bytes = rtc_res.into_body().collect().await.unwrap().to_bytes();
     let rtc_json: Value = serde_json::from_slice(&rtc_bytes).unwrap();
     assert_eq!(rtc_json["status"], "purged");
+    assert_eq!(rtc_json["purged_count"], 1);
+    assert_eq!(rtc_json["evicted_records"], 1);
     let purged_keys: Vec<String> = rtc_json["purged_cache_keys"]
         .as_array()
         .unwrap()
