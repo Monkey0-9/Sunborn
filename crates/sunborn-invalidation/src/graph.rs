@@ -46,6 +46,16 @@ pub trait KnowledgeGraphStore: Send + Sync {
 
     /// Connectivity / liveness health check
     async fn is_healthy(&self) -> bool;
+
+    /// Find all upstream knowledge sources that a cache key depends on
+    async fn get_upstream_sources(&self, _cache_key: &str) -> Result<Vec<Uuid>> {
+        Ok(Vec::new())
+    }
+
+    /// Retrieve summary statistics: (number of sources, number of dependency edges)
+    async fn get_graph_stats(&self) -> Result<(usize, usize)> {
+        Ok((0, 0))
+    }
 }
 
 /// In-memory hash-based knowledge graph implementation for high-speed local development and testing.
@@ -105,6 +115,28 @@ impl KnowledgeGraphStore for InMemoryGraphStore {
 
     async fn is_healthy(&self) -> bool {
         true
+    }
+
+    async fn get_upstream_sources(&self, cache_key: &str) -> Result<Vec<Uuid>> {
+        let deps = self.dependencies.read().await;
+        let sources = deps
+            .iter()
+            .filter_map(|(src, keys)| {
+                if keys.contains(cache_key) {
+                    Some(*src)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        Ok(sources)
+    }
+
+    async fn get_graph_stats(&self) -> Result<(usize, usize)> {
+        let deps = self.dependencies.read().await;
+        let sources = deps.len();
+        let edges = deps.values().map(|s| s.len()).sum();
+        Ok((sources, edges))
     }
 }
 
@@ -374,6 +406,28 @@ impl KnowledgeGraphStore for MockNeo4jCypherStore {
     async fn is_healthy(&self) -> bool {
         true
     }
+
+    async fn get_upstream_sources(&self, cache_key: &str) -> Result<Vec<Uuid>> {
+        let edges = self.direct_edges.read().await;
+        let sources = edges
+            .iter()
+            .filter_map(|(src, keys)| {
+                if keys.contains(cache_key) {
+                    Some(*src)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        Ok(sources)
+    }
+
+    async fn get_graph_stats(&self) -> Result<(usize, usize)> {
+        let edges = self.direct_edges.read().await;
+        let sources = edges.len();
+        let edge_count = edges.values().map(|s| s.len()).sum();
+        Ok((sources, edge_count))
+    }
 }
 
 /// Dependency graph tracking which cache keys depend on which document/source versions.
@@ -431,6 +485,19 @@ impl DependencyGraph {
     /// Clear recorded dependencies for a source after invalidation
     pub async fn clear_dependencies(&self, source_id: &Uuid) {
         let _ = self.store.clear_dependencies(source_id).await;
+    }
+
+    /// Find all upstream knowledge sources that a cache key depends on
+    pub async fn get_upstream_sources(&self, cache_key: &str) -> Vec<Uuid> {
+        self.store
+            .get_upstream_sources(cache_key)
+            .await
+            .unwrap_or_default()
+    }
+
+    /// Retrieve summary statistics: (number of sources, number of dependency edges)
+    pub async fn get_graph_stats(&self) -> (usize, usize) {
+        self.store.get_graph_stats().await.unwrap_or((0, 0))
     }
 
     /// Execute a Cypher query against the active graph backend

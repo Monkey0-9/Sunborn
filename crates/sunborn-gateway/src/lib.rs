@@ -87,6 +87,15 @@ pub fn create_router(state: AppState) -> Router {
         .route("/v1/messages", post(handlers::anthropic_messages))
         .route("/v1/invalidation", post(handlers::trigger_invalidation))
         .route("/v1/dependencies", post(handlers::record_dependency))
+        .route("/v1/cache/graph/stats", get(handlers::get_graph_stats))
+        .route(
+            "/v1/cache/graph/lineage/{*key}",
+            get(handlers::get_graph_lineage),
+        )
+        .route(
+            "/v1/cache/graph/invalidate",
+            post(handlers::invalidate_graph_rtc),
+        )
         .route(
             "/v1/caches/{*key}",
             get(handlers::get_cache).delete(handlers::delete_cache),

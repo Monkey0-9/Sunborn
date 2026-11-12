@@ -224,6 +224,82 @@ components:
           type: string
           description: RFC 2104 HMAC-SHA256 signature calculated over payload attributes
 
+    GraphCacheStats:
+      type: object
+      required:
+        - node_count
+        - edge_count
+        - cached_entries
+        - max_capacity
+        - invalidated_records
+        - hits
+        - misses
+      properties:
+        node_count:
+          type: integer
+          example: 42
+        edge_count:
+          type: integer
+          example: 128
+        cached_entries:
+          type: integer
+          example: 1024
+        max_capacity:
+          type: integer
+          example: 65536
+        invalidated_records:
+          type: integer
+          example: 5
+        hits:
+          type: integer
+          example: 950
+        misses:
+          type: integer
+          example: 150
+
+    GraphLineageResponse:
+      type: object
+      required:
+        - key
+        - is_cached
+        - upstream_source_ids
+      properties:
+        key:
+          type: string
+        is_cached:
+          type: boolean
+        upstream_source_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    GraphInvalidationRequest:
+      type: object
+      properties:
+        source_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        doc_hashes:
+          type: array
+          items:
+            type: integer
+
+    GraphInvalidationResponse:
+      type: object
+      required:
+        - status
+        - evicted_records
+      properties:
+        status:
+          type: string
+          example: "invalidated"
+        evicted_records:
+          type: integer
+          example: 3
+
 security:
   - ApiKeyAuth: []
   - BearerAuth: []
@@ -549,6 +625,63 @@ paths:
           description: Cache entry deleted
         '403':
           description: Administrative privileges required
+
+  /v1/cache/graph/stats:
+    get:
+      summary: Retrieve Real-Time Causal Lineage Graph Statistics
+      description: Returns real-time metrics for SIMD Roaring Treemap dependency graph and graph memory cache.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Real-time graph cache statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphCacheStats'
+
+  /v1/cache/graph/lineage/{key}:
+    get:
+      summary: Inspect Upstream Dependency Lineage
+      description: Returns upstream source document IDs and cache residency status for a given cache key.
+      parameters:
+        - in: path
+          name: key
+          required: true
+          schema:
+            type: string
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Lineage and cache status for key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphLineageResponse'
+
+  /v1/cache/graph/invalidate:
+    post:
+      summary: Invalidate Downstream Cache Entries via Real-Time Causal Graph
+      description: Triggers SIMD Roaring Bitmap transitive eviction across dependent cached records.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphInvalidationRequest'
+      responses:
+        '200':
+          description: Invalidation executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphInvalidationResponse'
 
   /v1/governance/provision:
     post:

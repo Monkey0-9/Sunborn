@@ -290,6 +290,54 @@ export function handleSimulatedRoute(
     };
   }
 
+  // 9b. Real-Time Causal (RTC) Graph Cache & Lineage
+  if (norm === "v1/cache/graph/stats") {
+    return {
+      status: 200,
+      body: {
+        node_count: 32,
+        edge_count: 84,
+        cached_entries: 512,
+        max_capacity: 65536,
+        invalidated_records: 14,
+        hits: 840,
+        misses: 120,
+      },
+    };
+  }
+
+  if (norm.startsWith("v1/cache/graph/lineage")) {
+    const key = norm.replace(/^v1\/cache\/graph\/lineage\/?/, "");
+    return {
+      status: 200,
+      body: {
+        key: key || "sample-query-key",
+        is_cached: true,
+        upstream_source_ids: [
+          "9a1f4b2e-0000-0000-0000-000000000001",
+          "8c3d1a7c-0000-0000-0000-000000000002",
+        ],
+      },
+    };
+  }
+
+  if (norm === "v1/cache/graph/invalidate") {
+    let count = 6;
+    try {
+      if (rawBody) {
+        const parsed = JSON.parse(rawBody);
+        count = (parsed.source_ids?.length || 0) * 3 + (parsed.doc_hashes?.length || 0) * 2;
+      }
+    } catch {}
+    return {
+      status: 200,
+      body: {
+        status: "invalidated",
+        evicted_records: Math.max(1, count),
+      },
+    };
+  }
+
   // 10. Adaptive Learning Policies
   if (norm === "v1/learning/policies") {
     return {

@@ -703,7 +703,39 @@ pub async fn execute_request_inner(
             if let Some(ref env_val) = envelope_meta {
                 entry.metadata["encrypted_envelope"] = env_val.clone();
             }
-            let _ = state.cache.set(entry).await;
+            let _ = state.cache.set(entry.clone()).await;
+
+            // Bind into knowledge dependency graph and graph memory cache
+            for snap in &req.dependency_snapshots {
+                let _ = state
+                    .dependency_graph
+                    .record_dependency(snap.source_id, &identity.key)
+                    .await;
+            }
+            if let Some(ref gmc) = state.graph_memory_cache {
+                let source_ids: Vec<Uuid> = req
+                    .dependency_snapshots
+                    .iter()
+                    .map(|s| s.source_id)
+                    .collect();
+                let doc_hashes: Vec<u64> = req
+                    .dependency_snapshots
+                    .iter()
+                    .map(|s| {
+                        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                        std::hash::Hash::hash(&s.source_id, &mut hasher);
+                        std::hash::Hasher::finish(&hasher)
+                    })
+                    .collect();
+                let record_id = {
+                    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                    std::hash::Hash::hash(&identity.key, &mut hasher);
+                    std::hash::Hasher::finish(&hasher)
+                };
+                let _ = gmc
+                    .set_with_lineage(entry, &source_ids, &doc_hashes, record_id)
+                    .await;
+            }
 
             // b) Admit into semantic vector store
             if let Ok(vector) = state.selected_embedder.embed(&req.prompt).await {
@@ -1183,6 +1215,11 @@ pub async fn trigger_invalidation(
         .map_err(AppError::from)?
         .unwrap_or(0);
 
+    // Immediate Real-Time Causal (RTC) cache purge on graph memory cache
+    if let Some(ref gmc) = state.graph_memory_cache {
+        let _ = gmc.invalidate_source_rtc(&payload.source_id).await;
+    }
+
     let bumped_epoch = state
         .epoch_lease_manager
         .bump_epoch(payload.source_id)
@@ -1226,6 +1263,109 @@ pub async fn record_dependency(
         "status": "recorded",
         "source_id": payload.source_id,
         "cache_key": payload.cache_key
+    })))
+}
+
+#[derive(Deserialize)]
+pub struct GraphRtcInvalidateRequest {
+    #[serde(default)]
+    pub source_ids: Vec<Uuid>,
+    #[serde(default)]
+    pub doc_hashes: Vec<u64>,
+}
+
+pub async fn get_graph_stats(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    sec_ctx
+        .require_admin()
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
+    let (total_sources, total_edges) = state.dependency_graph.get_graph_stats().await;
+    let (doc_count, total_assocs) = if let Some(ref gmc) = state.graph_memory_cache {
+        (
+            gmc.lineage_graph().document_count(),
+            gmc.lineage_graph().total_associations(),
+        )
+    } else {
+        (0, 0)
+    };
+
+    Ok(Json(json!({
+        "status": "healthy",
+        "graph_dependency_cache_enabled": state.graph_memory_cache.is_some(),
+        "total_sources": total_sources,
+        "total_edges": total_edges,
+        "total_doc_hashes": doc_count,
+        "total_doc_associations": total_assocs
+    })))
+}
+
+pub async fn get_graph_lineage(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    Path(key): Path<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    sec_ctx
+        .require_admin()
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
+    let upstream_sources = state.dependency_graph.get_upstream_sources(&key).await;
+    let is_cached = state.cache.exists(&key).await.unwrap_or(false);
+
+    Ok(Json(json!({
+        "cache_key": key,
+        "is_cached": is_cached,
+        "upstream_sources": upstream_sources,
+        "upstream_source_count": upstream_sources.len()
+    })))
+}
+
+pub async fn invalidate_graph_rtc(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    Json(payload): Json<GraphRtcInvalidateRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    sec_ctx
+        .require_admin()
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
+    let mut purged_keys = Vec::new();
+    let mut affected_doc_records_count = 0;
+
+    for src in &payload.source_ids {
+        if let Some(ref gmc) = state.graph_memory_cache {
+            if let Ok(keys) = gmc.invalidate_source_rtc(src).await {
+                purged_keys.extend(keys);
+            }
+        } else {
+            let keys = state.dependency_graph.get_affected_cache_keys(src).await;
+            for k in &keys {
+                let _ = state.cache.delete(k).await;
+            }
+            state.dependency_graph.clear_dependencies(src).await;
+            purged_keys.extend(keys);
+        }
+        state.epoch_lease_manager.bump_epoch(*src).await;
+        state.watermark_fencer.advance_watermark(&src.to_string());
+    }
+
+    if !payload.doc_hashes.is_empty() {
+        if let Some(ref gmc) = state.graph_memory_cache {
+            let affected = gmc.invalidate_docs_rtc(&payload.doc_hashes);
+            affected_doc_records_count = affected.len() as usize;
+        }
+    }
+
+    purged_keys.sort();
+    purged_keys.dedup();
+
+    Ok(Json(json!({
+        "status": "purged",
+        "purged_cache_keys": purged_keys,
+        "purged_count": purged_keys.len(),
+        "affected_doc_records_count": affected_doc_records_count
     })))
 }
 

@@ -17,6 +17,15 @@ use sunborn_cache::{CacheEntry, ExactCacheStore, MemoryExactCache};
 use sunborn_core::Result;
 use uuid::Uuid;
 
+/// Statistics representing active graph cache topology and lineage associations.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct GraphCacheStats {
+    pub total_sources: usize,
+    pub total_edges: usize,
+    pub total_doc_hashes: usize,
+    pub total_doc_associations: usize,
+}
+
 /// Graph-based memory cache linking in-memory key-value caching with causal lineage graphs.
 #[derive(Clone)]
 pub struct GraphMemoryCache {
@@ -115,6 +124,22 @@ impl GraphMemoryCache {
     /// Evaluates SIMD Roaring Treemap bitmap unions in $O(k)$ time and returns affected record IDs.
     pub fn invalidate_docs_rtc(&self, doc_hashes: &[u64]) -> RoaringTreemap {
         self.lineage_graph.invalidate_documents(doc_hashes)
+    }
+
+    /// Returns aggregated statistics across dependency graph and compressed roaring lineage.
+    pub async fn stats(&self) -> GraphCacheStats {
+        let (total_sources, total_edges) = self.dependency_graph.get_graph_stats().await;
+        GraphCacheStats {
+            total_sources,
+            total_edges,
+            total_doc_hashes: self.lineage_graph.document_count(),
+            total_doc_associations: self.lineage_graph.total_associations(),
+        }
+    }
+
+    /// Queries upstream sources for a given cache key.
+    pub async fn get_upstream_sources(&self, cache_key: &str) -> Vec<Uuid> {
+        self.dependency_graph.get_upstream_sources(cache_key).await
     }
 }
 

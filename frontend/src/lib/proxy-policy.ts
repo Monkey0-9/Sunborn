@@ -14,6 +14,7 @@ export const PRIVILEGED_ADMIN_PREFIXES = [
   "v1/learning/promote",
   "v1/learning/rollback",
   "v1/caches",
+  "v1/cache/graph/invalidate",
   "v1/invalidation",
   "v1/execution/evict",
   "v1/rebuild",

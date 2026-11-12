@@ -519,5 +519,33 @@ export const sunbornApi = {
 
   getMetrics: () =>
     request<string>("metrics", { method: "GET" }),
+
+  // Real-Time Causal (RTC) Graph Caching & Lineage
+  getGraphStats: () =>
+    request<{
+      node_count: number;
+      edge_count: number;
+      cached_entries: number;
+      max_capacity: number;
+      invalidated_records: number;
+      hits: number;
+      misses: number;
+    }>("v1/cache/graph/stats", { method: "GET" }),
+
+  getGraphLineage: (key: string) =>
+    request<{
+      key: string;
+      is_cached: boolean;
+      upstream_source_ids: string[];
+    }>(`v1/cache/graph/lineage/${encodeURIComponent(key)}`, { method: "GET" }),
+
+  invalidateGraphRtc: (payload: { source_ids?: string[]; doc_hashes?: number[] }) =>
+    request<{
+      status: string;
+      evicted_records: number;
+    }>("v1/cache/graph/invalidate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };
 

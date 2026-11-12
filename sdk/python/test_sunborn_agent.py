@@ -321,6 +321,52 @@ class TestSunbornClient(unittest.TestCase):
         res = client._get("empty/endpoint")
         self.assertEqual(res, {})
 
+    @patch("sunborn_agent.urllib.request.urlopen")
+    def test_graph_caching_sdk_methods(self, mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.read.return_value = b'{"node_count": 10, "edge_count": 25, "cached_entries": 100, "max_capacity": 65536, "invalidated_records": 2, "hits": 80, "misses": 20}'
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        client = SunbornClient(api_key="test-key")
+        stats = client.get_graph_stats()
+        self.assertEqual(stats["node_count"], 10)
+        self.assertEqual(stats["edge_count"], 25)
+
+        # Lineage check
+        mock_response.read.return_value = b'{"key": "test-key-1", "is_cached": true, "upstream_source_ids": ["00000000-0000-0000-0000-000000000001"]}'
+        lineage = client.get_graph_lineage("test-key-1")
+        self.assertTrue(lineage["is_cached"])
+        self.assertEqual(lineage["upstream_source_ids"][0], "00000000-0000-0000-0000-000000000001")
+
+        # Invalidation check
+        mock_response.read.return_value = b'{"status": "invalidated", "evicted_records": 1}'
+        inv = client.invalidate_graph_rtc(source_ids=["00000000-0000-0000-0000-000000000001"], doc_hashes=[12345])
+        self.assertEqual(inv["status"], "invalidated")
+        self.assertEqual(inv["evicted_records"], 1)
+
+    @patch("sunborn_agent.urllib.request.urlopen")
+    def test_async_graph_caching_sdk_methods(self, mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.read.return_value = b'{"node_count": 5, "edge_count": 12, "cached_entries": 50, "max_capacity": 65536, "invalidated_records": 0, "hits": 45, "misses": 5}'
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        async def run_async():
+            async with AsyncSunbornClient(api_key="test-key") as client:
+                stats = await client.get_graph_stats()
+                self.assertEqual(stats["node_count"], 5)
+
+                mock_response.read.return_value = b'{"key": "test-key-2", "is_cached": false, "upstream_source_ids": []}'
+                lineage = await client.get_graph_lineage("test-key-2")
+                self.assertFalse(lineage["is_cached"])
+
+                mock_response.read.return_value = b'{"status": "invalidated", "evicted_records": 0}'
+                inv = await client.invalidate_graph_rtc(doc_hashes=[999])
+                self.assertEqual(inv["evicted_records"], 0)
+
+        asyncio.run(run_async())
+
 
 if __name__ == "__main__":
     unittest.main()

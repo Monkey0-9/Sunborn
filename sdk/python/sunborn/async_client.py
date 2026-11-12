@@ -101,3 +101,21 @@ class AsyncSunbornClient:
         return await asyncio.to_thread(
             self._sync_client.record_tool_result, *args, **kwargs
         )
+
+    async def get_graph_stats(self) -> dict:
+        """Asynchronously retrieves real-time graph memory cache and lineage graph statistics."""
+        return await asyncio.to_thread(self._sync_client.get_graph_stats)
+
+    async def get_graph_lineage(self, key: str) -> dict:
+        """Asynchronously inspects upstream document lineage and cache residency for a key."""
+        return await asyncio.to_thread(self._sync_client.get_graph_lineage, key)
+
+    async def invalidate_graph_rtc(
+        self,
+        source_ids: list[str] | None = None,
+        doc_hashes: list[int] | None = None,
+    ) -> dict:
+        """Asynchronously triggers Real-Time Causal (RTC) transitive invalidation."""
+        return await asyncio.to_thread(
+            self._sync_client.invalidate_graph_rtc, source_ids, doc_hashes
+        )

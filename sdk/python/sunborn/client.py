@@ -308,6 +308,26 @@ class SunbornClient:
         }
         return self._post("execution/results", payload)
 
+    def get_graph_stats(self) -> dict:
+        """Retrieves real-time graph memory cache and lineage graph statistics."""
+        return self._get("cache/graph/stats")
+
+    def get_graph_lineage(self, key: str) -> dict:
+        """Inspects upstream document lineage and cache residency for a given cache key."""
+        return self._get(f"cache/graph/lineage/{key.lstrip('/')}")
+
+    def invalidate_graph_rtc(
+        self,
+        source_ids: list[str] | None = None,
+        doc_hashes: list[int] | None = None,
+    ) -> dict:
+        """Triggers Real-Time Causal (RTC) transitive invalidation over SIMD Roaring Bitmaps."""
+        payload: dict[str, Any] = {
+            "source_ids": source_ids or [],
+            "doc_hashes": doc_hashes or [],
+        }
+        return self._post("cache/graph/invalidate", payload)
+
 
 def get_default_client() -> SunbornClient:
     api_key = os.environ.get("SUNBORN_API_KEY")
