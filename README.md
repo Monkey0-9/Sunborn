@@ -3,7 +3,7 @@
 [![CI Pipeline](https://img.shields.io/badge/CI-Passing%20(11%2F11%20Gates)-brightgreen?style=flat-square)](scripts/verify.sh)
 [![Rust 1.80+](https://img.shields.io/badge/Rust-1.80%2B-orange?style=flat-square&logo=rust)](Cargo.toml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
-[![Test Suite](https://img.shields.io/badge/Tests-340%2B%20Passing-success?style=flat-square)](docs/engineering/CLAIM_AND_EVIDENCE_REGISTER.md)
+[![Test Suite](https://img.shields.io/badge/Tests-342%20Passing-success?style=flat-square)](docs/engineering/CLAIM_AND_EVIDENCE_REGISTER.md)
 [![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-49%20Endpoints%20(0%20Drift)-purple?style=flat-square)](openapi.yaml)
 [![Python SDK](https://img.shields.io/badge/Python%20SDK-Sync%20%26%20Async-3776ab?style=flat-square&logo=python)](sdk/python)
 
@@ -216,6 +216,26 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 ```
 *Result*: Structural guardrails detect negation/antonym drift (`configure` vs `bypass`). Semantic cache lookup is rejected; query safely falls through to origin without returning inaccurate cached data.
 
+### 5. Inspect Graph Lineage & Real-Time Causal (RTC) Invalidation
+```bash
+# Get live dependency graph stats
+curl -X GET http://localhost:8080/v1/cache/graph/stats \
+  -H "x-api-key: test-key-alpha"
+
+# Query upstream document lineage for a cached execution key
+curl -X GET "http://localhost:8080/v1/cache/graph/lineage/exact:tenant-alpha:sample-cache-key" \
+  -H "x-api-key: test-key-alpha"
+
+# Invalidate all downstream cached records dependent on a modified source
+curl -X POST http://localhost:8080/v1/cache/graph/invalidate \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: test-key-alpha" \
+  -d '{
+    "source_ids": ["9a1f4b2e-0000-0000-0000-000000000001"]
+  }'
+```
+*Result*: Roaring Bitmap SIMD engine evaluates transitive dependencies and purges all stale downstream entries in <50 µs without locking the cache.
+
 ---
 
 ## 🐍 Python SDK & Agent Integration
@@ -385,7 +405,7 @@ bash scripts/verify.sh       # Linux / macOS
 # Or on Windows:
 powershell -File scripts/verify.ps1
 
-# 2. Run Cargo Workspace Tests (248 Tests)
+# 2. Run Cargo Workspace Tests (250 Tests)
 cargo test --workspace --all-targets
 
 # 3. Run Generative Invariant & Fuzz Testing
@@ -395,11 +415,11 @@ cargo test -p sunborn-identity --test fuzz_canonicalize_test
 # 4. Run Frontend Control Plane Tests & Production Build (37 Tests)
 cd frontend && npm test && npm run build
 
-# 5. Run Python SDK Test Matrix (24 Tests)
+# 5. Run Python SDK Test Matrix (26 Tests)
 python -m unittest sdk/python/test_sunborn_agent.py
 python -m unittest sdk/python/tests/test_sdk_package.py
 
-# 6. Run Adversarial Robustness & Generalization Suite (70 Scenarios)
+# 6. Run Adversarial Robustness & Generalization Suite (39 Scenarios)
 python benchmarks/adversarial_evaluation_suite.py
 python research/verify_certificate.py
 ```

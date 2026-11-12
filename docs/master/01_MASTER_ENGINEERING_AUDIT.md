@@ -34,7 +34,7 @@ Sunborn is an enterprise AI infrastructure platform designed to solve the **Sema
   - Spend velocity controller enforcing atomic 5-stage budget reservation: `Reserve -> Authorize -> Execute -> Settle -> Release`.
   - Zero-hit reporting and amortized token utility scoring.
 - **Multi-Language Verification Suite**:
-  - 248+ Rust unit, integration, and property tests passing.
+  - 250 Rust unit, integration, and property tests passing.
   - 37 Next.js 15 frontend tests passing with WCAG 2.2 AA accessibility.
   - 24 Python SDK unit tests passing.
   - 46/46 OpenAPI 3.1 gateway operations verified with zero drift.

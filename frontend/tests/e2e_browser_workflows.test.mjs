@@ -19,7 +19,8 @@ const __dirname = path.dirname(__filename);
 const frontendDir = path.resolve(__dirname, '..');
 
 // Avoid accidentally reusing a stale Next.js process from a prior interrupted run.
-const TEST_PORT = 38000 + (process.pid % 20000);
+// Use port range 31000-38999, safely below Windows TCP dynamic excluded ranges (49152-65535).
+const TEST_PORT = 31000 + (process.pid % 8000);
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 
 let nextProcess = null;
@@ -40,10 +41,14 @@ before(async () => {
 
   // Start Next.js in production mode
   const nextJsBin = path.join(frontendDir, 'node_modules', 'next', 'dist', 'bin', 'next');
+  let startupError = '';
   nextProcess = spawn(process.execPath, [nextJsBin, 'start', '-p', `${TEST_PORT}`, '-H', '127.0.0.1'], {
     cwd: frontendDir,
     env: { ...process.env, PORT: `${TEST_PORT}`, NODE_ENV: 'production' },
-    stdio: 'ignore',
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  nextProcess.stderr.on('data', (chunk) => {
+    startupError += chunk.toString();
   });
 
   // Wait for health check
@@ -72,7 +77,7 @@ before(async () => {
     }
   }
 
-  assert.ok(isReady, `Next.js failed to start on ${BASE_URL} within 15 seconds`);
+  assert.ok(isReady, `Next.js failed to start on ${BASE_URL} within 15 seconds. Stderr: ${startupError}`);
 
   // Launch headless browser
   try {

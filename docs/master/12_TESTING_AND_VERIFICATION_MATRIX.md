@@ -18,16 +18,16 @@ Sunborn Platform Master System Verification (PowerShell)
        ✓ cargo check --workspace: Passed (0 errors)
        ✓ cargo clippy --workspace --all-targets -- -D warnings: Passed (0 warnings)
        ✓ cargo fmt --check: Clean
-       ✓ cargo test --workspace --all-targets: 248+ tests passed (0 failures)
+       ✓ cargo test --workspace --all-targets: 250 tests passed (0 failures)
 [2/11] Building Frontend Production Bundle...
        ✓ npm run build --prefix frontend: Clean production build (15 routes)
 [3/11] Running Frontend Test Suite...
        ✓ npm test --prefix frontend: 37/37 tests passed (0 failed, 0 skipped)
 [4/11] Running Python SDK Packaging & Clean Installation Verification...
-       ✓ sdk/python/test_sunborn_agent.py: 19/19 passed
+       ✓ sdk/python/test_sunborn_agent.py: 21/21 passed
        ✓ sdk/python/tests/test_sdk_package.py: 5/5 passed
 [5/11] Validating OpenAPI 3.1 Specification Drift...
-       ✓ 46/46 operations match OpenAPI spec (0 drift)
+       ✓ 49/49 operations match OpenAPI spec (0 drift)
 [6/11] Running Helm Chart Lint & Schema Validation...
        ✓ Helm template & values.schema.json verified
 [7/11] Running Multi-Container Live Stack Pre-Flight...

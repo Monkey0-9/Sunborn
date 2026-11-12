@@ -6,7 +6,7 @@
 # ==============================================================================
 
 set -eu
-set -o pipefail
+(set -o pipefail 2>/dev/null) && set -o pipefail || true
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -20,6 +20,36 @@ if [[ -x "${WORKSPACE_ROOT}/.venv/bin/python" ]]; then
     PYTHON_BIN="${WORKSPACE_ROOT}/.venv/bin/python"
 elif [[ -x "${WORKSPACE_ROOT}/.venv/Scripts/python.exe" ]]; then
     PYTHON_BIN="${WORKSPACE_ROOT}/.venv/Scripts/python.exe"
+fi
+
+CARGO_BIN="cargo"
+RUSTC_BIN="rustc"
+if ! command -v cargo >/dev/null 2>&1; then
+    if command -v cargo.exe >/dev/null 2>&1; then
+        CARGO_BIN="cargo.exe"
+        RUSTC_BIN="rustc.exe"
+    elif [ -f "$HOME/.cargo/bin/cargo" ]; then
+        CARGO_BIN="$HOME/.cargo/bin/cargo"
+        RUSTC_BIN="$HOME/.cargo/bin/rustc"
+    elif [ -f "$HOME/.cargo/bin/cargo.exe" ]; then
+        CARGO_BIN="$HOME/.cargo/bin/cargo.exe"
+        RUSTC_BIN="$HOME/.cargo/bin/rustc.exe"
+    else
+        WIN_CARGO=$(find /mnt/c/Users -maxdepth 4 -name "cargo.exe" 2>/dev/null | head -n 1)
+        if [ -n "${WIN_CARGO}" ]; then
+            CARGO_BIN="${WIN_CARGO}"
+            RUSTC_BIN="$(dirname "${WIN_CARGO}")/rustc.exe"
+        fi
+    fi
+fi
+export CARGO_BIN="${CARGO_BIN}"
+export RUSTC_BIN="${RUSTC_BIN}"
+
+NPM_BIN="npm"
+if ! command -v npm >/dev/null 2>&1; then
+    if command -v npm.cmd >/dev/null 2>&1; then
+        NPM_BIN="npm.cmd"
+    fi
 fi
 
 GIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
@@ -44,29 +74,29 @@ echo "========================================================================"
 
 echo ""
 echo "[1/5] Verifying Rust Workspace & Code Quality..."
-cargo --version
-rustc --version
-cargo fmt --all -- --check
-cargo clippy --all-targets --all-features -- -D warnings
+"${CARGO_BIN}" --version
+"${RUSTC_BIN}" --version
+"${CARGO_BIN}" fmt --all -- --check
+"${CARGO_BIN}" clippy --all-targets --all-features -- -D warnings
 echo "==> Code formatting and strict clippy checks PASSED."
 
 echo ""
 echo "[2/5] Running Core System Verification Test Suites..."
-cargo test --workspace --all-targets
+"${CARGO_BIN}" test --workspace --all-targets
 "${PYTHON_BIN}" -m unittest sdk/python/test_sunborn_agent.py
-if command -v npm >/dev/null 2>&1 && [[ -d frontend/node_modules ]]; then
+if command -v "${NPM_BIN}" >/dev/null 2>&1 && [[ -d frontend/node_modules ]]; then
     if [[ ! -f frontend/.next/BUILD_ID ]]; then
         echo "[*] Compiling Next.js production bundle for frontend test runner..."
-        npm run build --prefix frontend
+        "${NPM_BIN}" run build --prefix frontend
     fi
-    npm test --prefix frontend
+    "${NPM_BIN}" test --prefix frontend
 fi
 echo "==> All unit, integration, and contract tests PASSED."
 
 echo ""
 echo "[3/5] Executing Live Gateway Performance & Latency Verification..."
 PERF_LOG=$(mktemp)
-cargo test --test performance_test -- --nocapture | tee "${PERF_LOG}"
+"${CARGO_BIN}" test --test performance_test -- --nocapture | tee "${PERF_LOG}"
 echo "------------------------------------------------------------------------"
 echo "Empirical Latency Decomposition (ACM/IEEE Discipline):"
 echo "  [Table I]  In-Process CPU Engine Overhead (Zero-Network L1 Baseline):"
@@ -93,14 +123,14 @@ echo "==> Gateway latency SLO verified: Full stack P99 is ${GATEWAY_P99_US} µs 
 
 echo ""
 echo "[4/5] Executing Security, Chaos & Governance Compliance Tests..."
-cargo test --test security_test -- --nocapture
-cargo test --test chaos_test -- --nocapture
-cargo test --test governance_test -- --nocapture
-cargo test --test disaster_recovery_test -- --nocapture
-cargo test --test simulation_test -- --nocapture
-cargo test --test learning_controller_test -- --nocapture
-cargo test --test production_startup_test -- --nocapture
-cargo test --test adversarial_security_test -- --nocapture
+"${CARGO_BIN}" test --test security_test -- --nocapture
+"${CARGO_BIN}" test --test chaos_test -- --nocapture
+"${CARGO_BIN}" test --test governance_test -- --nocapture
+"${CARGO_BIN}" test --test disaster_recovery_test -- --nocapture
+"${CARGO_BIN}" test --test simulation_test -- --nocapture
+"${CARGO_BIN}" test --test learning_controller_test -- --nocapture
+"${CARGO_BIN}" test --test production_startup_test -- --nocapture
+"${CARGO_BIN}" test --test adversarial_security_test -- --nocapture
 echo "==> Zero cross-tenant leakage, tenant spoofing prevention, circuit-breaker fallback, DST Non-Accelerator Authority, production startup fail-closed, adversarial security, and 5-layer learning controller verified."
 
 echo ""
@@ -123,7 +153,7 @@ else
     # The live benchmark uses one least-privilege credential per isolated
     # application so each case is authorized without sharing cache state.
     export SUNBORN_API_KEYS="$("${PYTHON_BIN}" research/benchmark_credentials.py)"
-    cargo build --bin sunborn-gateway
+    "${CARGO_BIN}" build --bin sunborn-gateway
     GATEWAY_BIN="./target/debug/sunborn-gateway"
     if [[ -f "./target/debug/sunborn-gateway.exe" ]]; then
         GATEWAY_BIN="./target/debug/sunborn-gateway.exe"
@@ -188,8 +218,10 @@ with open('${MANIFEST_ARTIFACT}', 'rb') as f:
     manifest_sha = hashlib.sha256(manifest_bytes).hexdigest()
     manifest_data = json.loads(manifest_bytes.decode('utf-8'))
 
-rustc_ver = subprocess.run(['rustc', '--version'], capture_output=True, text=True).stdout.strip()
-cargo_ver = subprocess.run(['cargo', '--version'], capture_output=True, text=True).stdout.strip()
+rustc_cmd = os.environ.get('RUSTC_BIN') or 'rustc'
+cargo_cmd = os.environ.get('CARGO_BIN') or 'cargo'
+rustc_ver = subprocess.run([rustc_cmd, '--version'], capture_output=True, text=True).stdout.strip()
+cargo_ver = subprocess.run([cargo_cmd, '--version'], capture_output=True, text=True).stdout.strip()
 git_tree = subprocess.run(['git', 'rev-parse', 'HEAD^{tree}'], capture_output=True, text=True).stdout.strip()
 
 meta = bench_data.get('metadata', {})
