@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling>=1.26,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sunborn-latex-mcp"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["mcp>=2.0.0,<3.0.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3,<9", "ruff>=0.9,<1"]
+
+[project.scripts]
+sunborn-latex-mcp = "sunborn_latex_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sunborn_latex_mcp"]
