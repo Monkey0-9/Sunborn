@@ -14,22 +14,49 @@ echo "========================================================================"
 echo "Sunborn Platform Master System Verification"
 echo "========================================================================"
 
-echo "[1/11] Running Rust Workspace Tests & Clippy..."
-cargo check --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --check
-cargo test --workspace --all-targets
+CARGO_BIN="cargo"
+if ! command -v cargo >/dev/null 2>&1; then
+    if command -v cargo.exe >/dev/null 2>&1; then
+        CARGO_BIN="cargo.exe"
+    elif [ -f "$HOME/.cargo/bin/cargo" ]; then
+        CARGO_BIN="$HOME/.cargo/bin/cargo"
+    elif [ -f "$HOME/.cargo/bin/cargo.exe" ]; then
+        CARGO_BIN="$HOME/.cargo/bin/cargo.exe"
+    else
+        WIN_CARGO=$(find /mnt/c/Users -maxdepth 4 -name "cargo.exe" 2>/dev/null | head -n 1)
+        if [ -n "${WIN_CARGO}" ]; then
+            CARGO_BIN="${WIN_CARGO}"
+        fi
+    fi
+fi
 
-echo "[2/11] Building Frontend Production Bundle..."
-npm run build --prefix frontend
-
-echo "[3/11] Running Frontend Test Suite..."
-npm test --prefix frontend
+NPM_BIN="npm"
+if ! command -v npm >/dev/null 2>&1; then
+    if command -v npm.cmd >/dev/null 2>&1; then
+        NPM_BIN="npm.cmd"
+    fi
+fi
 
 PYTHON_BIN="python"
 if command -v python3 >/dev/null 2>&1 && python3 -c "import sys" 2>/dev/null; then
     PYTHON_BIN="python3"
+elif command -v python >/dev/null 2>&1 && python -c "import sys" 2>/dev/null; then
+    PYTHON_BIN="python"
+elif command -v python.exe >/dev/null 2>&1; then
+    PYTHON_BIN="python.exe"
 fi
+
+echo "[1/11] Running Rust Workspace Tests & Clippy..."
+"${CARGO_BIN}" check --workspace
+"${CARGO_BIN}" clippy --workspace --all-targets -- -D warnings
+"${CARGO_BIN}" fmt --check
+"${CARGO_BIN}" test --workspace --all-targets
+
+echo "[2/11] Building Frontend Production Bundle..."
+"${NPM_BIN}" run build --prefix frontend
+
+echo "[3/11] Running Frontend Test Suite..."
+"${NPM_BIN}" test --prefix frontend
 
 echo "[4/11] Running Python SDK Packaging & Clean Installation Verification..."
 bash scripts/test_python_sdk.sh

@@ -3,8 +3,8 @@
 [![CI Pipeline](https://img.shields.io/badge/CI-Passing%20(11%2F11%20Gates)-brightgreen?style=flat-square)](scripts/verify.sh)
 [![Rust 1.80+](https://img.shields.io/badge/Rust-1.80%2B-orange?style=flat-square&logo=rust)](Cargo.toml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
-[![Test Suite](https://img.shields.io/badge/Tests-338%20Passing-success?style=flat-square)](docs/engineering/CLAIM_AND_EVIDENCE_REGISTER.md)
-[![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-3.1%20Parity-purple?style=flat-square)](openapi.yaml)
+[![Test Suite](https://img.shields.io/badge/Tests-340%2B%20Passing-success?style=flat-square)](docs/engineering/CLAIM_AND_EVIDENCE_REGISTER.md)
+[![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-49%20Endpoints%20(0%20Drift)-purple?style=flat-square)](openapi.yaml)
 [![Python SDK](https://img.shields.io/badge/Python%20SDK-Sync%20%26%20Async-3776ab?style=flat-square&logo=python)](sdk/python)
 
 **Sunborn** is an enterprise-grade semantic execution gateway and multi-tier cache designed for high-throughput LLM applications and agentic workflows. Built in Rust on the Axum framework, Sunborn sits as a transparent reverse proxy between client applications and LLM providers (OpenAI, Anthropic Claude, self-hosted vLLM).
@@ -261,6 +261,22 @@ client = SunbornClient(base_url="http://localhost:8080/v1", api_key="demo-key")
 def fetch_portfolio_balance(account_id: str) -> dict:
     # Executed only on cache miss; memoized in Sunborn DAG
     return {"account_id": account_id, "balance_usd": 1250450.00}
+```
+
+### Real-Time Causal (RTC) Graph Lineage & Invalidation
+
+```python
+# Inspect live Roaring Treemap dependency graph statistics
+stats = client.get_graph_stats()
+print(f"Graph nodes: {stats['node_count']}, edges: {stats['edge_count']}, cached: {stats['cached_entries']}")
+
+# Inspect upstream document lineage for a specific cache key
+lineage = client.get_graph_lineage("sample-cache-key")
+print(f"Is cached: {lineage['is_cached']}, Upstream sources: {lineage['upstream_source_ids']}")
+
+# Trigger sub-50µs SIMD Real-Time Causal invalidation across dependent records
+res = client.invalidate_graph_rtc(source_ids=["9a1f4b2e-0000-0000-0000-000000000001"])
+print(f"Invalidated {res['evicted_records']} downstream cached entries in real time.")
 ```
 
 ---

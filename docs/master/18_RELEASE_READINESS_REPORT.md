@@ -21,7 +21,7 @@ All 7 production readiness gates (**Gate A through Gate G**) have been evaluated
 
 ```mermaid
 flowchart TD
-    GA["Gate A: Functional Completeness<br/>(248 Rust Tests, 9 Crates)"] --> Passed{"All Gates Passed?"}
+    GA["Gate A: Functional Completeness<br/>(250+ Rust Tests, 9 Crates)"] --> Passed{"All Gates Passed?"}
     GB["Gate B: Security & Cryptography<br/>(0 CVEs, Distroless, AEAD)"] --> Passed
     GC["Gate C: Semantic Inversion Safety<br/>(0.0% False Hits, CRC Bounds)"] --> Passed
     GD["Gate D: Performance & Latency<br/>(571k req/s L1, P99 < 500µs)"] --> Passed
@@ -40,8 +40,8 @@ flowchart TD
   * `cargo check --workspace`: 0 errors.
   * `cargo clippy --workspace --all-targets -- -D warnings`: 0 warnings.
   * `cargo fmt --check`: Clean formatting.
-  * `cargo test --workspace --all-targets`: **248 tests passed**, 0 failures.
-  * Axum reverse proxy correctly maps OpenAI and Anthropic completion routes.
+  * `cargo test --workspace --all-targets`: **250+ tests passed**, 0 failures (including end-to-end `graph_caching_test`).
+  * Axum reverse proxy correctly maps OpenAI and Anthropic completion routes with automatic SIMD Roaring Treemap graph cache lineage binding.
   * In-process W-TinyLFU, DragonflyDB L2 adapter, and Qdrant vector client operate reliably.
 
 ---

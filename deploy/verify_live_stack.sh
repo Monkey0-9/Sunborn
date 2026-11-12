@@ -5,7 +5,7 @@
 # and environment contracts across the entire Sunborn deployment stack.
 # ==============================================================================
 set -eu
-set -o pipefail
+(set -o pipefail 2>/dev/null) && set -o pipefail || true
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"

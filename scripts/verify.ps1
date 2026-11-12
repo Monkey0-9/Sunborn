@@ -42,6 +42,10 @@ if (Get-Command python3 -ErrorAction SilentlyContinue) {
 }
 
 Write-Host "[4/11] Running Python SDK Packaging & Clean Installation Verification..." -ForegroundColor Yellow
+if (Get-Command bash -ErrorAction SilentlyContinue) {
+    & bash scripts/test_python_sdk.sh
+    if ($LASTEXITCODE -ne 0) { throw "Python SDK clean wheel install smoke test failed" }
+}
 $env:PYTHONPATH = "sdk/python"
 & $PythonBin -m unittest sdk/python/test_sunborn_agent.py
 if ($LASTEXITCODE -ne 0) { throw "Python SDK agent test failed" }

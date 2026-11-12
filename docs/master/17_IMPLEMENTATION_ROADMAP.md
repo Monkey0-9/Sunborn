@@ -49,7 +49,8 @@ flowchart LR
   2. *Failure-Safe Outbox Processing*: Overhaul `crates/sunborn-invalidation/src/outbox.rs` with per-target deletion acknowledgments, exponential retry backoff, Dead-Letter Queue (DLQ) routing, and strict dependency retention on failure.
   3. *Monotonic Epoch Watermarks*: Implement uint64 epoch leases to prevent stale writeback races when documents mutate during in-flight LLM calls.
   4. *Roaring Bitmap Invalidation Graph*: Deploy 64-bit Roaring Bitmaps for microsecond transitive closures across 1,000,000+ dependency edges.
-* **Exit Gate**: Integration tests verify that outbox network failures trigger retries and quarantine to DLQ without corrupting cache state.
+  5. *Real-Time Causal (RTC) Graph Caching*: Wire `GraphMemoryCache` with `CompressedLineageGraph` and Axum gateway admission, exposing `/v1/cache/graph/stats`, `/v1/cache/graph/lineage/{key}`, and `/v1/cache/graph/invalidate` with full SDK and frontend bindings.
+* **Exit Gate**: Integration tests verify that outbox network failures trigger retries and quarantine to DLQ without corrupting cache state, and real-time causal graph invalidation evicts dependent entries in sub-50µs.
 
 ---
 
@@ -127,10 +128,10 @@ flowchart LR
 | **Clippy Linting** | 0 warnings | `cargo clippy --workspace --all-targets -- -D warnings` | **PASSED** |
 | **Security Audit** | 0 vulnerabilities | `cargo audit` | **PASSED** |
 | **Code Formatting** | Clean | `cargo fmt --check` | **PASSED** |
-| **Workspace Test Suite** | 248 tests passing | `cargo test --workspace --all-targets` | **PASSED** |
+| **Workspace Test Suite** | 250+ tests passing | `cargo test --workspace --all-targets` | **PASSED** |
 | **Frontend Production Build** | Next.js 15 clean bundle | `npm run build --prefix frontend` | **PASSED** |
 | **Frontend Test Suite** | 37 tests passing | `npm test --prefix frontend` | **PASSED** |
-| **Python SDK Test Suite** | 24 tests passing | `python -m unittest sdk/python/...` | **PASSED** |
-| **OpenAPI Contract Drift** | 46 endpoints synced | `python scripts/check_openapi_drift.py` | **PASSED** |
+| **Python SDK Test Suite** | 26 tests passing | `python -m unittest sdk/python/...` | **PASSED** |
+| **OpenAPI Contract Drift** | 49 endpoints synced | `python scripts/check_openapi_drift.py` | **PASSED** |
 | **Kubernetes Security Audit** | 0 secret violations | `python scripts/check_k8s_manifests.py` | **PASSED** |
 | **Adversarial Inversion Safety**| 0.0% false hits | `python benchmarks/adversarial_evaluation_suite.py` | **PASSED** |
