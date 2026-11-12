@@ -112,43 +112,44 @@ export default function OverviewPage() {
         temperature: 0.0,
       });
       const elapsedMs = performance.now() - start;
-      const isHit = data.sunborn_cached === true || activePreset === "exact" || activePreset === "semantic" || activePreset === "dag";
+      const isHit = Boolean(data.sunborn_cached);
       
-      let tierName = "Tier 1: Exact Match (DragonflyDB / W-TinyLFU)";
-      let actionName = "ExactHit";
+      let tierName = isHit
+        ? "Tier 1: Exact Match (W-TinyLFU / DragonflyDB)"
+        : "Tier 4: Origin Generation (Cache Miss)";
+      let actionName = isHit ? "VerifiedCacheHit" : "OriginExecution";
       let latencyUs = Math.round(elapsedMs * 1000);
-      let avoidedTokens = 45;
-      let confScore = 1.0;
+      const promptTokens = data?.usage?.prompt_tokens ?? 25;
+      const completionTokens = data?.usage?.completion_tokens ?? 20;
+      const avoidedTokens = isHit ? promptTokens + completionTokens : 0;
+      let confScore = isHit ? 1.0 : 0.0;
 
-      if (activePreset === "semantic") {
+      if (isHit && activePreset === "semantic") {
         tierName = "Tier 2: Conformal Semantic Retrieval (Qdrant HNSW)";
         actionName = "SafeSemanticHit";
-        avoidedTokens = 42;
         confScore = 0.945;
-      } else if (activePreset === "negation") {
+      } else if (!isHit && activePreset === "negation") {
         tierName = "Tier 4: Origin Generation (Semantic Inversion Guardrail Triggered)";
         actionName = "BypassVectorCache";
-        avoidedTokens = 0;
         confScore = 0.0;
-      } else if (activePreset === "dag") {
+      } else if (isHit && activePreset === "dag") {
         tierName = "Tier 3: Agent DAG Subgraph Reuse (Merkle Attested)";
         actionName = "PureToolDAGReused";
-        avoidedTokens = 68;
         confScore = 0.999;
       }
 
-      const netSaved = (avoidedTokens / 1000) * 0.03;
+      const netSaved = isHit ? (avoidedTokens / 1000) * 0.03 : 0.0;
       const traceId = `tr_${Math.random().toString(36).substring(2, 8)}`;
 
       setQueryTrace({
         tier: tierName,
         latencyUs: latencyUs > 0 ? latencyUs : 240,
-        hit: isHit && activePreset !== "negation",
+        hit: isHit,
         avoidedTokens,
         savedUsd: +netSaved.toFixed(4),
         conformalScore: confScore,
-        content: data?.choices?.[0]?.message?.content || "Verified execution reuse from Sunborn DragonflyDB exact tier.",
-        keyHash: `sb:10d:${Math.random().toString(36).substring(2, 10)}${Date.now().toString(36)}`,
+        content: data?.choices?.[0]?.message?.content || "No content returned from gateway.",
+        keyHash: (data as any)?.sunborn_key_hash || `sb:10d:${Math.random().toString(36).substring(2, 10)}${Date.now().toString(36)}`,
         action: actionName,
       });
 
@@ -157,24 +158,36 @@ export default function OverviewPage() {
           id: traceId,
           origin: "Console Ingress",
           event: actionName,
-          detail: `${tierName} · avoided: ${avoidedTokens} tokens`,
-          status: isHit && activePreset !== "negation" ? "200_HIT" : "200_ORIGIN",
+          detail: `${tierName} · avoided: ${avoidedTokens} tokens · latency: ${elapsedMs.toFixed(1)}ms`,
+          status: isHit ? "200_HIT" : "200_ORIGIN",
           time: "Just now",
         },
         ...prev.slice(0, 7),
       ]);
-    } catch {
+    } catch (err: any) {
+      const elapsedMs = performance.now() - start;
       setQueryTrace({
-        tier: "Tier 1: Exact Match (W-TinyLFU In-Memory)",
-        latencyUs: 240,
-        hit: true,
-        avoidedTokens: 45,
-        savedUsd: 0.0014,
-        conformalScore: 1.0,
-        content: "Verified execution reuse from Sunborn DragonflyDB exact tier.",
-        keyHash: "sb:10d:a8f93e2b1c4d9e0f",
-        action: "ExactHit",
+        tier: "Gateway Ingress Error",
+        latencyUs: Math.round(elapsedMs * 1000),
+        hit: false,
+        avoidedTokens: 0,
+        savedUsd: 0,
+        conformalScore: 0.0,
+        content: `Gateway request failed: ${err.message || "Connection refused"}. Ensure Sunborn Gateway is running on port 8080 (e.g., 'cargo run --release -p sunborn-gateway').`,
+        keyHash: "sb:offline",
+        action: "GatewayOffline",
       });
+      setActiveStream((prev) => [
+        {
+          id: `err_${Date.now().toString(36)}`,
+          origin: "Console Ingress",
+          event: "GATEWAY_ERROR",
+          detail: err.message || "Connection refused to http://127.0.0.1:8080",
+          status: "OFFLINE",
+          time: "Just now",
+        },
+        ...prev.slice(0, 7),
+      ]);
     } finally {
       setIsRunningQuery(false);
     }
@@ -448,15 +461,15 @@ export default function OverviewPage() {
         });
         if (healthRes.ok) {
           setIsConnected(true);
-          // Populate baseline operational metrics for unauthenticated session
+          // Public health succeeded; gateway is live but session is unauthenticated for private FinOps
           setMetrics((prev) => ({
-            totalRequests: prev.totalRequests > 0 ? prev.totalRequests : 12450,
-            hitRatio: prev.hitRatio > 0 ? prev.hitRatio : 79.0,
+            totalRequests: prev.totalRequests,
+            hitRatio: prev.hitRatio,
             p99LatencyUs: null,
-            throughputReqs: 2200,
-            avoidedCostUsd: prev.avoidedCostUsd > 0 ? prev.avoidedCostUsd : 142.50,
-            activeTenants: 4,
-            cachedEntries: prev.cachedEntries > 0 ? prev.cachedEntries : 9840,
+            throughputReqs: 0,
+            avoidedCostUsd: prev.avoidedCostUsd,
+            activeTenants: 1,
+            cachedEntries: prev.cachedEntries,
           }));
           return;
         }

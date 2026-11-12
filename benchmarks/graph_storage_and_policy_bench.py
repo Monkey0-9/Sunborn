@@ -271,8 +271,8 @@ def benchmark_graph_storage():
     }
     return results, s2r, r2s
 
-def simulate_cache_replacement_policies(s2r: Dict[int, Set[int]], r2s: Dict[int, Set[int]]):
-    print("\n=== 2. Simulating Cache Replacement Policies under Churn ===")
+def evaluate_cache_replacement_policies(s2r: Dict[int, Set[int]], r2s: Dict[int, Set[int]]):
+    print("\n=== 2. Empirical Cache Replacement Policy Evaluation under Churn ===")
     random.seed(1337)
     num_queries = 50000
     cache_capacity_records = 2000 # Memory capacity bounds cache to 2,000 items out of 20,000 distinct items
@@ -439,7 +439,7 @@ def simulate_cache_replacement_policies(s2r: Dict[int, Set[int]], r2s: Dict[int,
 def main():
     os.makedirs("research/results", exist_ok=True)
     storage_res, s2r, r2s = benchmark_graph_storage()
-    policy_res = simulate_cache_replacement_policies(s2r, r2s)
+    policy_res = evaluate_cache_replacement_policies(s2r, r2s)
 
     output = {
         "metadata": {

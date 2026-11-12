@@ -18,75 +18,75 @@
     "coverage_rate_pct": 0.0
   },
   "B_ConventionalCosine": {
-    "reused": 62,
-    "tp": 24,
-    "fp": 38,
-    "precision_pct": 38.71,
-    "recall_pct": 100.0,
+    "reused": 34,
+    "tp": 0,
+    "fp": 34,
+    "precision_pct": 0.0,
+    "recall_pct": 0.0,
     "recall_wilson_ci": [
-      86.2,
-      100.0
+      0.0,
+      13.8
     ],
-    "false_hit_rate_pct": 82.61,
+    "false_hit_rate_pct": 73.91,
     "false_hit_wilson_ci": [
-      69.28,
-      90.91
+      59.74,
+      84.4
     ],
-    "abstention_rate_pct": 11.43,
-    "coverage_rate_pct": 88.57
+    "abstention_rate_pct": 51.43,
+    "coverage_rate_pct": 48.57
   },
   "C_StructuralGuardrails": {
-    "reused": 20,
-    "tp": 18,
+    "reused": 3,
+    "tp": 1,
     "fp": 2,
-    "precision_pct": 90.0,
-    "recall_pct": 75.0,
+    "precision_pct": 33.33,
+    "recall_pct": 4.17,
     "recall_wilson_ci": [
-      55.1,
-      88.0
+      0.74,
+      20.24
     ],
     "false_hit_rate_pct": 4.35,
     "false_hit_wilson_ci": [
       1.2,
       14.53
     ],
-    "abstention_rate_pct": 71.43,
-    "coverage_rate_pct": 28.57
+    "abstention_rate_pct": 95.71,
+    "coverage_rate_pct": 4.29
   },
   "D_StructuralPlusConformal": {
-    "reused": 18,
-    "tp": 18,
+    "reused": 0,
+    "tp": 0,
     "fp": 0,
     "precision_pct": 100.0,
-    "recall_pct": 75.0,
+    "recall_pct": 0.0,
     "recall_wilson_ci": [
-      55.1,
-      88.0
+      0.0,
+      13.8
     ],
     "false_hit_rate_pct": 0.0,
     "false_hit_wilson_ci": [
       0.0,
       7.71
     ],
-    "abstention_rate_pct": 74.29,
-    "coverage_rate_pct": 25.71
+    "abstention_rate_pct": 100.0,
+    "coverage_rate_pct": 0.0
   },
   "E_CompleteSunborn": {
-    "reused": 11,
-    "tp": 11,
+    "reused": 0,
+    "tp": 0,
     "fp": 0,
     "precision_pct": 100.0,
-    "recall_pct": 45.83,
+    "recall_pct": 0.0,
     "recall_wilson_ci": [
-      27.89,
-      64.93
+      0.0,
+      13.8
     ],
     "false_hit_rate_pct": 0.0,
     "false_hit_wilson_ci": [
       0.0,
       7.71
     ],
-    "abstention_rate_pct": 84.29,
-    "coverage_rate_pct": 15.71
+    "abstention_rate_pct": 100.0,
+    "coverage_rate_pct": 0.0
   }
 }

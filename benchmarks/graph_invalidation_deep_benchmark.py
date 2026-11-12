@@ -419,7 +419,7 @@ def run_deep_benchmark(target_edges: int):
     e2e_invalidation_results = bench_op(lambda: sunborn_sim.invalidate_and_purge(random.choice(test_multi_10)), 100)
 
     # OP 11: Distributed Invalidation Outbox Serialization & Channel Push
-    def simulate_outbox_push(affected_count: int):
+    def measure_outbox_push_payload_serialization(affected_count: int):
         payload = json.dumps({
             "event_id": "outbox_evt_1049",
             "source_ids": [101, 102],
@@ -429,7 +429,7 @@ def run_deep_benchmark(target_edges: int):
         })
         return len(payload)
 
-    outbox_results = bench_op(lambda: simulate_outbox_push(250), 1000)
+    outbox_results = bench_op(lambda: measure_outbox_push_payload_serialization(250), 1000)
 
     # Print Summary Table
     print(f"\n--- Benchmark Results for {target_edges:,} Edges ---")
