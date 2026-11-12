@@ -1,64 +1,87 @@
-# Sunborn LaTeX MCP
+# Sunborn Research Paper — LaTeX MCP
 
-A separately scoped MCP server for research manuscripts. It does not connect to the Sunborn inference gateway and receives no gateway credentials.
+This MCP server exists to let Gemini CLI (agy) agents directly create, read, edit, validate, and compile the Sunborn research paper's LaTeX source. It is a writing-workflow tool, not a new Sunborn runtime/platform subsystem.
+
+## Repository layout
+
+The manuscript lives at `research/paper/`. Point `SUNBORN_LATEX_WORKSPACE` at that directory only. Do not expose the entire repository to the MCP server.
 
 ## Requirements
 
-Python 3.11+, uv, Gemini CLI. TeX Live with latexmk and pdflatex is required only for compilation.
+- Python 3.11+
+- uv
+- Gemini CLI
+- TeX Live with `latexmk` and `pdflatex`
 
-## Install
+## Install (Windows PowerShell)
 
-From the Sunborn repository root:
+From the repository root:
 
-    cd integrations/latex-mcp
-    uv sync --extra dev
+    uv sync --project integrations/latex-mcp
+    New-Item -ItemType Directory -Force research\paper
+    $env:SUNBORN_LATEX_WORKSPACE = (Resolve-Path "research\paper").Path
+    $env:SUNBORN_LATEX_ALLOW_COMPILE = "1"
 
-Create a dedicated manuscript directory. Do not expose the whole repository as the workspace.
+For a production or shared environment, run the MCP process and TeX build in a rootless container/VM with no network, CPU/memory/PID/disk limits, and only the paper directory mounted. TeX sources are executable input; no-shell-escape is defense-in-depth, not a complete sandbox. The above local setting is suitable only for trusted manuscript source under your control.
 
-Linux/macOS:
+## Gemini CLI configuration
 
-    export SUNBORN_LATEX_WORKSPACE="$PWD/../../research/manuscripts"
-    export SUNBORN_LATEX_ALLOW_COMPILE=0
+Merge the following server entry into the existing repository-root `.gemini/settings.json`. Preserve all existing settings and MCP servers:
 
-Windows PowerShell:
+    {
+      "mcpServers": {
+        "sunborn-paper": {
+          "command": "uv",
+          "args": [
+            "run",
+            "--project",
+            "integrations/latex-mcp",
+            "sunborn-latex-mcp"
+          ],
+          "timeout": 30000,
+          "trust": false,
+          "includeTools": [
+            "latex_workspace_list",
+            "latex_read_file",
+            "latex_create_file",
+            "latex_update_file",
+            "latex_validate_project",
+            "latex_compile_pdf"
+          ]
+        }
+      }
+    }
 
-    $env:SUNBORN_LATEX_WORKSPACE = (Resolve-Path "..\..\research\manuscripts").Path
-    $env:SUNBORN_LATEX_ALLOW_COMPILE = "0"
+Set `SUNBORN_LATEX_WORKSPACE` in the environment inherited by Gemini CLI before launching it. Restart Gemini CLI and run `/mcp list`. Approve tools explicitly; do not use YOLO mode.
 
-## Gemini CLI setup
+## Tools available to agents
 
-Merge .gemini/settings.example.json into the repository-root .gemini/settings.json without deleting existing MCP entries. Restart Gemini CLI and run /mcp list. Keep trust false and use explicit tool approvals.
+- `latex_workspace_list`: list manuscript files.
+- `latex_read_file`: read TeX/BibTeX/style/class/text files.
+- `latex_create_file`: create new source without overwriting.
+- `latex_update_file`: directly edit source files.
+- `latex_validate_project`: static document and bibliography checks.
+- `latex_compile_pdf`: run latexmk and persist PDF/auxiliary output in `research/paper/build/`.
 
-## Security model
-
-- Workspace root is explicit and mandatory.
-- Absolute paths, traversal segments, Windows separators, and symlinks are rejected.
-- Writes are limited to TeX, BibTeX, Markdown, and text.
-- Create is non-overwriting; writes use atomic replacement.
-- Compiler arguments are fixed; shell=False; no caller-supplied command or flags.
-- latexmk rc files are disabled and pdfLaTeX receives -no-shell-escape.
-- Compilation is disabled by default.
-- Build artifacts are ephemeral and the server returns only metadata and SHA-256.
-
-TeX is executable input. Disabling shell escape is not a complete sandbox. Before setting SUNBORN_LATEX_ALLOW_COMPILE=1, run the MCP process inside a rootless container or VM with no network, read-only base filesystem, bounded CPU, memory, process count, and disk, and only the manuscript workspace mounted. Never enable compilation on a shared host without those controls.
+The agents edit the actual files in `research/paper/`; there is no upload/download handoff or copy-paste step.
 
 ## Verify
 
-    uv run ruff check src tests
-    uv run pytest -q
-    uv run sunborn-latex-mcp
+    uv run --project integrations/latex-mcp ruff check integrations/latex-mcp/src integrations/latex-mcp/tests
+    uv run --project integrations/latex-mcp pytest integrations/latex-mcp/tests -q
 
-Use the official MCP Inspector to verify tool discovery and calls. MCP stdio uses stdout for protocol frames; application logs belong on stderr.
+Check the compiler:
 
-## Tools
+    latexmk --version
+    pdflatex --version
 
-- latex_workspace_list
-- latex_read_file
-- latex_create_file
-- latex_update_file
-- latex_validate_project
-- latex_compile_pdf
+Launch Gemini CLI from the repository root and run `/mcp list`. Ask an agent to call `latex_workspace_list`, create a small test .tex file, call `latex_validate_project`, then call `latex_compile_pdf`. Confirm the PDF exists under `research/paper/build/`.
 
-## Promotion gates
+## Paper integrity rules
 
-Before calling this production-approved: add a rootless sandbox profile and adversarial TeX tests; pin a TeX Live image and test real builds; persist artifacts in a controlled artifact store; integrate audit events with Sunborn's authoritative audit contract; add agent identity/document ACLs; add bibliography and PDF content validation; add SBOM, lockfile, image signing, and CI security gates. This initial implementation is a restricted staging integration, not a multi-tenant production isolation claim.
+- Claims must be grounded in source code, reproducible tests, benchmark artifacts, or cited literature.
+- Agents must never invent benchmark results, security guarantees, comparisons, or citations.
+- Every quantitative claim must link to a reproducible evidence artifact.
+- Preserve raw benchmark outputs and record commit SHA, environment, command, and timestamp.
+- Use separate agent review for technical correctness, methodology, citations, and LaTeX quality.
+- Keep generated build files under `build/`; do not commit temporary auxiliary files unless the paper's release process requires them.
