@@ -5,7 +5,8 @@
 # that empirical metrics match internal reproducibility standards.
 # ==============================================================================
 
-set -euo pipefail
+set -eu
+set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"

@@ -4,7 +4,8 @@
 # Verifies container definitions, network policies, non-root security contexts,
 # and environment contracts across the entire Sunborn deployment stack.
 # ==============================================================================
-set -euo pipefail
+set -eu
+set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
