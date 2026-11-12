@@ -280,6 +280,44 @@ impl NonExchangeableConformalCalibrator {
     pub fn window_len(&self) -> usize {
         self.window.len()
     }
+
+    /// Evaluates empirical coverage on current window observations at `threshold`
+    /// and returns `(coverage, (wilson_lower, wilson_upper))` with 95% confidence (z = 1.96).
+    pub fn empirical_coverage_wilson(&self, threshold: f64) -> (f64, (f64, f64)) {
+        let n = self.window.len();
+        if n == 0 {
+            return (1.0, (1.0, 1.0));
+        }
+        let safe_count = self
+            .window
+            .iter()
+            .filter(|obs| {
+                !(obs.cosine_similarity >= threshold && obs.semantic_loss > self.loss_tolerance)
+            })
+            .count();
+        let coverage = safe_count as f64 / n as f64;
+        let bounds = wilson_score_interval(safe_count, n, 1.96);
+        (coverage, bounds)
+    }
+}
+
+/// Computes the Wilson score interval for binomial proportions.
+/// Given `successes` out of `total` trials and a standard normal quantile `z` (1.96 for 95% confidence),
+/// returns `(lower_bound, upper_bound)` in [0.0, 1.0].
+pub fn wilson_score_interval(successes: usize, total: usize, z: f64) -> (f64, f64) {
+    if total == 0 {
+        return (0.0, 0.0);
+    }
+    let p_hat = successes as f64 / total as f64;
+    let n = total as f64;
+    let z2 = z * z;
+    let denom = 1.0 + z2 / n;
+    let centre = (p_hat + z2 / (2.0 * n)) / denom;
+    let margin = (z / denom)
+        * ((p_hat * (1.0 - p_hat) / n) + (z2 / (4.0 * n * n)))
+            .max(0.0)
+            .sqrt();
+    ((centre - margin).max(0.0), (centre + margin).min(1.0))
 }
 
 /// Experimental rolling-window recalibration engine.
@@ -425,5 +463,30 @@ mod tests {
             tightened >= thresh,
             "Threshold must tighten after high semantic loss"
         );
+    }
+
+    #[test]
+    fn test_wilson_score_interval_and_empirical_coverage() {
+        // Known statistical test: 95 successes out of 100 trials, z=1.96
+        let (lower, upper) = wilson_score_interval(95, 100, 1.96);
+        assert!(
+            (lower - 0.887).abs() < 0.01,
+            "Wilson lower bound around 0.887, got {lower}"
+        );
+        assert!(
+            (upper - 0.983).abs() < 0.01,
+            "Wilson upper bound around 0.983, got {upper}"
+        );
+
+        let mut cal = NonExchangeableConformalCalibrator::new(100, 0.995, 0.05);
+        for _ in 0..95 {
+            cal.record_shadow_evaluation(0.95, 0.0);
+        }
+        for _ in 0..5 {
+            cal.record_shadow_evaluation(0.95, 0.8);
+        }
+        let (cov, (w_low, w_high)) = cal.empirical_coverage_wilson(0.90);
+        assert_eq!(cov, 0.95);
+        assert!(w_low > 0.85 && w_high < 1.0);
     }
 }

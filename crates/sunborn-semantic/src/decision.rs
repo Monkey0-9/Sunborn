@@ -1,6 +1,6 @@
 use crate::conformal::{StreamingOODDetector, TaskStratifiedConformalCalibrator, TaskStratum};
 use crate::embedding::EmbeddingProvider;
-use crate::guardrails::{CrossEncoderVerifier, StructuralFingerprint};
+use crate::guardrails::{StructuralEntailmentScorer, StructuralFingerprint};
 use crate::vector_store::VectorStore;
 use serde::{Deserialize, Serialize};
 use sunborn_core::certificate::SafetyEvidenceRecord;
@@ -125,7 +125,7 @@ impl VerificationCascade {
         };
 
         // Cross-encoder entailment evaluation
-        let entailment = CrossEncoderVerifier::verify(&query_fp, &candidate_fp, similarity);
+        let entailment = StructuralEntailmentScorer::verify(&query_fp, &candidate_fp, similarity);
         let entailment_valid = entailment.is_safe_entailment(0.50, 0.20);
 
         if !structural_match || !entailment_valid || risk > 0.25 {

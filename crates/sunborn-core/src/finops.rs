@@ -206,9 +206,15 @@ impl SpendVelocityController {
         tenant_id: &str,
         estimated_cost: f64,
     ) -> std::result::Result<uuid::Uuid, (f64, f64)> {
+        let ceiling = self.ceiling_for_tenant(tenant_id);
+
+        // Numerical sanitization: reject NaN, infinite, negative, or unrealistic costs
+        if !estimated_cost.is_finite() || !(0.0..=100_000.0).contains(&estimated_cost) {
+            return Err((0.0, ceiling));
+        }
+
         let now = Instant::now();
         let cutoff = now.checked_sub(self.window_duration).unwrap_or(now);
-        let ceiling = self.ceiling_for_tenant(tenant_id);
 
         let mut res_guard = self.reservations.write().unwrap();
         let mut hist_guard = self.spend_history.write().unwrap();
@@ -247,6 +253,12 @@ impl SpendVelocityController {
         reservation_id: uuid::Uuid,
         actual_cost: f64,
     ) -> f64 {
+        let valid_cost = if actual_cost.is_finite() && actual_cost >= 0.0 {
+            actual_cost.min(100_000.0)
+        } else {
+            0.0
+        };
+
         let now = Instant::now();
         let cutoff = now.checked_sub(self.window_duration).unwrap_or(now);
 
@@ -259,7 +271,7 @@ impl SpendVelocityController {
         let mut hist_guard = self.spend_history.write().unwrap();
         let hist_entries = hist_guard.entry(tenant_id.to_string()).or_default();
         hist_entries.retain(|(ts, _)| *ts >= cutoff);
-        hist_entries.push((now, actual_cost));
+        hist_entries.push((now, valid_cost));
         hist_entries.iter().map(|(_, c)| *c).sum()
     }
 
@@ -296,16 +308,23 @@ impl SpendVelocityController {
         tenant_id: &str,
         cost_usd: f64,
     ) -> std::result::Result<f64, (f64, f64)> {
+        let ceiling = self.ceiling_for_tenant(tenant_id);
+
+        let valid_cost = if cost_usd.is_finite() && cost_usd >= 0.0 {
+            cost_usd.min(100_000.0)
+        } else {
+            return Err((0.0, ceiling));
+        };
+
         let now = Instant::now();
         let cutoff = now.checked_sub(self.window_duration).unwrap_or(now);
-        let ceiling = self.ceiling_for_tenant(tenant_id);
 
         let mut map = self.spend_history.write().unwrap();
         let entries = map.entry(tenant_id.to_string()).or_default();
 
         // Prune expired entries outside rolling window
         entries.retain(|(ts, _)| *ts >= cutoff);
-        entries.push((now, cost_usd));
+        entries.push((now, valid_cost));
 
         let total_window_spend: f64 = entries.iter().map(|(_, c)| *c).sum();
 

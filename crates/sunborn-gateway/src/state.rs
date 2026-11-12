@@ -411,12 +411,26 @@ impl AppState {
     pub async fn graceful_drain(&self) -> Result<(), sunborn_core::SunbornError> {
         tracing::info!("Executing AppState graceful drain of background workers...");
 
-        // 1. Drain pending outbox invalidation events
+        // 1. Drain pending outbox invalidation events (bounded, non-blocking drain)
         tracing::info!("Draining pending transactional outbox events...");
         let mut drained_invalidation_events = 0;
-        while let Ok(Some(evicted)) = self.invalidation_engine.process_next().await {
-            drained_invalidation_events += 1;
-            tracing::debug!(evicted, "Drained invalidation event during shutdown");
+        let drain_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+
+        while tokio::time::Instant::now() < drain_deadline {
+            match self.invalidation_engine.try_process_next().await {
+                Ok(Some(evicted)) => {
+                    drained_invalidation_events += 1;
+                    tracing::debug!(evicted, "Drained invalidation event during shutdown");
+                }
+                Ok(None) => {
+                    // Outbox is fully drained
+                    break;
+                }
+                Err(err) => {
+                    tracing::warn!(error = %err, "Error draining outbox event during shutdown");
+                    break;
+                }
+            }
         }
         tracing::info!(
             drained_invalidation_events,

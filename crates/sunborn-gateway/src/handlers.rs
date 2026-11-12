@@ -282,89 +282,94 @@ pub async fn execute_request_inner(
                 "Exact cache HIT (C0/C1)"
             );
 
-            let cert = match cached_entry.metadata.get("certificate").and_then(|v| {
+            let cert_opt = cached_entry.metadata.get("certificate").and_then(|v| {
                 serde_json::from_value::<sunborn_core::ReuseCertificate>(v.clone()).ok()
-            }) {
-                Some(c) => c,
-                None => {
+            });
+
+            if let Some(cert) = cert_opt {
+                // 1. Authoritative Server-Side Multi-Source Lease Check (SB-002)
+                let is_fresh = state
+                    .epoch_lease_manager
+                    .validate_multi_source_leases(&cert.source_snapshots)
+                    .await;
+
+                if !is_fresh {
                     tracing::warn!(
                         request_id = %req.request_id.0,
                         cache_key = %identity.key,
-                        "Exact cache entry lacks a valid cryptographic ReuseCertificate -> Abstaining to Revalidate"
+                        "Exact cache candidate dependencies modified in authoritative epoch registry -> Evicting entry and falling through to origin"
                     );
-                    state
-                        .spend_velocity_controller
-                        .release_reservation(&req.tenant_id.0, reservation_id);
-                    return Ok(ResponseEnvelope {
-                        request_id: req.request_id,
-                        tenant_id: req.tenant_id,
-                        application_id: req.application_id,
-                        decision: DecisionRecord {
-                            action: DecisionAction::Revalidate,
-                            cache_path: CachePath::Exact,
-                            confidence: 0.5,
-                            risk_score: 1.0,
-                            reason_code: "CERTIFICATE_MISSING_OR_INVALID".to_string(),
-                            latency_saved_ms: None,
-                            policy_version: Some(
-                                state.learning_controller.get_active_policy_version(),
-                            ),
-                            policy_id: Some(state.learning_controller.get_active_policy_id()),
-                        },
-                        content: cached_entry.content,
-                        cached: false,
-                        cache_key: Some(identity.key),
-                        created_at: Utc::now(),
-                        duration_ms,
-                        certificate: None,
+                    let cache_clone = state.cache.clone();
+                    let key_to_evict = identity.key.clone();
+                    tokio::spawn(async move {
+                        let _ = cache_clone.delete(&key_to_evict).await;
                     });
-                }
-            };
+                } else {
+                    // 2. Enforce proof-carrying admissibility contract at runtime:
+                    let mut source_epochs: Vec<(uuid::Uuid, u64)> = req
+                        .dependency_snapshots
+                        .iter()
+                        .map(|s| (s.source_id, s.snapshot_epoch))
+                        .collect();
+                    if source_epochs.is_empty() && !cert.source_snapshots.is_empty() {
+                        source_epochs = cert
+                            .source_snapshots
+                            .iter()
+                            .map(|s| (s.source_id, s.snapshot_epoch))
+                            .collect();
+                    }
 
-            // Enforce proof-carrying admissibility contract at runtime:
-            let source_epochs: Vec<(uuid::Uuid, u64)> = req
-                .dependency_snapshots
-                .iter()
-                .map(|s| (s.source_id, s.snapshot_epoch))
-                .collect();
-            if let Err(admissibility_err) = cert.verify_admissibility(
-                &state.learning_hmac_secret,
-                &req.tenant_id,
-                &req.application_id,
-                &req.model,
-                Some(&identity.hash),
-                Utc::now(),
-                req.knowledge_epoch.unwrap_or(1),
-                &source_epochs,
-            ) {
-                tracing::warn!(
-                    request_id = %req.request_id.0,
-                    error = %admissibility_err,
-                    "Exact cache candidate failed proof-carrying admissibility verification -> Evicting entry and falling through to origin"
-                );
-                let cache_clone = state.cache.clone();
-                let key_to_evict = identity.key.clone();
-                tokio::spawn(async move {
-                    let _ = cache_clone.delete(&key_to_evict).await;
-                });
-                // Fall through to semantic cache or origin execution (do NOT return unverified content)
-            } else {
-                let certificate = Some(cert);
+                    if let Err(admissibility_err) = cert.verify_admissibility(
+                        &state.learning_hmac_secret,
+                        &req.tenant_id,
+                        &req.application_id,
+                        &req.model,
+                        Some(&identity.hash),
+                        Utc::now(),
+                        req.knowledge_epoch.unwrap_or(1),
+                        &source_epochs,
+                    ) {
+                        tracing::warn!(
+                            request_id = %req.request_id.0,
+                            error = %admissibility_err,
+                            "Exact cache candidate failed proof-carrying admissibility verification -> Evicting entry and falling through to origin"
+                        );
+                        let cache_clone = state.cache.clone();
+                        let key_to_evict = identity.key.clone();
+                        tokio::spawn(async move {
+                            let _ = cache_clone.delete(&key_to_evict).await;
+                        });
+                        // Fall through to semantic cache or origin execution (do NOT return unverified content)
+                    } else {
+                        let certificate = Some(cert);
 
-                // Authenticated Decryption on Read Path (ER-001)
-                let envelope_opt = cached_entry
-                    .metadata
-                    .get("encrypted_envelope")
-                    .and_then(|v| serde_json::from_value::<EncryptedEnvelope>(v.clone()).ok())
-                    .or_else(|| parse_envelope_from_stored(&cached_entry.content));
+                        // Authenticated Decryption on Read Path (ER-001)
+                        let envelope_opt = cached_entry
+                            .metadata
+                            .get("encrypted_envelope")
+                            .and_then(|v| {
+                                serde_json::from_value::<EncryptedEnvelope>(v.clone()).ok()
+                            })
+                            .or_else(|| parse_envelope_from_stored(&cached_entry.content));
 
-                let content = if let Some(envelope) = envelope_opt {
-                    match state.crypto_registry.decrypt(&envelope, "cache_admission") {
-                        Ok(plain_bytes) => {
-                            String::from_utf8(plain_bytes).unwrap_or(cached_entry.content)
-                        }
-                        Err(err) => {
-                            tracing::warn!(tenant = %req.tenant_id.0, error = %err, "TDEK decryption failed or key shredded -> Rejecting cached entry");
+                        let content = if let Some(envelope) = envelope_opt {
+                            match state.crypto_registry.decrypt(&envelope, "cache_admission") {
+                                Ok(plain_bytes) => {
+                                    String::from_utf8(plain_bytes).unwrap_or(cached_entry.content)
+                                }
+                                Err(err) => {
+                                    tracing::warn!(tenant = %req.tenant_id.0, error = %err, "TDEK decryption failed or key shredded -> Rejecting cached entry");
+                                    state
+                                        .spend_velocity_controller
+                                        .release_reservation(&req.tenant_id.0, reservation_id);
+                                    return Err(SunbornError::forbidden(format!(
+                                        "Tenant '{}' key shredded or unprovisioned",
+                                        req.tenant_id.0
+                                    ))
+                                    .into());
+                                }
+                            }
+                        } else if cached_entry.content.starts_with("sunborn:enc:v1:") {
                             state
                                 .spend_velocity_controller
                                 .release_reservation(&req.tenant_id.0, reservation_id);
@@ -373,46 +378,51 @@ pub async fn execute_request_inner(
                                 req.tenant_id.0
                             ))
                             .into());
-                        }
-                    }
-                } else if cached_entry.content.starts_with("sunborn:enc:v1:") {
-                    state
-                        .spend_velocity_controller
-                        .release_reservation(&req.tenant_id.0, reservation_id);
-                    return Err(SunbornError::forbidden(format!(
-                        "Tenant '{}' key shredded or unprovisioned",
-                        req.tenant_id.0
-                    ))
-                    .into());
-                } else {
-                    cached_entry.content
-                };
+                        } else {
+                            cached_entry.content
+                        };
 
-                state
-                    .spend_velocity_controller
-                    .release_reservation(&req.tenant_id.0, reservation_id);
-                REQUEST_DURATION_MS_SUM.fetch_add(duration_ms, Ordering::Relaxed);
-                return Ok(ResponseEnvelope {
-                    request_id: req.request_id,
-                    tenant_id: req.tenant_id,
-                    application_id: req.application_id,
-                    decision: DecisionRecord {
-                        action: DecisionAction::SafeHit,
-                        cache_path: CachePath::Exact,
-                        confidence: 1.0,
-                        risk_score: 0.0,
-                        reason_code: "EXACT_CANONICAL_MATCH".to_string(),
-                        latency_saved_ms: Some(150),
-                        policy_version: Some(state.learning_controller.get_active_policy_version()),
-                        policy_id: Some(state.learning_controller.get_active_policy_id()),
-                    },
-                    content,
-                    cached: true,
-                    cache_key: Some(identity.key),
-                    created_at: Utc::now(),
-                    duration_ms,
-                    certificate,
+                        state
+                            .spend_velocity_controller
+                            .release_reservation(&req.tenant_id.0, reservation_id);
+                        REQUEST_DURATION_MS_SUM.fetch_add(duration_ms, Ordering::Relaxed);
+                        return Ok(ResponseEnvelope {
+                            request_id: req.request_id,
+                            tenant_id: req.tenant_id,
+                            application_id: req.application_id,
+                            decision: DecisionRecord {
+                                action: DecisionAction::SafeHit,
+                                cache_path: CachePath::Exact,
+                                confidence: 1.0,
+                                risk_score: 0.0,
+                                reason_code: "EXACT_CANONICAL_MATCH".to_string(),
+                                latency_saved_ms: Some(150),
+                                policy_version: Some(
+                                    state.learning_controller.get_active_policy_version(),
+                                ),
+                                policy_id: Some(state.learning_controller.get_active_policy_id()),
+                            },
+                            content,
+                            cached: true,
+                            cache_key: Some(identity.key),
+                            created_at: Utc::now(),
+                            duration_ms,
+                            certificate,
+                        });
+                    }
+                }
+            } else {
+                tracing::warn!(
+                    request_id = %req.request_id.0,
+                    cache_key = %identity.key,
+                    "Exact cache entry lacks a valid cryptographic ReuseCertificate -> Evicting entry and falling through to origin"
+                );
+                let cache_clone = state.cache.clone();
+                let key_to_evict = identity.key.clone();
+                tokio::spawn(async move {
+                    let _ = cache_clone.delete(&key_to_evict).await;
                 });
+                // Fall through to semantic cache or origin execution (do NOT return unverified content)
             }
         }
     }
@@ -1353,8 +1363,12 @@ pub async fn invalidate_graph_rtc(
 
     if !payload.doc_hashes.is_empty() {
         if let Some(ref gmc) = state.graph_memory_cache {
-            let affected = gmc.invalidate_docs_rtc(&payload.doc_hashes);
-            affected_doc_records_count = affected.len() as usize;
+            if let Ok((affected, doc_keys)) =
+                gmc.invalidate_docs_rtc_purge(&payload.doc_hashes).await
+            {
+                affected_doc_records_count = affected.len() as usize;
+                purged_keys.extend(doc_keys);
+            }
         }
     }
 

@@ -3,7 +3,7 @@
 [![CI Pipeline](https://img.shields.io/badge/CI-Passing%20(11%2F11%20Gates)-brightgreen?style=flat-square)](scripts/verify.sh)
 [![Rust 1.80+](https://img.shields.io/badge/Rust-1.80%2B-orange?style=flat-square&logo=rust)](Cargo.toml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
-[![Test Suite](https://img.shields.io/badge/Tests-342%20Passing-success?style=flat-square)](docs/engineering/CLAIM_AND_EVIDENCE_REGISTER.md)
+[![Test Suite](https://img.shields.io/badge/Tests-358%2B%20Passing-success?style=flat-square)](docs/master/12_TESTING_AND_VERIFICATION_MATRIX.md)
 [![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-49%20Endpoints%20(0%20Drift)-purple?style=flat-square)](openapi.yaml)
 [![Python SDK](https://img.shields.io/badge/Python%20SDK-Sync%20%26%20Async-3776ab?style=flat-square&logo=python)](sdk/python)
 
@@ -29,7 +29,7 @@ Query B: "Transfer $1,000 from savings to checking account #4812"  ──┘ (Na
 
 In production enterprise workloads (finance, healthcare, administration, customer support), a false cache hit delivers a hallucinated, legally liable, or security-compromising answer. 
 
-**Sunborn solves this with a multi-stage verification cascade**: queries must clear structural AST guardrails, non-exchangeable conformal risk bounds ($\alpha \le 0.001$), neural cross-encoder NLI verification, and causal document dependency checks before a semantic match is ever served.
+**Sunborn solves this with a multi-stage verification cascade**: queries must clear structural AST guardrails, non-exchangeable conformal risk bounds ($\alpha \le 0.001$), calibrated structural entailment scoring, and causal multi-source epoch lease checks before a cached match is ever served.
 
 ---
 
@@ -47,15 +47,18 @@ flowchart TD
     
     subgraph Tier1["2. Tier-1 Exact Match Cache (P99 < 0.5 ms)"]
         FinOpsPreCheck --> L1Lookup{"Exact Hash Match?<br/>(W-TinyLFU / DragonflyDB)"}
-        L1Lookup -- "Exact Hit" --> ReturnHit["Return Cached Response<br/>(AES-256-GCM Decrypted)"]
+        L1Lookup -- "Exact Hit" --> CertGate{"ReuseCertificate &<br/>Epoch Lease Valid?"}
+        CertGate -- "Verified & Fresh" --> ReturnHit["Return Cached Response<br/>(AES-256-GCM Decrypted)"]
+        CertGate -- "Invalid / Stale" --> EvictKey["Evict Invalid Entry &<br/>Fall Through to Origin"]
     end
     
     subgraph Tier2["3. Tier-2 Semantic Verification Cascade"]
         L1Lookup -- "Exact Miss" --> StructuralFilter{"Structural AST Guardrails<br/>Negation, Numerics, Quantifiers?"}
+        EvictKey --> StructuralFilter
         StructuralFilter -- "Drift / Inversion Detected" --> FallthroughOrigin["Bypass Semantic Cache"]
         StructuralFilter -- "Structure Match" --> VectorSearch["Qdrant HNSW Vector Search"]
         VectorSearch --> ConformalGate{"Conformal Risk Control<br/>Task Stratum Risk <= Alpha?"}
-        ConformalGate -- "Risk Exceeded" --> CrossEncoderCheck{"Neural Cross-Encoder NLI<br/>(DeBERTa-v3 Entailment)"}
+        ConformalGate -- "Risk Exceeded" --> CrossEncoderCheck{"Structural Entailment /<br/>Cross-Encoder NLI"}
         CrossEncoderCheck -- "Entailment Confirmed" --> CausalFreshness{"Causal Epoch Gate<br/>Authoritative Freshness Valid?"}
         ConformalGate -- "Safe Conformal Hit" --> CausalFreshness
         CausalFreshness -- "Fresh" --> ReturnSemantic["Return Semantic Hit"]
@@ -86,19 +89,19 @@ flowchart TD
 ## ✨ Key Capabilities
 
 ### 1. Multi-Tier High-Performance Caching
-* **Tier-1 Exact Cache**: Sub-millisecond in-memory cache utilizing W-TinyLFU eviction, backed by distributed DragonflyDB/Redis for cluster-wide caching.
-* **Tier-2 Semantic Cache**: Dense vector similarity search backed by Qdrant HNSW indexing with structural pre-filtering and context-digest bindings.
-* **Tier-3 Agent DAG Reuse**: Deterministic tool execution memoization. Parses agent step graphs into RFC 6962 compliant Merkle trees, skipping redundant tool calls while ensuring side-effectful mutations are never replayed.
+* **Tier-1 Exact Cache (C0/C1)**: Sub-millisecond in-memory cache utilizing W-TinyLFU eviction, backed by distributed DragonflyDB/Redis for cluster-wide persistence. Enforces proof-carrying cryptographic `ReuseCertificate` verification and authoritative server-side `EpochLeaseManager` freshness checks on read path. Invalid or expired entries are evicted and safely fall through to origin.
+* **Tier-2 Semantic Cache (C2)**: Dense vector similarity search backed by Qdrant HNSW indexing with structural pre-filtering and context-digest bindings.
+* **Tier-3 Agent DAG Reuse (C3)**: Deterministic tool execution memoization. Parses agent step graphs into RFC 6962 compliant Merkle trees, skipping redundant tool calls while ensuring side-effectful mutations are never replayed.
 
 ### 2. Multi-Stage Semantic Verification Cascade
-* **Structural AST Guardrails**: Tokenizes prompts to extract negation polarity bits, sorted numeric sequences, entity/proper nouns, and quantifier scopes (`all`, `none`, `some`, `only`). Inverted queries are rejected in <50 µs before vector search.
-* **Conformal Risk Control (CRC)**: Non-exchangeable split-conformal prediction provides distribution-free theoretical upper bounds on false-reuse risk ($\alpha \le 0.001$) calibrated across task strata (Financial, Healthcare, Admin, Security-Sensitive).
-* **Neural Cross-Encoder Re-Ranking**: Borderline candidate pairs are evaluated with DeBERTa-v3 NLI cross-encoder inference to calculate precise entailment, neutrality, and contradiction probabilities.
+* **Structural AST Guardrails**: Tokenizes prompts to extract negation polarity bits, sorted numeric sequences, entity/proper nouns, temporal/calendar markers, and quantifier scopes (`all`, `none`, `some`, `only`). Inverted queries are rejected in <50 µs before vector search.
+* **Conformal Risk Control (CRC)**: Non-exchangeable split-conformal prediction provides distribution-free theoretical upper bounds on false-reuse risk ($\alpha \le 0.001$) calibrated across task strata (Financial, Healthcare, Admin, Security-Sensitive), with analytical Wilson score 95% confidence intervals.
+* **Calibrated Structural Entailment**: Borderline candidate pairs are evaluated with calibrated `StructuralEntailmentScorer` (with pluggable `CrossEncoderBackend` support) to calculate exact entailment, neutrality, and contradiction probabilities.
 
-### 3. Causal Knowledge Invalidation
-* **Transitive Dependency Graph**: Maintains knowledge lineage between cached responses and upstream documents, tables, and API schemas.
-* **Roaring Bitmap SIMD Acceleration**: Uses 64-bit Roaring Bitmaps to evaluate recursive transitive closures across 1,000,000+ dependency edges in microseconds.
-* **Monotonic Epoch Fencing**: Prevents stale writebacks when an underlying knowledge source mutates while an LLM inference call is in flight.
+### 3. Causal Knowledge Invalidation & Lineage Graph (C4)
+* **Real-Time Causal (RTC) Invalidation Engine**: Pairs L1 exact caching with SIMD-accelerated 64-bit Roaring Treemaps (`CompressedLineageGraph`) to evaluate transitive dependency closures across millions of edges in microseconds.
+* **Atomic Two-Phase Admission**: `GraphMemoryCache::set_with_lineage` ensures that graph dependencies and document lineage are atomically bound before storing entries, with automatic compensation rollback on partial failures to prevent orphaned lineage.
+* **Monotonic Epoch & Watermark Fencing**: Validates multi-source lease versions and read-view watermarks, preventing stale writebacks when underlying documents mutate while an LLM inference call is in flight.
 
 ### 4. Zero-Trust Security & Cryptographic Privacy
 * **Per-Tenant AEAD Envelope Encryption**: Every cache payload is encrypted at rest using AES-256-GCM with unique 96-bit random nonces. Tenant Data Encryption Keys (TDEKs) are wrapped under master keys managed by AWS KMS or HashiCorp Vault Transit.
@@ -106,9 +109,13 @@ flowchart TD
 * **Dual-Admin Quorum Approval**: Destructive actions (tenant deletion, cryptographic shredding, chaos injection) require dual-administrator cryptographic sign-offs.
 
 ### 5. Distributed FinOps & Spend Governance
-* **Atomic Pre-Execution Budget Reservations**: Multi-replica reservation engine prevents concurrent budget overrun using atomic check-and-reserve semantics.
+* **Atomic Pre-Execution Budget Reservations**: Multi-replica reservation engine prevents concurrent budget overrun using atomic check-and-reserve semantics, with numerical sanitization against float extremes (NaN, infinity, negatives).
 * **Token Avoidance Accounting**: Real-time tracking of avoided prompt and completion tokens, calculating net financial savings based on upstream model pricing.
 * **Spend Velocity Limiting**: Sliding-window rate limiters block runaway agent loops before incurring unexpected cloud provider charges.
+
+### 6. Durable Operations & Graceful Shutdown
+* **Transactional Outbox & Dead Letter Queue (DLQ)**: Asynchronously evicts cache and vector keys with exponential backoff retries, capturing unresolvable events into a durable DLQ while retaining graph dependency edges to prevent stale reads.
+* **Bounded Graceful Shutdown**: `graceful_drain` uses non-blocking channel polling (`try_process_next`) bounded by a strict 5-second deadline, guaranteeing zero deadlock during termination.
 
 ---
 

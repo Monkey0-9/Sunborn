@@ -210,9 +210,12 @@ impl DistributedGraphSyncEngine {
     ) -> Result<usize> {
         let mut total_affected = 0;
 
-        // 1. Invalidate 64-bit Roaring Treemap document lineage
+        // 1. Invalidate 64-bit Roaring Treemap document lineage and purge resolved cache keys
         if !doc_hashes.is_empty() {
-            let roaring_affected = self.graph_cache.invalidate_docs_rtc(doc_hashes);
+            let (roaring_affected, _doc_keys) = self
+                .graph_cache
+                .invalidate_docs_rtc_purge(doc_hashes)
+                .await?;
             total_affected += roaring_affected.len() as usize;
         }
 
@@ -240,7 +243,7 @@ impl DistributedGraphSyncEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sunborn_cache::CacheEntry;
+    use sunborn_cache::{CacheEntry, ExactCacheStore};
 
     #[tokio::test]
     async fn test_multi_pod_distributed_graph_sync() {
@@ -296,12 +299,20 @@ mod tests {
 
         assert_eq!(local_evicted, 1);
         assert!(!cache_pod1.lineage_graph().contains_document(src_doc));
+        assert!(!cache_pod1
+            .exists("cache:financial:report:q3")
+            .await
+            .unwrap());
 
         // Allow cluster broadcast propagation to Pod 2
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-        // Pod 2 must have processed the cluster broadcast and evicted its local Roaring bitmap!
+        // Pod 2 must have processed the cluster broadcast and evicted its local Roaring bitmap and cache key!
         assert!(!cache_pod2.lineage_graph().contains_document(src_doc));
+        assert!(!cache_pod2
+            .exists("cache:financial:report:summary")
+            .await
+            .unwrap());
         assert_eq!(sync_pod2.messages_received(), 1);
         assert_eq!(sync_pod2.records_invalidated(), 1);
 

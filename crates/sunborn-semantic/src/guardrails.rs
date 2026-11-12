@@ -580,13 +580,22 @@ pub trait CrossEncoderBackend: Send + Sync {
     ) -> Result<EntailmentScores, sunborn_core::SunbornError>;
 }
 
-/// Evaluator for Cross-Encoder / NLI Entailment Verification
-pub struct CrossEncoderVerifier;
+/// Structural Entailment Scorer
+///
+/// Computes joint semantic entailment calibrated with strict structural fingerprint validation.
+/// Combines structural invariant matching (negation, entities, numbers, temporal markers)
+/// with piecewise continuous cosine calibration.
+///
+/// Note: This is an analytical structural heuristic and calibrated scoring engine;
+/// for deep neural cross-encoder NLI, use an external ONNX/TensorRT cross-encoder backend
+/// via `CrossEncoderBackend`.
+pub struct StructuralEntailmentScorer;
 
-impl CrossEncoderVerifier {
-    /// Evaluates candidate query and cached query jointly.
-    /// In production this dispatches to an ONNX INT8 NLI cross-encoder or calibrated structural verification.
-    /// Here we compute joint semantic entailment calibrated with strict structural fingerprint validation.
+/// Backward-compatibility alias for `StructuralEntailmentScorer`.
+pub type CrossEncoderVerifier = StructuralEntailmentScorer;
+
+impl StructuralEntailmentScorer {
+    /// Evaluates candidate query and cached query jointly using structural invariants and cosine similarity.
     pub fn verify(
         query_fp: &StructuralFingerprint,
         cached_fp: &StructuralFingerprint,

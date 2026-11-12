@@ -12,9 +12,11 @@ use crate::bitmap_lineage::CompressedLineageGraph;
 use crate::graph::DependencyGraph;
 use async_trait::async_trait;
 use roaring::RoaringTreemap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use sunborn_cache::{CacheEntry, ExactCacheStore, MemoryExactCache};
-use sunborn_core::Result;
+use sunborn_core::{Result, SunbornError};
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 /// Statistics representing active graph cache topology and lineage associations.
@@ -32,6 +34,7 @@ pub struct GraphMemoryCache {
     cache: Arc<dyn ExactCacheStore>,
     dependency_graph: Arc<DependencyGraph>,
     lineage_graph: Arc<CompressedLineageGraph>,
+    record_to_keys: Arc<RwLock<HashMap<u64, HashSet<String>>>>,
 }
 
 impl Default for GraphMemoryCache {
@@ -47,6 +50,7 @@ impl GraphMemoryCache {
             cache: Arc::new(MemoryExactCache::new()),
             dependency_graph: Arc::new(DependencyGraph::new()),
             lineage_graph: Arc::new(CompressedLineageGraph::new()),
+            record_to_keys: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -60,6 +64,7 @@ impl GraphMemoryCache {
             cache,
             dependency_graph,
             lineage_graph,
+            record_to_keys: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -79,6 +84,8 @@ impl GraphMemoryCache {
     }
 
     /// Stores a cache entry in memory and binds it to causal knowledge sources and document hashes.
+    /// Implements atomic two-phase admission (SB-010): if dependency registration or cache storage fails,
+    /// partial state is rolled back compensatorily to prevent dangling or orphaned lineage.
     pub async fn set_with_lineage(
         &self,
         entry: CacheEntry,
@@ -87,19 +94,49 @@ impl GraphMemoryCache {
         record_id: u64,
     ) -> Result<()> {
         let key = entry.key.clone();
-        // 1. Store in memory cache
-        self.cache.set(entry).await?;
 
-        // 2. Record multi-source dependencies in the knowledge graph
+        // Phase 1: Record multi-source dependencies in the knowledge graph
+        let mut recorded_sources = Vec::new();
         for &source_id in source_ids {
-            self.dependency_graph
+            match self
+                .dependency_graph
                 .record_dependency(source_id, &key)
-                .await?;
+                .await
+            {
+                Ok(_) => recorded_sources.push(source_id),
+                Err(err) => {
+                    // Rollback previously recorded source dependencies
+                    for src in recorded_sources {
+                        let _ = self.dependency_graph.remove_dependency(&src, &key).await;
+                    }
+                    return Err(err);
+                }
+            }
         }
 
-        // 3. Record document hashes in compressed Roaring bitmap lineage
+        // Phase 2: Link document hashes in compressed Roaring bitmap lineage
         if !doc_hashes.is_empty() {
             self.lineage_graph.link_documents(doc_hashes, record_id);
+            let mut r2k = self.record_to_keys.write().await;
+            r2k.entry(record_id).or_default().insert(key.clone());
+        }
+
+        // Phase 3: Store entry in memory cache (atomic compensation on failure)
+        if let Err(err) = self.cache.set(entry).await {
+            // Rollback graph dependencies
+            for src in recorded_sources {
+                let _ = self.dependency_graph.remove_dependency(&src, &key).await;
+            }
+            if !doc_hashes.is_empty() {
+                let mut r2k = self.record_to_keys.write().await;
+                if let Some(set) = r2k.get_mut(&record_id) {
+                    set.remove(&key);
+                    if set.is_empty() {
+                        r2k.remove(&record_id);
+                    }
+                }
+            }
+            return Err(err);
         }
 
         Ok(())
@@ -107,17 +144,74 @@ impl GraphMemoryCache {
 
     /// Real-Time Causal (RTC) Invalidation for a knowledge source:
     /// Traverses the multi-hop dependency graph, purges all affected cache entries
-    /// from memory immediately, and clears graph edges.
+    /// from memory immediately, and clears graph edges only for confirmed purged keys (SB-003).
     pub async fn invalidate_source_rtc(&self, source_id: &Uuid) -> Result<Vec<String>> {
         let affected_keys = self
             .dependency_graph
             .get_affected_cache_keys(source_id)
             .await;
+
+        let mut successfully_purged = Vec::new();
+        let mut failed_purges = Vec::new();
+
         for key in &affected_keys {
-            let _ = self.cache.delete(key).await;
+            match self.cache.delete(key).await {
+                Ok(_) => {
+                    successfully_purged.push(key.clone());
+                    let _ = self
+                        .dependency_graph
+                        .remove_dependency(source_id, key)
+                        .await;
+                }
+                Err(err) => {
+                    tracing::error!(
+                        source_id = %source_id,
+                        key = %key,
+                        error = %err,
+                        "Failed to delete cache key during RTC invalidation; preserving graph dependency"
+                    );
+                    failed_purges.push((key.clone(), err));
+                }
+            }
         }
-        self.dependency_graph.clear_dependencies(source_id).await;
-        Ok(affected_keys)
+
+        if failed_purges.is_empty() {
+            self.dependency_graph.clear_dependencies(source_id).await;
+            Ok(successfully_purged)
+        } else {
+            Err(SunbornError::internal(format!(
+                "RTC invalidation partially failed for source {}: {}/{} keys purged, {} failed",
+                source_id,
+                successfully_purged.len(),
+                affected_keys.len(),
+                failed_purges.len()
+            )))
+        }
+    }
+
+    /// Real-Time Causal (RTC) Invalidation for document hashes with full cache eviction:
+    /// Evaluates SIMD Roaring Treemap bitmap unions in $O(k)$ time, resolves affected
+    /// cache keys, purges them from memory cache, and returns both affected record IDs and purged keys.
+    pub async fn invalidate_docs_rtc_purge(
+        &self,
+        doc_hashes: &[u64],
+    ) -> Result<(RoaringTreemap, Vec<String>)> {
+        let affected_records = self.lineage_graph.invalidate_documents(doc_hashes);
+        let mut purged_keys = Vec::new();
+
+        let mut r2k = self.record_to_keys.write().await;
+        for record_id in &affected_records {
+            if let Some(keys) = r2k.remove(&record_id) {
+                for key in keys {
+                    let _ = self.cache.delete(&key).await;
+                    purged_keys.push(key);
+                }
+            }
+        }
+        purged_keys.sort();
+        purged_keys.dedup();
+
+        Ok((affected_records, purged_keys))
     }
 
     /// Real-Time Causal (RTC) Invalidation for document hashes:
@@ -219,9 +313,11 @@ mod tests {
         assert!(cache.exists("cache:doc:2").await.unwrap());
 
         // 4. Trigger SIMD Roaring Treemap RTC invalidation for doc_hashes [2001]
-        let affected_records = cache.invalidate_docs_rtc(&[2001]);
+        let (affected_records, doc_keys) = cache.invalidate_docs_rtc_purge(&[2001]).await.unwrap();
         assert_eq!(affected_records.len(), 1);
         assert!(affected_records.contains(84));
+        assert_eq!(doc_keys, vec!["cache:doc:2".to_string()]);
+        assert!(!cache.exists("cache:doc:2").await.unwrap());
     }
 
     #[tokio::test]

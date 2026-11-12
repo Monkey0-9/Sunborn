@@ -34,6 +34,9 @@ pub trait KnowledgeGraphStore: Send + Sync {
     /// Find all cache keys directly or transitively dependent on a knowledge source
     async fn get_affected_cache_keys(&self, source_id: &Uuid) -> Result<Vec<String>>;
 
+    /// Remove a single dependency edge between a knowledge source and a cache key
+    async fn remove_dependency(&self, source_id: &Uuid, cache_key: &str) -> Result<()>;
+
     /// Clear recorded dependencies for a source after invalidation
     async fn clear_dependencies(&self, source_id: &Uuid) -> Result<()>;
 
@@ -92,6 +95,17 @@ impl KnowledgeGraphStore for InMemoryGraphStore {
             .get(source_id)
             .map(|set| set.iter().cloned().collect())
             .unwrap_or_default())
+    }
+
+    async fn remove_dependency(&self, source_id: &Uuid, cache_key: &str) -> Result<()> {
+        let mut deps = self.dependencies.write().await;
+        if let Some(set) = deps.get_mut(source_id) {
+            set.remove(cache_key);
+            if set.is_empty() {
+                deps.remove(source_id);
+            }
+        }
+        Ok(())
     }
 
     async fn clear_dependencies(&self, source_id: &Uuid) -> Result<()> {
@@ -203,6 +217,15 @@ impl KnowledgeGraphStore for Neo4jCypherGraphStore {
             }
         }
         Ok(keys)
+    }
+
+    async fn remove_dependency(&self, source_id: &Uuid, cache_key: &str) -> Result<()> {
+        let cypher = "MATCH (k:CacheKey {key: $cache_key})-[r:DEPENDS_ON]->(s:KnowledgeSource {id: $source_id}) DELETE r";
+        let params = serde_json::json!({
+            "source_id": source_id.to_string(),
+            "cache_key": cache_key,
+        });
+        self.execute_cypher(cypher, params).await.map(|_| ())
     }
 
     async fn clear_dependencies(&self, source_id: &Uuid) -> Result<()> {
@@ -373,6 +396,23 @@ impl KnowledgeGraphStore for MockNeo4jCypherStore {
         Ok(affected.into_iter().collect())
     }
 
+    async fn remove_dependency(&self, source_id: &Uuid, cache_key: &str) -> Result<()> {
+        let cypher = "MATCH (k:CacheKey {key: $cache_key})-[r:DEPENDS_ON]->(s:KnowledgeSource {id: $source_id}) DELETE r";
+        let params = serde_json::json!({
+            "source_id": source_id.to_string(),
+            "cache_key": cache_key,
+        });
+        self.execute_cypher(cypher, params).await?;
+        let mut edges = self.direct_edges.write().await;
+        if let Some(set) = edges.get_mut(source_id) {
+            set.remove(cache_key);
+            if set.is_empty() {
+                edges.remove(source_id);
+            }
+        }
+        Ok(())
+    }
+
     async fn clear_dependencies(&self, source_id: &Uuid) -> Result<()> {
         let cypher = "MATCH (s:KnowledgeSource {id: $source_id}) DETACH DELETE s";
         let params = serde_json::json!({
@@ -480,6 +520,11 @@ impl DependencyGraph {
             .get_affected_cache_keys(source_id)
             .await
             .unwrap_or_default()
+    }
+
+    /// Remove a single dependency edge between a knowledge source and a cache key
+    pub async fn remove_dependency(&self, source_id: &Uuid, cache_key: &str) -> Result<()> {
+        self.store.remove_dependency(source_id, cache_key).await
     }
 
     /// Clear recorded dependencies for a source after invalidation

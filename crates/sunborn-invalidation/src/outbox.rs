@@ -129,6 +129,118 @@ impl<C: ExactCacheStore + ?Sized, V: VectorStore + ?Sized> InvalidationEngine<C,
         Ok(replayed)
     }
 
+    /// Core event processor: executes multi-target evictions with exponential backoff retries,
+    /// DLQ capture, and dependency retention invariants.
+    pub async fn process_event(&self, event: InvalidationEvent) -> Result<usize> {
+        let affected_keys = self.graph.get_affected_cache_keys(&event.source_id).await;
+        if affected_keys.is_empty() {
+            self.graph.clear_dependencies(&event.source_id).await;
+            return Ok(0);
+        }
+
+        tracing::info!(
+            source_id = %event.source_id,
+            affected_keys = affected_keys.len(),
+            "Processing knowledge invalidation event"
+        );
+
+        let mut pending_keys = affected_keys.clone();
+        let mut evicted_count = 0;
+        let mut retry_count = 0;
+        let mut last_error = String::new();
+
+        while !pending_keys.is_empty() && retry_count < self.max_retries {
+            let mut unevicted = Vec::new();
+            for key in &pending_keys {
+                let mut key_failed = false;
+
+                // 1. Delete from exact cache
+                match self.cache.delete(key).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        key_failed = true;
+                        last_error = format!("Cache deletion error for {key}: {e}");
+                    }
+                }
+
+                // 2. Delete from vector store
+                match self.vector_store.delete(key).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        key_failed = true;
+                        last_error = format!("Vector store deletion error for {key}: {e}");
+                    }
+                }
+
+                if key_failed {
+                    unevicted.push(key.clone());
+                } else {
+                    evicted_count += 1;
+                }
+            }
+
+            if unevicted.is_empty() {
+                pending_keys.clear();
+                break;
+            }
+
+            pending_keys = unevicted;
+            retry_count += 1;
+            tokio::time::sleep(std::time::Duration::from_millis(
+                5 * (1 << retry_count.min(5)),
+            ))
+            .await;
+        }
+
+        if !pending_keys.is_empty() {
+            let err_msg = if last_error.is_empty() {
+                format!(
+                    "Failed to evict {} keys after {} retries",
+                    pending_keys.len(),
+                    retry_count
+                )
+            } else {
+                last_error
+            };
+
+            // Automatically capture to Dead Letter Queue
+            self.send_to_dlq(event.clone(), err_msg.clone(), retry_count)
+                .await;
+
+            tracing::error!(
+                source_id = %event.source_id,
+                failed_keys = pending_keys.len(),
+                retries = retry_count,
+                "Invalidation pipeline failed; unevicted dependencies preserved and event captured in DLQ"
+            );
+
+            // Invariant: Dependencies must NOT be cleared if evictions failed
+            return Err(SunbornError::internal(format!(
+                "Invalidation failed for source {}: {err_msg}",
+                event.source_id
+            )));
+        }
+
+        // Only clear dependencies after all evictions have been acknowledged
+        self.graph.clear_dependencies(&event.source_id).await;
+        Ok(evicted_count)
+    }
+
+    /// Non-blocking drain method for graceful shutdown or polling.
+    /// Returns Ok(Some(evicted)) if an event was available and processed.
+    /// Returns Ok(None) if the channel is currently empty or disconnected.
+    pub async fn try_process_next(&self) -> Result<Option<usize>> {
+        let mut rx = self.rx.lock().await;
+        match rx.try_recv() {
+            Ok(event) => {
+                drop(rx);
+                self.process_event(event).await.map(Some)
+            }
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty) => Ok(None),
+            Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => Ok(None),
+        }
+    }
+
     /// Process the next invalidation event in the outbox with per-target acknowledgments,
     /// bounded exponential backoff retries, and automatic Dead Letter Queue (DLQ) capture.
     ///
@@ -138,98 +250,7 @@ impl<C: ExactCacheStore + ?Sized, V: VectorStore + ?Sized> InvalidationEngine<C,
         let mut rx = self.rx.lock().await;
         if let Some(event) = rx.recv().await {
             drop(rx);
-            let affected_keys = self.graph.get_affected_cache_keys(&event.source_id).await;
-            if affected_keys.is_empty() {
-                self.graph.clear_dependencies(&event.source_id).await;
-                return Ok(Some(0));
-            }
-
-            tracing::info!(
-                source_id = %event.source_id,
-                affected_keys = affected_keys.len(),
-                "Processing knowledge invalidation event"
-            );
-
-            let mut pending_keys = affected_keys.clone();
-            let mut evicted_count = 0;
-            let mut retry_count = 0;
-            let mut last_error = String::new();
-
-            while !pending_keys.is_empty() && retry_count < self.max_retries {
-                let mut unevicted = Vec::new();
-                for key in &pending_keys {
-                    let mut key_failed = false;
-
-                    // 1. Delete from exact cache
-                    match self.cache.delete(key).await {
-                        Ok(_) => {}
-                        Err(e) => {
-                            key_failed = true;
-                            last_error = format!("Cache deletion error for {key}: {e}");
-                        }
-                    }
-
-                    // 2. Delete from vector store
-                    match self.vector_store.delete(key).await {
-                        Ok(_) => {}
-                        Err(e) => {
-                            key_failed = true;
-                            last_error = format!("Vector store deletion error for {key}: {e}");
-                        }
-                    }
-
-                    if key_failed {
-                        unevicted.push(key.clone());
-                    } else {
-                        evicted_count += 1;
-                    }
-                }
-
-                if unevicted.is_empty() {
-                    pending_keys.clear();
-                    break;
-                }
-
-                pending_keys = unevicted;
-                retry_count += 1;
-                tokio::time::sleep(std::time::Duration::from_millis(
-                    5 * (1 << retry_count.min(5)),
-                ))
-                .await;
-            }
-
-            if !pending_keys.is_empty() {
-                let err_msg = if last_error.is_empty() {
-                    format!(
-                        "Failed to evict {} keys after {} retries",
-                        pending_keys.len(),
-                        retry_count
-                    )
-                } else {
-                    last_error
-                };
-
-                // Automatically capture to Dead Letter Queue
-                self.send_to_dlq(event.clone(), err_msg.clone(), retry_count)
-                    .await;
-
-                tracing::error!(
-                    source_id = %event.source_id,
-                    failed_keys = pending_keys.len(),
-                    retries = retry_count,
-                    "Invalidation pipeline failed; unevicted dependencies preserved and event captured in DLQ"
-                );
-
-                // Invariant: Dependencies must NOT be cleared if evictions failed
-                return Err(SunbornError::internal(format!(
-                    "Invalidation failed for source {}: {err_msg}",
-                    event.source_id
-                )));
-            }
-
-            // Only clear dependencies after all evictions have been acknowledged
-            self.graph.clear_dependencies(&event.source_id).await;
-            Ok(Some(evicted_count))
+            self.process_event(event).await.map(Some)
         } else {
             Ok(None)
         }

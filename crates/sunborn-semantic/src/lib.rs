@@ -23,8 +23,8 @@ pub mod microbatch;
 pub mod vector_store;
 
 pub use conformal::{
-    NonExchangeableConformalCalibrator, RollingWindowConformalEngine, ShadowObservation,
-    StreamingOODDetector, TaskStratifiedConformalCalibrator, TaskStratum,
+    wilson_score_interval, NonExchangeableConformalCalibrator, RollingWindowConformalEngine,
+    ShadowObservation, StreamingOODDetector, TaskStratifiedConformalCalibrator, TaskStratum,
 };
 pub use context_digest::ContextDigest;
 
@@ -37,7 +37,8 @@ pub use embedding::{
     LshRandomProjectionEmbeddingProvider, Vector,
 };
 pub use guardrails::{
-    ConformalRiskController, CrossEncoderVerifier, EntailmentScores, StructuralFingerprint,
+    ConformalRiskController, CrossEncoderVerifier, EntailmentScores, StructuralEntailmentScorer,
+    StructuralFingerprint,
 };
 pub use microbatch::MicroBatchedEmbedder;
 pub use vector_store::{

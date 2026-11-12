@@ -55,9 +55,11 @@ ALL 11/11 MASTER SYSTEM VERIFICATION GATES PASSED (FAANG / TIER-1 COMPLIANCE)
 |---|---|---|---|---|
 | **REQ-CACHE-01** | Sub-millisecond exact key lookup | `crates/sunborn-cache/src/memory.rs` | `sunborn-cache/src/memory.rs` | **PASSED** (9/9 tests) |
 | **REQ-CACHE-02** | FinOps GDSF cost-aware eviction | `crates/sunborn-cache/src/gdsf.rs` | `sunborn-cache/src/gdsf.rs` | **PASSED** |
+| **REQ-CACHE-03** | Exact-cache proof-carrying certificate & lease check | `crates/sunborn-gateway/src/handlers.rs` | `tests/reuse_certificate_path_test.rs` | **PASSED** (8/8 tests) |
+| **REQ-GRAPH-01** | Real-time causal invalidation & atomic 2-phase lineage | `crates/sunborn-invalidation/src/graph_cache.rs` | `graph_cache.rs`, `cluster_sync.rs` | **PASSED** (17/17 tests) |
 | **REQ-SEM-01** | Numeric transposition defense (Gap 2) | `crates/sunborn-semantic/src/guardrails.rs` | `guardrails.rs` (`test_structural_guardrails_detects_numeric_inversion`) | **PASSED** |
 | **REQ-SEM-02** | Negation & antonym polarity invariance | `crates/sunborn-semantic/src/guardrails.rs` | `guardrails.rs` (`test_structural_guardrails_detects_negation_inversion`) | **PASSED** |
-| **REQ-SEM-03** | Cross-Encoder NLI verification cascade | `crates/sunborn-semantic/src/decision.rs` | `decision.rs` (`test_verification_cascade_stages`) | **PASSED** |
+| **REQ-SEM-03** | Structural Entailment & Cross-Encoder cascade | `crates/sunborn-semantic/src/decision.rs` | `decision.rs` (`test_verification_cascade_stages`) | **PASSED** |
 | **REQ-SEM-04** | Conformal risk control ($\alpha \le 0.001$) | `crates/sunborn-semantic/src/conformal.rs` | `conformal.rs` (`test_task_stratified_conformal_calibrator`) | **PASSED** |
 | **REQ-INVAL-01**| Outbox per-target acks & retry backoff | `crates/sunborn-invalidation/src/outbox.rs` | `outbox.rs` (`test_invalidation_dlq_capture_and_retry`) | **PASSED** |
 | **REQ-INVAL-02**| Graph dependencies preserved on failure | `crates/sunborn-invalidation/src/outbox.rs` | `outbox.rs` (`test_invalidation_failure_retains_dependencies_and_populates_dlq`) | **PASSED** |
