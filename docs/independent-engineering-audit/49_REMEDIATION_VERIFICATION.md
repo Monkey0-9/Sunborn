@@ -125,3 +125,18 @@ Verified: `cargo check --workspace --all-targets` clean; **252 Rust tests pass,
 - Deterministic SBOM; real k8s hardening.
 - Benchmarks no longer emit fabricated precision or memory numbers.
 - 315 tests passing; typecheck and production build green.
+
+---
+
+## 10. Frontier Elevation & P0 Closure (Commits `bc4f209` & `71548a6`)
+
+| Remediation Item | Engineering Implementation | Verification Evidence |
+| :--- | :--- | :--- |
+| **P0-01: Multi-Tier Invalidation Orchestration** | Coordinated atomic purging across exact-cache keys, Qdrant vector points, and document lineage records in `invalidate_graph_rtc` with truthful `purged` / `partially_purged` status reporting. | `crates/sunborn-gateway/src/handlers.rs`, `crates/sunborn-invalidation/src/graph_cache.rs` |
+| **P0-02: Canonical Qdrant Point IDs** | Deterministic UUID v5 generation (`canonical_qdrant_point_id`) based strictly on tenant and prompt SHA-256 keys. Guarantees 100% point deletion & search consistency. | `crates/sunborn-semantic/src/vector_store.rs`, unit test `test_canonical_qdrant_point_id_determinism_and_format` |
+| **P0-03: Database Provenance Preservation** | Added `certificate_json` column to PostgreSQL `durable_cache_records`. Gateway rebuild strictly validates certificates on recovery, failing closed on counterfeit entries. | `crates/sunborn-db/src/postgres.rs`, `migrations/0004_durable_cache_certificate.sql`, `crates/sunborn-gateway/src/handlers.rs:trigger_rebuild` |
+| **P0-05: Transactional Admission State Machine** | Implemented 2-phase staged cache admission replacing silent drops with structured certificate verification, AEAD encryption, database write, and compensation logging. | `crates/sunborn-gateway/src/handlers.rs:execute_request_inner` |
+| **P0-06: Frontier Multi-Model Routing** | Native Anthropic Claude 3.5 `/v1/messages` and Google Gemini 1.5 `generateContent` adapters alongside OpenAI/vLLM with model-family affinity and zero-downtime 429/503 failover. | `crates/sunborn-gateway/src/origin/anthropic.rs`, `gemini.rs`, `provider.rs` |
+| **P0-07: Dual Caching Default Parity** | Enabled both SIMD Roaring Treemap knowledge graph caching (`GraphMemoryCache`) and Qdrant vector search active by default in configuration. | `crates/sunborn-core/src/config.rs:50`, `crates/sunborn-gateway/src/state.rs:390` |
+| **11/11 Master Verification Pipeline** | All 11 verification gates passed (Cargo check, clippy, fmt, tests, Next.js build, frontend tests, Python SDK smoke test, OpenAPI drift, K8s manifests, reproducibility, SBOM). | `scripts/verify.ps1` exit code 0 |
+
