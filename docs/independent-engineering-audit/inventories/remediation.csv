@@ -1,0 +1,49 @@
+id,priority,title,depends_on,acceptance,verify
+P0-1,P0,Remove frontend fake backend default,none,No simulated response unless explicit demo flag,Playwright offline
+P0-2,P0,Remove dev auth bypass and plaintext secret,none,Gateway-down login fails; token only from access_token,Unit+e2e
+P0-3,P0,Remove fake credential minting,none,Failure shows error,Unit
+P0-4,P0,Measure certificate evidence,P0-1,Evidence equals measured fingerprint,Integration
+P0-5,P0,Server-derive freshness/epochs,P0-4,Epochs from registry not body,Fencing tests
+P0-6,P0,Fix Qdrant delete id,none,Insert/delete same UUID,Contract test
+P0-7,P0,Rewrite false claims,none,Every number cites artifact,Review+doc paths
+P1-1,P1,Fail closed instead of silent fallback,P0-4,No silent substitution in prod,Metric+log test
+P1-2,P1,Wire durable outbox and DLQ,P1-1,Invalidation survives restart,Restart test
+P1-3,P1,Wire distributed cluster sync,P1-2,Multi-pod purge,Cluster test
+P1-4,P1,Transitive closure in-memory or require Neo4j,none,Transitive test,Integration
+P1-5,P1,Wire or delete write-behind,none,No dead durable path,Review
+P1-6,P1,Separate certificate signing key,P0-4,Distinct keys+rotation,Rotation test
+P1-7,P1,Replace KEYS with SCAN,none,No O(N) blocking,Load test
+P1-8,P1,Fix lineage retention,P1-4,Repeat mutation test,Unit
+P1-9,P1,Async KMS trait,P1-1,No runtime spin,Review
+P1-10,P1,Rate limits and size caps,none,Load test,Load test
+P1-11,P1,Resolve advisory suppressions,none,Audit clean/justified,CI
+P1-12,P1,Live-infra integration tests,none,CI touches infra,CI
+P1-13,P1,Fix branch protection + wire doc paths,none,Protection satisfiable,CI
+P1-14,P1,Deploy hardening,P1-13,Secrets provisioned; read-only; affinity,kustomize+smoke
+P1-15,P1,Remove dead components,none,No exported-unused,Review
+P2-1,P2,Deterministic SBOM,none,Stable output,CI diff
+P2-2,P2,Fix root openapi pointer,none,Valid spec path,Drift check
+P2-3,P2,Real NFC,none,Unicode tests,Unit
+P2-4,P2,Unify canonical JSON,none,Single JCS path,Unit
+P2-5,P2,OTel metrics/tracing,none,Dashboards,Integration
+P2-6,P2,Consolidate docs,none,One SSOT,Review
+P2-7,P2,Consolidate SDK,none,One package,CI
+P2-8,P2,Idempotency keys,none,Replay safe,Integration
+P2-9,P2,Gitignore and junk cleanup,none,Clean tree,git status
+P2-10,P2,Accessibility fixes,none,AA conformance,axe
+P2-11,P2,Replace a11y tests,none,Rendered DOM tests,CI
+P3-1,P3,Criterion+HTTP benches,none,Measured outputs,CI
+P3-2,P3,Publish p50-p999,none,Signed artifacts,Review
+P3-3,P3,Coverage thresholds,none,Gate,CI
+P3-4,P3,Remove dead code,none,Reduced surface,Review
+P3-5,P3,L1 optimization,none,Measured improvement,Bench
+P4-1,P4,Real embeddings,none,No silent LSH,Integration
+P4-2,P4,Real ANN,none,Recall/latency published,Bench
+P4-3,P4,Real NLI backend,none,Backend impl,Integration
+P4-4,P4,Rigorous conformal online,none,Stated coverage,Eval
+P4-5,P4,Asymmetric certs + verifier CLI,none,Third-party verify,E2E
+P4-6,P4,Heldout real-embedding eval,none,Nonzero reuse,Artifact
+P4-7,P4,Multi-region implementation,none,Partition tests,Chaos
+P4-8,P4,OIDC/MFA,none,Auth flow,E2E
+P4-9,P4,Cosign+SLSA+Trivy,none,Signed images,CI
+P4-10,P4,Generated API docs + machine-checked claims,none,CI links,CI

@@ -143,30 +143,9 @@ export default function SecurityPage() {
         app: res.application_id,
       });
     } catch {
-      // Local fallback simulator if gateway offline
-      const mockRaw = `sb_live_${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}`;
-      const mockHash = Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-      const allowed = newKeyModels.split(",").map((s) => s.trim());
-
-      const fallbackCred = {
-        id: `cred-${Date.now().toString(36)}`,
-        keyPrefix: `${mockRaw.substring(0, 12)}...`,
-        keyHash: mockHash,
-        tenantId: newKeyTenant,
-        appId: newKeyApp,
-        allowedModels: allowed,
-        rateLimitRps: newKeyRps,
-        isAdmin: newKeyIsAdmin,
-        status: "ACTIVE" as const,
-      };
-
-      setActiveCredentials((prev) => [fallbackCred, ...prev]);
-      setGeneratedKey({
-        rawKey: mockRaw,
-        keyHash: mockHash,
-        tenant: newKeyTenant,
-        app: newKeyApp,
-      });
+      // Gateway unavailable: never fabricate credentials. Leave the UI unchanged
+      // so an operator cannot mistake an invented key for a real one.
+      console.error("Credential provisioning failed: gateway unavailable");
     } finally {
       setIsGeneratingKey(false);
     }

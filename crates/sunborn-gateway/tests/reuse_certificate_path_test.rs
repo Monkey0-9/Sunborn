@@ -60,7 +60,7 @@ async fn test_reuse_certificate_authenticated_and_validated_on_reuse_path() {
     let cert: ReuseCertificate = serde_json::from_value(cert_val.clone()).unwrap();
 
     // Verify certificate Merkle root and RFC 2104 HMAC-SHA-256 signature
-    assert!(cert.verify_integrity(&state.learning_hmac_secret).is_ok());
+    assert!(cert.verify_integrity(&state.certificate_signing_key).is_ok());
     assert_eq!(cert.tenant_id, TenantId::new("enterprise-fintech"));
     assert_eq!(cert.model_name, "gpt-4o");
 
@@ -302,7 +302,7 @@ async fn test_reuse_certificate_epoch_advance_abstains_to_revalidate() {
             expires_at: Utc::now() + Duration::seconds(60),
             monotonic_epoch_lease: 1, // lease valid only for epoch <= 1
         },
-        &state.learning_hmac_secret,
+        &state.certificate_signing_key,
     );
     cached_entry.metadata["certificate"] = serde_json::to_value(restricted_cert).unwrap();
     state.cache.set(cached_entry).await.unwrap();
@@ -392,7 +392,7 @@ async fn test_reuse_certificate_expired_validity_window_abstains_to_revalidate()
             expires_at: Utc::now() - Duration::seconds(10), // expired in past
             monotonic_epoch_lease: 100,
         },
-        &state.learning_hmac_secret,
+        &state.certificate_signing_key,
     );
     cached_entry.metadata["certificate"] = serde_json::to_value(expired_cert).unwrap();
     state.cache.set(cached_entry).await.unwrap();

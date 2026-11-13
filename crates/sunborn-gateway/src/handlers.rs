@@ -320,7 +320,7 @@ pub async fn execute_request_inner(
                     }
 
                     if let Err(admissibility_err) = cert.verify_admissibility(
-                        &state.learning_hmac_secret,
+                        &state.certificate_signing_key,
                         &req.tenant_id,
                         &req.application_id,
                         &req.model,
@@ -497,7 +497,7 @@ pub async fn execute_request_inner(
                             }
                         }
                         if let Err(admissibility_err) = cert.verify_admissibility(
-                            &state.learning_hmac_secret,
+                            &state.certificate_signing_key,
                             &req.tenant_id,
                             &req.application_id,
                             &req.model,
@@ -670,7 +670,7 @@ pub async fn execute_request_inner(
                     + chrono::Duration::seconds(state.config.cache.default_ttl_secs as i64),
                 monotonic_epoch_lease: req.knowledge_epoch.unwrap_or(1),
             },
-            &state.learning_hmac_secret,
+            &state.certificate_signing_key,
         );
 
         // Authenticated Encryption on Write Path (K-003: Fail-closed on encryption failure)
@@ -1844,7 +1844,7 @@ pub async fn trigger_rebuild(
                     .unwrap_or_else(|| Utc::now() + chrono::Duration::seconds(ttl_secs as i64)),
                 monotonic_epoch_lease: 1,
             },
-            &state.learning_hmac_secret,
+            &state.certificate_signing_key,
         );
 
         let mut entry = CacheEntry::new(&record.key, &record.content, Some(ttl_secs));

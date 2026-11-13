@@ -470,9 +470,15 @@ def run_live_endurance_soak(
     else:
         print("\n[*] Dry-run enabled: skipped writing report to disk.")
 
+    failed = int(errors) + int(locals().get("bg_errors", 0))
+    status = (
+        "PASS"
+        if failed == 0 and total_processed > 0
+        else f"FAIL ({failed} errors / {total_processed} requests)"
+    )
     print("\n" + "=" * 78)
-    print("ENDURANCE CAPACITY SOAK SUMMARY: 100% STABLE (PASS)")
-    print(f"Total Requests: {total_processed} | Duration: {total_duration:.2f}s | Zero Memory Leaks Verified")
+    print(f"ENDURANCE CAPACITY SOAK SUMMARY: {status}")
+    print(f"Total Requests: {total_processed} | Duration: {total_duration:.2f}s")
     print("=" * 78)
     return report
 

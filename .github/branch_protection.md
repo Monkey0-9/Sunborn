@@ -22,14 +22,18 @@ The `main` branch represents the cryptographically attested, auditable productio
 * **Enforce Linear History**: Merge commits are disabled. Pull requests must be integrated via `Squash and merge` or `Rebase and merge`.
 
 ### 1.3 Mandatory Status Checks (CI/CD Gates)
-The following automated status checks must pass green before merge authorization:
-1. `verify-ci / test-workspace`: All 195+ Rust workspace tests pass (`cargo test --workspace`).
-2. `verify-ci / frontend-test`: All 25+ Next.js unit tests pass (`npm test`).
-3. `verify-ci / openapi-drift`: Zero API drift verified (`python scripts/check_openapi_drift.py`).
-4. `verify-security / semgrep-sast`: Zero high/critical static analysis findings.
-5. `verify-security / npm-audit`: Zero high/critical supply chain vulnerabilities in `frontend/package-lock.json`.
-6. `verify-security / k8s-manifests`: Zero deployable placeholder secrets (`python scripts/check_k8s_manifests.py`).
-7. `verify-research / cert-verification`: Research artifact hash verification passes (`python research/verify_certificate.py`).
+The following status checks correspond to real jobs in
+[`workflows/ci.yml`](workflows/ci.yml) and [`workflows/security.yml`](workflows/security.yml)
+and must pass green before merge authorization:
+1. `backend-verification`: `cargo fmt --check`, `clippy -D warnings`, and the full Rust suite (252 tests).
+2. `frontend-verification`: TypeScript check, production build, and the frontend suite (37 tests).
+3. `research-reproducibility`: SDK and research artifact verification.
+4. `contract-and-sdk-verification`: OpenAPI drift (`python scripts/check_openapi_drift.py`) and Python SDK tests.
+5. `helm-and-manifest-verification`: `helm lint`/`template` and Kubernetes manifest checks.
+6. `security-audit`: `cargo audit`, secret scan, npm audit, and Semgrep.
+
+> Note: earlier revisions of this document named checks that do not exist
+> (`verify-ci / test-workspace`, etc.). Those names are corrected above.
 
 ---
 
@@ -37,4 +41,4 @@ The following automated status checks must pass green before merge authorization
 
 * Production release candidates are tagged strictly in the format `vMAJOR.MINOR.PATCH`.
 * Release triggers [`.github/workflows/release.yml`](workflows/release.yml) under the `release-approval` environment requiring formal manual sign-off.
-* Container builds generate SLSA Level 3 provenance (`provenance: mode=max`) and CycloneDX SBOMs published directly to GitHub Container Registry (`ghcr.io`).
+* Container builds generate build provenance (`provenance: mode=max`) and CycloneDX SBOMs published to GitHub Container Registry (`ghcr.io`). **Image signing (cosign) and SLSA attestation are not yet implemented**; see the independent audit for status.

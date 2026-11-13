@@ -56,6 +56,7 @@ pub struct AppState {
     pub learning_store: Arc<crate::learning::TenantLearningStore>,
     pub learning_controller: Arc<crate::learning::PolicyPromotionController>,
     pub learning_hmac_secret: Vec<u8>,
+    pub certificate_signing_key: Vec<u8>,
     pub spend_velocity_controller: Arc<sunborn_core::SpendVelocityController>,
     pub key_provider_configuration_error: Option<String>,
     pub graph_memory_cache: Option<Arc<GraphMemoryCache>>,
@@ -318,6 +319,22 @@ impl AppState {
                 b"sunborn-insecure-dev-hmac-secret-change-in-production".to_vec()
             };
 
+        // Dedicated key for ReuseCertificate signing/verification. Kept distinct from
+        // the learning-feedback HMAC secret so the two security roles never share keys.
+        let certificate_signing_key: Vec<u8> =
+            if let Ok(secret) = std::env::var("SUNBORN_CERTIFICATE_SIGNING_KEY") {
+                secret.into_bytes()
+            } else if let Ok(master_kek) = std::env::var("SUNBORN_MASTER_KEK") {
+                let mut hasher = Sha256::new();
+                hasher.update(b"sunborn-certificate-signing-v1:");
+                hasher.update(master_kek.as_bytes());
+                hasher.finalize().to_vec()
+            } else if is_prod {
+                Vec::new()
+            } else {
+                b"sunborn-insecure-dev-cert-signing-secret-change-in-production".to_vec()
+            };
+
         let is_graph_cache_enabled = config.cache.graph_dependency_cache_enabled
             || sunborn_core::config::parse_bool_env(
                 "SUNBORN_GRAPH_DEPENDENCY_CACHE_ENABLED",
@@ -366,6 +383,7 @@ impl AppState {
             learning_store,
             learning_controller,
             learning_hmac_secret,
+            certificate_signing_key,
             spend_velocity_controller,
             key_provider_configuration_error,
             graph_memory_cache,
@@ -584,6 +602,24 @@ impl AppState {
                 return Err(sunborn_core::SunbornError::configuration_error(
                     "Cryptographic key separation violation: SUNBORN_LEARNING_HMAC_SECRET must NOT equal SUNBORN_ADMIN_KEY.",
                 ));
+            }
+
+            // Certificate signing key must be distinct from every other security role.
+            let cert_signing = std::env::var("SUNBORN_CERTIFICATE_SIGNING_KEY").unwrap_or_default();
+            if !cert_signing.is_empty() {
+                if cert_signing == master_kek
+                    || cert_signing == admin_key
+                    || cert_signing == learning_hmac
+                {
+                    return Err(sunborn_core::SunbornError::configuration_error(
+                        "Cryptographic key separation violation: SUNBORN_CERTIFICATE_SIGNING_KEY must be distinct from the master KEK, admin key, and learning HMAC secret.",
+                    ));
+                }
+                if cert_signing.len() < 32 {
+                    return Err(sunborn_core::SunbornError::configuration_error(
+                        "Production SUNBORN_CERTIFICATE_SIGNING_KEY is too short; provide at least 32 bytes of high entropy.",
+                    ));
+                }
             }
         }
 

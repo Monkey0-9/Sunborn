@@ -1,0 +1,9 @@
+suite,command,executed,total,passed,failed,skipped,notes
+Rust workspace,cargo test --workspace --all-targets,yes,252,252,0,0,35 test binaries; no live infra
+Frontend,npm test,yes,37,37,0,0,E2E mocked; a11y tests are source greps
+Python SDK,python -m unittest sdk/python/test_sunborn_agent.py sdk/python/tests/test_sdk_package.py,yes,26,26,0,0,1.534s
+Adversarial suite,python benchmarks/adversarial_evaluation_suite.py,no,39,unknown,unknown,unknown,not run in audit
+Heldout suite,python benchmarks/heldout_semantic_generalization.py,no,70,unknown,unknown,unknown,script prints 75
+Verifier negatives,python research/tests/test_verifier_negative.py,no,23,unknown,unknown,unknown,not run in audit
+Cargo fuzz,cargo fuzz,no,n/a,n/a,n/a,n/a,not run
+Live Postgres/Redis/Qdrant,n/a,no,n/a,n/a,n/a,n/a,BLOCKED infra not provisioned

@@ -1,0 +1,46 @@
+id,feature,implementation,runtime,evidence
+1,OpenAI chat completions proxy,COMPLETE,VERIFIED WORKING,handlers.rs:904
+2,Anthropic messages proxy,COMPLETE,VERIFIED WORKING,handlers.rs:1069
+3,L1 exact cache,COMPLETE,WORKING WITH LIMITATIONS,gdsf.rs; state.rs:66-70
+4,L2 Dragonfly/Redis,COMPLETE,WORKING WITH LIMITATIONS,dragonfly.rs
+5,Vector search memory,COMPLETE,WORKING WITH LIMITATIONS,vector_store.rs:94-150
+6,Vector search Qdrant,COMPLETE,WORKING WITH LIMITATIONS,vector_store.rs:169-585
+7,Embeddings HTTP,COMPLETE,WORKING WITH LIMITATIONS,embedding.rs:174-233
+8,Embeddings default,HARDCODED,SIMULATED,embedding.rs:54-140
+9,Structural guardrails,PARTIAL,WORKING,guardrails.rs
+10,Conformal risk control,PARTIAL,WORKING WITH LIMITATIONS,conformal.rs:78-123
+11,Rigorous conformal calibrator,COMPLETE,DEAD CODE,conformal.rs:205-327
+12,Cross-encoder NLI,NOT IMPLEMENTED,NOT EXECUTABLE,guardrails.rs:595-637
+13,ReuseCertificate,PARTIAL,WORKING WITH LIMITATIONS,certificate.rs; handlers.rs:651-674
+14,Epoch lease fencing,PARTIAL,WORKING WITH LIMITATIONS,epoch.rs; handlers.rs:1235;1369
+15,Roaring lineage,COMPLETE,WORKING WITH LIMITATIONS,bitmap_lineage.rs:46-65
+16,Atomic two-phase admission,COMPLETE,VERIFIED WORKING,graph_cache.rs:89-146
+17,Transitive invalidation in-memory,PARTIAL,WORKING WITH LIMITATIONS,graph.rs
+18,Transitive invalidation Neo4j,COMPLETE,UNWIRED,graph.rs:158-291
+19,Durable Postgres outbox,COMPLETE,DEAD CODE,postgres.rs outbox
+20,In-memory outbox DLQ,COMPLETE,WORKING WITH LIMITATIONS,outbox.rs
+21,Distributed cluster sync,COMPLETE,UNWIRED,cluster_sync.rs
+22,Merkle DAG planner,COMPLETE,VERIFIED WORKING,planner.rs; merkle.rs
+23,Inclusion proofs,COMPLETE,VERIFIED WORKING,merkle.rs:191-260
+24,Execution memoization,COMPLETE,WORKING WITH LIMITATIONS,store.rs
+25,Write-behind flusher,COMPLETE,UNWIRED,write_behind.rs
+26,AEAD envelope encryption,COMPLETE,VERIFIED WORKING,crypto_shred.rs
+27,Real KMS/Vault,COMPLETE,WORKING WITH LIMITATIONS,crypto_shred.rs
+28,Crypto-shredding,COMPLETE,VERIFIED WORKING,crypto_shred.rs
+29,Dual-admin quorum,PARTIAL,WORKING WITH LIMITATIONS,auth.rs:55-85
+30,FinOps reservations,COMPLETE,VERIFIED WORKING,finops.rs; handlers.rs:249
+31,Token avoidance accounting,COMPLETE,VERIFIED WORKING,finops.rs
+32,Graceful shutdown,COMPLETE,VERIFIED WORKING,main.rs
+33,Postgres persistence,COMPLETE,WORKING WITH LIMITATIONS,postgres.rs
+34,Metrics,PARTIAL,WORKING WITH LIMITATIONS,handlers.rs:27-33
+35,Health readiness,COMPLETE,VERIFIED WORKING,main.rs; lib.rs
+36,Python SDK,COMPLETE,VERIFIED WORKING,sdk/python
+37,Agent memoization,COMPLETE,VERIFIED WORKING,client.py:346-489
+38,Next.js control plane,PARTIAL,WORKING WITH LIMITATIONS,frontend/src
+39,Real frontend data,PARTIAL,MOCKED,standalone-simulator.ts
+40,Frontend auth,PARTIAL,FAILING,api/auth/route.ts
+41,WCAG AA,NOT IMPLEMENTED,FAILING,38
+42,11-gate CI,PARTIAL,NOT EXECUTABLE,verify.sh vs ci.yml
+43,OpenAPI contract,COMPLETE,WORKING WITH LIMITATIONS,docs/api/openapi.yaml
+44,Multi-region failover,NOT IMPLEMENTED,NOT EXECUTABLE,deploy/k8s/multi-region
+45,Real benchmarks,PARTIAL,NOT EXECUTABLE,benchmarks/*

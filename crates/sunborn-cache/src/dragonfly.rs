@@ -6,6 +6,33 @@ use std::sync::Arc;
 use sunborn_core::{Result, SunbornError};
 use tokio::sync::RwLock;
 
+/// Cursor-based `SCAN` over the server keyspace. Avoids the O(N) blocking `KEYS`
+/// command, which can stall a production Dragonfly/Redis instance.
+async fn scan_pattern(
+    conn: &mut redis::aio::ConnectionManager,
+    pattern: &str,
+) -> redis::RedisResult<Vec<String>> {
+    let mut cursor: u64 = 0;
+    let mut keys: Vec<String> = Vec::new();
+    loop {
+        let (next, batch): (u64, Vec<String>) = redis::cmd("SCAN")
+            .arg(cursor)
+            .arg("MATCH")
+            .arg(pattern)
+            .arg("COUNT")
+            .arg(1000)
+            .query_async(conn)
+            .await?;
+        keys.extend(batch);
+        // Bound the scan so a pathological keyspace cannot exhaust memory.
+        if next == 0 || keys.len() >= 100_000 {
+            break;
+        }
+        cursor = next;
+    }
+    Ok(keys)
+}
+
 /// Production DragonflyDB / Redis exact cache adapter implementing ExactCacheStore
 #[derive(Clone)]
 pub struct DragonflyCacheStore {
@@ -215,7 +242,7 @@ impl ExactCacheStore for DragonflyCacheStore {
         let mut deleted_count = 0;
         if let Some(mut conn) = self.get_connection().await {
             let pattern = format!("{}*", prefix);
-            match conn.keys::<_, Vec<String>>(&pattern).await {
+            match scan_pattern(&mut conn, &pattern).await {
                 Ok(keys) => {
                     if !keys.is_empty() {
                         if let Ok(count) = conn.del::<_, usize>(&keys).await {
@@ -247,7 +274,7 @@ impl ExactCacheStore for DragonflyCacheStore {
         let mut df_count = 0;
         if let Some(mut conn) = self.get_connection().await {
             let pattern = format!("{}*", prefix);
-            match conn.keys::<_, Vec<String>>(&pattern).await {
+            match scan_pattern(&mut conn, &pattern).await {
                 Ok(keys) => {
                     df_count = keys.len();
                 }

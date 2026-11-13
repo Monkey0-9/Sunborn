@@ -1,0 +1,43 @@
+crate,function,file,line,purpose,verdict
+core,ReuseCertificate::new_signed,certificate.rs,75-252,issue signed proof,SELF_ATTESTED
+core,ReuseCertificate::validate_for_reuse,certificate.rs,454-462,verify gates,CHECKS_UNMEASURED
+core,FinOpsEngine::reserve,finops.rs,204-360,budget reservation,OK
+core,AppConfig::load_from_env,config.rs,210,config load,PANICS
+identity,encrypt/decrypt,crypto_shred.rs,1102-1189,AEAD,OK
+identity,normalize_unicode_nfc,canonical.rs,8-66,NFC,FAKE
+identity,run_blocking_async,crypto_shred.rs,530-575,sync bridge,RISK
+cache,MemoryExactCache,memory.rs,120-140,L1,GDSF/OLDEST
+cache,delete_by_prefix,dragonfly.rs,214-244,prefix delete,KEYS
+cache,count_by_prefix,dragonfly.rs,246-...,prefix count,KEYS
+cache,GDSF,gdsf.rs,40-186,eviction,OK
+semantic,cosine_similarity,embedding.rs,6-24,similarity,OK
+semantic,Lsh embed,embedding.rs,54-140,default embed,NON_SEMANTIC
+semantic,HttpEmbeddingProvider::embed,embedding.rs,174-252,real embed,FALLBACK
+semantic,MemoryVectorStore::search,vector_store.rs,94-150,search,O_ND
+semantic,Qdrant insert,vector_store.rs,281-353,upsert,HASHED_ID
+semantic,Qdrant delete,vector_store.rs,469-501,delete,ID_MISMATCH
+semantic,StructuralFingerprint::extract,guardrails.rs,33-495,guardrails,NOT_AST
+semantic,StructuralEntailmentScorer,guardrails.rs,599-637,entailment,TABLE
+semantic,TaskStratifiedConformalCalibrator,conformal.rs,103-123,threshold,SEEDED
+semantic,NonExchangeableConformalCalibrator,conformal.rs,205-327,rigorous,UNWIRED
+semantic,VerificationCascade::verify,decision.rs,73-193,cascade,OK
+invalid,CompressedLineageGraph::invalidate_document,bitmap_lineage.rs,46-54,purge,DROPS_LINEAGE
+invalid,GraphMemoryCache::set_with_lineage,graph_cache.rs,89-146,admission,OK
+invalid,EpochLeaseManager,epoch.rs,76-150,fencing,ADMIN_ONLY
+invalid,WatermarkLineageFencer,watermark.rs,32-98,watermark,OK
+invalid,InvalidationEngine::process_event,outbox.rs,134-227,retry,IN_MEMORY
+invalid,DistributedGraphSyncEngine,cluster_sync.rs,108-238,sync,UNWIRED
+invalid,InMemoryGraphStore::get_affected,graph.rs,96-116,lookup,DIRECT_ONLY
+exec,splice_dag,merkle.rs,131-189,reuse,FLAT_METRIC
+exec,build_merkle_tree,merkle.rs,191-260,proofs,OK
+exec,ExecutionPlanner::plan_reuse,planner.rs,194-253,plan,OK
+db,PostgresDatabaseStore::new,postgres.rs,176-360,pool/ddl,OK
+db,outbox CRUD,postgres.rs,775-858,durable,DECODE
+db,WriteBehindFlusher,write_behind.rs,18-230,group commit,UNWIRED
+gateway,create_router,lib.rs,35-175,routes,OK
+gateway,chat_completions,handlers.rs,904,openai,OK
+gateway,anthropic_messages,handlers.rs,1069,anthropic,OK
+gateway,execute_request_inner,handlers.rs,980,pipeline,SELF_ATTEST
+gateway,auth middleware,auth.rs,38-450,auth,OK
+gateway,graceful_drain,state.rs,411-457,drain,OK
+gateway,MockOriginProvider,origin/provider.rs,293-322,origin,MOCK

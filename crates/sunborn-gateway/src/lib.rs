@@ -173,5 +173,6 @@ pub fn create_router(state: AppState) -> Router {
         ))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
+        .layer(axum::extract::DefaultBodyLimit::max(4 * 1024 * 1024))
         .with_state(state)
 }

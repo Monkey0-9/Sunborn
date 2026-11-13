@@ -32,23 +32,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch {
-    const isStrict = process.env.STRICT_GATEWAY === "true" || process.env.NODE_ENV === "production";
-    if (!isStrict && sessionToken) {
-      return NextResponse.json({
-        authenticated: true,
-        session: {
-          active: true,
-          cookie_protected: true,
-          tenant_id: "dev-sandbox-tenant",
-          application_id: "dev-console",
-          is_admin: false,
-          simulated: true,
-        },
-      }, {
-        headers: { "X-Sunborn-Simulated": "true" }
-      });
-    }
-    // Upstream gateway unreachable: fail-closed in production
+    // Upstream gateway unreachable: fail closed in every environment.
     return NextResponse.json(
       { authenticated: false, error: 'Gateway authentication unavailable' },
       { status: 502 }
@@ -129,7 +113,13 @@ export async function POST(req: NextRequest) {
       }
 
       const data = await gatewayRes.json();
-      const accessToken = data.access_token || client_secret;
+      const accessToken = data.access_token;
+      if (!accessToken) {
+        return NextResponse.json(
+          { error: 'Gateway did not return an access token' },
+          { status: 502 }
+        );
+      }
 
       const res = NextResponse.json({
         success: true,
@@ -150,30 +140,7 @@ export async function POST(req: NextRequest) {
 
       return res;
     } catch (err: any) {
-      const isStrict = process.env.STRICT_GATEWAY === "true" || process.env.NODE_ENV === "production";
-      if (!isStrict && client_id && client_secret) {
-        // Offline development sandbox ONLY - never allowed in production
-        const tid = tenant_id || "dev-sandbox-tenant";
-        const app = "dev-console";
-        const res = NextResponse.json({
-          success: true,
-          tenant_id: tid,
-          application_id: app,
-          is_admin: false,
-          expires_in: 86400,
-          simulated: true,
-        }, {
-          headers: { "X-Sunborn-Simulated": "true" }
-        });
-        res.cookies.set('sunborn_session', client_secret, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
-          path: '/',
-          maxAge: 86400,
-        });
-        return res;
-      }
+      // No offline credential acceptance and never persist a plaintext secret.
       return NextResponse.json(
         { error: `Upstream gateway unreachable: ${err.message}` },
         { status: 502 }

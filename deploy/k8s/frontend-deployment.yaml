@@ -18,6 +18,13 @@ spec:
         app.kubernetes.io/name: sunborn-frontend
         app.kubernetes.io/component: control-plane
     spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: sunborn-frontend
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -25,7 +32,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: frontend
-          image: ghcr.io/sunborn/sunborn-frontend:v0.1.0
+          image: ghcr.io/sunborn/sunborn-frontend:0.1.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -45,7 +52,15 @@ spec:
               memory: "512Mi"
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: next-cache
+              mountPath: /app/.next/cache
           livenessProbe:
             httpGet:
               path: /
@@ -58,6 +73,11 @@ spec:
               port: http
             initialDelaySeconds: 10
             periodSeconds: 10
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: next-cache
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

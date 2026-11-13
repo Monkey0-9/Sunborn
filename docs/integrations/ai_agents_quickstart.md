@@ -28,10 +28,9 @@ response = client.chat.completions.create(
 
 print(response.choices[0].message.content)
 
-# Inspect Sunborn Execution-Reuse Metadata:
-# Headers / response include:
-#   sunborn_cached: True / False
-#   sunborn_tier: "c1_exact" / "c2_semantic" / "origin"
+# Execution-reuse metadata is surfaced in the response body fields
+# `sunborn_cached` and `sunborn_tier` by the OpenAI-compatible handler.
+# (Dedicated response headers are not currently emitted.)
 ```
 
 ---

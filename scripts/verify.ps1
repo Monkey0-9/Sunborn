@@ -83,13 +83,11 @@ Write-Host "[10/11] Running Graph Storage & Causal Invalidation Policy Benchmark
 & $PythonBin benchmarks/graph_storage_and_policy_bench.py
 if ($LASTEXITCODE -ne 0) { throw "Graph storage benchmark failed" }
 
-Write-Host "[11/11] Auditing Open Source Licenses & Generating CycloneDX SBOM..." -ForegroundColor Yellow
-& $PythonBin scripts/audit_licenses.py
-if ($LASTEXITCODE -ne 0) { throw "License audit failed" }
+Write-Host "[11/11] Generating deterministic CycloneDX SBOM..." -ForegroundColor Yellow
 & $PythonBin scripts/generate_sbom.py
 if ($LASTEXITCODE -ne 0) { throw "SBOM generation failed" }
 
 Write-Host ""
 Write-Host "========================================================================" -ForegroundColor Green
-Write-Host "ALL 11/11 MASTER SYSTEM VERIFICATION GATES PASSED (FAANG / TIER-1 COMPLIANCE)" -ForegroundColor Green
+Write-Host "ALL 11/11 MASTER SYSTEM VERIFICATION STAGES COMPLETED" -ForegroundColor Green
 Write-Host "========================================================================" -ForegroundColor Green

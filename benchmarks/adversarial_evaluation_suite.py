@@ -817,10 +817,12 @@ def evaluate_baselines(dataset: List[Dict[str, Any]]) -> Dict[str, Any]:
     total_non_equiv = total - total_equiv
 
     for name, r in results.items():
+        # Precision is undefined (not 100%) when nothing was reused. Reporting
+        # 100% for an empty denominator overstates safety.
         prec = (
             (r["tp"] / (r["tp"] + r["fp"])) * 100.0
             if (r["tp"] + r["fp"]) > 0
-            else 100.0
+            else None
         )
         rec = (r["tp"] / total_equiv) * 100.0 if total_equiv > 0 else 0.0
         fp_rate = (r["fp"] / total_non_equiv) * 100.0 if total_non_equiv > 0 else 0.0
@@ -830,7 +832,8 @@ def evaluate_baselines(dataset: List[Dict[str, Any]]) -> Dict[str, Any]:
             "fp": r["fp"],
             "tn": r["tn"],
             "fn": r["fn"],
-            "precision": round(prec, 2),
+            "precision": round(prec, 2) if prec is not None else None,
+            "precision_defined": prec is not None,
             "recall": round(rec, 2),
             "false_hit_rate": round(fp_rate, 2),
             "fp_wilson_ci": wilson_interval(r["fp"], total_non_equiv),
@@ -857,8 +860,9 @@ if __name__ == "__main__":
         fp_ci = (
             f"{s['false_hit_rate']}% [{s['fp_wilson_ci'][0]},{s['fp_wilson_ci'][1]}]"
         )
+        prec_str = f"{s['precision']:.1f}" if s["precision"] is not None else "N/A"
         print(
-            f"{name:<30} | {s['reused']:<6} | {s['tp']:<4} | {s['fp']:<4} | {s['precision']:<7.1f} | {rec_ci:<18} | {fp_ci:<18}"
+            f"{name:<30} | {s['reused']:<6} | {s['tp']:<4} | {s['fp']:<4} | {prec_str:<7} | {rec_ci:<18} | {fp_ci:<18}"
         )
     print("=" * 80)
 

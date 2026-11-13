@@ -28,6 +28,14 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "sunborn.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: frontend
       securityContext:
         {{- if .Values.frontend.podSecurityContext }}
         {{- toYaml .Values.frontend.podSecurityContext | nindent 8 }}
@@ -61,10 +69,20 @@ spec:
               value: "http://{{ include "sunborn.fullname" . }}-gateway:{{ .Values.gateway.service.port }}"
             - name: STRICT_GATEWAY
               value: "true"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: next-cache
+              mountPath: /app/.next/cache
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
           livenessProbe:
             {{- toYaml .Values.frontend.livenessProbe | nindent 12 }}
           readinessProbe:
             {{- toYaml .Values.frontend.readinessProbe | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: next-cache
+          emptyDir: {}
 {{- end }}

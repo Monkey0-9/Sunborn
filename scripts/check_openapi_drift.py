@@ -64,11 +64,10 @@ def main():
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     lib_path = os.path.join(root_dir, "crates", "sunborn-gateway", "src", "lib.rs")
     openapi_doc_path = os.path.join(root_dir, "docs", "api", "openapi.yaml")
-    openapi_root_path = os.path.join(root_dir, "openapi.yaml")
 
-    # 1. Check root openapi.yaml existence
-    if not os.path.exists(openapi_root_path):
-        print("ERROR: Root openapi.yaml does not exist! Expected symlink to docs/api/openapi.yaml")
+    # 1. Check canonical OpenAPI spec existence
+    if not os.path.exists(openapi_doc_path):
+        print("ERROR: Canonical spec docs/api/openapi.yaml does not exist!")
         sys.exit(1)
 
     # 2. Extract routes from lib.rs
@@ -164,9 +163,9 @@ def main():
         print(f"Total OpenAPI Operations : {len(openapi_operations)}")
         sys.exit(1)
 
-    print(f"✓ All {len(gateway_operations)} gateway method/path operations match OpenAPI and pass minimum structure checks.")
-    print("! Runtime schema, authorization, and error-behavior parity still require contract and policy tests.")
-    print(f"✓ Root openapi.yaml verified reachable at {openapi_root_path}")
+    print(f"OK: all {len(gateway_operations)} gateway method/path operations match OpenAPI and pass minimum structure checks.")
+    print("NOTE: runtime schema, authorization, and error-behavior parity still require contract and policy tests.")
+    print(f"OK: canonical spec verified at {openapi_doc_path}")
     sys.exit(0)
 
 if __name__ == "__main__":

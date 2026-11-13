@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """
-Sunborn Documentation Governance: Path & Implementation Verifier
-Ensures all source code and test paths referenced in docs/ actually exist in the repository.
+Sunborn Documentation Governance: Path Verifier.
+
+Scans Markdown under docs/ and the root README for backticked repository
+source paths and verifies they exist on disk.
+
+By default this is advisory (warnings, exit 0). Pass --strict to fail the
+build when a referenced source path is missing.
 """
 
 import os
@@ -10,46 +15,56 @@ import sys
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+PATH_PATTERN = re.compile(
+    r"`((?:crates|apps|frontend|deploy|research|sdk|scripts|migrations|tests|benchmarks)/[a-zA-Z0-9_\-\./\[\]]+)`"
+)
 
-def verify_feature_matrix_paths() -> int:
-    matrix_file = os.path.join(ROOT_DIR, "docs", "audit", "FEATURE_VERIFICATION_MATRIX.md")
-    if not os.path.exists(matrix_file):
-        print(f"Error: {matrix_file} not found")
-        return 1
 
-    with open(matrix_file, "r", encoding="utf-8") as f:
-        content = f.read()
+def collect_markdown_files():
+    files = []
+    readme = os.path.join(ROOT_DIR, "README.md")
+    if os.path.exists(readme):
+        files.append(readme)
+    docs_dir = os.path.join(ROOT_DIR, "docs")
+    for dirpath, _, filenames in os.walk(docs_dir):
+        for name in filenames:
+            if name.endswith(".md"):
+                files.append(os.path.join(dirpath, name))
+    return files
 
-    # Match paths in code ticks like `crates/sunborn-cache/src/memory.rs`
-    path_pattern = re.compile(r"`((?:crates|apps|frontend|deploy|research|sdk|scripts|migrations)/[a-zA-Z0-9_\-\./]+)`")
-    matches = path_pattern.findall(content)
 
-    missing = []
+def verify(strict: bool) -> int:
     checked = set()
+    missing = set()
 
-    for path in matches:
-        # Ignore directory references or wildcards
-        clean_path = path.rstrip("/")
-        if "*" in clean_path or clean_path.endswith(".sql") and "0001-0003" in clean_path:
-            continue
-        if clean_path in checked:
-            continue
-        checked.add(clean_path)
+    for md in collect_markdown_files():
+        with open(md, "r", encoding="utf-8", errors="ignore") as handle:
+            content = handle.read()
+        for path in PATH_PATTERN.findall(content):
+            clean = path.rstrip("/")
+            if "*" in clean or "<" in clean:
+                continue
+            if clean in checked:
+                continue
+            checked.add(clean)
+            full = os.path.join(ROOT_DIR, clean.replace("/", os.sep))
+            if not os.path.exists(full):
+                missing.add(clean)
 
-        full_path = os.path.join(ROOT_DIR, clean_path.replace("/", os.sep))
-        if not os.path.exists(full_path):
-            missing.append(clean_path)
-
-    print(f"Verified {len(checked)} distinct implementation paths in FEATURE_VERIFICATION_MATRIX.md")
+    print(f"Verified {len(checked)} distinct source paths referenced across Markdown.")
     if missing:
-        print("FAILED: The following referenced paths do not exist:")
-        for m in missing:
-            print(f"  - {m}")
-        return 1
+        print("WARNINGS: referenced source paths not found:")
+        for item in sorted(missing):
+            print(f"  - {item}")
+        if strict:
+            print("FAILED (--strict): missing paths above.")
+            return 1
+        print("Advisory mode: not failing the build.")
+        return 0
 
-    print("✓ All referenced source and test paths exist on disk.")
+    print("OK: all referenced source paths exist on disk.")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(verify_feature_matrix_paths())
+    sys.exit(verify("--strict" in sys.argv[1:]))

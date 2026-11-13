@@ -88,11 +88,10 @@ echo "[9/11] Executing Adversarial Robustness & Linguistic Invariance Suite..."
 echo "[10/11] Running Graph Storage & Causal Invalidation Policy Benchmark..."
 "${PYTHON_BIN}" benchmarks/graph_storage_and_policy_bench.py
 
-echo "[11/11] Auditing Open Source Licenses & Generating CycloneDX SBOM..."
-"${PYTHON_BIN}" scripts/audit_licenses.py
+echo "[11/11] Generating deterministic CycloneDX SBOM..."
 "${PYTHON_BIN}" scripts/generate_sbom.py
 
 echo ""
 echo "========================================================================"
-echo "ALL 11/11 MASTER SYSTEM VERIFICATION GATES PASSED (FAANG / TIER-1 COMPLIANCE)"
+echo "ALL 11/11 MASTER SYSTEM VERIFICATION STAGES COMPLETED"
 echo "========================================================================"

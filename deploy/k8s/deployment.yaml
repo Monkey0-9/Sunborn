@@ -27,6 +27,13 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: sunborn-gateway
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
@@ -34,7 +41,7 @@ spec:
         fsGroup: 65532
       containers:
         - name: gateway
-          image: ghcr.io/sunborn/sunborn-gateway:v0.1.0
+          image: ghcr.io/sunborn/sunborn-gateway:0.1.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

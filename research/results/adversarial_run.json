@@ -6,7 +6,8 @@
       "fp": 0,
       "tn": 30,
       "fn": 9,
-      "precision": 100.0,
+      "precision": null,
+      "precision_defined": false,
       "recall": 0.0,
       "false_hit_rate": 0.0,
       "fp_wilson_ci": [
@@ -25,6 +26,7 @@
       "tn": 8,
       "fn": 7,
       "precision": 8.33,
+      "precision_defined": true,
       "recall": 22.22,
       "false_hit_rate": 73.33,
       "fp_wilson_ci": [
@@ -43,6 +45,7 @@
       "tn": 18,
       "fn": 9,
       "precision": 0.0,
+      "precision_defined": true,
       "recall": 0.0,
       "false_hit_rate": 40.0,
       "fp_wilson_ci": [
@@ -61,6 +64,7 @@
       "tn": 25,
       "fn": 9,
       "precision": 0.0,
+      "precision_defined": true,
       "recall": 0.0,
       "false_hit_rate": 16.67,
       "fp_wilson_ci": [
@@ -78,7 +82,8 @@
       "fp": 0,
       "tn": 30,
       "fn": 9,
-      "precision": 100.0,
+      "precision": null,
+      "precision_defined": false,
       "recall": 0.0,
       "false_hit_rate": 0.0,
       "fp_wilson_ci": [

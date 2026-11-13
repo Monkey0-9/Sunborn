@@ -473,8 +473,24 @@ impl VectorStore for QdrantVectorStore {
             self.endpoint_url.trim_end_matches('/'),
             self.collection_name
         );
+        // Qdrant point ids are UUIDs; reuse the exact deterministic UUID derived at
+        // insert time so invalidation actually deletes the indexed point.
+        let point_uuid = {
+            let mut hasher = sha2::Sha256::new();
+            use sha2::Digest;
+            hasher.update(id.as_bytes());
+            let hash = hex::encode(hasher.finalize());
+            format!(
+                "{}-{}-{}-{}-{}",
+                &hash[0..8],
+                &hash[8..12],
+                &hash[12..16],
+                &hash[16..20],
+                &hash[20..32]
+            )
+        };
         let delete_payload = serde_json::json!({
-            "points": [id]
+            "points": [point_uuid]
         });
         match self.client.post(&url).json(&delete_payload).send().await {
             Ok(resp) if resp.status().is_success() => Ok(true),

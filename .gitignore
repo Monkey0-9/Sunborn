@@ -1,27 +1,68 @@
+# Build output
 /target
-**/*.rs.bk
+**/target/
+*.rs.bk
+dist/
+build/
+*.egg-info/
+.venv/
+.venv*/
+
+# Environment
 .env
 .env.*
 !.env.example
 **/.env
 **/.env.*
 !**/.env.example
-linear_data.json
-.DS_Store
+
+# Node / Next
 node_modules
 .next
 *.tsbuildinfo
+frontend/playwright-report/
+frontend/test-results/
+frontend/.playwright/
+
+# Python caches
 __pycache__/
 *.pyc
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Tooling / editor
 .vscode/
-.trunk/
+.trunk/out/
+.trunk/logs/
+.trunk/actions/
+.trunk/tools/
+.trunk/notifications/
+.trunk/plugins/
+.commandcode/
+.DS_Store
+.idea/
+*.log
+*.tmp
+*~
+
+# Secrets / infra state
+*.pem
+*.key
+kubeconfig
+*.tfstate
+
+# Generated / duplicate artifacts
+linear_data.json
+system_inventory.md
 data/
 **/data/
-system_inventory.md
+sbom.cyclonedx.json
 research/results/capacity_soak_report.json
-*.egg-info/
-dist/
-.venv/
-.venv*/
-frontend/pnpm-lock.yaml
+research/results/baseline_backup/
+
+# Screenshots (keep intentional docs images under docs/assets/)
 *.png
+!docs/assets/**

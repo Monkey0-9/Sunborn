@@ -84,12 +84,12 @@ Run both Gateway and Control Plane together:
 
 ```powershell
 # Windows PowerShell
-.\scripts\run_fullstack.ps1
+.\scripts\start-all.ps1
 ```
 
 ```bash
 # Linux / macOS
-./scripts/run_fullstack.sh
+./scripts/start-all.sh
 ```
 
 ### Option B: Individual Service Launch

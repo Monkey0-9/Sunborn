@@ -1,0 +1,48 @@
+{
+  "audit": {
+    "baseline_commit": "0e412f8",
+    "branch": "audit/independent-2026-11",
+    "date": "2026-11-13",
+    "tracked_files": 382,
+    "rust_loc": 32081,
+    "rust_files": 97,
+    "frontend_src_files": 34,
+    "frontend_tests": 7,
+    "docs_files": 103
+  },
+  "executed": {
+    "cargo_test_passed": 252,
+    "cargo_test_failed": 0,
+    "cargo_test_binaries": 35,
+    "frontend_tests_passed": 37,
+    "frontend_tests_failed": 0,
+    "python_tests_passed": 26,
+    "python_tests_failed": 0,
+    "total_passed": 315
+  },
+  "feature_matrix": {
+    "total": 45,
+    "verified_working": 18,
+    "working_with_limitations": 14,
+    "simulated_mocked_unwired_dead": 8,
+    "not_implemented_design_only": 4,
+    "failing": 1
+  },
+  "severity_counts": {
+    "P0": 10,
+    "P1": 19,
+    "P2": 14,
+    "P3": 5,
+    "total_findings": 48
+  },
+  "verdict": {
+    "classification": "functional prototype / early-stage product",
+    "production": "NO-GO",
+    "maturity_mean": 4.4
+  },
+  "blocked": [
+    "live Postgres/Redis/Qdrant/Neo4j/Vault/KMS integration",
+    "docker compose smoke",
+    "load tests"
+  ]
+}

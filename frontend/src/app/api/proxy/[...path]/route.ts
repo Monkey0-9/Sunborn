@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  evaluateProxySecurity,
-  isPrivilegedRoute,
-  isPublicRoute,
-} from "@/lib/proxy-policy";
-import { handleSimulatedRoute } from "@/lib/standalone-simulator";
+import { evaluateProxySecurity } from "@/lib/proxy-policy";
 
 const GATEWAY_URL =
   process.env.SUNBORN_GATEWAY_URL ||
@@ -160,35 +155,8 @@ async function handleProxy(req: NextRequest, context: RouteContext) {
       );
     }
 
-    // High-Fidelity Standalone Simulation Engine Fallback
-    // ONLY permitted in local development mode for non-privileged inspection routes.
-    // In production or strict mode, or on privileged mutating operations, strictly fail closed.
-    const isStrict = process.env.STRICT_GATEWAY === "true" || process.env.NODE_ENV === "production";
-    const isPrivileged = isPrivilegedRoute(normalizedPath);
-    if (!isStrict && !isPrivileged) {
-      const simulated = handleSimulatedRoute(req.method, normalizedPath, typeof body === "string" ? body : undefined);
-      if (simulated) {
-        if (typeof simulated.body === "string") {
-          return new NextResponse(simulated.body, {
-            status: simulated.status,
-            headers: {
-              ...simulated.headers,
-              "x-sunborn-mode": "standalone-simulation",
-              "x-sunborn-simulated": "true",
-            },
-          });
-        }
-        return NextResponse.json(simulated.body, {
-          status: simulated.status,
-          headers: {
-            ...simulated.headers,
-            "x-sunborn-mode": "standalone-simulation",
-            "x-sunborn-simulated": "true",
-          },
-        });
-      }
-    }
-
+    // Fail closed whenever the gateway is unreachable. No simulated responses
+    // are permitted in any environment: start the gateway to use the console.
     return NextResponse.json(
       {
         error: "GATEWAY_CONNECTION_FAILED",

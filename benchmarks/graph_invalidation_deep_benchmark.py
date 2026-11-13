@@ -43,6 +43,26 @@ import gc
 from collections import defaultdict, deque
 from typing import Dict, List, Set, Tuple, Any
 
+
+def deep_size_mb(obj: Any, seen: Set[int] = None) -> float:
+    """Measured recursive object-graph size in MiB (no hardcoded per-edge constants)."""
+    if seen is None:
+        seen = set()
+    oid = id(obj)
+    if oid in seen:
+        return 0.0
+    seen.add(oid)
+    total = float(sys.getsizeof(obj))
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            total += deep_size_mb(key, seen) + deep_size_mb(value, seen)
+    elif isinstance(obj, (list, tuple, set, frozenset)):
+        for item in obj:
+            total += deep_size_mb(item, seen)
+    elif hasattr(obj, "__dict__"):
+        total += deep_size_mb(vars(obj), seen)
+    return total
+
 # ---------------------------------------------------------------------------
 # Power-law synthetic graph generation
 # ---------------------------------------------------------------------------
@@ -291,12 +311,13 @@ def run_deep_benchmark(target_edges: int):
         roaring_tm_store[s] = tm
     roaring_tm_init_ms = (time.perf_counter() - t0) * 1000
 
-    # Memory Estimations (Bytes per edge)
-    mem_hash_set = (len(hash_set_store) * 64 + len(edges) * 24) / (1024 * 1024)
-    mem_adj_list = (len(adj_list_store) * 64 + len(edges) * 16) / (1024 * 1024)
-    mem_csr = (len(csr_store.row_offsets) * 8 + len(csr_store.col_indices) * 8) / (1024 * 1024)
-    mem_roaring_bm = (len(roaring_bm_store) * 32 + len(edges) * 1.8) / (1024 * 1024)
-    mem_roaring_tm = (len(roaring_tm_store) * 48 + len(edges) * 2.4) / (1024 * 1024)
+    # Measured memory footprint (recursive object graph, MiB). These are real
+    # Python object sizes, not per-edge constants.
+    mem_hash_set = deep_size_mb(hash_set_store)
+    mem_adj_list = deep_size_mb(adj_list_store)
+    mem_csr = deep_size_mb(csr_store)
+    mem_roaring_bm = deep_size_mb(roaring_bm_store)
+    mem_roaring_tm = deep_size_mb(roaring_tm_store)
 
     # -----------------------------------------------------------------------
     # OP 1: Node Lookup (Check existence of source in graph)

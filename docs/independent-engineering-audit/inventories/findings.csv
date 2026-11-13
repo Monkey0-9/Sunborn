@@ -1,0 +1,49 @@
+id,severity,category,title,file,line,verdict,fix,status
+F-001,P0,Security,Dev auth bypass accepts any credential and stores plaintext secret as session,frontend/src/app/api/auth/route.ts,132;152-176,CONFIRMED,Remove dev bypass; only accept access_token,PENDING
+F-002,P0,Frontend,Fake backend is default in dev and fabricates proofs/stats/credentials,frontend/src/lib/standalone-simulator.ts; frontend/src/app/api/proxy/[...path]/route.ts,163-190,CONFIRMED,Delete simulator from default path; fail closed,PENDING
+F-003,P0,Security,Fake API keys minted on failure,frontend/src/app/security/page.tsx,145-172,CONFIRMED,Show error; never fabricate,PENDING
+F-004,P0,Attestation,Certificate evidence hardcoded at issuance while verifier checks it,crates/sunborn-gateway/src/handlers.rs; crates/sunborn-core/src/certificate.rs,658-666;454-462,CONFIRMED,Compute from engine; refuse if unmeasured,PENDING
+F-005,P0,Distributed,Client-supplied dependency snapshots and epoch baked into certificate,crates/sunborn-gateway/src/handlers.rs,657;671,CONFIRMED,Server-derive from registry/ingest,PENDING
+F-006,P0,Core,Qdrant delete uses raw id while insert hashes UUID,crates/sunborn-semantic/src/vector_store.rs,281-353;469-478,CONFIRMED,Use same hashed UUID,PENDING
+F-007,P0,Docs,False performance and safety claims in README,README.md,467-475,CONFIRMED,Rewrite with measured values or remove,PENDING
+F-010,P1,Reliability,Silent fallback to memory/LSH on backend failure,multiple,embedding.rs:242-251;dragonfly.rs:216-243;vector_store.rs:326-351;postgres.rs:692,CONFIRMED,Fail closed or explicit degraded mode,PENDING
+F-011,P1,Distributed,Durable Postgres outbox methods have no callers,crates/sunborn-db/src/postgres.rs,775-858,CONFIRMED,Wire or delete,PENDING
+F-012,P1,Distributed,DistributedGraphSyncEngine not referenced by gateway,crates/sunborn-invalidation/src/cluster_sync.rs,108-238,CONFIRMED,Wire Redis pub/sub or mark experimental,PENDING
+F-013,P1,Distributed,Neo4j store never constructed,crates/sunborn-invalidation/src/graph.rs,158-291,CONFIRMED,Add env path or remove,PENDING
+F-014,P1,Core,Write-behind flusher never instantiated,crates/sunborn-db/src/write_behind.rs,18-230,CONFIRMED,Wire or delete,PENDING
+F-015,P1,Crypto,Certificate HMAC key equals learning-feedback secret,crates/sunborn-gateway/src/handlers.rs; state.rs,673;307-319,CONFIRMED,Separate keys + rotation,PENDING
+F-016,P1,Performance,KEYS used instead of SCAN for prefix ops,crates/sunborn-cache/src/dragonfly.rs,218;250,CONFIRMED,Use SCAN,PENDING
+F-017,P1,Correctness,Lineage dropped after first invalidation,crates/sunborn-invalidation/src/bitmap_lineage.rs,46-65,CONFIRMED,Retain mapping or re-link,PENDING
+F-018,P1,Correctness,In-memory graph returns direct edges only; no transitive closure,crates/sunborn-invalidation/src/graph.rs; state.rs,96-116;142,CONFIRMED,Implement closure or require Neo4j,PENDING
+F-019,P1,Concurrency,run_blocking_async spins/blocks runtime,crates/sunborn-identity/src/crypto_shred.rs,530-575,CONFIRMED,Async KMS trait,PENDING
+F-020,P2,Observability,Metrics are process-local atomics presented as Prometheus,crates/sunborn-gateway/src/handlers.rs,27-33,CONFIRMED,OTel/aggregation,PENDING
+F-021,P1,Docs,Documented cache headers are never set,README.md; crates/sunborn-gateway/src,331;346;361,CONFIRMED,Implement headers or remove claim,PENDING
+F-022,P2,Docs,Shutdown claim 30s vs code 15s and in-memory drain,README.md; crates/sunborn-gateway/src/main.rs,548-553;109-112,CONFIRMED,Align docs,PENDING
+F-023,P1,Docs,Four contradictory release verdicts and claim registers,docs/**,multiple,CONFIRMED,Collapse to SSOT,PENDING
+F-024,P1,CI,Branch-protection check names match no job; cosmetic gates,.github/branch_protection.md; scripts/audit_licenses.py; scripts/generate_sbom.py,26-32;all,CONFIRMED,Align jobs; fix scripts,PENDING
+F-025,P1,Deploy,Raw k8s cannot start (no secrets); frontend not read-only; no anti-affinity,deploy/k8s/**,kustomization;deployments,CONFIRMED,Provision secrets; harden,PENDING
+F-026,P2,Frontend,42% API methods unused; dead toast/aurora; dead controls,frontend/src,multiple,CONFIRMED,Remove dead code,PENDING
+F-027,P1,Accessibility,Unlabelled sliders and non-keyboard clickable divs; no CSP,frontend/src,multiple,CONFIRMED,Fix a11y + CSP,PENDING
+F-028,P1,Testing,No live-infra integration tests; source-grep a11y; mock-only E2E,multiple,multiple,CONFIRMED,Add testcontainers; axe,PENDING
+F-029,P1,Build,Root openapi.yaml is a 21-byte hardlink text pointer,openapi.yaml,1,CONFIRMED,Remove; update scripts/links,PENDING
+F-030,P2,Repo,Non-deterministic SBOM and duplicate tracked artifacts,sbom.cyclonedx.json; research/results/baseline_backup/,n/a,CONFIRMED,Delete; deterministic generator,PENDING
+F-031,P2,Naming,No client HNSW index; brute-force cosine,crates/sunborn-semantic/src/vector_store.rs,94-150,CONFIRMED,Rename or implement ANN,PENDING
+F-032,P2,Naming,No W-TinyLFU; GDSF plus oldest fallback,crates/sunborn-cache/src/gdsf.rs; memory.rs,40-186;120-140,CONFIRMED,Rename or implement,PENDING
+F-033,P2,Naming,No AST parser; token heuristics,crates/sunborn-semantic/src/guardrails.rs,33-495,CONFIRMED,Rename,PENDING
+F-034,P2,Naming,No cross-encoder NLI; cosine-probability table; zero backends,crates/sunborn-semantic/src/guardrails.rs,595-637,CONFIRMED,Implement backend,PENDING
+F-035,P2,Naming,No PostgreSQL WAL semantics; plain OLTP,crates/sunborn-db/src/postgres.rs,176-360,CONFIRMED,Rename,PENDING
+F-036,P1,AI,Default embeddings are FNV-1a LSH hash vectors,crates/sunborn-semantic/src/embedding.rs; state.rs,54-140;114,CONFIRMED,Real embeddings; no silent fallback,PENDING
+F-037,P1,Math,Conformal alpha guarantee not established online,crates/sunborn-semantic/src/conformal.rs,78-123;323-327,CONFIRMED,Wire rigorous calibrator,PENDING
+F-038,P0,Math,Precision 100% reported from empty reuse denominator,benchmarks/adversarial_evaluation_suite.py,820-824,CONFIRMED,Report undefined/abstention,PENDING
+F-039,P0,Benchmark,2.15MB/1.8B per edge is a hardcoded formula,benchmarks/graph_invalidation_deep_benchmark.py,295;298,CONFIRMED,Measure or remove,PENDING
+F-040,P0,Benchmark,571428 req/s cites nonexistent throughput_test.rs,README.md,469,CONFIRMED,Remove/replace with real bench,PENDING
+F-041,P2,Math,Hardcoded 75-scenario print; 70 scenarios,benchmarks/heldout_semantic_generalization.py,399,CONFIRMED,Fix,PENDING
+F-042,P2,Benchmark,Unconditional 100% STABLE PASS print,benchmarks/capacity_soak.py,474-475,CONFIRMED,Measure or remove,PENDING
+F-043,P2,Crypto,Dual-admin quorum is a second API key not a signature,crates/sunborn-gateway/src/middleware/auth.rs,55-85,CONFIRMED,Rename or implement signatures,PENDING
+F-044,P2,Identity,NFC is a 40-pair hardcoded table; two canonicalizers,crates/sunborn-identity/src/canonical.rs,8-66;96;119,CONFIRMED,Real NFC; unify JSON,PENDING
+F-045,P2,SDK,Duplicate legacy implementation and broken README example,sdk/python/sunborn_agent.py; README.md,all;421-427,CONFIRMED,Consolidate; fix example,PENDING
+F-046,P3,Frontend,Proof initialized true before verification,frontend/src/app/execution/page.tsx,20-22,CONFIRMED,Initialize false,PENDING
+F-047,P3,Frontend,Hardcoded telemetry and exports,frontend/src/app/**,multiple,CONFIRMED,Wire real data,PENDING
+F-048,P3,Repo,gitignore gaps and committed caches,.gitignore,all,CONFIRMED,Fix ignore rules,PENDING
+F-049,P3,Repo,Screenshots present in tree,frontend/*.png,n/a,CONFIRMED,Delete,PENDING
+F-050,P3,Test,test_inspect.mjs is not a test,frontend/tests/test_inspect.mjs,all,CONFIRMED,Remove or convert,PENDING

@@ -95,6 +95,15 @@ frontend:
       drop:
         - ALL
 
+  # Container-level hardening. Writable paths are provided via emptyDir volumes
+  # so the root filesystem can be mounted read-only.
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
   livenessProbe:
     httpGet:
       path: /api/health

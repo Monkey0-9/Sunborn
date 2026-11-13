@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import React from "react";
 import "./globals.css";
 import { Header } from "@/components/layout/header";
-import { ToastProvider } from "@/components/ui/toast";
 
 export const metadata: Metadata = {
   title: "Sunborn | Autonomous AI Execution & Conformal Semantic Cache",
@@ -25,8 +24,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark scroll-smooth">
       <body className="min-h-screen bg-[#020617] text-slate-100 font-sans antialiased selection:bg-cyan-500/30 selection:text-cyan-200 relative overflow-x-hidden">
-        <ToastProvider>
-          {/* Silicon Valley Quantum Mesh & Atmospheric Spotlights */}
+        {/* Silicon Valley Quantum Mesh & Atmospheric Spotlights */}
           <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
             <div className="absolute -top-40 left-1/4 w-[750px] h-[550px] rounded-full bg-gradient-to-tr from-cyan-600/12 via-indigo-600/10 to-transparent blur-[160px]" />
             <div className="absolute top-[35%] -right-20 w-[650px] h-[650px] rounded-full bg-gradient-to-bl from-violet-600/10 via-purple-700/8 to-transparent blur-[180px]" />
@@ -104,12 +102,11 @@ export default function RootLayout({
                   <span>All Subsystems Operational · Multi-Tier Non-Accelerator Authority</span>
                 </div>
                 <div>
-                  <span>Sunborn Autonomous Gateway © 2026–2028 · Production Ready</span>
+                  <span>Sunborn Autonomous Gateway © 2026–2028 · Independent audit: NO-GO</span>
                 </div>
               </div>
             </div>
           </footer>
-        </ToastProvider>
       </body>
     </html>
   );

@@ -1,0 +1,24 @@
+name,version,ecosystem,used_for,real_network,notes
+tokio,1.40,rust,async runtime,yes,workspace
+axum,0.8,rust,http server,yes,workspace
+tower,0.5,rust,middleware,yes,workspace
+tower-http,0.6,rust,trace/cors,yes,workspace
+serde,1.0,rust,serialization,no,workspace
+sqlx,0.8,rust,postgres,yes,real; silent memory fallback
+redis,0.27,rust,dragonfly/redis,yes,real; unused in invalidation crate
+reqwest,0.12,rust,http client,yes,real
+aes-gcm,0.10,rust,encryption,no,real
+hmac,0.12,rust,pseudorandom,no,real
+sha2,0.10,rust,hashing,no,real
+zeroize,1.9.1,rust,key zeroization,no,real
+aws-config,1.5,rust,kms,yes,opt-in
+aws-sdk-kms,1.52,rust,kms,yes,opt-in
+roaring,0.10,rust,bitmap lineage,no,real
+dashmap,6.1,rust,concurrent map,no,real
+qdrant-client,absent,rust,vector db,n/a,not used; REST raw
+hnsw/usearch,absent,rust,ann,n/a,absent
+onnxruntime/candle,absent,rust,nli/embeddings,n/a,absent
+next,15,javascript,frontend framework,no,package.json
+react,19,javascript,ui,no,package.json
+playwright,dev,javascript,e2e,no,mock-only
+uvicorn-starlette,absent,python,n/a,n/a,SDK is stdlib-only

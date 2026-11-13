@@ -366,7 +366,8 @@ def evaluate_suite():
         tp = stats["tp"]
         fp = stats["fp"]
         reused = stats["reused"]
-        prec = (tp / reused * 100.0) if reused > 0 else 100.0
+        # Undefined when nothing was reused; do not report 100% for an empty denominator.
+        prec = (tp / reused * 100.0) if reused > 0 else None
         rec_val = (tp / total_equiv * 100.0) if total_equiv > 0 else 0.0
         rec_ci = wilson_interval(tp, total_equiv)
         fh_val = (fp / total_non_equiv * 100.0) if total_non_equiv > 0 else 0.0
@@ -375,13 +376,15 @@ def evaluate_suite():
         abstention = round(((total_queries - reused) / total_queries) * 100.0, 2)
         coverage = round((reused / total_queries) * 100.0, 2)
 
-        print(f"{name:<26} | {reused:<6} | {tp:<4} | {fp:<4} | {prec:<7.1f} | {rec_val:.1f}% [{rec_ci[0]},{rec_ci[1]}]".ljust(79) + f" | {fh_val:.1f}% [{fh_ci[0]},{fh_ci[1]}]")
+        prec_str = f"{prec:.1f}" if prec is not None else "N/A"
+        print(f"{name:<26} | {reused:<6} | {tp:<4} | {fp:<4} | {prec_str:<7} | {rec_val:.1f}% [{rec_ci[0]},{rec_ci[1]}]".ljust(79) + f" | {fh_val:.1f}% [{fh_ci[0]},{fh_ci[1]}]")
 
         report_data[name] = {
             "reused": reused,
             "tp": tp,
             "fp": fp,
-            "precision_pct": round(prec, 2),
+            "precision_pct": round(prec, 2) if prec is not None else None,
+            "precision_defined": prec is not None,
             "recall_pct": round(rec_val, 2),
             "recall_wilson_ci": rec_ci,
             "false_hit_rate_pct": round(fh_val, 2),
@@ -395,8 +398,14 @@ def evaluate_suite():
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(report_data, f, indent=2)
 
-    print(f"\n[✓] Phase 4 Held-Out Generalization Evaluation completed.")
-    print(f"    Baseline E (CompleteSunborn) achieved 0.0% False Hits across all 75 scenarios.")
+    e_stats = report_data.get("E_CompleteSunborn", {})
+    print("\n[OK] Phase 4 Held-Out Generalization Evaluation completed.")
+    print(
+        f"    Baseline E (CompleteSunborn): false-hit rate "
+        f"{e_stats.get('false_hit_rate_pct')}% across {total_queries} scenarios, "
+        f"coverage {e_stats.get('coverage_rate_pct')}% "
+        f"(precision {'undefined' if e_stats.get('precision_pct') is None else str(e_stats.get('precision_pct')) + '%'})."
+    )
     print(f"    Report exported to {output_path}")
 
 if __name__ == "__main__":
