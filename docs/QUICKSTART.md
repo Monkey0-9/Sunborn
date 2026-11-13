@@ -33,14 +33,28 @@ PORT=8080
 # Ingress & CORS
 SUNBORN_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 
-# Backend Storage (defaults to in-memory fallback if services are offline)
-SUNBORN_DB_STRICT_DURABILITY=false
-POSTGRES_URL=postgres://sunborn:sunborn@localhost:5432/sunborn
+# Frontier LLM Provider Credentials
+ANTHROPIC_API_KEY=sk-ant-api03-...
+GEMINI_API_KEY=AIzaSy...
+OPENAI_API_KEY=sk-proj-...
+SUNBORN_LLM_ORIGIN_URL=https://api.openai.com/v1
+
+# Dual Caching Configuration (Graph + Vector active by default)
+SUNBORN_GRAPH_DEPENDENCY_CACHE_ENABLED=true
+SUNBORN_VECTOR_BACKEND=qdrant
+SUNBORN_QDRANT_URL=http://127.0.0.1:6333
+SUNBORN_CACHE_BACKEND=dragonfly
 DRAGONFLY_URL=redis://127.0.0.1:6379
+
+# Backend Storage
+SUNBORN_DB_BACKEND=postgres
+POSTGRES_URL=postgres://sunborn:sunborn@localhost:5432/sunborn
+SUNBORN_DB_STRICT_DURABILITY=false
 
 # Cryptography & Security
 SUNBORN_KMS_PROVIDER=local-aead
 SUNBORN_MASTER_KEK=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+SUNBORN_CERTIFICATE_SIGNING_KEY=a0b1c2d3e4f5a0b1c2d3e4f5a0b1c2d3e4f5a0b1c2d3e4f5a0b1c2d3e4f5a0b1
 ```
 
 ---
