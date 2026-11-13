@@ -4,11 +4,12 @@ use sunborn_gateway::state::AppState;
 use uuid::Uuid;
 
 #[tokio::test]
-async fn test_graph_dependency_cache_feature_flag_disabled_by_default() {
-    let config = AppConfig::default();
+async fn test_graph_dependency_cache_feature_flag_disabled_lifecycle() {
+    let mut config = AppConfig::default();
+    config.cache.graph_dependency_cache_enabled = false;
     let state = AppState::new(config);
 
-    // Feature flag is disabled by default: zero extra allocations or overhead
+    // Feature flag is explicitly disabled: zero extra allocations or overhead
     assert!(
         state.graph_memory_cache.is_none(),
         "graph_memory_cache must be None when SUNBORN_GRAPH_DEPENDENCY_CACHE_ENABLED is false"
@@ -18,6 +19,18 @@ async fn test_graph_dependency_cache_feature_flag_disabled_by_default() {
     let entry = CacheEntry::new("test:key:baseline", "content baseline", Some(3600));
     state.cache.set(entry).await.unwrap();
     assert!(state.cache.exists("test:key:baseline").await.unwrap());
+}
+
+#[tokio::test]
+async fn test_graph_dependency_cache_active_by_default() {
+    let config = AppConfig::default();
+    let state = AppState::new(config);
+
+    // Both vector and graph caching active by default
+    assert!(
+        state.graph_memory_cache.is_some(),
+        "graph_memory_cache must be initialized by default for unified vector + graph caching"
+    );
 }
 
 #[tokio::test]

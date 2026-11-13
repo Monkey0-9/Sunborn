@@ -25,6 +25,8 @@ pub struct DurableCacheRecord {
     pub created_at: DateTime<Utc>,
     pub expires_at: Option<DateTime<Utc>>,
     pub last_accessed_at: DateTime<Utc>,
+    #[serde(default)]
+    pub certificate_json: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

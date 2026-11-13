@@ -244,6 +244,7 @@ mod tests {
                     created_at: Utc::now(),
                     expires_at: None,
                     last_accessed_at: Utc::now(),
+                    certificate_json: None,
                 })
                 .await
                 .unwrap();
@@ -295,6 +296,7 @@ mod tests {
                 created_at: Utc::now(),
                 expires_at: None,
                 last_accessed_at: Utc::now(),
+                certificate_json: None,
             })
             .await
             .unwrap();

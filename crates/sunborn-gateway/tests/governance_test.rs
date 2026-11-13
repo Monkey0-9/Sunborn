@@ -52,6 +52,7 @@ async fn test_tenant_cascade_offboarding_zero_lingering_data() {
             created_at: chrono::Utc::now(),
             expires_at: None,
             last_accessed_at: chrono::Utc::now(),
+            certificate_json: None,
         })
         .await
         .unwrap();

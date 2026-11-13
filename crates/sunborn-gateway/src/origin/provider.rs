@@ -378,8 +378,44 @@ impl LlmOriginProvider for MultiProviderArbitrageRouter {
             ));
         }
 
+        // Intelligent Frontier Model Affinity Ordering:
+        // Prioritize providers matching the model family (Claude -> Anthropic, Gemini -> Google, GPT -> OpenAI)
+        let mut ordered_providers = self.providers.clone();
+        if req.model.starts_with("claude-") {
+            ordered_providers.sort_by_key(|p| {
+                if p.name.to_lowercase().contains("anthropic")
+                    || p.name.to_lowercase().contains("claude")
+                {
+                    0
+                } else {
+                    p.priority + 1
+                }
+            });
+        } else if req.model.starts_with("gemini-") {
+            ordered_providers.sort_by_key(|p| {
+                if p.name.to_lowercase().contains("gemini")
+                    || p.name.to_lowercase().contains("google")
+                {
+                    0
+                } else {
+                    p.priority + 1
+                }
+            });
+        } else if req.model.starts_with("gpt-")
+            || req.model.starts_with("o1")
+            || req.model.starts_with("o3")
+        {
+            ordered_providers.sort_by_key(|p| {
+                if p.name.to_lowercase().contains("openai") {
+                    0
+                } else {
+                    p.priority + 1
+                }
+            });
+        }
+
         let mut last_error = None;
-        for entry in &self.providers {
+        for entry in &ordered_providers {
             match entry.provider.execute(req).await {
                 Ok(res) => {
                     tracing::info!(

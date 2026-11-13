@@ -228,8 +228,11 @@ impl PostgresDatabaseStore {
                 hit_count BIGINT NOT NULL DEFAULT 0,
                 created_at TIMESTAMPTZ NOT NULL,
                 expires_at TIMESTAMPTZ,
-                last_accessed_at TIMESTAMPTZ NOT NULL
+                last_accessed_at TIMESTAMPTZ NOT NULL,
+                certificate_json TEXT
             );
+
+            ALTER TABLE durable_cache_entries ADD COLUMN IF NOT EXISTS certificate_json TEXT;
 
             CREATE INDEX IF NOT EXISTS idx_cache_tenant ON durable_cache_entries(tenant_id);
 
@@ -668,9 +671,9 @@ impl DatabaseStore for PostgresDatabaseStore {
         if let Some(pool) = self.get_pool().await {
             let res = sqlx::query(
                 "INSERT INTO durable_cache_entries 
-                 (key, tenant_id, application_id, model, policy_version, hash, prompt_canonical, content, hit_count, created_at, expires_at, last_accessed_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-                 ON CONFLICT (key) DO UPDATE SET hit_count = durable_cache_entries.hit_count + 1, last_accessed_at = $12"
+                 (key, tenant_id, application_id, model, policy_version, hash, prompt_canonical, content, hit_count, created_at, expires_at, last_accessed_at, certificate_json)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                 ON CONFLICT (key) DO UPDATE SET hit_count = durable_cache_entries.hit_count + 1, last_accessed_at = $12, certificate_json = COALESCE($13, durable_cache_entries.certificate_json)"
             )
             .bind(&entry.key)
             .bind(&entry.tenant_id)
@@ -684,6 +687,7 @@ impl DatabaseStore for PostgresDatabaseStore {
             .bind(entry.created_at)
             .bind(entry.expires_at)
             .bind(entry.last_accessed_at)
+            .bind(&entry.certificate_json)
             .execute(&pool)
             .await;
 
@@ -714,7 +718,7 @@ impl DatabaseStore for PostgresDatabaseStore {
     async fn get_cache_entry(&self, key: &str) -> Result<Option<DurableCacheRecord>> {
         if let Some(pool) = self.get_pool().await {
             match sqlx::query(
-                "SELECT key, tenant_id, application_id, model, policy_version, hash, prompt_canonical, content, hit_count, created_at, expires_at, last_accessed_at
+                "SELECT key, tenant_id, application_id, model, policy_version, hash, prompt_canonical, content, hit_count, created_at, expires_at, last_accessed_at, certificate_json
                  FROM durable_cache_entries WHERE key = $1"
             )
             .bind(key)
@@ -736,6 +740,7 @@ impl DatabaseStore for PostgresDatabaseStore {
                         created_at: row.get("created_at"),
                         expires_at: row.get("expires_at"),
                         last_accessed_at: row.get("last_accessed_at"),
+                        certificate_json: row.get("certificate_json"),
                     }));
                 }
                 Ok(None) => {
@@ -953,7 +958,7 @@ impl DatabaseStore for PostgresDatabaseStore {
     ) -> Result<Vec<DurableCacheRecord>> {
         if let Some(pool) = self.get_pool().await {
             match sqlx::query(
-                "SELECT key, tenant_id, application_id, model, policy_version, hash, prompt_canonical, content, hit_count, created_at, expires_at, last_accessed_at
+                "SELECT key, tenant_id, application_id, model, policy_version, hash, prompt_canonical, content, hit_count, created_at, expires_at, last_accessed_at, certificate_json
                  FROM durable_cache_entries ORDER BY created_at DESC LIMIT $1 OFFSET $2"
             )
             .bind(limit as i64)
@@ -979,6 +984,7 @@ impl DatabaseStore for PostgresDatabaseStore {
                                 created_at: row.get("created_at"),
                                 expires_at: row.get("expires_at"),
                                 last_accessed_at: row.get("last_accessed_at"),
+                                certificate_json: row.get("certificate_json"),
                             }
                         })
                         .collect();

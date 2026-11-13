@@ -198,18 +198,45 @@ impl GraphMemoryCache {
     ) -> Result<(RoaringTreemap, Vec<String>)> {
         let affected_records = self.lineage_graph.invalidate_documents(doc_hashes);
         let mut purged_keys = Vec::new();
+        let mut failed_keys = Vec::new();
 
         let mut r2k = self.record_to_keys.write().await;
         for record_id in &affected_records {
-            if let Some(keys) = r2k.remove(&record_id) {
-                for key in keys {
-                    let _ = self.cache.delete(&key).await;
-                    purged_keys.push(key);
+            if let Some(keys) = r2k.get_mut(&record_id) {
+                let mut remaining_keys = std::collections::HashSet::new();
+                for key in keys.drain() {
+                    match self.cache.delete(&key).await {
+                        Ok(_) => {
+                            purged_keys.push(key);
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                record_id,
+                                key = %key,
+                                error = %e,
+                                "Failed to delete cache key during doc purge; preserving lineage"
+                            );
+                            failed_keys.push((key.clone(), e.to_string()));
+                            remaining_keys.insert(key);
+                        }
+                    }
+                }
+                if remaining_keys.is_empty() {
+                    r2k.remove(&record_id);
+                } else {
+                    *keys = remaining_keys;
                 }
             }
         }
         purged_keys.sort();
         purged_keys.dedup();
+
+        if !failed_keys.is_empty() && purged_keys.is_empty() {
+            return Err(SunbornError::internal(format!(
+                "Failed to purge cache keys for doc hashes: {} failures",
+                failed_keys.len()
+            )));
+        }
 
         Ok((affected_records, purged_keys))
     }

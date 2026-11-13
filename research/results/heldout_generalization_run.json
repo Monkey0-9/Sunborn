@@ -3,7 +3,8 @@
     "reused": 0,
     "tp": 0,
     "fp": 0,
-    "precision_pct": 100.0,
+    "precision_pct": null,
+    "precision_defined": false,
     "recall_pct": 0.0,
     "recall_wilson_ci": [
       0.0,
@@ -22,6 +23,7 @@
     "tp": 0,
     "fp": 34,
     "precision_pct": 0.0,
+    "precision_defined": true,
     "recall_pct": 0.0,
     "recall_wilson_ci": [
       0.0,
@@ -40,6 +42,7 @@
     "tp": 1,
     "fp": 2,
     "precision_pct": 33.33,
+    "precision_defined": true,
     "recall_pct": 4.17,
     "recall_wilson_ci": [
       0.74,
@@ -57,7 +60,8 @@
     "reused": 0,
     "tp": 0,
     "fp": 0,
-    "precision_pct": 100.0,
+    "precision_pct": null,
+    "precision_defined": false,
     "recall_pct": 0.0,
     "recall_wilson_ci": [
       0.0,
@@ -75,7 +79,8 @@
     "reused": 0,
     "tp": 0,
     "fp": 0,
-    "precision_pct": 100.0,
+    "precision_pct": null,
+    "precision_defined": false,
     "recall_pct": 0.0,
     "recall_wilson_ci": [
       0.0,

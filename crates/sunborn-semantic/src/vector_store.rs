@@ -166,6 +166,22 @@ impl VectorStore for MemoryVectorStore {
     }
 }
 
+/// Canonical deterministic UUID for Qdrant point from a cache key or record ID (P0-02).
+pub fn canonical_qdrant_point_id(id: &str) -> String {
+    use sha2::Digest;
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(id.as_bytes());
+    let hash = hex::encode(hasher.finalize());
+    format!(
+        "{}-{}-{}-{}-{}",
+        &hash[0..8],
+        &hash[8..12],
+        &hash[12..16],
+        &hash[16..20],
+        &hash[20..32]
+    )
+}
+
 /// Production Qdrant vector store adapter providing cosine distance search with strict tenant filters
 #[derive(Clone)]
 pub struct QdrantVectorStore {
@@ -289,21 +305,8 @@ impl VectorStore for QdrantVectorStore {
             self.collection_name
         );
 
-        // Deterministic UUID for Qdrant point from entry.id
-        let point_uuid = {
-            let mut hasher = sha2::Sha256::new();
-            use sha2::Digest;
-            hasher.update(entry.id.as_bytes());
-            let hash = hex::encode(hasher.finalize());
-            format!(
-                "{}-{}-{}-{}-{}",
-                &hash[0..8],
-                &hash[8..12],
-                &hash[12..16],
-                &hash[16..20],
-                &hash[20..32]
-            )
-        };
+        // Deterministic canonical UUID for Qdrant point from entry.id (P0-02)
+        let point_uuid = canonical_qdrant_point_id(&entry.id);
 
         let payload = serde_json::json!({
             "points": [
@@ -473,22 +476,9 @@ impl VectorStore for QdrantVectorStore {
             self.endpoint_url.trim_end_matches('/'),
             self.collection_name
         );
-        // Qdrant point ids are UUIDs; reuse the exact deterministic UUID derived at
-        // insert time so invalidation actually deletes the indexed point.
-        let point_uuid = {
-            let mut hasher = sha2::Sha256::new();
-            use sha2::Digest;
-            hasher.update(id.as_bytes());
-            let hash = hex::encode(hasher.finalize());
-            format!(
-                "{}-{}-{}-{}-{}",
-                &hash[0..8],
-                &hash[8..12],
-                &hash[12..16],
-                &hash[16..20],
-                &hash[20..32]
-            )
-        };
+        // Qdrant point ids are UUIDs; reuse the exact canonical deterministic UUID derived at
+        // insert time so invalidation actually deletes the indexed point (P0-02).
+        let point_uuid = canonical_qdrant_point_id(id);
         let delete_payload = serde_json::json!({
             "points": [point_uuid]
         });
@@ -665,5 +655,24 @@ mod tests {
             0,
             "Cross-tenant vector search must yield 0 results"
         );
+    }
+
+    #[test]
+    fn test_canonical_qdrant_point_id_determinism_and_format() {
+        let key = "sunborn:tenant-alpha:app-1:chat:sha256:abcd1234efgh5678";
+        let id1 = canonical_qdrant_point_id(key);
+        let id2 = canonical_qdrant_point_id(key);
+        assert_eq!(
+            id1, id2,
+            "Canonical Qdrant point IDs must be strictly deterministic"
+        );
+
+        // Verify valid UUID string length (36 chars with 4 hyphens)
+        assert_eq!(id1.len(), 36);
+        assert_eq!(id1.matches('-').count(), 4);
+
+        // Verify distinct keys produce distinct point IDs
+        let id3 = canonical_qdrant_point_id("sunborn:tenant-beta:app-2:chat");
+        assert_ne!(id1, id3);
     }
 }

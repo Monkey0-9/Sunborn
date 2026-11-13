@@ -47,7 +47,7 @@ impl Default for CacheConfig {
             postgres_url: "postgres://postgres:postgres@localhost:5432/sunborn".to_string(),
             master_kek: None,
             strict_durability: false,
-            graph_dependency_cache_enabled: false,
+            graph_dependency_cache_enabled: true,
         }
     }
 }
@@ -162,7 +162,7 @@ impl AppConfig {
             .ok();
         let strict_durability = parse_bool_env("SUNBORN_STRICT_DURABILITY", false)?;
         let graph_dependency_cache_enabled =
-            parse_bool_env("SUNBORN_GRAPH_DEPENDENCY_CACHE_ENABLED", false)?;
+            parse_bool_env("SUNBORN_GRAPH_DEPENDENCY_CACHE_ENABLED", true)?;
 
         let exact_cache_enabled = if parse_bool_env("SUNBORN_DISABLE_EXACT_CACHE", false)? {
             false

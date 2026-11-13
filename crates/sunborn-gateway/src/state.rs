@@ -272,42 +272,80 @@ impl AppState {
             vc.increment("gateway-primary-node-1");
         }
 
-        let origin_provider: Arc<dyn LlmOriginProvider> = if let Ok(url) =
+        let mut arbitrage_entries = Vec::new();
+
+        // 1. OpenAI / vLLM / Ollama Provider
+        if let Ok(url) =
             std::env::var("SUNBORN_LLM_ORIGIN_URL").or_else(|_| std::env::var("OPENAI_API_BASE"))
         {
             let api_key = std::env::var("SUNBORN_LLM_ORIGIN_API_KEY")
                 .or_else(|_| std::env::var("OPENAI_API_KEY"))
                 .ok();
-            let primary = Arc::new(crate::origin::provider::HttpLlmOriginProvider::new(
-                url, api_key,
-            ));
+            arbitrage_entries.push(crate::origin::provider::ArbitrageProviderEntry {
+                name: "openai-compatible".into(),
+                provider: Arc::new(crate::origin::provider::HttpLlmOriginProvider::new(
+                    url, api_key,
+                )),
+                cost_per_million_input: 2.50,
+                cost_per_million_output: 10.00,
+                priority: 1,
+            });
+        }
 
-            if let Ok(failover_url) = std::env::var("SUNBORN_FAILOVER_ORIGIN_URL") {
-                let failover_key = std::env::var("SUNBORN_FAILOVER_ORIGIN_KEY").ok();
-                let secondary = Arc::new(crate::origin::provider::HttpLlmOriginProvider::new(
+        // 2. Native Anthropic Messages Provider (Claude 3.5 Sonnet / Opus)
+        if let Ok(anthropic_key) = std::env::var("ANTHROPIC_API_KEY") {
+            let anthropic_url = std::env::var("ANTHROPIC_BASE_URL")
+                .unwrap_or_else(|_| "https://api.anthropic.com".to_string());
+            arbitrage_entries.push(crate::origin::provider::ArbitrageProviderEntry {
+                name: "anthropic-claude".into(),
+                provider: Arc::new(crate::origin::anthropic::AnthropicMessagesProvider::new(
+                    anthropic_url,
+                    Some(anthropic_key),
+                )),
+                cost_per_million_input: 3.00,
+                cost_per_million_output: 15.00,
+                priority: 2,
+            });
+        }
+
+        // 3. Native Google Gemini Provider (Gemini 1.5 Pro / Flash)
+        if let Ok(gemini_key) = std::env::var("GEMINI_API_KEY") {
+            let gemini_url = std::env::var("GEMINI_BASE_URL")
+                .unwrap_or_else(|_| "https://generativelanguage.googleapis.com".to_string());
+            arbitrage_entries.push(crate::origin::provider::ArbitrageProviderEntry {
+                name: "google-gemini".into(),
+                provider: Arc::new(crate::origin::gemini::GeminiProvider::new(
+                    gemini_url,
+                    Some(gemini_key),
+                )),
+                cost_per_million_input: 1.25,
+                cost_per_million_output: 5.00,
+                priority: 3,
+            });
+        }
+
+        // 4. Secondary failover provider if explicitly configured
+        if let Ok(failover_url) = std::env::var("SUNBORN_FAILOVER_ORIGIN_URL") {
+            let failover_key = std::env::var("SUNBORN_FAILOVER_ORIGIN_KEY").ok();
+            arbitrage_entries.push(crate::origin::provider::ArbitrageProviderEntry {
+                name: "failover-origin".into(),
+                provider: Arc::new(crate::origin::provider::HttpLlmOriginProvider::new(
                     failover_url,
                     failover_key,
-                ));
-                Arc::new(crate::origin::provider::MultiProviderArbitrageRouter::new(
-                    vec![
-                        crate::origin::provider::ArbitrageProviderEntry {
-                            name: "primary-origin".into(),
-                            provider: primary,
-                            cost_per_million_input: 2.50,
-                            cost_per_million_output: 10.00,
-                            priority: 1,
-                        },
-                        crate::origin::provider::ArbitrageProviderEntry {
-                            name: "failover-origin".into(),
-                            provider: secondary,
-                            cost_per_million_input: 3.00,
-                            cost_per_million_output: 15.00,
-                            priority: 2,
-                        },
-                    ],
-                ))
+                )),
+                cost_per_million_input: 3.00,
+                cost_per_million_output: 15.00,
+                priority: 10,
+            });
+        }
+
+        let origin_provider: Arc<dyn LlmOriginProvider> = if !arbitrage_entries.is_empty() {
+            if arbitrage_entries.len() == 1 {
+                arbitrage_entries.remove(0).provider
             } else {
-                primary
+                Arc::new(crate::origin::provider::MultiProviderArbitrageRouter::new(
+                    arbitrage_entries,
+                ))
             }
         } else {
             Arc::new(MockOriginProvider::new())
@@ -349,12 +387,7 @@ impl AppState {
                 b"sunborn-insecure-dev-cert-signing-secret-change-in-production".to_vec()
             };
 
-        let is_graph_cache_enabled = config.cache.graph_dependency_cache_enabled
-            || sunborn_core::config::parse_bool_env(
-                "SUNBORN_GRAPH_DEPENDENCY_CACHE_ENABLED",
-                false,
-            )
-            .unwrap_or(false);
+        let is_graph_cache_enabled = config.cache.graph_dependency_cache_enabled;
 
         let graph_memory_cache = if is_graph_cache_enabled {
             let lineage_graph = Arc::new(CompressedLineageGraph::new());

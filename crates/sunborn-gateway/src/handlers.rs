@@ -834,77 +834,9 @@ pub async fn execute_request_inner(
             );
             let envelope_meta = serde_json::to_value(&env).ok();
 
-            // a) Save in exact cache with embedded certificate metadata
-            let mut entry = CacheEntry::new(
-                &identity.key,
-                &stored_content,
-                Some(state.config.cache.default_ttl_secs),
-            );
-            if let Ok(cert_val) = serde_json::to_value(&admission_cert) {
-                entry.metadata["certificate"] = cert_val;
-            }
-            if let Some(ref env_val) = envelope_meta {
-                entry.metadata["encrypted_envelope"] = env_val.clone();
-            }
-            let _ = state.cache.set(entry.clone()).await;
-
-            // Bind into knowledge dependency graph and graph memory cache
-            for snap in &req.dependency_snapshots {
-                let _ = state
-                    .dependency_graph
-                    .record_dependency(snap.source_id, &identity.key)
-                    .await;
-            }
-            if let Some(ref gmc) = state.graph_memory_cache {
-                let source_ids: Vec<Uuid> = req
-                    .dependency_snapshots
-                    .iter()
-                    .map(|s| s.source_id)
-                    .collect();
-                let doc_hashes: Vec<u64> = req
-                    .dependency_snapshots
-                    .iter()
-                    .map(|s| {
-                        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                        std::hash::Hash::hash(&s.source_id, &mut hasher);
-                        std::hash::Hasher::finish(&hasher)
-                    })
-                    .collect();
-                let record_id = {
-                    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                    std::hash::Hash::hash(&identity.key, &mut hasher);
-                    std::hash::Hasher::finish(&hasher)
-                };
-                let _ = gmc
-                    .set_with_lineage(entry, &source_ids, &doc_hashes, record_id)
-                    .await;
-            }
-
-            // b) Admit into semantic vector store
-            if let Ok(vector) = state.selected_embedder.embed(&req.prompt).await {
-                let mut meta = serde_json::json!({
-                    "model": req.model,
-                    "certificate": serde_json::to_value(&admission_cert).unwrap_or_default(),
-                });
-                if let Some(ref env_val) = envelope_meta {
-                    meta["encrypted_envelope"] = env_val.clone();
-                }
-                let _ = state
-                    .vector_store
-                    .insert(VectorEntry {
-                        id: identity.key.clone(),
-                        tenant_id: req.tenant_id.clone(),
-                        application_id: req.application_id.clone(),
-                        prompt: req.prompt.clone(),
-                        content: stored_content.clone(),
-                        vector,
-                        metadata: meta,
-                        created_at: Utc::now(),
-                    })
-                    .await;
-            }
-
-            // c) Save to authoritative PostgreSQL system of record
+            // Transactional Cache Admission State Machine (P0-05)
+            // Stage 1: Save to authoritative PostgreSQL system of record with certificate provenance (P0-03)
+            let cert_json = serde_json::to_string(&admission_cert).ok();
             let db_res = state
                 .db
                 .insert_cache_entry(sunborn_db::models::DurableCacheRecord {
@@ -923,10 +855,11 @@ pub async fn execute_request_inner(
                             + chrono::Duration::seconds(state.config.cache.default_ttl_secs as i64),
                     ),
                     last_accessed_at: Utc::now(),
+                    certificate_json: cert_json,
                 })
                 .await;
 
-            if let Err(e) = db_res {
+            if let Err(ref e) = db_res {
                 tracing::error!(
                     key = %identity.key,
                     tenant = %req.tenant_id.0,
@@ -939,6 +872,110 @@ pub async fn execute_request_inner(
                         "Strict durability violation: failed to persist authoritative cache entry to database: {e}"
                     ))
                     .into());
+                }
+            }
+
+            // Stage 2: Save in exact cache with embedded certificate metadata
+            let mut entry = CacheEntry::new(
+                &identity.key,
+                &stored_content,
+                Some(state.config.cache.default_ttl_secs),
+            );
+            if let Ok(cert_val) = serde_json::to_value(&admission_cert) {
+                entry.metadata["certificate"] = cert_val;
+            }
+            if let Some(ref env_val) = envelope_meta {
+                entry.metadata["encrypted_envelope"] = env_val.clone();
+            }
+
+            match state.cache.set(entry.clone()).await {
+                Ok(_) => {
+                    // Stage 3: Bind into knowledge dependency graph and graph memory cache (P0-01)
+                    for snap in &req.dependency_snapshots {
+                        if let Err(e) = state
+                            .dependency_graph
+                            .record_dependency(snap.source_id, &identity.key)
+                            .await
+                        {
+                            tracing::warn!(
+                                key = %identity.key,
+                                source_id = %snap.source_id,
+                                error = %e,
+                                "Failed to record knowledge dependency edge"
+                            );
+                        }
+                    }
+                    if let Some(ref gmc) = state.graph_memory_cache {
+                        let source_ids: Vec<Uuid> = req
+                            .dependency_snapshots
+                            .iter()
+                            .map(|s| s.source_id)
+                            .collect();
+                        // Derive doc_hashes by combining source_id and content_hash (P0-01 D)
+                        let doc_hashes: Vec<u64> = req
+                            .dependency_snapshots
+                            .iter()
+                            .map(|s| {
+                                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                                std::hash::Hash::hash(&s.source_id, &mut hasher);
+                                std::hash::Hash::hash(&s.content_hash, &mut hasher);
+                                std::hash::Hasher::finish(&hasher)
+                            })
+                            .collect();
+                        let record_id = {
+                            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                            std::hash::Hash::hash(&identity.key, &mut hasher);
+                            std::hash::Hasher::finish(&hasher)
+                        };
+                        if let Err(e) = gmc
+                            .set_with_lineage(entry, &source_ids, &doc_hashes, record_id)
+                            .await
+                        {
+                            tracing::warn!(
+                                key = %identity.key,
+                                error = %e,
+                                "Failed to commit entry to graph memory cache with lineage"
+                            );
+                        }
+                    }
+
+                    // Stage 4: Admit into semantic vector store
+                    if let Ok(vector) = state.selected_embedder.embed(&req.prompt).await {
+                        let mut meta = serde_json::json!({
+                            "model": req.model,
+                            "certificate": serde_json::to_value(&admission_cert).unwrap_or_default(),
+                        });
+                        if let Some(ref env_val) = envelope_meta {
+                            meta["encrypted_envelope"] = env_val.clone();
+                        }
+                        if let Err(e) = state
+                            .vector_store
+                            .insert(VectorEntry {
+                                id: identity.key.clone(),
+                                tenant_id: req.tenant_id.clone(),
+                                application_id: req.application_id.clone(),
+                                prompt: req.prompt.clone(),
+                                content: stored_content.clone(),
+                                vector,
+                                metadata: meta,
+                                created_at: Utc::now(),
+                            })
+                            .await
+                        {
+                            tracing::warn!(
+                                key = %identity.key,
+                                error = %e,
+                                "Vector store insertion failed on cache admission"
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(
+                        key = %identity.key,
+                        error = %e,
+                        "Exact cache insertion failed on cache admission"
+                    );
                 }
             }
         } else {
@@ -1484,32 +1521,73 @@ pub async fn invalidate_graph_rtc(
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
 
     let mut purged_keys = Vec::new();
+    let mut failed_keys = Vec::new();
     let mut affected_doc_records_count = 0;
 
     for src in &payload.source_ids {
-        if let Some(ref gmc) = state.graph_memory_cache {
-            if let Ok(keys) = gmc.invalidate_source_rtc(src).await {
-                purged_keys.extend(keys);
+        let keys = state.dependency_graph.get_affected_cache_keys(src).await;
+        let mut successfully_deleted_for_src = Vec::new();
+
+        for k in &keys {
+            let mut key_failed = false;
+            // Tier 1: Delete from exact cache
+            if let Err(e) = state.cache.delete(k).await {
+                tracing::error!(source_id = %src, key = %k, error = %e, "Exact cache delete failed during RTC");
+                failed_keys.push((k.clone(), format!("exact_cache: {e}")));
+                key_failed = true;
             }
-        } else {
-            let keys = state.dependency_graph.get_affected_cache_keys(src).await;
-            for k in &keys {
-                let _ = state.cache.delete(k).await;
+
+            // Tier 2: Delete from vector store
+            if let Err(e) = state.vector_store.delete(k).await {
+                tracing::error!(source_id = %src, key = %k, error = %e, "Vector store delete failed during RTC");
+                failed_keys.push((k.clone(), format!("vector_store: {e}")));
+                key_failed = true;
             }
-            state.dependency_graph.clear_dependencies(src).await;
-            purged_keys.extend(keys);
+
+            if !key_failed {
+                successfully_deleted_for_src.push(k.clone());
+                purged_keys.push(k.clone());
+                // Remove individual dependency edge upon confirmed multi-tier deletion
+                let _ = state.dependency_graph.remove_dependency(src, k).await;
+            }
         }
+
+        // Tier 3: Invalidate graph memory cache if configured
+        if let Some(ref gmc) = state.graph_memory_cache {
+            match gmc.invalidate_source_rtc(src).await {
+                Ok(gmc_keys) => {
+                    purged_keys.extend(gmc_keys);
+                }
+                Err(e) => {
+                    tracing::warn!(source_id = %src, error = %e, "GMC source RTC purge had warnings");
+                }
+            }
+        }
+
+        // If all keys for this source were successfully deleted, clear remaining source dependencies
+        if successfully_deleted_for_src.len() == keys.len() {
+            state.dependency_graph.clear_dependencies(src).await;
+        }
+
         state.epoch_lease_manager.bump_epoch(*src).await;
         state.watermark_fencer.advance_watermark(&src.to_string());
     }
 
     if !payload.doc_hashes.is_empty() {
         if let Some(ref gmc) = state.graph_memory_cache {
-            if let Ok((affected, doc_keys)) =
-                gmc.invalidate_docs_rtc_purge(&payload.doc_hashes).await
-            {
-                affected_doc_records_count = affected.len() as usize;
-                purged_keys.extend(doc_keys);
+            match gmc.invalidate_docs_rtc_purge(&payload.doc_hashes).await {
+                Ok((affected, doc_keys)) => {
+                    affected_doc_records_count = affected.len() as usize;
+                    // Also purge corresponding vectors for doc keys
+                    for k in &doc_keys {
+                        let _ = state.vector_store.delete(k).await;
+                    }
+                    purged_keys.extend(doc_keys);
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "Document hash RTC purge failed");
+                    failed_keys.push(("doc_hashes".to_string(), e.to_string()));
+                }
             }
         }
     }
@@ -1518,12 +1596,21 @@ pub async fn invalidate_graph_rtc(
     purged_keys.dedup();
 
     let count = purged_keys.len();
+    let status = if failed_keys.is_empty() {
+        "purged"
+    } else if count > 0 {
+        "partially_purged"
+    } else {
+        "failed"
+    };
+
     Ok(Json(json!({
-        "status": "purged",
+        "status": status,
         "purged_cache_keys": purged_keys,
         "purged_count": count,
         "evicted_records": count,
-        "affected_doc_records_count": affected_doc_records_count
+        "affected_doc_records_count": affected_doc_records_count,
+        "failed_keys": failed_keys,
     })))
 }
 
@@ -1947,38 +2034,49 @@ pub async fn trigger_rebuild(
             .map(|exp| (exp - Utc::now()).num_seconds().max(1) as u64)
             .unwrap_or(state.config.cache.default_ttl_secs);
 
-        let prompt_risk = sunborn_semantic::DecisionEngine::<
-            std::sync::Arc<dyn sunborn_semantic::EmbeddingProvider>,
-            std::sync::Arc<dyn sunborn_semantic::VectorStore>,
-        >::assess_risk(&record.prompt_canonical);
+        // Strict Provenance Recovery (P0-03): Rebuild authentic certificate from durable store.
+        // If certificate is missing, malformed, or fails cryptographic integrity, fail closed
+        // and never invent fake positive evidence or empty snapshots.
+        let restored_cert = match record.certificate_json.as_deref() {
+            Some(cert_str) => {
+                match serde_json::from_str::<sunborn_core::ReuseCertificate>(cert_str) {
+                    Ok(cert) => {
+                        if cert
+                            .verify_integrity(&state.certificate_signing_key)
+                            .is_ok()
+                        {
+                            Some(cert)
+                        } else {
+                            tracing::warn!(
+                                key = %record.key,
+                                "Stored certificate integrity check failed during rebuild -> skipping unverified cache admission"
+                            );
+                            None
+                        }
+                    }
+                    Err(err) => {
+                        tracing::warn!(
+                            key = %record.key,
+                            error = %err,
+                            "Failed to deserialize stored certificate during rebuild -> skipping cache admission"
+                        );
+                        None
+                    }
+                }
+            }
+            None => {
+                tracing::warn!(
+                    key = %record.key,
+                    "No authentic certificate found in durable record -> skipping cache admission (fail-closed)"
+                );
+                None
+            }
+        };
 
-        let req_hash = record.hash.split(':').next_back().unwrap_or(&record.hash);
-
-        let restored_cert = sunborn_core::ReuseCertificate::new_signed(
-            TenantId::new(record.tenant_id.clone()),
-            sunborn_core::model::ApplicationId::new(record.application_id.clone()),
-            req_hash,
-            &record.model,
-            record.prompt_canonical.split_whitespace().count() as u32,
-            vec![],
-            sunborn_core::SafetyEvidenceRecord {
-                structural_hash_match: true,
-                negation_polarity_match: true,
-                numeric_literal_match: true,
-                entity_drift_detected: false,
-                non_conformity_score: 0.0,
-                calibrated_risk_bound: 0.25,
-                heuristic_risk_score: prompt_risk,
-            },
-            sunborn_core::ValidityWindow {
-                issued_at: record.created_at,
-                expires_at: record
-                    .expires_at
-                    .unwrap_or_else(|| Utc::now() + chrono::Duration::seconds(ttl_secs as i64)),
-                monotonic_epoch_lease: 1,
-            },
-            &state.certificate_signing_key,
-        );
+        let restored_cert = match restored_cert {
+            Some(c) => c,
+            None => continue, // Never admit cache entries without authentic cryptographic provenance
+        };
 
         let mut entry = CacheEntry::new(&record.key, &record.content, Some(ttl_secs));
         if let Ok(cert_val) = serde_json::to_value(&restored_cert) {
@@ -2003,6 +2101,7 @@ pub async fn trigger_rebuild(
                     .map(|s| {
                         let mut hasher = std::collections::hash_map::DefaultHasher::new();
                         std::hash::Hash::hash(&s.source_id, &mut hasher);
+                        std::hash::Hash::hash(&s.content_hash, &mut hasher);
                         std::hash::Hasher::finish(&hasher)
                     })
                     .collect();

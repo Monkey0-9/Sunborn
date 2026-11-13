@@ -28,6 +28,7 @@
 //!     created_at: chrono::Utc::now(),
 //!     expires_at: Some(chrono::Utc::now() + chrono::Duration::seconds(3600)),
 //!     last_accessed_at: chrono::Utc::now(),
+//!     certificate_json: None,
 //! };
 //!
 //! db.insert_cache_entry(record).await.expect("Saved successfully");
