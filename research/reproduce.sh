@@ -160,7 +160,7 @@ else
     fi
     "${GATEWAY_BIN}" >/dev/null 2>&1 &
     SPAWNED_GATEWAY_PID=$!
-    for i in {1..50}; do
+    for i in {1..150}; do
         if curl -s http://127.0.0.1:8080/health >/dev/null 2>&1; then
             GATEWAY_HEALTHY=1
             echo "[*] Live gateway ready at http://127.0.0.1:8080 (startup verified in ${i}00ms)"
@@ -171,7 +171,7 @@ else
 fi
 
 if [[ "${GATEWAY_HEALTHY}" -ne 1 ]]; then
-    echo "FATAL: Sunborn Gateway failed to become healthy at http://127.0.0.1:8080 within startup deadline (5.0s)." >&2
+    echo "FATAL: Sunborn Gateway failed to become healthy at http://127.0.0.1:8080 within startup deadline (15.0s)." >&2
     exit 1
 fi
 
