@@ -251,6 +251,7 @@ export default function ExplorerPage() {
                   </div>
                   <input
                     type="range"
+                    aria-label="Temperature"
                     min="0"
                     max="1"
                     step="0.05"

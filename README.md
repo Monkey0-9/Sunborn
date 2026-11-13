@@ -132,6 +132,8 @@ Set these to leave simulation behind:
 | `SUNBORN_DB_BACKEND=postgres` + `POSTGRES_URL` | PostgreSQL persistence |
 | `SUNBORN_KMS_PROVIDER=aws-kms` or `vault` | Remote key management |
 | `SUNBORN_STRICT_DURABILITY=true` | Fail instead of silent in-memory fallback |
+| `SUNBORN_CERTIFICATE_SIGNING_KEY` | Dedicated certificate signing key (must differ from KEK/admin/learning HMAC) |
+| `SUNBORN_NEO4J_URL` (+ user/password) | Enable Neo4j transitive lineage invalidation |
 
 ## Performance
 

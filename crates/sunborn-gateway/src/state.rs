@@ -140,7 +140,21 @@ impl AppState {
             selected_vector.clone(),
             DecisionConfig::default(),
         ));
-        let dependency_graph = Arc::new(DependencyGraph::new());
+        // Select Neo4j for transitive lineage when configured; otherwise in-memory.
+        let dependency_graph = match std::env::var("SUNBORN_NEO4J_URL") {
+            Ok(url) if !url.trim().is_empty() => {
+                let user = std::env::var("SUNBORN_NEO4J_USER").unwrap_or_default();
+                let password = std::env::var("SUNBORN_NEO4J_PASSWORD").unwrap_or_default();
+                let auth = if user.is_empty() {
+                    None
+                } else {
+                    Some((user.as_str(), password.as_str()))
+                };
+                tracing::info!(endpoint = %url, "Using Neo4j Cypher graph store for dependency lineage");
+                Arc::new(DependencyGraph::new_neo4j(url, auth))
+            }
+            _ => Arc::new(DependencyGraph::new()),
+        };
         let invalidation_engine = Arc::new(InvalidationEngine::new(
             dependency_graph.clone(),
             selected_cache.clone(),

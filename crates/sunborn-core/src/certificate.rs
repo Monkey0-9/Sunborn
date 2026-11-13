@@ -633,6 +633,61 @@ mod tests {
     }
 
     #[test]
+    fn test_measured_evidence_is_enforced_over_issuance_flags() {
+        let key = b"measured-evidence-key-32-bytes!!";
+        let tenant = TenantId::new("tenant-measured");
+        let app = ApplicationId::new("app-measured");
+        let doc_id = Uuid::new_v4();
+        let good = SafetyEvidenceRecord {
+            structural_hash_match: true,
+            negation_polarity_match: true,
+            numeric_literal_match: true,
+            entity_drift_detected: false,
+            non_conformity_score: 0.0,
+            calibrated_risk_bound: 0.25,
+            heuristic_risk_score: 0.0,
+        };
+        let mut cert = ReuseCertificate::new_signed(
+            tenant.clone(),
+            app.clone(),
+            "identity-hash",
+            "gpt-4o",
+            10,
+            vec![SourceVersionSnapshot {
+                source_id: doc_id,
+                snapshot_epoch: 1,
+                content_hash: "h".to_string(),
+            }],
+            good.clone(),
+            ValidityWindow {
+                issued_at: Utc::now(),
+                expires_at: Utc::now() + Duration::hours(1),
+                monotonic_epoch_lease: 1,
+            },
+            key,
+        );
+        cert.attach_reference_fingerprint("{\"reference\":true}", key);
+
+        // Measured evidence that passes is accepted.
+        assert!(cert
+            .verify_admissibility_measured(
+                key, &tenant, &app, "gpt-4o", None, Utc::now(), 1, &[(doc_id, 1)], &good
+            )
+            .is_ok());
+
+        // Even though issuance recorded "true", measured evidence that fails is rejected.
+        let bad = SafetyEvidenceRecord {
+            structural_hash_match: false,
+            ..good
+        };
+        assert!(cert
+            .verify_admissibility_measured(
+                key, &tenant, &app, "gpt-4o", None, Utc::now(), 1, &[(doc_id, 1)], &bad
+            )
+            .is_err());
+    }
+
+    #[test]
     fn test_certificate_admissibility_enforcement_and_rejections() {
         let key = b"admissibility-key-32-bytes-long!";
         let tenant = TenantId::new("tenant-safe");

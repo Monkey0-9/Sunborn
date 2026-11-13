@@ -135,12 +135,15 @@ All P0 and P1 tasks in `46_REMEDIATION_ROADMAP.md`, plus the four passing infras
 
 **Verdict: FUNCTIONAL PROTOTYPE / EARLY-STAGE PRODUCT. NO-GO for production.**
 
-> **Post-audit progress (2026-11-13):** six P0 items are closed — the frontend
-> fake backend, dev auth bypass, fabricated credentials, Qdrant delete mismatch,
-> false public claims, and broken root OpenAPI pointer — plus dedicated
-> certificate signing keys, bounded `SCAN`, a request body limit, CSP, and deploy
-> hardening. The verdict is unchanged because **F-004 (measured certificate
-> evidence)** and **F-005 (server-derived freshness)** remain open, along with the
-> durable/distributed wiring. See `49_REMEDIATION_VERIFICATION.md`.
+> **Post-audit progress (2026-11-13):** all seven originally-listed P0s are now
+> addressed — the frontend fake backend, dev auth bypass, fabricated credentials,
+> Qdrant delete mismatch, false public claims, broken root OpenAPI pointer, and
+> **measured certificate evidence** (reference fingerprint bound into the signed
+> certificate and re-verified against the candidate prompt). Freshness is now
+> **server-derived** from the epoch registry, and Neo4j transitive lineage is
+> wired when configured. The verdict remains NO-GO because the durable outbox,
+> distributed cluster sync, write-behind, real embeddings/ANN/NLI, live-infra
+> tests, and supply-chain signing are still open. See
+> `49_REMEDIATION_VERIFICATION.md`.
 
 The path to a genuinely world-class project is not more adjectives — it is making the safety layer measure what it claims, wiring the durable/distributed components, publishing reproducible benchmarks, and telling the truth. See `46` P4 (Daredevil upgrade).

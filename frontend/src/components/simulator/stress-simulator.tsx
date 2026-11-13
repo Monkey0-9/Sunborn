@@ -328,6 +328,7 @@ export function PlanetScaleStressSimulator() {
               </div>
               <input
                 type="range"
+                aria-label="Ingress throughput (requests per second)"
                 min={10000}
                 max={1000000}
                 step={10000}
@@ -350,6 +351,7 @@ export function PlanetScaleStressSimulator() {
               </div>
               <input
                 type="range"
+                aria-label="Cache miss rate (percent)"
                 min={5}
                 max={50}
                 step={1}
@@ -374,6 +376,7 @@ export function PlanetScaleStressSimulator() {
               </div>
               <input
                 type="range"
+                aria-label="RAG document churn (documents per hour)"
                 min={10}
                 max={10000}
                 step={50}
@@ -396,6 +399,7 @@ export function PlanetScaleStressSimulator() {
               </div>
               <input
                 type="range"
+                aria-label="Active Kubernetes regions"
                 min={1}
                 max={5}
                 step={1}

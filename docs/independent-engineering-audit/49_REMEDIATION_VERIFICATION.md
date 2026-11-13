@@ -34,7 +34,7 @@ This appendix records what was actually changed after the baseline audit, with v
 |---|---|---|---|
 | F-015 | Dedicated certificate signing key; separated from learning HMAC; distinctness + length enforced in production | `crates/sunborn-gateway/src/state.rs` (field, derivation, readiness check); `handlers.rs` (4 call sites); tests | `cargo test` (252 pass) |
 | F-016 | `KEYS` replaced with bounded cursor `SCAN` | `crates/sunborn-cache/src/dragonfly.rs` | `cargo test` |
-| F-027 (partial) | Content-Security-Policy added | `frontend/next.config.mjs` | build |
+| F-027 (partial) | CSP added; aria-labels added to all range sliders | `frontend/next.config.mjs`, page components | tsc + build + tests |
 | — | 4 MiB request body limit | `crates/sunborn-gateway/src/lib.rs` | `cargo test` |
 | — | Deploy hardening: frontend read-only rootfs + emptyDir volumes + drop ALL; topology spread; image tags unified to `0.1.0` | `deploy/k8s/*.yaml`, `deploy/helm/sunborn/*` | `check_k8s_manifests.py` |
 
@@ -66,10 +66,10 @@ This appendix records what was actually changed after the baseline audit, with v
 ## 6. Still open (the reason production remains NO-GO)
 
 - **F-010**: silent fallback still exists outside production (production startup does fail closed).
-- **F-011/F-012/F-013/F-014/F-018**: durable outbox, cluster sync, Neo4j, write-behind, and in-memory transitive closure remain unwired/partial.
+- **F-011/F-012/F-014/F-018**: durable outbox, cluster sync, write-behind, and in-memory transitive closure remain unwired/partial. (F-013 Neo4j is now wired when `SUNBORN_NEO4J_URL` is set.)
 - **F-028**: no live-infra integration tests.
 - **F-036/F-037**: default embeddings and online conformal guarantee not fixed (P4/P5).
-- **A11y** (sliders, keyboard divs), image signing/SLSA, OIDC, multi-region.
+- **A11y** (remaining keyboard-operable clickable divs), image signing/SLSA, OIDC, multi-region.
 
 These remain tracked in `46_REMEDIATION_ROADMAP.md`. The production verdict is unchanged.
 
@@ -87,7 +87,34 @@ These remain tracked in `46_REMEDIATION_ROADMAP.md`. The production verdict is u
 
 Python syntax check: `python -m py_compile` on all modified scripts — exit 0.
 
-## 8. What is now genuinely complete
+## 8. Hardest P0s closed: measured attestation and server-derived freshness
+
+**F-004 — measured certificate evidence.** The certificate now carries a
+`reference_fingerprint` (canonical JSON of the issuing prompt's
+`StructuralFingerprint`), included in the signed Merkle root (`certificate.rs`
+leaf 4). At read time the gateway recomputes the candidate prompt's fingerprint,
+evaluates `StructuralFingerprint::matches`, and calls
+`verify_admissibility_measured`, which applies the *measured* evidence instead
+of the issuance-time booleans. A regression test
+(`test_measured_evidence_is_enforced_over_issuance_flags`) proves a certificate
+issued with `structural_hash_match: true` is still rejected when measured
+evidence is false. Legacy certificates with an empty reference fingerprint fall
+back to the old path; new admissions always carry it.
+
+**F-005 — server-derived freshness.** Source epochs are read from the
+authoritative `EpochLeaseManager` at admission and reuse. The request's declared
+dependency *set* is still enforced (so omissions, duplicates, and orphaned
+certificate deps are rejected), but epoch values are never taken from the
+client. `monotonic_epoch_lease` is the max server-derived lease.
+
+**F-013 — Neo4j wiring.** `AppState` selects `DependencyGraph::new_neo4j(...)`
+when `SUNBORN_NEO4J_URL` is set (optional user/password), enabling transitive
+`DEPENDS_ON*1..5` invalidation; otherwise it stays in-memory.
+
+Verified: `cargo check --workspace --all-targets` clean; **252 Rust tests pass,
+0 failed**, including the new core regression test.
+
+## 9. What is now genuinely complete
 
 - Clean, single-suite repository; no committed caches/generated artifacts.
 - Truthful README and release record.

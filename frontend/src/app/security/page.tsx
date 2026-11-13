@@ -486,6 +486,7 @@ export default function SecurityPage() {
                 </div>
                 <input
                   type="range"
+                  aria-label="API key rate limit (requests per second)"
                   min="10"
                   max="500"
                   step="10"

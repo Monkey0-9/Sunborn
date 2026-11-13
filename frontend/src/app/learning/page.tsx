@@ -351,6 +351,7 @@ export default function LearningControllerPage() {
                 </div>
                 <input
                   type="range"
+                  aria-label="Canary traffic allocation (percent)"
                   min="5"
                   max="25"
                   step="5"

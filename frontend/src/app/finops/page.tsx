@@ -408,6 +408,7 @@ export default function FinOpsPage() {
                 </div>
                 <input
                   type="range"
+                  aria-label="Monthly request volume"
                   min="50000"
                   max="5000000"
                   step="50000"
@@ -424,6 +425,7 @@ export default function FinOpsPage() {
                 </div>
                 <input
                   type="range"
+                  aria-label="Cache hit ratio (percent)"
                   min="10"
                   max="99"
                   step="0.5"
