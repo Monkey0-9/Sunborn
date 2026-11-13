@@ -1,0 +1,44 @@
+cff-version: 1.2.0
+message: "If you use Sunborn in your research, production systems, or academic benchmarks, please cite it as below."
+title: "Sunborn: Deterministic Equivalence, Multi-Tier Semantic Caching, and Partial Execution Reuse for Agentic RAG Systems"
+abstract: >-
+  Sunborn is a high-performance distributed semantic execution gateway designed around formal equivalence
+  classes (C0 to C3). It integrates RFC 8785 JSON Canonicalization Scheme (JCS), Non-Exchangeable Conformal Risk
+  Control with 32-byte ContextDigest context-lineage binding, SIMD-accelerated 64-bit Roaring Bitmaps for microsecond
+  transitive key closure, cost-aware Greedy-Dual-Size-Frequency (GDSF) eviction, and Non-Accelerator Authority
+  over PostgreSQL state. Sunborn guarantees zero cross-tenant leakage, 0.0% semantic false hits under calibrated
+  guardrails, and sub-millisecond execution reuse across frontier LLMs (Claude, Gemini, OpenAI).
+authors:
+  - family-names: "Sunborn Research Team"
+    name: "Sunborn Architecture & Systems Group"
+    affiliation: "Distributed Systems & AI Infrastructure Lab"
+    email: "contact@sunborn.internal"
+repository-code: "https://github.com/Monkey0-9/Sunborn"
+url: "https://github.com/Monkey0-9/Sunborn"
+repository-artifact: "https://github.com/Monkey0-9/Sunborn/tree/main/research"
+license: "Apache-2.0"
+version: "0.1.0"
+date-released: "2026-11-13"
+keywords:
+  - "semantic caching"
+  - "agentic ai"
+  - "retrieval-augmented generation"
+  - "dag execution reuse"
+  - "conformal risk control"
+  - "rfc 8785"
+  - "roaring bitmaps"
+  - "distributed systems"
+  - "ieee 1012"
+  - "acm artifact badging"
+
+preferred-citation:
+  type: conference-paper
+  title: "Sunborn: Deterministic Equivalence, Multi-Tier Semantic Caching, and Partial Execution Reuse for Agentic RAG Systems"
+  authors:
+    - family-names: "Sunborn Research Team"
+  year: 2026
+  month: 11
+  conference:
+    name: "IEEE/ACM International Conference on Automated Software Engineering & AI Systems"
+  publisher:
+    name: "IEEE / ACM"

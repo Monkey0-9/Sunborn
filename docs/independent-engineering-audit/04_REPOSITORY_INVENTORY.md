@@ -73,6 +73,6 @@ Key modules:
 
 ## 7. Untracked / on-disk but not source (junk & caches)
 
-`target/`, `frontend/.next/`, `frontend/node_modules/`, `.mypy_cache/`, `.ruff_cache/`, `.trunk/`, `.vscode/`, `.commandcode/`, `__pycache__/`, `frontend/tsconfig.tsbuildinfo`, `frontend/*.png`, `sdk/python/dist/`, `sdk/python/build/`, `sdk/python/sunborn.egg-info/`.
+`target/`, `frontend/.next/`, `frontend/node_modules/`, `.mypy_cache/`, `.ruff_cache/`, `.trunk/`, `.vscode/`, `__pycache__/`, `frontend/tsconfig.tsbuildinfo`, `frontend/*.png`, `sdk/python/dist/`, `sdk/python/build/`, `sdk/python/sunborn.egg-info/`.
 
 `.gitignore` gaps and committed artifacts are enumerated in 30/39 and 40.

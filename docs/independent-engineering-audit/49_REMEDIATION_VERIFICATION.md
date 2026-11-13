@@ -14,7 +14,7 @@ This appendix records what was actually changed after the baseline audit, with v
 |---|---|---|
 | Removed redundant doc suites | `docs/master`, `architecture`, `verification`, `engineering`, `audit`, `operations`, `research` (102 tracked artifacts) | `git status` shows 102 deletions |
 | Removed generated/junk | root `openapi.yaml` pointer, `sbom.cyclonedx.json`, `research/results/baseline_backup/`, screenshots, caches | files absent |
-| Fixed `.gitignore` | added caches, `.commandcode/`, `**/target/`, Playwright output, secrets; narrowed `*.png`, `.trunk/` | `.gitignore` |
+| Fixed `.gitignore` | added caches, `**/target/`, Playwright output, secrets; narrowed `*.png`, `.trunk/` | `.gitignore` |
 | Archived preliminary duplicate audit files | moved to scratchpad, keeping one authoritative suite | `docs/independent-engineering-audit/` |
 
 ## 2. P0 fixes

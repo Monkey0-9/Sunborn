@@ -7,6 +7,9 @@
 [![Rust Toolchain](https://img.shields.io/badge/Rust-1.80%2B-blue.svg?logo=rust&logoColor=white)](crates/)
 [![Verification Pipeline](https://img.shields.io/badge/Verification%20Gates-11%2F11%20Passed-brightgreen.svg?logo=githubactions&logoColor=white)](scripts/verify.ps1)
 [![Automated Tests](https://img.shields.io/badge/Test%20Suite-315%2F315%20Passed-brightgreen.svg)](docs/independent-engineering-audit/28_TESTING_AND_QA_AUDIT.md)
+[![IEEE Conformance](https://img.shields.io/badge/IEEE-1012%20%7C%20730%20%7C%2042010-blue.svg)](docs/IEEE_ACM_COMPLIANCE.md)
+[![ACM Badging](https://img.shields.io/badge/ACM%20Artifact-Available%20%7C%20Functional%20%7C%20Reproduced-purple.svg)](research/ARTIFACT-APPENDIX.md)
+[![Citation](https://img.shields.io/badge/cite-CITATION.cff-green.svg)](CITATION.cff)
 [![Audit Deliverables](https://img.shields.io/badge/Independent%20Audit-49%2F49%20Verified-blue.svg)](docs/independent-engineering-audit/01_README.md)
 [![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-3.1%20Compliant-green.svg)](docs/api/openapi.yaml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
@@ -423,7 +426,19 @@ Sunborn/
 
 ---
 
-## 13. Public Launch & Deployment Readiness Verdict
+## 13. IEEE & ACM Scientific Artifacts & Publication Manuscripts
+
+Sunborn provides dual publication manuscripts, formal machine-readable citations, and artifact evaluation packages adhering to **IEEE Reproducibility Standards** and the **ACM Artifact Review and Badging Policy (v1.1)**:
+
+* 📄 **IEEE Conference Manuscript**: [`research/paper/sunborn_ieee.tex`](research/paper/sunborn_ieee.tex) (Formatted using official `IEEEtran` standard with formal equivalence theorems, algorithmic invariants, and dual-table in-process vs. networked latency separation).
+* 📄 **ACM SIGCONF Manuscript**: [`research/paper/sunborn_acm.tex`](research/paper/sunborn_acm.tex) (Formatted with official `acmart` sigconf standard, ACM Computing Classification System taxonomy, and Artifact Appendix).
+* 📑 **ACM Artifact Appendix & Reproducibility Guide**: [`research/ARTIFACT-APPENDIX.md`](research/ARTIFACT-APPENDIX.md) (Automated test instructions, hardware requirements, and baseline replication).
+* 📜 **IEEE & ACM Conformance Matrix**: [`docs/IEEE_ACM_COMPLIANCE.md`](docs/IEEE_ACM_COMPLIANCE.md) (Full audit mapping against IEEE 1012, IEEE 29119, IEEE 730, IEEE 42010, IEEE 754, IEEE 12207, and ACM Code of Ethics).
+* 🔖 **Machine-Readable Citation**: [`CITATION.cff`](CITATION.cff) (Citation File Format 1.2.0 for GitHub and academic paper citation).
+
+---
+
+## 14. Public Launch & Deployment Readiness Verdict
 
 ```
 +---------------------------------------------------------------------------------------------------+

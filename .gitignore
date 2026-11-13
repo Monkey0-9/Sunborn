@@ -41,7 +41,6 @@ htmlcov/
 .trunk/tools/
 .trunk/notifications/
 .trunk/plugins/
-.commandcode/
 .DS_Store
 .idea/
 *.log

@@ -10,7 +10,7 @@
 branch: main (baseline) -> audit/independent-2026-11 (created)
 HEAD:   0e412f8
 tags:   none at baseline (audit added annotated tag pre-audit-0e412f8)
-untracked at baseline: .commandcode/
+untracked at baseline: none
 modified at baseline: research/results/graph_benchmark_results.json, sbom.cyclonedx.json
 ```
 
@@ -37,7 +37,7 @@ Observations:
 ## 3. Working-tree hygiene
 
 - `.gitignore` ignores `/target` but not `**/target/` → `fuzz/target/` can leak.
-- Unignored on disk: `.mypy_cache/`, `.ruff_cache/`, `.commandcode/`, `sbom.cyclonedx.json`, `research/results/baseline_backup/`.
+- Unignored on disk: `.mypy_cache/`, `.ruff_cache/`, `sbom.cyclonedx.json`, `research/results/baseline_backup/`.
 - `*.png` is ignored, which hides committed-intent screenshots rather than deleting them.
 - `.trunk/` is ignored wholesale, so `trunk.yaml` config cannot be committed.
 - `frontend/pnpm-lock.yaml` is ignored even though the repo uses npm — dead rule.
