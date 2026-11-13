@@ -63,6 +63,11 @@ pub struct ReuseCertificate {
     pub source_snapshots: Vec<SourceVersionSnapshot>,
     pub safety_evidence: SafetyEvidenceRecord,
     pub validity_window: ValidityWindow,
+    /// Canonical JSON of the issuing prompt's structural fingerprint. Empty for
+    /// legacy certificates. When present, reuse is re-verified against the
+    /// candidate prompt instead of trusting the issuance-time boolean flags.
+    #[serde(default)]
+    pub reference_fingerprint: String,
     pub merkle_root: String,
     pub signature: String,
 }
@@ -83,6 +88,7 @@ impl ReuseCertificate {
         source_snapshots: &[SourceVersionSnapshot],
         safety_evidence: &SafetyEvidenceRecord,
         validity_window: &ValidityWindow,
+        reference_fingerprint: &str,
     ) -> String {
         // Leaf 1: Tenant & Identity Scope (with domain separation & explicit length prefixes)
         let mut h1 = Sha256::new();
@@ -128,6 +134,8 @@ impl ReuseCertificate {
         h4.update(safety_evidence.non_conformity_score.to_be_bytes());
         h4.update(safety_evidence.calibrated_risk_bound.to_be_bytes());
         h4.update(safety_evidence.heuristic_risk_score.to_be_bytes());
+        h4.update((reference_fingerprint.len() as u32).to_be_bytes());
+        h4.update(reference_fingerprint.as_bytes());
         let leaf4 = h4.finalize();
 
         // Leaf 5: Validity Window
@@ -198,6 +206,7 @@ impl ReuseCertificate {
             &source_snapshots,
             &safety_evidence,
             &validity_window,
+            "",
         );
 
         let signature = Self::compute_signature(&merkle_root, signing_key);
@@ -213,9 +222,35 @@ impl ReuseCertificate {
             source_snapshots,
             safety_evidence,
             validity_window,
+            reference_fingerprint: String::new(),
             merkle_root,
             signature,
         }
+    }
+
+    /// Binds the canonical structural fingerprint of the issuing prompt to the
+    /// certificate and re-signs it. Reuse can then be re-verified against the
+    /// candidate prompt at read time.
+    pub fn attach_reference_fingerprint(
+        &mut self,
+        reference_fingerprint: impl Into<String>,
+        signing_key: &[u8],
+    ) {
+        self.reference_fingerprint = reference_fingerprint.into();
+        self.merkle_root = Self::compute_merkle_root(
+            &self.certificate_id,
+            self.certificate_version,
+            &self.tenant_id,
+            &self.application_id,
+            &self.request_identity_hash,
+            &self.model_name,
+            self.prompt_tokens,
+            &self.source_snapshots,
+            &self.safety_evidence,
+            &self.validity_window,
+            &self.reference_fingerprint,
+        );
+        self.signature = Self::compute_signature(&self.merkle_root, signing_key);
     }
 
     /// Verifies cryptographic integrity of Merkle root and HMAC-SHA-256 signature in constant time
@@ -231,6 +266,7 @@ impl ReuseCertificate {
             &self.source_snapshots,
             &self.safety_evidence,
             &self.validity_window,
+            &self.reference_fingerprint,
         );
 
         // Constant-time check for Merkle root
@@ -490,6 +526,41 @@ impl ReuseCertificate {
         };
 
         self.validate_for_reuse(&req_ctx)
+    }
+
+    /// Verifies the signature and freshness, then applies caller-measured safety
+    /// evidence instead of the issuance-time flags. This is the measured path:
+    /// the gateway recomputes structural/negation/numeric/entity results against
+    /// the candidate prompt and passes them here.
+    #[allow(clippy::too_many_arguments)]
+    pub fn verify_admissibility_measured(
+        &self,
+        signing_key: &[u8],
+        expected_tenant: &TenantId,
+        expected_app: &ApplicationId,
+        expected_model: &str,
+        expected_identity_hash: Option<&str>,
+        current_time: DateTime<Utc>,
+        current_knowledge_epoch: u64,
+        current_source_epochs: &[(Uuid, u64)],
+        measured: &SafetyEvidenceRecord,
+    ) -> Result<()> {
+        self.verify_integrity(signing_key)?;
+
+        let mut effective = self.clone();
+        effective.safety_evidence = measured.clone();
+
+        let req_ctx = ReuseValidationContext {
+            tenant_id: expected_tenant,
+            application_id: expected_app,
+            model_name: expected_model,
+            expected_identity_hash,
+            current_time,
+            current_knowledge_epoch,
+            current_source_epochs,
+        };
+
+        effective.validate_for_reuse(&req_ctx)
     }
 
     /// Legacy compatibility alias for verify_integrity

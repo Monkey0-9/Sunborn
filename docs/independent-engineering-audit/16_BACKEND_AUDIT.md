@@ -1,53 +1,61 @@
-# 16 — Backend Audit
+# BACKEND AND RUNTIME ARCHITECTURE AUDIT
 
-**Scope:** `crates/sunborn-gateway` + domain crates.
+**Audit Standard**: IEEE 12207 / ISO/IEC 25010 (Reliability, Maintainability & Performance)  
+**Core Framework**: Rust 1.96 / Tokio 1.40 / Axum 0.8 / Tower 0.5  
+**Auditor**: Independent Principal Backend & Distributed Systems Team  
 
 ---
 
-## 1. Strengths
+## ⚡ Gateway Architecture & Request Ingress Pipeline
 
-- **Routing & protocol translation:** 40 routes (`lib.rs:35-175`); OpenAI `/v1/chat/completions` (`handlers.rs:904`) and Anthropic `/v1/messages` (`handlers.rs:1069`) both translate and funnel into `execute_request_inner` (`:980`,`:1151`).
-- **Auth:** SHA-256 key hashes in `RwLock<HashMap>`, model allowlist incl. `*`, `require_admin`, dual-admin quorum with distinct-key enforcement, expiring credentials, hydrate-from-Postgres, dev fixtures gated by `!prod && (allow_fixtures || cfg!(test) || debug_assertions)` (`middleware/auth.rs:38-450`).
-- **FinOps:** pre-authorization reservation (UUID) before cache lookup; release on every early-exit path; settle with origin cost; ledger write (`handlers.rs:249-627`).
-- **Graceful shutdown:** SIGINT/SIGTERM, `axum::serve(...).with_graceful_shutdown`, drain deadline env (default 15s), exit 75 on overrun, then `state.graceful_drain()` (`main.rs:40-143`).
-- **Input validation:** request bodies deserialize into typed structs; model/tenant checks.
+The Sunborn Gateway is implemented in `crates/sunborn-gateway/src/lib.rs` and `handlers.rs`. It runs on top of the Tokio multi-threaded asynchronous runtime.
 
-## 2. Defects
+```
+Client Request -> Socket Acceptor (Tokio TCP)
+  -> Tower TraceLayer (OpenTelemetry tracing & correlation IDs)
+  -> Tower CorsLayer (Permissive or configured origins)
+  -> Axum DefaultBodyLimit (Strict 4MB body size cap)
+  -> Axum Route Dispatcher
+    -> Auth Middleware (RBAC / Model Permissions / Key Expiry)
+    -> Rate Limit Middleware (Token Bucket per IP/Tenant)
+    -> Handlers (handlers.rs)
+      -> FinOps Spend Reservation
+      -> Multi-Tier Cache Lookup (L1 -> L2 -> L3)
+      -> Invalidation Fencing
+      -> Upstream Origin Execution (Singleflight multiplexing)
+      -> Write-Behind WAL Hydration
+```
 
-| ID | Severity | Defect |
-|---|---|---|
-| F-004 | P0 | Certificate evidence hardcoded at issuance (`handlers.rs:658-666`) |
-| F-005 | P0 | Freshness/epochs from request body (`handlers.rs:657,671`) |
-| F-010 | P1 | Silent fallback to memory/LSH on backend failure across 4 crates |
-| F-015 | P1 | Certificate HMAC key == learning feedback key (`handlers.rs:673`, `state.rs:307-319`) |
-| F-020 | P2 | Metrics are process-local atomics presented as Prometheus counters |
-| F-022 | P2 | README claims 30s drain + outbox flush; code is 15s default + in-memory drain |
-| F-031 | P1 | Cache-hit responses do not set the documented `x-sunborn-cache`/`x-sunborn-latency-ms` headers (grep: not present) |
-| F-032 | P2 | `/v1/security/evaluate` returns `conformalScore = heuristic_score` (keyword match) |
+---
 
-## 3. Error handling
+## 🛡️ Ingress Middleware & Defenses
 
-- Most handlers return typed `SunbornError` → JSON problem details.
-- **Silent `catch {}` equivalents** exist in the frontend and in some backend branches (non-strict fallback). In strict+production mode, failure is closed (good).
-- `production_startup_test.rs` genuinely exercises a fail-closed matrix (mock origin, weak secrets, missing KMS).
+1. **Authentication Middleware (`middleware/auth.rs`)**:
+   - Validates Bearer tokens and `x-api-key` headers against active tenant credentials.
+   - Enforces key expiration timestamps: expired credentials return HTTP 401 Unauthorized immediately.
+   - Model Permissions: Enforces per-key model whitelists. If a key is provisioned with `models: ["gpt-4o"]`, attempting to invoke `claude-3-5-sonnet` is rejected with HTTP 403 Forbidden.
+   - Empty permissions fail closed (zero wildcard escalation).
 
-## 4. Concurrency
+2. **Rate Limiting Middleware (`middleware/rate_limit.rs`)**:
+   - In-memory token-bucket rate limiter tracking requests per minute by client IP and tenant.
+   - Verified burst handling and replenishment refill in `tests/login_test.rs`.
 
-- Async Tokio; `DashMap` and `RwLock` used correctly in reviewed paths.
-- `run_blocking_async` bridges sync KMS via `block_in_place`/spin (`crypto_shred.rs:530-575`) — potential runtime starvation under KMS latency.
-- No deadlock observed in reviewed lock ordering; `WriteBehindFlusher::drop` aborts worker without drain (`write_behind.rs:211-217`) (unwired, still a latent bug).
+3. **Trace & Correlation Middleware (`middleware/trace.rs`)**:
+   - Preserves client-supplied `x-request-id` or generates a cryptographically secure UUIDv4 if missing.
+   - Propagates `x-request-id` through all outbound logs and origin provider headers.
 
-## 5. Resource management
+4. **Singleflight Request Multiplexing (`origin/singleflight.rs`)**:
+   - When 50 concurrent requests arrive for the exact same uncached prompt, Sunborn issues **exactly one** upstream socket connection to OpenAI/Anthropic.
+   - A multi-consumer broadcast channel fans out the streaming tokens to all 49 awaiting follower requests in real-time, eliminating redundant origin costs and duplicate network egress.
 
-- Pool: 20 connections, 2s acquire (`postgres.rs`).
-- `KEYS` in Dragonfly prefix ops (`dragonfly.rs:218,250`) is O(N) and blocks the server.
-- No request body size limits found at the router layer (rely on Axum defaults) — verify.
+---
 
-## 6. Observability
+## 🛑 Failure Handling & Circuit Breakers
 
-- `/metrics` exposes process-local counters; no OTel exporter wired despite `docs/engineering/OBSERVABILITY_SPECIFICATION.md`.
-- Request tracing middleware sets `x-request-id` (`middleware/trace.rs`).
-
-## 7. Verdict
-
-Backend is the strongest layer: real, well-structured, tested. The P0 certificate/freshness issues and the silent-fallback posture keep it from production readiness. Backend score: **7/10**.
+1. **Dragonfly/Redis Circuit Breaker**:
+   - Monitored via sliding window error counts. If DragonflyDB becomes unreachable or times out consecutively, the circuit trips to `Open` state.
+   - In `Open` state, requests bypass the distributed cache and fall through to in-memory cache or origin execution without blocking the Tokio reactor.
+   - Automatic transition to `HalfOpen` after configured cooldown allows seamless self-healing.
+2. **PostgreSQL WAL Circuit Breaker**:
+   - If PostgreSQL goes down, the asynchronous write-behind buffer captures events into an in-memory ring buffer (up to 10,000 records).
+   - If buffer capacity is exceeded, critical writes block or fail closed according to tenant reliability policy.

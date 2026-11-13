@@ -32,6 +32,51 @@ static RATE_LIMITED_TOTAL: AtomicU64 = AtomicU64::new(0);
 static SPEND_VELOCITY_REJECTIONS_TOTAL: AtomicU64 = AtomicU64::new(0);
 static REQUEST_DURATION_MS_SUM: AtomicU64 = AtomicU64::new(0);
 
+/// Measures safety evidence by comparing the certificate's bound reference
+/// fingerprint against the candidate prompt. Returns `None` for legacy
+/// certificates with no reference fingerprint.
+fn measured_safety_evidence(
+    cert: &sunborn_core::ReuseCertificate,
+    candidate_prompt: &str,
+    calibrated_risk_bound: f32,
+) -> Option<sunborn_core::SafetyEvidenceRecord> {
+    if cert.reference_fingerprint.is_empty() {
+        return None;
+    }
+
+    let reference = serde_json::from_str::<sunborn_semantic::StructuralFingerprint>(
+        &cert.reference_fingerprint,
+    )
+    .ok()?;
+    let candidate = sunborn_semantic::StructuralFingerprint::extract(candidate_prompt);
+
+    let negation_match = reference.negation_polarity_bit == candidate.negation_polarity_bit
+        && reference.negation_antonym_tokens == candidate.negation_antonym_tokens
+        && reference.quantifier_scope_tokens == candidate.quantifier_scope_tokens;
+    let numeric_match = reference.sorted_numeric_literals == candidate.sorted_numeric_literals
+        && (reference.role_bound_numeric_tokens.is_empty()
+            || candidate.role_bound_numeric_tokens.is_empty()
+            || reference.role_bound_numeric_tokens == candidate.role_bound_numeric_tokens)
+        && (reference.ordered_numeric_sequence.is_empty()
+            || candidate.ordered_numeric_sequence.is_empty()
+            || reference.ordered_numeric_sequence == candidate.ordered_numeric_sequence);
+    let entity_drift = reference.entity_tokens != candidate.entity_tokens;
+    let matched = reference.matches(&candidate);
+
+    Some(sunborn_core::SafetyEvidenceRecord {
+        structural_hash_match: matched,
+        negation_polarity_match: negation_match,
+        numeric_literal_match: numeric_match,
+        entity_drift_detected: entity_drift,
+        non_conformity_score: if matched { 0.0 } else { 1.0 },
+        calibrated_risk_bound,
+        heuristic_risk_score: sunborn_semantic::DecisionEngine::<
+            std::sync::Arc<dyn sunborn_semantic::EmbeddingProvider>,
+            std::sync::Arc<dyn sunborn_semantic::VectorStore>,
+        >::assess_risk(candidate_prompt),
+    })
+}
+
 pub async fn health() -> impl IntoResponse {
     Json(json!({
         "status": "healthy",
@@ -305,30 +350,54 @@ pub async fn execute_request_inner(
                         let _ = cache_clone.delete(&key_to_evict).await;
                     });
                 } else {
-                    // 2. Enforce proof-carrying admissibility contract at runtime:
-                    let mut source_epochs: Vec<(uuid::Uuid, u64)> = req
-                        .dependency_snapshots
-                        .iter()
-                        .map(|s| (s.source_id, s.snapshot_epoch))
-                        .collect();
-                    if source_epochs.is_empty() && !cert.source_snapshots.is_empty() {
-                        source_epochs = cert
-                            .source_snapshots
-                            .iter()
-                            .map(|s| (s.source_id, s.snapshot_epoch))
-                            .collect();
+                    // 2. Enforce proof-carrying admissibility contract at runtime.
+                    // Epochs come from the authoritative registry, never the request.
+                    // Preserve the request's declared dependency set (so omissions,
+                    // duplicates, and orphaned cert deps are still rejected) but take
+                    // every epoch from the authoritative registry, not the request.
+                    let mut server_epochs: Vec<(uuid::Uuid, u64)> = Vec::new();
+                    for snap in &req.dependency_snapshots {
+                        server_epochs.push((
+                            snap.source_id,
+                            state.epoch_lease_manager.acquire_lease(snap.source_id).await,
+                        ));
                     }
+                    if server_epochs.is_empty() && !cert.source_snapshots.is_empty() {
+                        for snap in &cert.source_snapshots {
+                            server_epochs.push((
+                                snap.source_id,
+                                state.epoch_lease_manager.acquire_lease(snap.source_id).await,
+                            ));
+                        }
+                    }
+                    let server_knowledge_epoch =
+                        server_epochs.iter().map(|(_, e)| *e).max().unwrap_or(1);
 
-                    if let Err(admissibility_err) = cert.verify_admissibility(
-                        &state.certificate_signing_key,
-                        &req.tenant_id,
-                        &req.application_id,
-                        &req.model,
-                        Some(&identity.hash),
-                        Utc::now(),
-                        req.knowledge_epoch.unwrap_or(1),
-                        &source_epochs,
-                    ) {
+                    let measured = measured_safety_evidence(&cert, &req.prompt, 0.25);
+                    let admissibility = match &measured {
+                        Some(evidence) => cert.verify_admissibility_measured(
+                            &state.certificate_signing_key,
+                            &req.tenant_id,
+                            &req.application_id,
+                            &req.model,
+                            Some(&identity.hash),
+                            Utc::now(),
+                            server_knowledge_epoch,
+                            &server_epochs,
+                            evidence,
+                        ),
+                        None => cert.verify_admissibility(
+                            &state.certificate_signing_key,
+                            &req.tenant_id,
+                            &req.application_id,
+                            &req.model,
+                            Some(&identity.hash),
+                            Utc::now(),
+                            server_knowledge_epoch,
+                            &server_epochs,
+                        ),
+                    };
+                    if let Err(admissibility_err) = admissibility {
                         tracing::warn!(
                             request_id = %req.request_id.0,
                             error = %admissibility_err,
@@ -485,27 +554,51 @@ pub async fn execute_request_inner(
                             break 'semantic_eval;
                         }
 
-                        // Runtime proof-carrying admissibility check:
-                        let mut source_epochs: Vec<(uuid::Uuid, u64)> = req
-                            .dependency_snapshots
-                            .iter()
-                            .map(|s| (s.source_id, s.snapshot_epoch))
-                            .collect();
-                        for snap in &cert.source_snapshots {
-                            if !source_epochs.iter().any(|(id, _)| *id == snap.source_id) {
-                                source_epochs.push((snap.source_id, snap.snapshot_epoch));
+                        // Runtime proof-carrying admissibility check, with server-derived epochs.
+                        // Keep the request's dependency set; replace only the epochs.
+                        let mut server_epochs: Vec<(uuid::Uuid, u64)> = Vec::new();
+                        for snap in &req.dependency_snapshots {
+                            server_epochs.push((
+                                snap.source_id,
+                                state.epoch_lease_manager.acquire_lease(snap.source_id).await,
+                            ));
+                        }
+                        if server_epochs.is_empty() && !cert.source_snapshots.is_empty() {
+                            for snap in &cert.source_snapshots {
+                                server_epochs.push((
+                                    snap.source_id,
+                                    state.epoch_lease_manager.acquire_lease(snap.source_id).await,
+                                ));
                             }
                         }
-                        if let Err(admissibility_err) = cert.verify_admissibility(
-                            &state.certificate_signing_key,
-                            &req.tenant_id,
-                            &req.application_id,
-                            &req.model,
-                            None,
-                            Utc::now(),
-                            req.knowledge_epoch.unwrap_or(1),
-                            &source_epochs,
-                        ) {
+                        let server_knowledge_epoch =
+                            server_epochs.iter().map(|(_, e)| *e).max().unwrap_or(1);
+
+                        let measured = measured_safety_evidence(&cert, &req.prompt, 0.25);
+                        let admissibility = match &measured {
+                            Some(evidence) => cert.verify_admissibility_measured(
+                                &state.certificate_signing_key,
+                                &req.tenant_id,
+                                &req.application_id,
+                                &req.model,
+                                None,
+                                Utc::now(),
+                                server_knowledge_epoch,
+                                &server_epochs,
+                                evidence,
+                            ),
+                            None => cert.verify_admissibility(
+                                &state.certificate_signing_key,
+                                &req.tenant_id,
+                                &req.application_id,
+                                &req.model,
+                                None,
+                                Utc::now(),
+                                server_knowledge_epoch,
+                                &server_epochs,
+                            ),
+                        };
+                        if let Err(admissibility_err) = admissibility {
                             tracing::warn!(
                                 request_id = %req.request_id.0,
                                 error = %admissibility_err,
@@ -648,13 +741,36 @@ pub async fn execute_request_inner(
             std::sync::Arc<dyn sunborn_semantic::VectorStore>,
         >::assess_risk(&req.prompt);
 
-        let admission_cert = sunborn_core::ReuseCertificate::new_signed(
+        // Server-derived source epochs: never trust request-supplied epochs.
+        let mut server_snapshots: Vec<sunborn_core::SourceVersionSnapshot> = Vec::new();
+        for snap in &req.dependency_snapshots {
+            let epoch = state.epoch_lease_manager.acquire_lease(snap.source_id).await;
+            server_snapshots.push(sunborn_core::SourceVersionSnapshot {
+                source_id: snap.source_id,
+                snapshot_epoch: epoch,
+                content_hash: snap.content_hash.clone(),
+            });
+        }
+        let server_knowledge_epoch = server_snapshots
+            .iter()
+            .map(|s| s.snapshot_epoch)
+            .max()
+            .unwrap_or(1);
+
+        // Bind the issuing prompt's structural fingerprint so reuse is measured
+        // against the candidate prompt at read time.
+        let reference_fingerprint = serde_json::to_string(
+            &sunborn_semantic::StructuralFingerprint::extract(&req.prompt),
+        )
+        .unwrap_or_default();
+
+        let mut admission_cert = sunborn_core::ReuseCertificate::new_signed(
             req.tenant_id.clone(),
             req.application_id.clone(),
             &identity.hash,
             &req.model,
             req.prompt.split_whitespace().count() as u32,
-            req.dependency_snapshots.clone(),
+            server_snapshots,
             sunborn_core::SafetyEvidenceRecord {
                 structural_hash_match: true,
                 negation_polarity_match: true,
@@ -668,8 +784,12 @@ pub async fn execute_request_inner(
                 issued_at: Utc::now(),
                 expires_at: Utc::now()
                     + chrono::Duration::seconds(state.config.cache.default_ttl_secs as i64),
-                monotonic_epoch_lease: req.knowledge_epoch.unwrap_or(1),
+                monotonic_epoch_lease: server_knowledge_epoch,
             },
+            &state.certificate_signing_key,
+        );
+        admission_cert.attach_reference_fingerprint(
+            reference_fingerprint,
             &state.certificate_signing_key,
         );
 

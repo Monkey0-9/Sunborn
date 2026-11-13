@@ -60,7 +60,9 @@ async fn test_reuse_certificate_authenticated_and_validated_on_reuse_path() {
     let cert: ReuseCertificate = serde_json::from_value(cert_val.clone()).unwrap();
 
     // Verify certificate Merkle root and RFC 2104 HMAC-SHA-256 signature
-    assert!(cert.verify_integrity(&state.certificate_signing_key).is_ok());
+    assert!(cert
+        .verify_integrity(&state.certificate_signing_key)
+        .is_ok());
     assert_eq!(cert.tenant_id, TenantId::new("enterprise-fintech"));
     assert_eq!(cert.model_name, "gpt-4o");
 

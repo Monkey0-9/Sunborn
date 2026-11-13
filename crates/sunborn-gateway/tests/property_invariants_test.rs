@@ -141,6 +141,7 @@ fn test_property_merkle_tree_avalanche_and_domain_separation() {
         &sources,
         &safety,
         &validity,
+        "",
     );
 
     // Property 2.1: Single-byte flip in model name mutates root completely
@@ -155,6 +156,7 @@ fn test_property_merkle_tree_avalanche_and_domain_separation() {
         &sources,
         &safety,
         &validity,
+        "",
     );
     assert_ne!(
         base_root, mutated_model_root,
@@ -173,6 +175,7 @@ fn test_property_merkle_tree_avalanche_and_domain_separation() {
         &sources,
         &safety,
         &validity,
+        "",
     );
     assert_ne!(
         base_root, mutated_token_root,
@@ -192,6 +195,7 @@ fn test_property_merkle_tree_avalanche_and_domain_separation() {
         &sources,
         &safety,
         &validity,
+        "",
     );
     assert_ne!(
         base_root, mutated_tenant_root,
@@ -212,6 +216,7 @@ fn test_property_merkle_tree_avalanche_and_domain_separation() {
         &sources,
         &mutated_safety,
         &validity,
+        "",
     );
     assert_ne!(
         base_root, mutated_safety_root,

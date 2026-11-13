@@ -24,6 +24,8 @@ This appendix records what was actually changed after the baseline audit, with v
 | F-001 | Dev auth bypass removed; no plaintext secret stored; requires `access_token` | `frontend/src/app/api/auth/route.ts` | `tsc`, build, tests |
 | F-002 | Fake backend removed from default path; BFF fails closed (502) | `frontend/src/app/api/proxy/[...path]/route.ts`; deleted `standalone-simulator.ts` | build + tests |
 | F-003 | No fabricated credentials on failure | `frontend/src/app/security/page.tsx` | build + tests |
+| F-004 | Reference fingerprint bound to Merkle leaf 4; candidate prompt re-measured at reuse time via `verify_admissibility_measured` | `crates/sunborn-core/src/certificate.rs`, `crates/sunborn-gateway/src/handlers.rs` | `cargo test` |
+| F-005 | Server-derived source epochs via `epoch_lease_manager` on write path; request epochs never blindly trusted | `crates/sunborn-gateway/src/handlers.rs` | `cargo test` |
 | F-006 | Qdrant delete now uses the same deterministic UUID as insert | `crates/sunborn-semantic/src/vector_store.rs:476-494` | `cargo test` |
 
 ## 3. P1 fixes
@@ -63,8 +65,6 @@ This appendix records what was actually changed after the baseline audit, with v
 
 ## 6. Still open (the reason production remains NO-GO)
 
-- **F-004**: certificate safety evidence is still asserted at issuance, not measured. Requires the certificate to carry the reference fingerprint and the verifier to recompute it against the incoming request.
-- **F-005**: freshness/epochs still originate from the request body; needs an ingestion-driven epoch authority.
 - **F-010**: silent fallback still exists outside production (production startup does fail closed).
 - **F-011/F-012/F-013/F-014/F-018**: durable outbox, cluster sync, Neo4j, write-behind, and in-memory transitive closure remain unwired/partial.
 - **F-028**: no live-infra integration tests.

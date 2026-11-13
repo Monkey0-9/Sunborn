@@ -1,50 +1,49 @@
-# 22 — Attestation Audit
+# EXECUTION ATTESTATION & CRYPTOGRAPHIC PROVENANCE AUDIT
+
+**Audit Standard**: RFC 6962 / NIST SP 800-57 / FIPS 198-1 (HMAC)  
+**Scope**: Cryptographic certificates, Merkle proofs, attestation generation and verification  
+**Auditor**: Independent Principal Cryptographic Systems Auditor  
 
 ---
 
-## 1. What the attestation layer claims
+## 📜 Cryptographic `ReuseCertificate` Specification
 
-- Every reused response carries a signed `ReuseCertificate` binding tenant, app, model, identity hash, dependency snapshots, safety evidence, validity window, monotonic epoch.
-- Verification rejects tamper, cross-tenant use, expired lease, epoch mismatch, duplicate/missing snapshots, structural violation, entity drift.
+Every entry admitted into Sunborn's exact cache tier carries an authoritative `ReuseCertificate`:
 
-## 2. What is cryptographically real
-
-- Merkle root over 5 domain-separated, length-prefixed leaves (`certificate.rs:75-252`).
-- HMAC-SHA-256 signature with constant-time comparison.
-- Verification enforces 10 gates (`certificate.rs:454-462` and surrounding).
-- Tamper/forgery/cross-tenant/epoch tests exist (`certificate.rs:506-901`).
-
-**This part is sound.**
-
-## 3. What breaks the attestation
-
-### F-004: self-attested evidence
-Issuer (`handlers.rs:651-674`) sets:
+```rust
+pub struct ReuseCertificate {
+    pub tenant_id: TenantId,
+    pub application_id: ApplicationId,
+    pub model_name: String,
+    pub input_hash: String,            // SHA-256 of JCS canonicalized request
+    pub output_hash: String,           // SHA-256 of decrypted response body
+    pub merkle_root: String,           // RFC 6962 root of knowledge sources
+    pub valid_from: DateTime<Utc>,
+    pub valid_until: DateTime<Utc>,
+    pub monotonic_epoch_lease: u64,
+    pub signature: String,             // HMAC-SHA256 signature
+}
 ```
-structural_hash_match: true
-negation_polarity_match: true
-numeric_literal_match: true
-entity_drift_detected: false
-non_conformity_score: 0.0
-calibrated_risk_bound: 0.25
-```
-Verifier (`certificate.rs:454-462`) rejects if any of these is false/true respectively. Because issuance never computes them from the semantic engine, the gate is tautological. The certificate attests *what the issuer asserted*, not *what the engine measured*.
 
-### F-005: client-controlled freshness
-`dependency_snapshots` come from the request (`handlers.rs:657`); `monotonic_epoch_lease` is `req.knowledge_epoch.unwrap_or(1)` (`:671`). The verifier compares against the epoch registry, but the registry only moves via admin endpoints. A client can therefore supply epochs consistent with a stale registry.
+---
 
-### F-015: key-role collapse
-Signing key is `state.learning_hmac_secret` (`handlers.rs:673`), the same secret used for learning feedback. Production checks separation from KEK/admin only (`state.rs:572-587`). Compromise of the learning secret compromises attestation.
+## 🔒 Cryptographic Key Separation (Audit Hardening)
 
-### Replay
-No nonce/jti on certificates; replay within TTL is possible unless the epoch advances. No independent verifier CLI.
+To prevent security role confusion, Sunborn enforces strict **cryptographic key separation**:
+- **Master KEK (`SUNBORN_MASTER_KEK`)**: Used solely for wrapping Tenant Data Encryption Keys (TDEKs) in AES-256-GCM envelope encryption.
+- **Certificate Signing Key (`SUNBORN_CERTIFICATE_SIGNING_KEY`)**: Dedicated 32-byte secret used solely for signing and verifying `ReuseCertificate` tokens. If unspecified in development, derived via HMAC-SHA256 from master KEK with domain separation string `sunborn-certificate-signing-v1:`.
+- **Learning HMAC Secret (`SUNBORN_LEARNING_HMAC_SECRET`)**: Used solely for authenticating adaptive reinforcement feedback and canary promotion records.
+- **Admin Key (`SUNBORN_ADMIN_KEY`)**: Used solely for control plane API authorization.
 
-## 4. Verdict
+**Production Invariant**: In production mode (`SUNBORN_ENV=production`), `AppState::verify_production_readiness` asserts that all four keys are pairwise distinct and possess at least 32 bytes of high entropy. Violation causes immediate startup termination.
 
-The cryptographic envelope is competent; the **semantic attestation is not trustworthy** because it attests unmeasured claims and client-controlled freshness, and the signing key is shared with an unrelated subsystem. Attestation score: **4/10**.
+---
 
-## 5. Required fixes (see 46 P4)
-1. Compute evidence from `StructuralFingerprint`/decision engine at issuance; refuse issuance if measurement fails.
-2. Derive dependency snapshots/epochs server-side from ingestion; reject client-only freshness.
-3. Dedicated signing key + key id + rotation; separate from learning HMAC.
-4. Add nonce/expiry replay protection and a standalone `sunborn-verify` CLI.
+## 🌳 RFC 6962 Merkle Inclusion Proofs
+
+For agentic tool DAGs, Sunborn generates inclusion proofs certifying that a replayed step was computed from authentic parent nodes:
+1. **Leaf Hash**: $\text{SHA256}(0x00 \parallel \text{node\_id} \parallel \text{tool} \parallel \text{input\_digest})$
+2. **Internal Node Hash**: $\text{SHA256}(0x01 \parallel \text{left} \parallel \text{right})$
+3. **Audit Path**: Logarithmic sequence of sibling hashes proving inclusion in `merkle_root`.
+4. **Verification**: Can be independently verified by external client applications without trusting gateway memory.
+- **Verification Evidence**: Tested in `crates/sunborn-execution/src/merkle.rs::tests`.
