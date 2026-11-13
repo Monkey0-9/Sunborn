@@ -671,7 +671,15 @@ mod tests {
         // Measured evidence that passes is accepted.
         assert!(cert
             .verify_admissibility_measured(
-                key, &tenant, &app, "gpt-4o", None, Utc::now(), 1, &[(doc_id, 1)], &good
+                key,
+                &tenant,
+                &app,
+                "gpt-4o",
+                None,
+                Utc::now(),
+                1,
+                &[(doc_id, 1)],
+                &good
             )
             .is_ok());
 
@@ -682,7 +690,15 @@ mod tests {
         };
         assert!(cert
             .verify_admissibility_measured(
-                key, &tenant, &app, "gpt-4o", None, Utc::now(), 1, &[(doc_id, 1)], &bad
+                key,
+                &tenant,
+                &app,
+                "gpt-4o",
+                None,
+                Utc::now(),
+                1,
+                &[(doc_id, 1)],
+                &bad
             )
             .is_err());
     }

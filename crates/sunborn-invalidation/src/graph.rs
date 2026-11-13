@@ -59,18 +59,25 @@ pub trait KnowledgeGraphStore: Send + Sync {
     async fn get_graph_stats(&self) -> Result<(usize, usize)> {
         Ok((0, 0))
     }
+
+    /// Record a key-to-key dependency edge: child_key transitively depends on parent_key
+    async fn record_key_dependency(&self, _child_key: &str, _parent_key: &str) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// In-memory hash-based knowledge graph implementation for high-speed local development and testing.
 #[derive(Clone, Default)]
 pub struct InMemoryGraphStore {
     dependencies: Arc<RwLock<HashMap<Uuid, HashSet<String>>>>,
+    key_hierarchy: Arc<RwLock<HashMap<String, HashSet<String>>>>,
 }
 
 impl InMemoryGraphStore {
     pub fn new() -> Self {
         Self {
             dependencies: Arc::new(RwLock::new(HashMap::new())),
+            key_hierarchy: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -89,12 +96,45 @@ impl KnowledgeGraphStore for InMemoryGraphStore {
         Ok(())
     }
 
+    async fn record_key_dependency(&self, child_key: &str, parent_key: &str) -> Result<()> {
+        let mut hierarchy = self.key_hierarchy.write().await;
+        hierarchy
+            .entry(parent_key.to_string())
+            .or_default()
+            .insert(child_key.to_string());
+        Ok(())
+    }
+
     async fn get_affected_cache_keys(&self, source_id: &Uuid) -> Result<Vec<String>> {
         let deps = self.dependencies.read().await;
-        Ok(deps
-            .get(source_id)
-            .map(|set| set.iter().cloned().collect())
-            .unwrap_or_default())
+        let mut affected = HashSet::new();
+
+        if let Some(direct) = deps.get(source_id) {
+            for key in direct {
+                affected.insert(key.clone());
+            }
+        }
+
+        let hierarchy = self.key_hierarchy.read().await;
+        let mut frontier: Vec<String> = affected.iter().cloned().collect();
+        for _ in 0..10 {
+            let mut next_frontier = Vec::new();
+            for item in frontier {
+                if let Some(children) = hierarchy.get(&item) {
+                    for child in children {
+                        if affected.insert(child.clone()) {
+                            next_frontier.push(child.clone());
+                        }
+                    }
+                }
+            }
+            if next_frontier.is_empty() {
+                break;
+            }
+            frontier = next_frontier;
+        }
+
+        Ok(affected.into_iter().collect())
     }
 
     async fn remove_dependency(&self, source_id: &Uuid, cache_key: &str) -> Result<()> {
@@ -228,6 +268,17 @@ impl KnowledgeGraphStore for Neo4jCypherGraphStore {
         self.execute_cypher(cypher, params).await.map(|_| ())
     }
 
+    async fn record_key_dependency(&self, child_key: &str, parent_key: &str) -> Result<()> {
+        let cypher = "MERGE (p:CacheKey {key: $parent_key}) \
+                      MERGE (c:CacheKey {key: $child_key}) \
+                      MERGE (c)-[:DEPENDS_ON]->(p)";
+        let params = serde_json::json!({
+            "parent_key": parent_key,
+            "child_key": child_key,
+        });
+        self.execute_cypher(cypher, params).await.map(|_| ())
+    }
+
     async fn clear_dependencies(&self, source_id: &Uuid) -> Result<()> {
         let cypher = "MATCH (s:KnowledgeSource {id: $source_id}) DETACH DELETE s";
         let params = serde_json::json!({
@@ -354,6 +405,11 @@ impl KnowledgeGraphStore for MockNeo4jCypherStore {
             .entry(source_id)
             .or_default()
             .insert(cache_key.to_string());
+        Ok(())
+    }
+
+    async fn record_key_dependency(&self, child_key: &str, parent_key: &str) -> Result<()> {
+        self.add_transitive_key_edge(child_key, parent_key).await;
         Ok(())
     }
 
@@ -514,6 +570,17 @@ impl DependencyGraph {
         self.store.record_dependency(source_id, &key).await
     }
 
+    /// Record a key-to-key dependency edge: child_key transitively depends on parent_key
+    pub async fn record_key_dependency(
+        &self,
+        child_key: impl Into<String>,
+        parent_key: impl Into<String>,
+    ) -> Result<()> {
+        self.store
+            .record_key_dependency(&child_key.into(), &parent_key.into())
+            .await
+    }
+
     /// Find all cache keys that must be invalidated when source_id is updated
     pub async fn get_affected_cache_keys(&self, source_id: &Uuid) -> Vec<String> {
         self.store
@@ -575,6 +642,47 @@ mod tests {
         graph.clear_dependencies(&src_id).await;
         let after_clear = graph.get_affected_cache_keys(&src_id).await;
         assert_eq!(after_clear.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_transitive_invalidation() {
+        let graph = DependencyGraph::new();
+        let src_id = Uuid::new_v4();
+
+        let root_key = "report:summary";
+        let child_key1 = "report:chart";
+        let child_key2 = "report:table";
+        let grandchild_key = "report:widget";
+
+        // Direct dependency: root_key depends on src_id
+        graph.record_dependency(src_id, root_key).await.unwrap();
+
+        // Transitive dependencies: child_key1 & child_key2 depend on root_key
+        graph
+            .record_key_dependency(child_key1, root_key)
+            .await
+            .unwrap();
+        graph
+            .record_key_dependency(child_key2, root_key)
+            .await
+            .unwrap();
+
+        // 2-hop transitive: grandchild_key depends on child_key1
+        graph
+            .record_key_dependency(grandchild_key, child_key1)
+            .await
+            .unwrap();
+
+        let affected = graph.get_affected_cache_keys(&src_id).await;
+        assert_eq!(
+            affected.len(),
+            4,
+            "In-memory graph must traverse multi-hop transitive keys"
+        );
+        assert!(affected.contains(&root_key.to_string()));
+        assert!(affected.contains(&child_key1.to_string()));
+        assert!(affected.contains(&child_key2.to_string()));
+        assert!(affected.contains(&grandchild_key.to_string()));
     }
 
     #[tokio::test]

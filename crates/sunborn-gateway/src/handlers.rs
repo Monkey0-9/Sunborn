@@ -359,14 +359,20 @@ pub async fn execute_request_inner(
                     for snap in &req.dependency_snapshots {
                         server_epochs.push((
                             snap.source_id,
-                            state.epoch_lease_manager.acquire_lease(snap.source_id).await,
+                            state
+                                .epoch_lease_manager
+                                .acquire_lease(snap.source_id)
+                                .await,
                         ));
                     }
                     if server_epochs.is_empty() && !cert.source_snapshots.is_empty() {
                         for snap in &cert.source_snapshots {
                             server_epochs.push((
                                 snap.source_id,
-                                state.epoch_lease_manager.acquire_lease(snap.source_id).await,
+                                state
+                                    .epoch_lease_manager
+                                    .acquire_lease(snap.source_id)
+                                    .await,
                             ));
                         }
                     }
@@ -560,14 +566,20 @@ pub async fn execute_request_inner(
                         for snap in &req.dependency_snapshots {
                             server_epochs.push((
                                 snap.source_id,
-                                state.epoch_lease_manager.acquire_lease(snap.source_id).await,
+                                state
+                                    .epoch_lease_manager
+                                    .acquire_lease(snap.source_id)
+                                    .await,
                             ));
                         }
                         if server_epochs.is_empty() && !cert.source_snapshots.is_empty() {
                             for snap in &cert.source_snapshots {
                                 server_epochs.push((
                                     snap.source_id,
-                                    state.epoch_lease_manager.acquire_lease(snap.source_id).await,
+                                    state
+                                        .epoch_lease_manager
+                                        .acquire_lease(snap.source_id)
+                                        .await,
                                 ));
                             }
                         }
@@ -744,7 +756,10 @@ pub async fn execute_request_inner(
         // Server-derived source epochs: never trust request-supplied epochs.
         let mut server_snapshots: Vec<sunborn_core::SourceVersionSnapshot> = Vec::new();
         for snap in &req.dependency_snapshots {
-            let epoch = state.epoch_lease_manager.acquire_lease(snap.source_id).await;
+            let epoch = state
+                .epoch_lease_manager
+                .acquire_lease(snap.source_id)
+                .await;
             server_snapshots.push(sunborn_core::SourceVersionSnapshot {
                 source_id: snap.source_id,
                 snapshot_epoch: epoch,
@@ -788,10 +803,8 @@ pub async fn execute_request_inner(
             },
             &state.certificate_signing_key,
         );
-        admission_cert.attach_reference_fingerprint(
-            reference_fingerprint,
-            &state.certificate_signing_key,
-        );
+        admission_cert
+            .attach_reference_fingerprint(reference_fingerprint, &state.certificate_signing_key);
 
         // Authenticated Encryption on Write Path (K-003: Fail-closed on encryption failure)
         let maybe_envelope = if state.crypto_registry.is_shredded(&req.tenant_id) {

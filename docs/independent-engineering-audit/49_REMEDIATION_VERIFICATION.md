@@ -34,6 +34,7 @@ This appendix records what was actually changed after the baseline audit, with v
 |---|---|---|---|
 | F-015 | Dedicated certificate signing key; separated from learning HMAC; distinctness + length enforced in production | `crates/sunborn-gateway/src/state.rs` (field, derivation, readiness check); `handlers.rs` (4 call sites); tests | `cargo test` (252 pass) |
 | F-016 | `KEYS` replaced with bounded cursor `SCAN` | `crates/sunborn-cache/src/dragonfly.rs` | `cargo test` |
+| F-018 | In-memory multi-hop transitive key closure implemented in `InMemoryGraphStore` and `DependencyGraph` | `crates/sunborn-invalidation/src/graph.rs` | `cargo test` (unit test + multi-hop traversal) |
 | F-027 (partial) | CSP added; aria-labels added to all range sliders | `frontend/next.config.mjs`, page components | tsc + build + tests |
 | — | 4 MiB request body limit | `crates/sunborn-gateway/src/lib.rs` | `cargo test` |
 | — | Deploy hardening: frontend read-only rootfs + emptyDir volumes + drop ALL; topology spread; image tags unified to `0.1.0` | `deploy/k8s/*.yaml`, `deploy/helm/sunborn/*` | `check_k8s_manifests.py` |
@@ -66,7 +67,7 @@ This appendix records what was actually changed after the baseline audit, with v
 ## 6. Still open (the reason production remains NO-GO)
 
 - **F-010**: silent fallback still exists outside production (production startup does fail closed).
-- **F-011/F-012/F-014/F-018**: durable outbox, cluster sync, write-behind, and in-memory transitive closure remain unwired/partial. (F-013 Neo4j is now wired when `SUNBORN_NEO4J_URL` is set.)
+- **F-011/F-012/F-014**: durable outbox, cluster sync, and write-behind remain unwired/partial. (F-013 Neo4j is now wired when `SUNBORN_NEO4J_URL` is set; F-018 in-memory transitive closure is now implemented and verified.)
 - **F-028**: no live-infra integration tests.
 - **F-036/F-037**: default embeddings and online conformal guarantee not fixed (P4/P5).
 - **A11y** (remaining keyboard-operable clickable divs), image signing/SLSA, OIDC, multi-region.
