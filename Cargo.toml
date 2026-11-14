@@ -10,6 +10,7 @@ members = [
     "crates/sunborn-db",
     "crates/sunborn-execution",
     "apps/sunborn-rebuild",
+    "apps/sunborn-verify",
 ]
 
 [workspace.package]
@@ -52,4 +53,6 @@ aws-config = { version = "1.5", default-features = false, features = ["rt-tokio"
 aws-sdk-kms = { version = "1.52", default-features = false, features = ["rt-tokio", "default-https-client"] }
 roaring = "0.10"
 dashmap = "6.1"
+ed25519-dalek = { version = "2.1", default-features = false, features = ["std", "rand_core", "serde"] }
+unicode-normalization = "0.1"
 

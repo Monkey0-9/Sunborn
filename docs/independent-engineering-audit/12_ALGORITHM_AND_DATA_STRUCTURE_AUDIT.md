@@ -49,7 +49,7 @@
   - *Vector Search*: $\mathcal{O}(\log N)$ where $N$ is vector corpus size.
   - *Distance Metric*: Cosine similarity over normalized 1536-dimensional or 3072-dimensional embedding vectors.
 - **Multi-Tenant Partitioning**: Enforces strict payload filter query clauses (`tenant_id = X AND context_digest = Y`) prior to graph traversal, eliminating cross-tenant leakage.
-- **Audit Verdict**: ✅ **PASSED**. Isolation verified in `tests/adversarial_security_test.rs`.
+- **Audit Verdict**: ✅ **PASSED**. Isolation verified in `crates/sunborn-gateway/tests/adversarial_security_test.rs`.
 
 ---
 

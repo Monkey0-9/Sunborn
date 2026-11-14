@@ -25,3 +25,4 @@ reqwest.workspace = true
 tokio.workspace = true
 aws-config.workspace = true
 aws-sdk-kms.workspace = true
+unicode-normalization.workspace = true

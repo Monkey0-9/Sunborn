@@ -28,7 +28,7 @@
 - **Complexity**: Time $\mathcal{O}(1)$ atomic CAS loop; Space $\mathcal{O}(1)$.
 - **Concurrency**: Thread-safe via atomic CAS and locked sliding-window bucket counters.
 - **Edge Cases**: Sanitizes against NaN, negative spend amounts, and subnormal floats.
-- **Audit Verdict**: ✅ **PASSED**. Verified under multi-threaded concurrency in `tests/spend_velocity_test.rs`.
+- **Audit Verdict**: ✅ **PASSED**. Verified under multi-threaded concurrency in `crates/sunborn-gateway/tests/spend_velocity_test.rs`.
 
 ---
 
@@ -65,7 +65,7 @@
 - **Outputs**: `Result<MerkleTree, ExecutionError>`
 - **Complexity**: Time $\mathcal{O}(N \log N)$ where $N$ is DAG node count; Space $\mathcal{O}(N)$.
 - **Invariants**: Domain separation prefixes (`0x00` leaf, `0x01` internal node) to prevent second-preimage attacks.
-- **Audit Verdict**: ✅ **PASSED**. Property-tested in `tests/property_invariants_test.rs`.
+- **Audit Verdict**: ✅ **PASSED**. Property-tested in `crates/sunborn-gateway/tests/property_invariants_test.rs`.
 
 #### `sunborn_execution::planner::ExecutionPlanner::evaluate_reuse`
 - **File**: `crates/sunborn-execution/src/planner.rs`
@@ -73,7 +73,7 @@
 - **Inputs**: `dag: &ExecutionDAG`, `store: &ExecutionCacheStore`
 - **Outputs**: `ExecutionPlan` (`ReusedNodes`, `PendingOriginNodes`)
 - **Invariants**: Any node with `is_mutating: true` is permanently excluded from cache reuse and contaminates all transitive descendants.
-- **Audit Verdict**: ✅ **PASSED**. Verified in `tests/execution_test.rs`.
+- **Audit Verdict**: ✅ **PASSED**. Verified in `crates/sunborn-gateway/tests/execution_test.rs`.
 
 ---
 

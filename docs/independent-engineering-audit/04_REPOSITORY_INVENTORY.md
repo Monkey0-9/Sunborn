@@ -59,7 +59,7 @@ Key modules:
 
 ## 4. SDK
 
-`sdk/python`: `sunborn/` package (real client + async client + models + exceptions), legacy duplicate `sunborn_agent.py`, tests (`test_sunborn_agent.py` 21, `tests/test_sdk_package.py` 5), generated `dist/`, `uv.lock`.
+`sdk/python`: `sunborn/` package (real client + async client + models + exceptions), legacy duplicate `sunborn_agent.py`, tests (`test_sunborn_agent.py` 21, `sdk/python/tests/test_sdk_package.py` 5), generated `dist/`, `uv.lock`.
 
 ## 5. Docs (103 files)
 

@@ -23,6 +23,7 @@ sunborn-semantic = { path = "../sunborn-semantic" }
 sunborn-invalidation = { path = "../sunborn-invalidation" }
 sunborn-db = { path = "../sunborn-db" }
 sunborn-execution = { path = "../sunborn-execution" }
+ed25519-dalek.workspace = true
 tokio.workspace = true
 axum.workspace = true
 tower.workspace = true

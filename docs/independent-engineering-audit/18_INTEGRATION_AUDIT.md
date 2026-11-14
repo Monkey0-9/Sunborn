@@ -32,7 +32,7 @@ flowchart LR
 ### 2. Gateway to Cache Boundary (`crates/sunborn-cache`)
 - **Protocol**: Redis RESP3 protocol using `redis::aio::ConnectionManager`.
 - **Contract Enforcement**: Read-through fallback from L1 memory to L2 DragonflyDB. If L2 fails or trips its circuit breaker, read-through seamlessly falls through to origin without aborting the user request.
-- **Test Evidence**: Verified in `crates/sunborn-cache/src/circuit_breaker.rs::tests` and `tests/chaos_test.rs`.
+- **Test Evidence**: Verified in `crates/sunborn-cache/src/circuit_breaker.rs::tests` and `crates/sunborn-gateway/tests/chaos_test.rs`.
 
 ### 3. Gateway to Vector Search Boundary (`crates/sunborn-semantic`)
 - **Protocol**: HTTP REST / JSON to Qdrant vector database (`/collections/sunborn_vectors/points/search`).

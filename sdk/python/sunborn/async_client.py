@@ -119,3 +119,7 @@ class AsyncSunbornClient:
         return await asyncio.to_thread(
             self._sync_client.invalidate_graph_rtc, source_ids, doc_hashes
         )
+
+    async def get_ceremony_public_keys(self) -> dict:
+        """Asynchronously retrieves active Ed25519 ceremony verifying public keys."""
+        return await asyncio.to_thread(self._sync_client.get_ceremony_public_keys)

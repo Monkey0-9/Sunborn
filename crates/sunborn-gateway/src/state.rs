@@ -57,9 +57,13 @@ pub struct AppState {
     pub learning_controller: Arc<crate::learning::PolicyPromotionController>,
     pub learning_hmac_secret: Vec<u8>,
     pub certificate_signing_key: Vec<u8>,
+    pub attestation_signing_key: Option<ed25519_dalek::SigningKey>,
+    pub attestation_verifying_key: ed25519_dalek::VerifyingKey,
+    pub attestation_key_id: String,
     pub spend_velocity_controller: Arc<sunborn_core::SpendVelocityController>,
     pub key_provider_configuration_error: Option<String>,
     pub graph_memory_cache: Option<Arc<GraphMemoryCache>>,
+    pub cluster_sync_engine: Option<Arc<sunborn_invalidation::DistributedGraphSyncEngine>>,
 }
 
 impl AppState {
@@ -389,6 +393,49 @@ impl AppState {
 
         let is_graph_cache_enabled = config.cache.graph_dependency_cache_enabled;
 
+        let (attestation_signing_key, attestation_verifying_key, attestation_key_id) = {
+            let key_id = std::env::var("SUNBORN_ATTESTATION_KEY_ID")
+                .unwrap_or_else(|_| "sunborn-primary-ed25519-v1".to_string());
+            if let Ok(seed_hex) = std::env::var("SUNBORN_ATTESTATION_SEED_HEX") {
+                if let Ok(seed_bytes) = hex::decode(seed_hex.trim()) {
+                    if seed_bytes.len() == 32 {
+                        let mut arr = [0u8; 32];
+                        arr.copy_from_slice(&seed_bytes);
+                        let sk = ed25519_dalek::SigningKey::from_bytes(&arr);
+                        let vk = sk.verifying_key();
+                        (Some(sk), vk, key_id)
+                    } else {
+                        let mut hasher = Sha256::new();
+                        hasher.update(&seed_bytes);
+                        let arr: [u8; 32] = hasher.finalize().into();
+                        let sk = ed25519_dalek::SigningKey::from_bytes(&arr);
+                        let vk = sk.verifying_key();
+                        (Some(sk), vk, key_id)
+                    }
+                } else {
+                    let mut hasher = Sha256::new();
+                    hasher.update(b"sunborn-fallback-ed25519-seed:");
+                    hasher.update(&certificate_signing_key);
+                    let arr: [u8; 32] = hasher.finalize().into();
+                    let sk = ed25519_dalek::SigningKey::from_bytes(&arr);
+                    let vk = sk.verifying_key();
+                    (Some(sk), vk, key_id)
+                }
+            } else {
+                let mut hasher = Sha256::new();
+                hasher.update(b"sunborn-derived-ed25519-seed-v1:");
+                if !certificate_signing_key.is_empty() {
+                    hasher.update(&certificate_signing_key);
+                } else {
+                    hasher.update(b"default-sunborn-deterministic-attestation-seed");
+                }
+                let arr: [u8; 32] = hasher.finalize().into();
+                let sk = ed25519_dalek::SigningKey::from_bytes(&arr);
+                let vk = sk.verifying_key();
+                (Some(sk), vk, key_id)
+            }
+        };
+
         let graph_memory_cache = if is_graph_cache_enabled {
             let lineage_graph = Arc::new(CompressedLineageGraph::new());
             Some(Arc::new(GraphMemoryCache::new(
@@ -396,6 +443,22 @@ impl AppState {
                 dependency_graph.clone(),
                 lineage_graph,
             )))
+        } else {
+            None
+        };
+
+        let cluster_sync_engine = if let Some(ref gmc) = graph_memory_cache {
+            let pod_id = std::env::var("POD_NAME")
+                .or_else(|_| std::env::var("HOSTNAME"))
+                .unwrap_or_else(|_| format!("gateway-{}", uuid::Uuid::new_v4()));
+            let transport = Arc::new(sunborn_invalidation::InMemoryClusterTransport::new(2048));
+            let engine = Arc::new(sunborn_invalidation::DistributedGraphSyncEngine::new(
+                pod_id,
+                transport,
+                gmc.clone(),
+            ));
+            drop(engine.clone().start_listener());
+            Some(engine)
         } else {
             None
         };
@@ -431,9 +494,13 @@ impl AppState {
             learning_controller,
             learning_hmac_secret,
             certificate_signing_key,
+            attestation_signing_key,
+            attestation_verifying_key,
+            attestation_key_id,
             spend_velocity_controller,
             key_provider_configuration_error,
             graph_memory_cache,
+            cluster_sync_engine,
         }
     }
 

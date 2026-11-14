@@ -11,11 +11,11 @@
 | Gate | Focus Area | Acceptance Criteria | Observed Implementation | Gate Verdict |
 | :---: | :--- | :--- | :--- | :---: |
 | **Gate A** | **Configuration & Secrets** | Zero placeholder secrets; mandatory key separation (KEK $\ne$ Admin $\ne$ HMAC $\ne$ Cert). | Enforced at startup in `AppState::verify_production_readiness`. | ✅ **PASSED** |
-| **Gate B** | **Data Durability (NAA)** | Ephemeral caches must be 100% reconstructible from PostgreSQL WAL. | Verified via `apps/sunborn-rebuild` and `tests/disaster_recovery_test.rs`. | ✅ **PASSED** |
-| **Gate C** | **Security & Access** | Deny-by-default on unauthenticated requests; RBAC model permissions; CSRF defense. | Verified in `tests/adversarial_security_test.rs` and frontend BFF tests. | ✅ **PASSED** |
+| **Gate B** | **Data Durability (NAA)** | Ephemeral caches must be 100% reconstructible from PostgreSQL WAL. | Verified via `apps/sunborn-rebuild` and `crates/sunborn-gateway/tests/disaster_recovery_test.rs`. | ✅ **PASSED** |
+| **Gate C** | **Security & Access** | Deny-by-default on unauthenticated requests; RBAC model permissions; CSRF defense. | Verified in `crates/sunborn-gateway/tests/adversarial_security_test.rs` and frontend BFF tests. | ✅ **PASSED** |
 | **Gate D** | **Semantic Safety** | Bounded false-reuse risk ($\alpha \le 0.001$); structural negation & numeric inversion rejection. | Verified in `benchmarks/adversarial_evaluation_suite.py` (0 false hits). | ✅ **PASSED** |
 | **Gate E** | **Observability** | Standard Prometheus metrics (`/metrics`), request duration histograms, DLQ depth. | Implemented in `crates/sunborn-core/src/telemetry.rs` and exposed at `/metrics`. | ✅ **PASSED** |
-| **Gate F** | **Reliability & Draining** | Bounded non-blocking shutdown ($\le 5\text{s}$); zero deadlock on channel drain. | Verified in `tests/remediation_verification_test.rs`. | ✅ **PASSED** |
+| **Gate F** | **Reliability & Draining** | Bounded non-blocking shutdown ($\le 5\text{s}$); zero deadlock on channel drain. | Verified in `crates/sunborn-gateway/tests/remediation_verification_test.rs`. | ✅ **PASSED** |
 | **Gate G** | **Supply Chain & SBOM** | CycloneDX SBOM generated; zero high/critical known CVEs; license compliance. | 362 components cataloged in `sbom.cyclonedx.json`; license audit clean. | ✅ **PASSED** |
 
 ---

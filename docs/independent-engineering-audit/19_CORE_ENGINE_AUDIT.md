@@ -52,4 +52,4 @@ Sunborn enforces the **Non-Accelerator Authority (NAA)** paradigm:
 - **PostgreSQL WAL is the sole source of truth**.
 - DragonflyDB/Redis and Qdrant are treated as 100% disposable accelerators.
 - In the event of a catastrophic accelerator crash, `apps/sunborn-rebuild` can replay the PostgreSQL WAL to rebuild the entire L1/L2 cache and Qdrant vector index with zero data loss and zero drift.
-- **Verification**: Verified in `tests/disaster_recovery_test.rs`.
+- **Verification**: Verified in `crates/sunborn-gateway/tests/disaster_recovery_test.rs`.

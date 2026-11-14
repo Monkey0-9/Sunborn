@@ -23,7 +23,8 @@ pub mod model;
 pub mod telemetry;
 
 pub use certificate::{
-    ReuseCertificate, SafetyEvidenceRecord, SourceVersionSnapshot, ValidityWindow,
+    ReuseCertificate, SafetyEvidenceRecord, SignatureAlgorithm, SourceVersionSnapshot,
+    ValidityWindow,
 };
 pub use cluster::{CausalityRelation, ClusterSyncDigest, VectorClock};
 pub use config::{allow_test_fixtures, is_production_mode, AppConfig};

@@ -1,0 +1,22 @@
+[package]
+name = "sunborn-verify"
+description = "Zero-Trust Standalone CLI for Third-Party Verification of Sunborn Execution Attestation Certificates"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "sunborn-verify"
+path = "src/main.rs"
+
+[dependencies]
+sunborn-core = { path = "../../crates/sunborn-core" }
+ed25519-dalek.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+hex.workspace = true
+uuid.workspace = true

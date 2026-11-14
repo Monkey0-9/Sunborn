@@ -12,7 +12,7 @@ Write-Host "====================================================================
 Write-Host "Sunborn Platform Master System Verification (PowerShell)" -ForegroundColor Cyan
 Write-Host "========================================================================" -ForegroundColor Cyan
 
-Write-Host "[1/11] Running Rust Workspace Tests & Clippy..." -ForegroundColor Yellow
+Write-Host "[1/12] Running Rust Workspace Tests & Clippy..." -ForegroundColor Yellow
 cargo check --workspace
 if ($LASTEXITCODE -ne 0) { throw "cargo check failed" }
 
@@ -25,11 +25,11 @@ if ($LASTEXITCODE -ne 0) { throw "cargo fmt failed" }
 cargo test --workspace --all-targets
 if ($LASTEXITCODE -ne 0) { throw "cargo test failed" }
 
-Write-Host "[2/11] Building Frontend Production Bundle..." -ForegroundColor Yellow
+Write-Host "[2/12] Building Frontend Production Bundle..." -ForegroundColor Yellow
 npm run build --prefix frontend
 if ($LASTEXITCODE -ne 0) { throw "npm run build failed" }
 
-Write-Host "[3/11] Running Frontend Test Suite..." -ForegroundColor Yellow
+Write-Host "[3/12] Running Frontend Test Suite..." -ForegroundColor Yellow
 npm test --prefix frontend
 if ($LASTEXITCODE -ne 0) { throw "npm test failed" }
 
@@ -41,7 +41,7 @@ if (Get-Command python3 -ErrorAction SilentlyContinue) {
     } catch {}
 }
 
-Write-Host "[4/11] Running Python SDK Packaging & Clean Installation Verification..." -ForegroundColor Yellow
+Write-Host "[4/12] Running Python SDK Packaging & Clean Installation Verification..." -ForegroundColor Yellow
 if (Get-Command bash -ErrorAction SilentlyContinue) {
     & bash scripts/test_python_sdk.sh
     if ($LASTEXITCODE -ne 0) { throw "Python SDK clean wheel install smoke test failed" }
@@ -52,11 +52,11 @@ if ($LASTEXITCODE -ne 0) { throw "Python SDK agent test failed" }
 & $PythonBin -m unittest sdk/python/tests/test_sdk_package.py
 if ($LASTEXITCODE -ne 0) { throw "Python SDK package test failed" }
 
-Write-Host "[5/11] Validating OpenAPI 3.1 Specification Drift..." -ForegroundColor Yellow
+Write-Host "[5/12] Validating OpenAPI 3.1 Specification Drift..." -ForegroundColor Yellow
 & $PythonBin scripts/check_openapi_drift.py
 if ($LASTEXITCODE -ne 0) { throw "OpenAPI drift check failed" }
 
-Write-Host "[6/11] Running Helm Chart Lint & Schema Validation..." -ForegroundColor Yellow
+Write-Host "[6/12] Running Helm Chart Lint & Schema Validation..." -ForegroundColor Yellow
 if (Get-Command helm -ErrorAction SilentlyContinue) {
     helm lint deploy/helm/sunborn --set secrets.existingSecret=ci-validation
     helm template sunborn deploy/helm/sunborn --set secrets.existingSecret=sunborn-custom-secret | Out-Null
@@ -65,29 +65,35 @@ if (Get-Command helm -ErrorAction SilentlyContinue) {
     Write-Host "  ℹ helm CLI not in PATH; verified schema & parameters via deploy/verify_live_stack.sh" -ForegroundColor Gray
 }
 
-Write-Host "[7/11] Running Multi-Container Live Stack Pre-Flight..." -ForegroundColor Yellow
+Write-Host "[7/12] Running Multi-Container Live Stack Pre-Flight..." -ForegroundColor Yellow
 & $PythonBin scripts/check_k8s_manifests.py
 if ($LASTEXITCODE -ne 0) { throw "K8s manifests check failed" }
 
-Write-Host "[8/11] Verifying Research Reproducibility Gates..." -ForegroundColor Yellow
+Write-Host "[8/12] Verifying Research Reproducibility Gates..." -ForegroundColor Yellow
 & $PythonBin -m unittest research/tests/test_verifier_negative.py
 if ($LASTEXITCODE -ne 0) { throw "Research verifier negative tests failed" }
 & $PythonBin research/verify_certificate.py
 if ($LASTEXITCODE -ne 0) { throw "Research certificate verification failed" }
 
-Write-Host "[9/11] Executing Adversarial Robustness & Linguistic Invariance Suite..." -ForegroundColor Yellow
+Write-Host "[9/12] Executing Adversarial Robustness & Linguistic Invariance Suite..." -ForegroundColor Yellow
 & $PythonBin benchmarks/adversarial_evaluation_suite.py
 if ($LASTEXITCODE -ne 0) { throw "Adversarial benchmark failed" }
 
-Write-Host "[10/11] Running Graph Storage & Causal Invalidation Policy Benchmark..." -ForegroundColor Yellow
+Write-Host "[10/12] Running Graph Storage & Causal Invalidation Policy Benchmark..." -ForegroundColor Yellow
 & $PythonBin benchmarks/graph_storage_and_policy_bench.py
 if ($LASTEXITCODE -ne 0) { throw "Graph storage benchmark failed" }
 
-Write-Host "[11/11] Generating deterministic CycloneDX SBOM..." -ForegroundColor Yellow
+Write-Host "[11/12] Generating deterministic CycloneDX SBOM..." -ForegroundColor Yellow
 & $PythonBin scripts/generate_sbom.py
 if ($LASTEXITCODE -ne 0) { throw "SBOM generation failed" }
 
+Write-Host "[12/12] Strict Documentation & Attestation CLI Verification..." -ForegroundColor Yellow
+& $PythonBin scripts/verify_doc_paths.py --strict
+if ($LASTEXITCODE -ne 0) { throw "Strict doc path verification failed" }
+cargo run -p sunborn-verify -- --help | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "sunborn-verify CLI execution failed" }
+
 Write-Host ""
 Write-Host "========================================================================" -ForegroundColor Green
-Write-Host "ALL 11/11 MASTER SYSTEM VERIFICATION STAGES COMPLETED" -ForegroundColor Green
+Write-Host "ALL 12/12 MASTER SYSTEM VERIFICATION STAGES COMPLETED" -ForegroundColor Green
 Write-Host "========================================================================" -ForegroundColor Green

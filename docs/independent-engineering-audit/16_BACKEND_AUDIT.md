@@ -38,7 +38,7 @@ Client Request -> Socket Acceptor (Tokio TCP)
 
 2. **Rate Limiting Middleware (`middleware/rate_limit.rs`)**:
    - In-memory token-bucket rate limiter tracking requests per minute by client IP and tenant.
-   - Verified burst handling and replenishment refill in `tests/login_test.rs`.
+   - Verified burst handling and replenishment refill in `crates/sunborn-gateway/tests/login_test.rs`.
 
 3. **Trace & Correlation Middleware (`middleware/trace.rs`)**:
    - Preserves client-supplied `x-request-id` or generates a cryptographically secure UUIDv4 if missing.

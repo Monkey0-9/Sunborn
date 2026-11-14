@@ -51,10 +51,10 @@ before(async () => {
     startupError += chunk.toString();
   });
 
-  // Wait for health check
+  // Wait for health check (allow up to 30s for Next.js development server compilation on Windows)
   const startTime = Date.now();
   let isReady = false;
-  while (Date.now() - startTime < 15000) {
+  while (Date.now() - startTime < 30000) {
     try {
       await new Promise((resolve, reject) => {
         const req = http.get(`${BASE_URL}/api/health`, (res) => {

@@ -47,4 +47,4 @@ sunborn-rebuild --from-wal --batch-size 500
 ```
 - Restores in-memory and accelerator state from authoritative PostgreSQL tables with verified `ReuseCertificate` integrity.
 - Zero data loss or state drift during complete accelerator rebuilds.
-- **Verification Evidence**: Tested in `tests/disaster_recovery_test.rs`.
+- **Verification Evidence**: Tested in `crates/sunborn-gateway/tests/disaster_recovery_test.rs`.

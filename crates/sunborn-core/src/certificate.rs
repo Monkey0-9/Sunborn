@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -9,6 +10,17 @@ use crate::error::{Result, SunbornError};
 use crate::model::{ApplicationId, TenantId};
 
 type HmacSha256 = Hmac<Sha256>;
+
+/// Cryptographic algorithm used to attest certificate provenance and non-repudiation
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SignatureAlgorithm {
+    #[serde(rename = "ed25519")]
+    #[default]
+    Ed25519,
+    #[serde(rename = "hmac-sha256")]
+    HmacSha256,
+}
 
 /// Snapshot of an authoritative knowledge source dependency at the time of computation
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -70,6 +82,10 @@ pub struct ReuseCertificate {
     pub reference_fingerprint: String,
     pub merkle_root: String,
     pub signature: String,
+    #[serde(default)]
+    pub signature_algorithm: SignatureAlgorithm,
+    #[serde(default)]
+    pub public_key_id: String,
 }
 
 impl ReuseCertificate {
@@ -225,7 +241,120 @@ impl ReuseCertificate {
             reference_fingerprint: String::new(),
             merkle_root,
             signature,
+            signature_algorithm: SignatureAlgorithm::HmacSha256,
+            public_key_id: String::new(),
         }
+    }
+
+    /// Creates and signs a new ReuseCertificate using asymmetric Ed25519
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_signed_ed25519(
+        tenant_id: TenantId,
+        application_id: ApplicationId,
+        request_identity_hash: impl Into<String>,
+        model_name: impl Into<String>,
+        prompt_tokens: u32,
+        source_snapshots: Vec<SourceVersionSnapshot>,
+        safety_evidence: SafetyEvidenceRecord,
+        validity_window: ValidityWindow,
+        signing_key: &SigningKey,
+        key_id: impl Into<String>,
+    ) -> Self {
+        let certificate_id = Uuid::new_v4();
+        let certificate_version = Self::CURRENT_VERSION;
+        let req_id_hash = request_identity_hash.into();
+        let model = model_name.into();
+        let public_key_id = key_id.into();
+
+        let merkle_root = Self::compute_merkle_root(
+            &certificate_id,
+            certificate_version,
+            &tenant_id,
+            &application_id,
+            &req_id_hash,
+            &model,
+            prompt_tokens,
+            &source_snapshots,
+            &safety_evidence,
+            &validity_window,
+            "",
+        );
+
+        let signature = Self::compute_signature_ed25519(&merkle_root, signing_key);
+
+        Self {
+            certificate_id,
+            certificate_version,
+            tenant_id,
+            application_id,
+            request_identity_hash: req_id_hash,
+            model_name: model,
+            prompt_tokens,
+            source_snapshots,
+            safety_evidence,
+            validity_window,
+            reference_fingerprint: String::new(),
+            merkle_root,
+            signature,
+            signature_algorithm: SignatureAlgorithm::Ed25519,
+            public_key_id,
+        }
+    }
+
+    /// Computes standard Ed25519 signature over the Merkle root with domain separation
+    pub fn compute_signature_ed25519(merkle_root: &str, signing_key: &SigningKey) -> String {
+        let mut msg = Vec::with_capacity(32 + merkle_root.len());
+        msg.extend_from_slice(b"sunborn:cert:v1:ed25519:sig:");
+        msg.extend_from_slice(merkle_root.as_bytes());
+        let sig: Signature = signing_key.sign(&msg);
+        hex::encode(sig.to_bytes())
+    }
+
+    /// Binds reference fingerprint and signs with Ed25519
+    pub fn attach_reference_fingerprint_ed25519(
+        &mut self,
+        reference_fingerprint: impl Into<String>,
+        signing_key: &SigningKey,
+    ) {
+        self.reference_fingerprint = reference_fingerprint.into();
+        self.merkle_root = Self::compute_merkle_root(
+            &self.certificate_id,
+            self.certificate_version,
+            &self.tenant_id,
+            &self.application_id,
+            &self.request_identity_hash,
+            &self.model_name,
+            self.prompt_tokens,
+            &self.source_snapshots,
+            &self.safety_evidence,
+            &self.validity_window,
+            &self.reference_fingerprint,
+        );
+        self.signature = Self::compute_signature_ed25519(&self.merkle_root, signing_key);
+        self.signature_algorithm = SignatureAlgorithm::Ed25519;
+    }
+
+    /// Verifies Ed25519 signature over the Merkle root using only a public VerifyingKey
+    pub fn verify_signature_ed25519(&self, verifying_key: &VerifyingKey) -> Result<()> {
+        let sig_bytes = hex::decode(&self.signature)
+            .map_err(|e| SunbornError::validation_error(format!("Invalid hex signature: {e}")))?;
+        if sig_bytes.len() != 64 {
+            return Err(SunbornError::validation_error(
+                "Ed25519 signature must be exactly 64 bytes",
+            ));
+        }
+        let mut arr = [0u8; 64];
+        arr.copy_from_slice(&sig_bytes);
+        let sig = Signature::from_bytes(&arr);
+
+        let mut msg = Vec::with_capacity(32 + self.merkle_root.len());
+        msg.extend_from_slice(b"sunborn:cert:v1:ed25519:sig:");
+        msg.extend_from_slice(self.merkle_root.as_bytes());
+
+        verifying_key.verify(&msg, &sig).map_err(|_| {
+            SunbornError::validation_error("Certificate Ed25519 public key verification failed")
+        })?;
+        Ok(())
     }
 
     /// Binds the canonical structural fingerprint of the issuing prompt to the
@@ -250,11 +379,18 @@ impl ReuseCertificate {
             &self.validity_window,
             &self.reference_fingerprint,
         );
-        self.signature = Self::compute_signature(&self.merkle_root, signing_key);
+        if self.signature_algorithm == SignatureAlgorithm::Ed25519 && signing_key.len() == 32 {
+            let mut seed = [0u8; 32];
+            seed.copy_from_slice(signing_key);
+            let sk = SigningKey::from_bytes(&seed);
+            self.signature = Self::compute_signature_ed25519(&self.merkle_root, &sk);
+        } else {
+            self.signature = Self::compute_signature(&self.merkle_root, signing_key);
+        }
     }
 
-    /// Verifies cryptographic integrity of Merkle root and HMAC-SHA-256 signature in constant time
-    pub fn verify_integrity(&self, signing_key: &[u8]) -> Result<()> {
+    /// Verifies cryptographic integrity of Merkle root and signature in constant time
+    pub fn verify_integrity(&self, key: &[u8]) -> Result<()> {
         let expected_root = Self::compute_merkle_root(
             &self.certificate_id,
             self.certificate_version,
@@ -276,15 +412,54 @@ impl ReuseCertificate {
             ));
         }
 
-        // Standard HMAC-SHA-256 verification in constant time
-        let expected_sig = Self::compute_signature(&self.merkle_root, signing_key);
-        if !bool::from(self.signature.as_bytes().ct_eq(expected_sig.as_bytes())) {
-            return Err(SunbornError::validation_error(
-                "Certificate cryptographic HMAC signature verification failed",
-            ));
-        }
+        match self.signature_algorithm {
+            SignatureAlgorithm::Ed25519 => {
+                if key.len() == 32 {
+                    let mut vk_bytes = [0u8; 32];
+                    vk_bytes.copy_from_slice(key);
+                    if let Ok(verifying_key) = VerifyingKey::from_bytes(&vk_bytes) {
+                        if self.verify_signature_ed25519(&verifying_key).is_ok() {
+                            return Ok(());
+                        }
+                    }
+                }
 
-        Ok(())
+                // Also allow verification if caller provided the secret signing key/seed
+                let mut hasher = Sha256::new();
+                hasher.update(b"sunborn-derived-ed25519-seed-v1:");
+                hasher.update(key);
+                let derived_seed: [u8; 32] = hasher.finalize().into();
+                let sk = SigningKey::from_bytes(&derived_seed);
+                let vk = sk.verifying_key();
+                if self.verify_signature_ed25519(&vk).is_ok() {
+                    return Ok(());
+                }
+
+                // Also try direct 32-byte signing key seed
+                if key.len() == 32 {
+                    let mut seed = [0u8; 32];
+                    seed.copy_from_slice(key);
+                    let direct_sk = SigningKey::from_bytes(&seed);
+                    let direct_vk = direct_sk.verifying_key();
+                    if self.verify_signature_ed25519(&direct_vk).is_ok() {
+                        return Ok(());
+                    }
+                }
+
+                Err(SunbornError::validation_error(
+                    "Certificate Ed25519 signature verification failed with provided key",
+                ))
+            }
+            SignatureAlgorithm::HmacSha256 => {
+                let expected_sig = Self::compute_signature(&self.merkle_root, key);
+                if !bool::from(self.signature.as_bytes().ct_eq(expected_sig.as_bytes())) {
+                    return Err(SunbornError::validation_error(
+                        "Certificate cryptographic HMAC signature verification failed",
+                    ));
+                }
+                Ok(())
+            }
+        }
     }
 
     /// Evaluates if certificate remains fresh at a given time against authoritative epochs
@@ -1040,5 +1215,75 @@ mod tests {
         assert!(err
             .to_string()
             .contains("duplicate source snapshot in certificate"));
+    }
+
+    #[test]
+    fn test_ed25519_certificate_signing_and_zero_trust_public_verification() {
+        let seed = [42u8; 32];
+        let signing_key = SigningKey::from_bytes(&seed);
+        let verifying_key = signing_key.verifying_key();
+
+        let tenant = TenantId::new("tenant-ed25519");
+        let app = ApplicationId::new("app-ed25519");
+        let doc_id = Uuid::new_v4();
+
+        let mut cert = ReuseCertificate::new_signed_ed25519(
+            tenant.clone(),
+            app.clone(),
+            "req-hash-ed25519",
+            "claude-3-5-sonnet-20241022",
+            250,
+            vec![SourceVersionSnapshot {
+                source_id: doc_id,
+                snapshot_epoch: 1,
+                content_hash: "hash-doc-ed25519".to_string(),
+            }],
+            SafetyEvidenceRecord {
+                structural_hash_match: true,
+                negation_polarity_match: true,
+                numeric_literal_match: true,
+                entity_drift_detected: false,
+                non_conformity_score: 0.01,
+                calibrated_risk_bound: 0.05,
+                heuristic_risk_score: 0.0,
+            },
+            ValidityWindow {
+                issued_at: Utc::now(),
+                expires_at: Utc::now() + Duration::minutes(15),
+                monotonic_epoch_lease: 1,
+            },
+            &signing_key,
+            "key-ed25519-v1",
+        );
+
+        assert_eq!(cert.signature_algorithm, SignatureAlgorithm::Ed25519);
+        assert_eq!(cert.public_key_id, "key-ed25519-v1");
+
+        // 1. Verify with VerifyingKey directly (offline zero-trust verification)
+        assert!(cert.verify_signature_ed25519(&verifying_key).is_ok());
+
+        // 2. Verify with verify_integrity using verifying key bytes (32 bytes)
+        assert!(cert.verify_integrity(verifying_key.as_bytes()).is_ok());
+
+        // 3. Attach reference fingerprint and re-verify
+        cert.attach_reference_fingerprint_ed25519("{\"fingerprint\": \"abc\"}", &signing_key);
+        assert!(cert.verify_signature_ed25519(&verifying_key).is_ok());
+
+        // 4. Tamper detection: modifying Merkle root fails verification
+        let mut tampered_cert = cert.clone();
+        tampered_cert.merkle_root =
+            "0000000000000000000000000000000000000000000000000000000000000000".to_string();
+        assert!(tampered_cert
+            .verify_integrity(verifying_key.as_bytes())
+            .is_err());
+
+        // 5. Tamper detection: verifying with wrong public key fails
+        let wrong_seed = [99u8; 32];
+        let wrong_signing_key = SigningKey::from_bytes(&wrong_seed);
+        let wrong_verifying_key = wrong_signing_key.verifying_key();
+        assert!(cert.verify_signature_ed25519(&wrong_verifying_key).is_err());
+        assert!(cert
+            .verify_integrity(wrong_verifying_key.as_bytes())
+            .is_err());
     }
 }

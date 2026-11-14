@@ -123,6 +123,10 @@ pub fn create_router(state: AppState) -> Router {
             post(handlers::verify_merkle_attestation),
         )
         .route(
+            "/v1/ceremony/public-keys",
+            get(handlers::ceremony_public_keys),
+        )
+        .route(
             "/v1/speculative/predict",
             post(handlers::predict_speculative),
         )

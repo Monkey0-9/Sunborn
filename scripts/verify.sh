@@ -46,27 +46,27 @@ elif command -v python.exe >/dev/null 2>&1; then
     PYTHON_BIN="python.exe"
 fi
 
-echo "[1/11] Running Rust Workspace Tests & Clippy..."
+echo "[1/12] Running Rust Workspace Tests & Clippy..."
 "${CARGO_BIN}" check --workspace
 "${CARGO_BIN}" clippy --workspace --all-targets -- -D warnings
 "${CARGO_BIN}" fmt --check
 "${CARGO_BIN}" test --workspace --all-targets
 
-echo "[2/11] Building Frontend Production Bundle..."
+echo "[2/12] Building Frontend Production Bundle..."
 "${NPM_BIN}" run build --prefix frontend
 
-echo "[3/11] Running Frontend Test Suite..."
+echo "[3/12] Running Frontend Test Suite..."
 "${NPM_BIN}" test --prefix frontend
 
-echo "[4/11] Running Python SDK Packaging & Clean Installation Verification..."
+echo "[4/12] Running Python SDK Packaging & Clean Installation Verification..."
 bash scripts/test_python_sdk.sh
 PYTHONPATH=sdk/python "${PYTHON_BIN}" -m unittest sdk/python/test_sunborn_agent.py
 PYTHONPATH=sdk/python "${PYTHON_BIN}" -m unittest sdk/python/tests/test_sdk_package.py
 
-echo "[5/11] Validating OpenAPI 3.1 Specification Drift..."
+echo "[5/12] Validating OpenAPI 3.1 Specification Drift..."
 "${PYTHON_BIN}" scripts/check_openapi_drift.py
 
-echo "[6/11] Running Helm Chart Lint & Schema Validation..."
+echo "[6/12] Running Helm Chart Lint & Schema Validation..."
 if command -v helm >/dev/null 2>&1; then
     helm lint deploy/helm/sunborn --set secrets.existingSecret=ci-validation
     helm template sunborn deploy/helm/sunborn --set secrets.existingSecret=sunborn-custom-secret > /dev/null
@@ -75,23 +75,27 @@ else
     echo "  ℹ helm CLI not in PATH; verified schema & parameters via deploy/verify_live_stack.sh"
 fi
 
-echo "[7/11] Running Multi-Container Live Stack Pre-Flight..."
+echo "[7/12] Running Multi-Container Live Stack Pre-Flight..."
 bash deploy/verify_live_stack.sh
 
-echo "[8/11] Verifying Research Reproducibility Gates..."
+echo "[8/12] Verifying Research Reproducibility Gates..."
 "${PYTHON_BIN}" -m unittest research/tests/test_verifier_negative.py
 "${PYTHON_BIN}" research/verify_certificate.py
 
-echo "[9/11] Executing Adversarial Robustness & Linguistic Invariance Suite..."
+echo "[9/12] Executing Adversarial Robustness & Linguistic Invariance Suite..."
 "${PYTHON_BIN}" benchmarks/adversarial_evaluation_suite.py
 
-echo "[10/11] Running Graph Storage & Causal Invalidation Policy Benchmark..."
+echo "[10/12] Running Graph Storage & Causal Invalidation Policy Benchmark..."
 "${PYTHON_BIN}" benchmarks/graph_storage_and_policy_bench.py
 
-echo "[11/11] Generating deterministic CycloneDX SBOM..."
+echo "[11/12] Generating deterministic CycloneDX SBOM..."
 "${PYTHON_BIN}" scripts/generate_sbom.py
+
+echo "[12/12] Strict Documentation & Attestation CLI Verification..."
+"${PYTHON_BIN}" scripts/verify_doc_paths.py --strict
+cargo run -p sunborn-verify -- --help > /dev/null
 
 echo ""
 echo "========================================================================"
-echo "ALL 11/11 MASTER SYSTEM VERIFICATION STAGES COMPLETED"
+echo "ALL 12/12 MASTER SYSTEM VERIFICATION STAGES COMPLETED"
 echo "========================================================================"

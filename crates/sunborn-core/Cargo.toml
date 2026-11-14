@@ -25,3 +25,4 @@ sha2.workspace = true
 hex.workspace = true
 hmac.workspace = true
 subtle.workspace = true
+ed25519-dalek.workspace = true

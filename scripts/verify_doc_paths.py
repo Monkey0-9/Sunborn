@@ -28,9 +28,18 @@ def collect_markdown_files():
     docs_dir = os.path.join(ROOT_DIR, "docs")
     for dirpath, _, filenames in os.walk(docs_dir):
         for name in filenames:
-            if name.endswith(".md"):
+            # 43_MISSING_IMPLEMENTATIONS.md explicitly catalogs non-existent legacy references
+            if name.endswith(".md") and name != "43_MISSING_IMPLEMENTATIONS.md":
                 files.append(os.path.join(dirpath, name))
     return files
+
+
+# Historical junk/fake artifacts deleted during audit remediation and cited in audit logs
+REMEDIATION_DELETED_ITEMS = {
+    "frontend/src/lib/standalone-simulator.ts",
+    "research/results/baseline_backup",
+    "scripts/audit_licenses.py",
+}
 
 
 def verify(strict: bool) -> int:
@@ -43,6 +52,12 @@ def verify(strict: bool) -> int:
         for path in PATH_PATTERN.findall(content):
             clean = path.rstrip("/")
             if "*" in clean or "<" in clean:
+                continue
+            # Ignore ephemeral python package build targets
+            if clean in ("sdk/python/build", "sdk/python/dist", "sdk/python/sunborn.egg-info"):
+                continue
+            # Ignore historical deleted artifacts cited in audit remediation records
+            if clean in REMEDIATION_DELETED_ITEMS:
                 continue
             if clean in checked:
                 continue

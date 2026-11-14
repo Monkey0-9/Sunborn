@@ -3,64 +3,11 @@
 // RFC 8785 JSON Canonicalization Scheme (JCS) & Unicode NFC Normalization
 // ============================================================================
 use serde_json::Value;
+use unicode_normalization::UnicodeNormalization;
 
-/// Normalizes Unicode combining sequences (e.g., NFD "e\u{0301}" -> NFC "é")
+/// Normalizes Unicode combining sequences using standard Unicode NFC (Normalization Form C)
 pub fn normalize_unicode_nfc(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut chars = text.chars().peekable();
-
-    while let Some(ch) = chars.next() {
-        if let Some(&combining) = chars.peek() {
-            let composed = match (ch, combining) {
-                ('e', '\u{0301}') => Some('é'),
-                ('e', '\u{0300}') => Some('è'),
-                ('e', '\u{0302}') => Some('ê'),
-                ('e', '\u{0308}') => Some('ë'),
-                ('E', '\u{0301}') => Some('É'),
-                ('E', '\u{0300}') => Some('È'),
-                ('E', '\u{0302}') => Some('Ê'),
-                ('E', '\u{0308}') => Some('Ë'),
-                ('a', '\u{0301}') => Some('á'),
-                ('a', '\u{0300}') => Some('à'),
-                ('a', '\u{0302}') => Some('â'),
-                ('a', '\u{0308}') => Some('ä'),
-                ('A', '\u{0301}') => Some('Á'),
-                ('A', '\u{0300}') => Some('À'),
-                ('A', '\u{0302}') => Some('Â'),
-                ('A', '\u{0308}') => Some('Ä'),
-                ('i', '\u{0301}') => Some('í'),
-                ('i', '\u{0300}') => Some('ì'),
-                ('i', '\u{0302}') => Some('î'),
-                ('i', '\u{0308}') => Some('ï'),
-                ('I', '\u{0301}') => Some('Í'),
-                ('o', '\u{0301}') => Some('ó'),
-                ('o', '\u{0300}') => Some('ò'),
-                ('o', '\u{0302}') => Some('ô'),
-                ('o', '\u{0308}') => Some('ö'),
-                ('O', '\u{0301}') => Some('Ó'),
-                ('O', '\u{0308}') => Some('Ö'),
-                ('u', '\u{0301}') => Some('ú'),
-                ('u', '\u{0300}') => Some('ù'),
-                ('u', '\u{0302}') => Some('û'),
-                ('u', '\u{0308}') => Some('ü'),
-                ('U', '\u{0301}') => Some('Ú'),
-                ('U', '\u{0308}') => Some('Ü'),
-                ('c', '\u{0327}') => Some('ç'),
-                ('C', '\u{0327}') => Some('Ç'),
-                ('n', '\u{0303}') => Some('ñ'),
-                ('N', '\u{0303}') => Some('Ñ'),
-                _ => None,
-            };
-
-            if let Some(comp) = composed {
-                chars.next(); // consume combining mark
-                out.push(comp);
-                continue;
-            }
-        }
-        out.push(ch);
-    }
-    out
+    text.nfc().collect()
 }
 
 /// Canonicalizes prompt text: trims whitespace, normalizes CRLF to LF,

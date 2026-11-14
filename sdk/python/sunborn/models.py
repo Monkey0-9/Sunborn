@@ -99,3 +99,18 @@ def compute_context_digest(
     final_hasher.update(rag_root)
 
     return final_hasher.hexdigest()
+
+
+@dataclass
+class ReuseCertificateRecord:
+    """Represents a verified, tamper-evident Sunborn execution attestation certificate."""
+
+    certificate_id: str
+    tenant_id: str
+    application_id: str
+    model_name: str
+    merkle_root: str
+    signature: str
+    signature_algorithm: str = "ed25519"
+    public_key_id: str = ""
+    is_valid: bool = True

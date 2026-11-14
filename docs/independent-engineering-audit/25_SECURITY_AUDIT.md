@@ -10,12 +10,12 @@
 
 | STRIDE Threat | Potential Attack Vector | Sunborn Architectural Defense | Test Verification | Verdict |
 | :--- | :--- | :--- | :--- | :---: |
-| **Spoofing** | Attacker spoofs tenant identity via modified HTTP headers | RBAC bearer tokens bound to tenant scopes; header overrides strictly rejected | `tests/security_test.rs` | ✅ **DEFENDED** |
-| **Tampering** | Attacker modifies cached response payload in Redis/Dragonfly | `ReuseCertificate` HMAC-SHA256 signature checked on read path; fails closed | `tests/reuse_certificate_path_test.rs` | ✅ **DEFENDED** |
-| **Repudiation** | Operator denies executing destructive tenant deletion | Dual-admin quorum signatures recorded in append-only PostgreSQL WAL | `tests/quorum_authorization_test.rs` | ✅ **DEFENDED** |
-| **Information Disclosure** | Cross-tenant data leakage via semantic vector collisions | AES-256-GCM envelope encryption per tenant; mandatory Qdrant tenant filters | `tests/adversarial_security_test.rs` | ✅ **DEFENDED** |
-| **Denial of Service** | Deep JSON nesting, CRLF headers, or runaway inference loops | 4MB Axum body cap; 10MB BFF cap; sliding-window spend velocity hard stops | `tests/adversarial_security_test.rs` | ✅ **DEFENDED** |
-| **Elevation of Privilege** | Non-admin caller accesses `/v1/shred/*` or `/v1/admin/*` | Role checks in auth middleware strictly reject non-admin callers (HTTP 403) | `tests/login_test.rs` | ✅ **DEFENDED** |
+| **Spoofing** | Attacker spoofs tenant identity via modified HTTP headers | RBAC bearer tokens bound to tenant scopes; header overrides strictly rejected | `crates/sunborn-gateway/tests/security_test.rs` | ✅ **DEFENDED** |
+| **Tampering** | Attacker modifies cached response payload in Redis/Dragonfly | `ReuseCertificate` HMAC-SHA256 signature checked on read path; fails closed | `crates/sunborn-gateway/tests/reuse_certificate_path_test.rs` | ✅ **DEFENDED** |
+| **Repudiation** | Operator denies executing destructive tenant deletion | Dual-admin quorum signatures recorded in append-only PostgreSQL WAL | `crates/sunborn-gateway/tests/quorum_authorization_test.rs` | ✅ **DEFENDED** |
+| **Information Disclosure** | Cross-tenant data leakage via semantic vector collisions | AES-256-GCM envelope encryption per tenant; mandatory Qdrant tenant filters | `crates/sunborn-gateway/tests/adversarial_security_test.rs` | ✅ **DEFENDED** |
+| **Denial of Service** | Deep JSON nesting, CRLF headers, or runaway inference loops | 4MB Axum body cap; 10MB BFF cap; sliding-window spend velocity hard stops | `crates/sunborn-gateway/tests/adversarial_security_test.rs` | ✅ **DEFENDED** |
+| **Elevation of Privilege** | Non-admin caller accesses `/v1/shred/*` or `/v1/admin/*` | Role checks in auth middleware strictly reject non-admin callers (HTTP 403) | `crates/sunborn-gateway/tests/login_test.rs` | ✅ **DEFENDED** |
 
 ---
 

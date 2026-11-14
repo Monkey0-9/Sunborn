@@ -1117,6 +1117,33 @@ paths:
         '401':
           description: Unauthorized
 
+  /v1/ceremony/public-keys:
+    get:
+      summary: Export Active Ceremony Verifying Public Keys
+      description: Exports the active Ed25519 public key and key ID for zero-trust offline verification of execution certificates.
+      tags:
+        - Governance
+      responses:
+        '200':
+          description: Active verifying keys report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  active_key_id:
+                    type: string
+                  signature_algorithm:
+                    type: string
+                  verifying_key_hex:
+                    type: string
+                  cluster_sync_active:
+                    type: boolean
+                  timestamp:
+                    type: string
+
   /v1/cluster/status:
     get:
       summary: Cluster Status

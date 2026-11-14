@@ -379,10 +379,19 @@ pub async fn execute_request_inner(
                     let server_knowledge_epoch =
                         server_epochs.iter().map(|(_, e)| *e).max().unwrap_or(1);
 
+                    let verification_key = match cert.signature_algorithm {
+                        sunborn_core::SignatureAlgorithm::Ed25519 => {
+                            state.attestation_verifying_key.as_bytes().as_slice()
+                        }
+                        sunborn_core::SignatureAlgorithm::HmacSha256 => {
+                            state.certificate_signing_key.as_slice()
+                        }
+                    };
+
                     let measured = measured_safety_evidence(&cert, &req.prompt, 0.25);
                     let admissibility = match &measured {
                         Some(evidence) => cert.verify_admissibility_measured(
-                            &state.certificate_signing_key,
+                            verification_key,
                             &req.tenant_id,
                             &req.application_id,
                             &req.model,
@@ -393,7 +402,7 @@ pub async fn execute_request_inner(
                             evidence,
                         ),
                         None => cert.verify_admissibility(
-                            &state.certificate_signing_key,
+                            verification_key,
                             &req.tenant_id,
                             &req.application_id,
                             &req.model,
@@ -586,10 +595,19 @@ pub async fn execute_request_inner(
                         let server_knowledge_epoch =
                             server_epochs.iter().map(|(_, e)| *e).max().unwrap_or(1);
 
+                        let verification_key = match cert.signature_algorithm {
+                            sunborn_core::SignatureAlgorithm::Ed25519 => {
+                                state.attestation_verifying_key.as_bytes().as_slice()
+                            }
+                            sunborn_core::SignatureAlgorithm::HmacSha256 => {
+                                state.certificate_signing_key.as_slice()
+                            }
+                        };
+
                         let measured = measured_safety_evidence(&cert, &req.prompt, 0.25);
                         let admissibility = match &measured {
                             Some(evidence) => cert.verify_admissibility_measured(
-                                &state.certificate_signing_key,
+                                verification_key,
                                 &req.tenant_id,
                                 &req.application_id,
                                 &req.model,
@@ -600,7 +618,7 @@ pub async fn execute_request_inner(
                                 evidence,
                             ),
                             None => cert.verify_admissibility(
-                                &state.certificate_signing_key,
+                                verification_key,
                                 &req.tenant_id,
                                 &req.application_id,
                                 &req.model,
@@ -779,32 +797,65 @@ pub async fn execute_request_inner(
         )
         .unwrap_or_default();
 
-        let mut admission_cert = sunborn_core::ReuseCertificate::new_signed(
-            req.tenant_id.clone(),
-            req.application_id.clone(),
-            &identity.hash,
-            &req.model,
-            req.prompt.split_whitespace().count() as u32,
-            server_snapshots,
-            sunborn_core::SafetyEvidenceRecord {
-                structural_hash_match: true,
-                negation_polarity_match: true,
-                numeric_literal_match: true,
-                entity_drift_detected: false,
-                non_conformity_score: 0.0,
-                calibrated_risk_bound: 0.25,
-                heuristic_risk_score: prompt_risk,
-            },
-            sunborn_core::ValidityWindow {
-                issued_at: Utc::now(),
-                expires_at: Utc::now()
-                    + chrono::Duration::seconds(state.config.cache.default_ttl_secs as i64),
-                monotonic_epoch_lease: server_knowledge_epoch,
-            },
-            &state.certificate_signing_key,
-        );
-        admission_cert
-            .attach_reference_fingerprint(reference_fingerprint, &state.certificate_signing_key);
+        let admission_cert = if let Some(ref ed_sk) = state.attestation_signing_key {
+            let mut cert = sunborn_core::ReuseCertificate::new_signed_ed25519(
+                req.tenant_id.clone(),
+                req.application_id.clone(),
+                &identity.hash,
+                &req.model,
+                req.prompt.split_whitespace().count() as u32,
+                server_snapshots,
+                sunborn_core::SafetyEvidenceRecord {
+                    structural_hash_match: true,
+                    negation_polarity_match: true,
+                    numeric_literal_match: true,
+                    entity_drift_detected: false,
+                    non_conformity_score: 0.0,
+                    calibrated_risk_bound: 0.25,
+                    heuristic_risk_score: prompt_risk,
+                },
+                sunborn_core::ValidityWindow {
+                    issued_at: Utc::now(),
+                    expires_at: Utc::now()
+                        + chrono::Duration::seconds(state.config.cache.default_ttl_secs as i64),
+                    monotonic_epoch_lease: server_knowledge_epoch,
+                },
+                ed_sk,
+                &state.attestation_key_id,
+            );
+            cert.attach_reference_fingerprint_ed25519(reference_fingerprint, ed_sk);
+            cert
+        } else {
+            let mut cert = sunborn_core::ReuseCertificate::new_signed(
+                req.tenant_id.clone(),
+                req.application_id.clone(),
+                &identity.hash,
+                &req.model,
+                req.prompt.split_whitespace().count() as u32,
+                server_snapshots,
+                sunborn_core::SafetyEvidenceRecord {
+                    structural_hash_match: true,
+                    negation_polarity_match: true,
+                    numeric_literal_match: true,
+                    entity_drift_detected: false,
+                    non_conformity_score: 0.0,
+                    calibrated_risk_bound: 0.25,
+                    heuristic_risk_score: prompt_risk,
+                },
+                sunborn_core::ValidityWindow {
+                    issued_at: Utc::now(),
+                    expires_at: Utc::now()
+                        + chrono::Duration::seconds(state.config.cache.default_ttl_secs as i64),
+                    monotonic_epoch_lease: server_knowledge_epoch,
+                },
+                &state.certificate_signing_key,
+            );
+            cert.attach_reference_fingerprint(
+                reference_fingerprint,
+                &state.certificate_signing_key,
+            );
+            cert
+        };
 
         // Authenticated Encryption on Write Path (K-003: Fail-closed on encryption failure)
         let maybe_envelope = if state.crypto_registry.is_shredded(&req.tenant_id) {
@@ -1376,9 +1427,9 @@ pub async fn trigger_invalidation(
 
     let event = InvalidationEvent {
         id: Uuid::new_v4(),
-        tenant_id: TenantId::new(payload.tenant_id),
+        tenant_id: TenantId::new(payload.tenant_id.clone()),
         source_id: payload.source_id,
-        version_tag: payload.version_tag,
+        version_tag: payload.version_tag.clone(),
         timestamp: Utc::now(),
     };
 
@@ -1408,6 +1459,35 @@ pub async fn trigger_invalidation(
     let bumped_watermark = state
         .watermark_fencer
         .advance_watermark(&payload.source_id.to_string());
+
+    // Record invalidation in durable PostgreSQL outbox table
+    let outbox_record = sunborn_db::models::OutboxRecord {
+        id: 0,
+        tenant_id: payload.tenant_id.clone(),
+        entity_type: "knowledge_source".to_string(),
+        entity_id: payload.source_id.to_string(),
+        action: "invalidate".to_string(),
+        payload: json!({
+            "source_id": payload.source_id,
+            "version_tag": payload.version_tag,
+            "bumped_epoch": bumped_epoch,
+        }),
+        status: "processed".to_string(),
+        created_at: Utc::now(),
+    };
+    let _ = state.db.insert_outbox_event(outbox_record).await;
+
+    // Broadcast across distributed cluster pods if cluster sync is active
+    if let Some(ref sync_engine) = state.cluster_sync_engine {
+        let _ = sync_engine
+            .publish_and_invalidate(
+                TenantId::new(payload.tenant_id.clone()),
+                vec![],
+                vec![payload.source_id],
+                bumped_epoch,
+            )
+            .await;
+    }
 
     Ok(Json(json!({
         "status": "processed",
@@ -2477,6 +2557,17 @@ pub async fn verify_merkle_attestation(
         "valid": is_valid,
         "root_hash": root,
         "leaf_hash": leaf
+    }))
+}
+
+pub async fn ceremony_public_keys(State(state): State<AppState>) -> impl IntoResponse {
+    Json(json!({
+        "status": "active",
+        "active_key_id": state.attestation_key_id,
+        "signature_algorithm": "ed25519",
+        "verifying_key_hex": hex::encode(state.attestation_verifying_key.as_bytes()),
+        "cluster_sync_active": state.cluster_sync_engine.is_some(),
+        "timestamp": Utc::now()
     }))
 }
 

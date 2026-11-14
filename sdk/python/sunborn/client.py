@@ -328,6 +328,10 @@ class SunbornClient:
         }
         return self._post("cache/graph/invalidate", payload)
 
+    def get_ceremony_public_keys(self) -> dict:
+        """Retrieves active Ed25519 ceremony verifying public keys for zero-trust offline verification."""
+        return self._get("ceremony/public-keys")
+
 
 def get_default_client() -> SunbornClient:
     api_key = os.environ.get("SUNBORN_API_KEY")
