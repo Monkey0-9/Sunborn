@@ -63,7 +63,7 @@ provider key is ever in this site.
    - Sunborn API key: the gateway's `SUNBORN_ADMIN_KEY` for local testing (the
      compose file sets a development default), or a scoped key created with
      `POST /v1/auth/credentials`.
-   - Model: `gemini-3.8-flash` or any other `gemini-*` model.
+   - Model: `gemini-3.5-flash-lite` or any other `gemini-*` model.
 
 4. Click **Test connection**, then send a prompt twice.
 

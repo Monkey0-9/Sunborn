@@ -78,7 +78,7 @@ const BENCH = [
 const CURL = `curl http://localhost:8080/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: $SUNBORN_API_KEY" \\
-  -d '{"model":"gemini-3.8-flash",
+  -d '{"model":"gemini-3.5-flash-lite",
        "messages":[{"role":"user","content":"What is the capital of France?"}]}'
 
 # Response includes:  "sunborn_cached": true, "sunborn_tier": "c2_semantic"`;
