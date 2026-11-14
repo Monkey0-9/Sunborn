@@ -7,6 +7,13 @@ services:
       dockerfile: deploy/Dockerfile
     container_name: sunborn-gateway
     restart: unless-stopped
+    # LLM provider keys (GEMINI_API_KEY, ANTHROPIC_API_KEY,
+    # SUNBORN_LLM_ORIGIN_URL / SUNBORN_LLM_ORIGIN_API_KEY) are read from
+    # deploy/.env, which git ignores. Leave a key out entirely rather than
+    # setting it empty. With no keys, the gateway answers from its mock origin.
+    env_file:
+      - path: ./.env
+        required: false
     environment:
       HOST: "0.0.0.0"
       PORT: "8080"
@@ -20,6 +27,9 @@ services:
       SUNBORN_MASTER_KEK: "${SUNBORN_MASTER_KEK:-dev_insecure_master_kek_32bytes_local}"
       SUNBORN_ADMIN_KEY: "${SUNBORN_ADMIN_KEY:-dev_insecure_admin_key_32bytes_local}"
       SUNBORN_LEARNING_HMAC_SECRET: "${SUNBORN_LEARNING_HMAC_SECRET:-dev_insecure_hmac_secret_32bytes_local}"
+      # Browser origins allowed to call the gateway directly: the dashboard,
+      # the showcase site in dev (port 3001) and the GitHub Pages site.
+      SUNBORN_CORS_ALLOWED_ORIGINS: "${SUNBORN_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,https://candiate32.github.io}"
     ports:
       - "127.0.0.1:8080:8080"
     healthcheck:
