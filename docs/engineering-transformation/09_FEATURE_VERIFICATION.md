@@ -10,7 +10,7 @@
 
 | ID | Feature Description | Implementation Location | Runtime Status | Verified Evidence / Test Target |
 | :--- | :--- | :--- | :--- | :--- |
-| 1 | OpenAI chat completions proxy | `gateway/src/handlers.rs:904` | VERIFIED WORKING | `tests/chat_completions_test.rs` |
+| 1 | OpenAI chat completions proxy | `gateway/src/handlers.rs:904` | VERIFIED WORKING | `crates/sunborn-gateway/tests/chat_completions_test.rs` |
 | 2 | Anthropic messages proxy | `gateway/src/handlers.rs:1069` | VERIFIED WORKING | `gateway/src/origin/anthropic.rs` |
 | 3 | L1 exact cache (GDSF) | `cache/src/gdsf.rs` | VERIFIED WORKING | 1.03M ops/s in `benches/throughput_test.rs` |
 | 4 | L2 Dragonfly/Redis store | `cache/src/dragonfly.rs` | VERIFIED WORKING | `state.rs:478-510` dynamic Redis pool |
@@ -30,17 +30,17 @@
 | 18 | Transitive graph invalidation | `invalidation/src/graph.rs` | VERIFIED WORKING | `test_graph_memory_cache_transitive_rtc` |
 | 19 | Durable Postgres transactional outbox| `db/src/postgres.rs` | VERIFIED WORKING | Background worker in `state.rs:525` |
 | 20 | Outbox DLQ & backoff | `invalidation/src/outbox.rs` | VERIFIED WORKING | `migrations/0005_persistent_epochs_and_dlq.sql` |
-| 21 | Multi-replica cluster sync | `invalidation/src/cluster_sync.rs`| VERIFIED WORKING | `tests/multi_replica_consistency_test.rs` |
+| 21 | Multi-replica cluster sync | `invalidation/src/cluster_sync.rs`| VERIFIED WORKING | `crates/sunborn-gateway/tests/multi_replica_consistency_test.rs` |
 | 22 | Merkle DAG execution planner | `execution/src/planner.rs` | VERIFIED WORKING | `test_execution_plan_dag_evaluation` |
 | 23 | Execution memoization store | `execution/src/store.rs` | VERIFIED WORKING | DAG node memoization tests |
 | 24 | Write-behind buffer flusher | `db/src/write_behind.rs` | VERIFIED WORKING | `test_write_behind_group_commit_batching` |
 | 25 | AES-256-GCM envelope encryption | `identity/src/crypto_shred.rs` | VERIFIED WORKING | `test_tampered_ciphertext_fails_mac` |
 | 26 | Hardware KMS / Vault provider | `identity/src/crypto_shred.rs` | VERIFIED WORKING | Remote AWS KMS lifecycle tests |
 | 27 | Cryptographic shredding (GDPR Art 17)| `identity/src/crypto_shred.rs` | VERIFIED WORKING | `test_shredded_tenant_fail_closed` |
-| 28 | Dual-admin quorum authorization | `gateway/src/middleware/auth.rs` | VERIFIED WORKING | `tests/quorum_authorization_test.rs` |
-| 29 | FinOps spend velocity controller | `core/src/finops.rs` | VERIFIED WORKING | `tests/spend_velocity_test.rs` |
+| 28 | Dual-admin quorum authorization | `gateway/src/middleware/auth.rs` | VERIFIED WORKING | `crates/sunborn-gateway/tests/quorum_authorization_test.rs` |
+| 29 | FinOps spend velocity controller | `core/src/finops.rs` | VERIFIED WORKING | `crates/sunborn-gateway/tests/spend_velocity_test.rs` |
 | 30 | Token avoidance accounting | `core/src/finops.rs` | VERIFIED WORKING | `handlers.rs:249` FinOps metrics |
-| 31 | Multi-provider cost arbitrage router| `gateway/src/origin/provider.rs`| VERIFIED WORKING | `tests/provider_integration_test.rs` |
+| 31 | Multi-provider cost arbitrage router| `gateway/src/origin/provider.rs`| VERIFIED WORKING | `crates/sunborn-gateway/tests/provider_integration_test.rs` |
 | 32 | Graceful shutdown lifecycle | `gateway/src/main.rs` | VERIFIED WORKING | SIGINT/SIGTERM listener tests |
 | 33 | Singular DB migration authority | `db/src/postgres.rs` | VERIFIED WORKING | Migrations 0001-0005 tracking |
 | 34 | Prometheus metrics exporter | `gateway/src/handlers.rs:27` | VERIFIED WORKING | `/v1/metrics` format verification |
@@ -51,7 +51,7 @@
 | 39 | CSRF Origin Validation | `frontend/src/app/api/auth` | VERIFIED WORKING | `frontend/tests/auth_session.test.mjs` |
 | 40 | Hardened Non-Root Container | `.devcontainer/Dockerfile` | VERIFIED WORKING | Non-root `appuser` enforcement |
 | 41 | CycloneDX Software SBOM | `sbom.cyclonedx.json` | VERIFIED WORKING | CycloneDX 1.5 JSON verification |
-| 42 | RFC 8785 JSON Canonicalization | `identity/src/canonical.rs` | VERIFIED WORKING | `tests/fuzz_canonicalize_test.rs` |
+| 42 | RFC 8785 JSON Canonicalization | `identity/src/canonical.rs` | VERIFIED WORKING | `crates/sunborn-identity/tests/fuzz_canonicalize_test.rs` |
 | 43 | Radix Tree Prompt Routing | `gateway/src/routing/radix.rs` | VERIFIED WORKING | `test_radix_routing_and_affinity` |
 | 44 | Singleflight Streaming Multiplexing| `gateway/src/origin/singleflight.rs`| VERIFIED WORKING| `test_singleflight_streamer_multiplexing` |
 | 45 | Held-Out Benchmark Dataset | `research/calibration/` | VERIFIED WORKING | `test_held_out_evaluation_dataset_precision` |

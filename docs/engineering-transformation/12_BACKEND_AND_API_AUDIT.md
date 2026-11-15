@@ -22,4 +22,4 @@ Every inbound HTTP request traverses a hardened Tower middleware pipeline:
 Under high-concurrency cache misses, multiple identical prompts arriving within milliseconds are coalesced into a single upstream LLM provider call via `crates/sunborn-gateway/src/origin/singleflight.rs`.
 - Prevents upstream thundering herds.
 - Streaming responses are multiplexed to all waiting followers with zero buffer overrun.
-- Verified in `tests/origin/singleflight.rs:test_singleflight_streamer_multiplexing`.
+- Verified in `crates/sunborn-gateway/src/origin/singleflight.rs:test_singleflight_streamer_multiplexing`.

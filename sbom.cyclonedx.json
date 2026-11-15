@@ -1,7 +1,7 @@
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
-  "serialNumber": "urn:uuid:1889e502-8ebf-5f58-841d-43ad536cfdf7",
+  "serialNumber": "urn:uuid:b709f899-32e1-5002-91e6-06a707a3e13b",
   "version": 1,
   "metadata": {
     "component": {
@@ -2054,82 +2054,82 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:cargo/sunborn-cache@0.1.0",
+      "bom-ref": "pkg:cargo/sunborn-cache@1.0.0",
       "name": "sunborn-cache",
-      "version": "0.1.0",
-      "purl": "pkg:cargo/sunborn-cache@0.1.0",
+      "version": "1.0.0",
+      "purl": "pkg:cargo/sunborn-cache@1.0.0",
       "scope": "required"
     },
     {
       "type": "library",
-      "bom-ref": "pkg:cargo/sunborn-core@0.1.0",
+      "bom-ref": "pkg:cargo/sunborn-core@1.0.0",
       "name": "sunborn-core",
-      "version": "0.1.0",
-      "purl": "pkg:cargo/sunborn-core@0.1.0",
+      "version": "1.0.0",
+      "purl": "pkg:cargo/sunborn-core@1.0.0",
       "scope": "required"
     },
     {
       "type": "library",
-      "bom-ref": "pkg:cargo/sunborn-db@0.1.0",
+      "bom-ref": "pkg:cargo/sunborn-db@1.0.0",
       "name": "sunborn-db",
-      "version": "0.1.0",
-      "purl": "pkg:cargo/sunborn-db@0.1.0",
+      "version": "1.0.0",
+      "purl": "pkg:cargo/sunborn-db@1.0.0",
       "scope": "required"
     },
     {
       "type": "library",
-      "bom-ref": "pkg:cargo/sunborn-execution@0.1.0",
+      "bom-ref": "pkg:cargo/sunborn-execution@1.0.0",
       "name": "sunborn-execution",
-      "version": "0.1.0",
-      "purl": "pkg:cargo/sunborn-execution@0.1.0",
+      "version": "1.0.0",
+      "purl": "pkg:cargo/sunborn-execution@1.0.0",
       "scope": "required"
     },
     {
       "type": "library",
-      "bom-ref": "pkg:cargo/sunborn-gateway@0.1.0",
+      "bom-ref": "pkg:cargo/sunborn-gateway@1.0.0",
       "name": "sunborn-gateway",
-      "version": "0.1.0",
-      "purl": "pkg:cargo/sunborn-gateway@0.1.0",
+      "version": "1.0.0",
+      "purl": "pkg:cargo/sunborn-gateway@1.0.0",
       "scope": "required"
     },
     {
       "type": "library",
-      "bom-ref": "pkg:cargo/sunborn-identity@0.1.0",
+      "bom-ref": "pkg:cargo/sunborn-identity@1.0.0",
       "name": "sunborn-identity",
-      "version": "0.1.0",
-      "purl": "pkg:cargo/sunborn-identity@0.1.0",
+      "version": "1.0.0",
+      "purl": "pkg:cargo/sunborn-identity@1.0.0",
       "scope": "required"
     },
     {
       "type": "library",
-      "bom-ref": "pkg:cargo/sunborn-invalidation@0.1.0",
+      "bom-ref": "pkg:cargo/sunborn-invalidation@1.0.0",
       "name": "sunborn-invalidation",
-      "version": "0.1.0",
-      "purl": "pkg:cargo/sunborn-invalidation@0.1.0",
+      "version": "1.0.0",
+      "purl": "pkg:cargo/sunborn-invalidation@1.0.0",
       "scope": "required"
     },
     {
       "type": "library",
-      "bom-ref": "pkg:cargo/sunborn-rebuild@0.1.0",
+      "bom-ref": "pkg:cargo/sunborn-rebuild@1.0.0",
       "name": "sunborn-rebuild",
-      "version": "0.1.0",
-      "purl": "pkg:cargo/sunborn-rebuild@0.1.0",
+      "version": "1.0.0",
+      "purl": "pkg:cargo/sunborn-rebuild@1.0.0",
       "scope": "required"
     },
     {
       "type": "library",
-      "bom-ref": "pkg:cargo/sunborn-semantic@0.1.0",
+      "bom-ref": "pkg:cargo/sunborn-semantic@1.0.0",
       "name": "sunborn-semantic",
-      "version": "0.1.0",
-      "purl": "pkg:cargo/sunborn-semantic@0.1.0",
+      "version": "1.0.0",
+      "purl": "pkg:cargo/sunborn-semantic@1.0.0",
       "scope": "required"
     },
     {
       "type": "library",
-      "bom-ref": "pkg:cargo/sunborn-verify@0.1.0",
+      "bom-ref": "pkg:cargo/sunborn-verify@1.0.0",
       "name": "sunborn-verify",
-      "version": "0.1.0",
-      "purl": "pkg:cargo/sunborn-verify@0.1.0",
+      "version": "1.0.0",
+      "purl": "pkg:cargo/sunborn-verify@1.0.0",
       "scope": "required"
     },
     {
