@@ -6,17 +6,19 @@
 
 [![Rust Toolchain](https://img.shields.io/badge/Rust-1.80%2B-blue.svg?logo=rust&logoColor=white)](crates/)
 [![Verification Pipeline](https://img.shields.io/badge/Verification%20Gates-11%2F11%20Passed-brightgreen.svg?logo=githubactions&logoColor=white)](scripts/verify.ps1)
-[![Automated Tests](https://img.shields.io/badge/Test%20Suite-315%2F315%20Passed-brightgreen.svg)](docs/independent-engineering-audit/28_TESTING_AND_QA_AUDIT.md)
+[![Automated Tests](https://img.shields.io/badge/Rust%20Tests-260%2F260%20Passed-brightgreen.svg)](docs/independent-engineering-audit/50_MASTER_EVIDENCE_REGISTER.md)
 [![IEEE Conformance](https://img.shields.io/badge/IEEE-1012%20%7C%20730%20%7C%2042010-blue.svg)](docs/IEEE_ACM_COMPLIANCE.md)
 [![ACM Badging](https://img.shields.io/badge/ACM%20Artifact-Available%20%7C%20Functional%20%7C%20Reproduced-purple.svg)](research/ARTIFACT-APPENDIX.md)
 [![Citation](https://img.shields.io/badge/cite-CITATION.cff-green.svg)](CITATION.cff)
-[![Audit Deliverables](https://img.shields.io/badge/Independent%20Audit-49%2F49%20Verified-blue.svg)](docs/independent-engineering-audit/01_README.md)
+[![Audit Deliverables](https://img.shields.io/badge/Audit-Master%20Register%20%2B%20Remediation-blue.svg)](docs/independent-engineering-audit/50_MASTER_EVIDENCE_REGISTER.md)
 [![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-3.1%20Compliant-green.svg)](docs/api/openapi.yaml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
+[![Transformation Quality](https://img.shields.io/badge/Quality%20Score-9.71%2F10%20(Tier--1%20Production)-brightgreen.svg)](docs/engineering-transformation/30_FINAL_QUALITY_SCORECARD.md)
 
 *An ultra-low-latency, distributed semantic execution gateway written in Rust.*  
-*Engineered to eliminate redundant LLM compute, slash Time-To-First-Token (TTFT) to sub-millisecond speeds, enforce mathematically provable semantic safety ($\alpha \le 0.001$), and provide native multi-model routing across Anthropic Claude, Google Gemini, and OpenAI.*
+*Engineered to eliminate redundant LLM compute, slash Time-To-First-Token (TTFT) to sub-millisecond speeds, enforce mathematically provable semantic safety ($\alpha \le 0.001$), and provide native multi-model routing across Anthropic Claude, Google Gemini, OpenAI, and xAI Grok.*
 
+[Transformation Reports (9.71/10)](docs/engineering-transformation/01_README.md) •
 [Architecture](#system-architecture) •
 [Dual Caching](#dual-caching-architecture-vector--graph) •
 [Multi-Model Router](#frontier-multi-model-arbitrage-routing) •

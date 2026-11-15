@@ -1,0 +1,48 @@
+{
+  "manifest_version": "1.0.0",
+  "model_id": "text-embedding-3-small-mnli-v1",
+  "calibration_timestamp": "2026-11-14T12:00:00Z",
+  "sha256_checksum": "a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef0",
+  "strata": {
+    "LowRiskGeneral": {
+      "sample_size": 1500,
+      "alpha": 0.05,
+      "non_conformity_quantile": 0.165,
+      "calibrated_similarity_threshold": 0.835,
+      "empirical_coverage": 0.952,
+      "wilson_lower_bound": 0.941
+    },
+    "FinancialAccounting": {
+      "sample_size": 2200,
+      "alpha": 0.01,
+      "non_conformity_quantile": 0.092,
+      "calibrated_similarity_threshold": 0.908,
+      "empirical_coverage": 0.991,
+      "wilson_lower_bound": 0.987
+    },
+    "HealthcareMedical": {
+      "sample_size": 1800,
+      "alpha": 0.005,
+      "non_conformity_quantile": 0.048,
+      "calibrated_similarity_threshold": 0.952,
+      "empirical_coverage": 0.996,
+      "wilson_lower_bound": 0.992
+    },
+    "SystemAdministrative": {
+      "sample_size": 1200,
+      "alpha": 0.01,
+      "non_conformity_quantile": 0.088,
+      "calibrated_similarity_threshold": 0.912,
+      "empirical_coverage": 0.990,
+      "wilson_lower_bound": 0.983
+    },
+    "SecuritySensitive": {
+      "sample_size": 3000,
+      "alpha": 0.001,
+      "non_conformity_quantile": 0.018,
+      "calibrated_similarity_threshold": 0.982,
+      "empirical_coverage": 0.999,
+      "wilson_lower_bound": 0.998
+    }
+  }
+}

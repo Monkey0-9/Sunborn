@@ -71,11 +71,18 @@ impl VectorClock {
     }
 }
 
+#[async_trait::async_trait]
+pub trait EpochPersistenceBackend: Send + Sync {
+    async fn load_all_epochs(&self) -> sunborn_core::Result<HashMap<Uuid, u64>>;
+    async fn persist_epoch(&self, source_id: Uuid, epoch: u64) -> sunborn_core::Result<()>;
+}
+
 /// Thread-safe Epoch and Causality Lease Manager supporting multi-source validation.
 #[derive(Clone, Default)]
 pub struct EpochLeaseManager {
     epochs: Arc<RwLock<HashMap<Uuid, Arc<AtomicU64>>>>,
     vector_clocks: Arc<RwLock<HashMap<String, VectorClock>>>,
+    persistence: Option<Arc<dyn EpochPersistenceBackend>>,
 }
 
 impl EpochLeaseManager {
@@ -83,6 +90,30 @@ impl EpochLeaseManager {
         Self {
             epochs: Arc::new(RwLock::new(HashMap::new())),
             vector_clocks: Arc::new(RwLock::new(HashMap::new())),
+            persistence: None,
+        }
+    }
+
+    pub fn with_persistence(persistence: Arc<dyn EpochPersistenceBackend>) -> Self {
+        Self {
+            epochs: Arc::new(RwLock::new(HashMap::new())),
+            vector_clocks: Arc::new(RwLock::new(HashMap::new())),
+            persistence: Some(persistence),
+        }
+    }
+
+    /// Hydrate in-memory epoch counters from persistent database store at startup
+    pub async fn hydrate_from_persistence(&self) -> sunborn_core::Result<usize> {
+        if let Some(ref p) = self.persistence {
+            let loaded = p.load_all_epochs().await?;
+            let count = loaded.len();
+            let mut map = self.epochs.write().await;
+            for (source_id, epoch) in loaded {
+                map.insert(source_id, Arc::new(AtomicU64::new(epoch)));
+            }
+            Ok(count)
+        } else {
+            Ok(0)
         }
     }
 
@@ -97,11 +128,19 @@ impl EpochLeaseManager {
 
     /// Advance epoch upon knowledge update / document invalidation
     pub async fn bump_epoch(&self, source_id: Uuid) -> u64 {
-        let mut map = self.epochs.write().await;
-        let counter = map
-            .entry(source_id)
-            .or_insert_with(|| Arc::new(AtomicU64::new(1)));
-        counter.fetch_add(1, Ordering::SeqCst) + 1
+        let new_epoch = {
+            let mut map = self.epochs.write().await;
+            let counter = map
+                .entry(source_id)
+                .or_insert_with(|| Arc::new(AtomicU64::new(1)));
+            counter.fetch_add(1, Ordering::SeqCst) + 1
+        };
+
+        if let Some(ref p) = self.persistence {
+            let _ = p.persist_epoch(source_id, new_epoch).await;
+        }
+
+        new_epoch
     }
 
     /// Check if write back is safe for a single source
@@ -238,5 +277,52 @@ mod tests {
         // Concurrent scenario: vc_a increments node-1 independently
         vc_a.increment("node-1");
         assert!(vc_a.concurrent_with(&vc_b));
+    }
+
+    struct MockEpochDb {
+        storage: Arc<tokio::sync::Mutex<HashMap<Uuid, u64>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl EpochPersistenceBackend for MockEpochDb {
+        async fn load_all_epochs(&self) -> sunborn_core::Result<HashMap<Uuid, u64>> {
+            let guard = self.storage.lock().await;
+            Ok(guard.clone())
+        }
+
+        async fn persist_epoch(&self, source_id: Uuid, epoch: u64) -> sunborn_core::Result<()> {
+            let mut guard = self.storage.lock().await;
+            guard.insert(source_id, epoch);
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_epoch_lease_manager_persistent_hydration_and_monotonicity() {
+        let storage = Arc::new(tokio::sync::Mutex::new(HashMap::new()));
+        let backend = Arc::new(MockEpochDb {
+            storage: storage.clone(),
+        });
+
+        let src = Uuid::new_v4();
+
+        // 1. First process run: bump epoch to 5
+        let mgr1 = EpochLeaseManager::with_persistence(backend.clone());
+        assert_eq!(mgr1.acquire_lease(src).await, 1);
+        for _ in 0..4 {
+            mgr1.bump_epoch(src).await;
+        }
+        assert_eq!(mgr1.acquire_lease(src).await, 5);
+
+        // 2. Simulate process restart: new EpochLeaseManager hydrates from DB
+        let mgr2 = EpochLeaseManager::with_persistence(backend.clone());
+        let count = mgr2.hydrate_from_persistence().await.unwrap();
+        assert_eq!(count, 1);
+
+        // Monotonicity property: must not reset to 1, must resume from 5 and bump to 6
+        assert_eq!(mgr2.acquire_lease(src).await, 5);
+        let bumped = mgr2.bump_epoch(src).await;
+        assert_eq!(bumped, 6);
+        assert_eq!(mgr2.acquire_lease(src).await, 6);
     }
 }

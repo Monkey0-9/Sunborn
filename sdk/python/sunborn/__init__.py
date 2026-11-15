@@ -22,7 +22,7 @@ from .models import (
     compute_context_digest,
 )
 
-__version__ = "0.1.0rc1"
+__version__ = "1.0.0"
 
 # Canonical and ergonomic aliases
 Sunborn = SunbornClient

@@ -19,19 +19,22 @@ pub mod cluster_sync;
 pub mod epoch;
 pub mod graph;
 pub mod graph_cache;
+pub mod orchestrator;
 pub mod outbox;
 pub mod watermark;
 
 pub use bitmap_lineage::CompressedLineageGraph;
 pub use cluster_sync::{
-    ClusterBroadcastTransport, ClusterInvalidationMessage, DistributedGraphSyncEngine,
-    InMemoryClusterTransport, CLUSTER_INVALIDATION_CHANNEL,
+    create_cluster_transport, ClusterBroadcastTransport, ClusterInvalidationMessage,
+    DistributedGraphSyncEngine, InMemoryClusterTransport, RedisClusterTransport,
+    CLUSTER_INVALIDATION_CHANNEL,
 };
-pub use epoch::{EpochFence, EpochLeaseManager, VectorClock};
+pub use epoch::{EpochFence, EpochLeaseManager, EpochPersistenceBackend, VectorClock};
 pub use graph::{
     DependencyGraph, DocumentVersion, InMemoryGraphStore, KnowledgeGraphStore, KnowledgeSource,
     MockNeo4jCypherStore, Neo4jCypherGraphStore,
 };
-pub use graph_cache::GraphMemoryCache;
+pub use graph_cache::{deterministic_hash_64, GraphCacheStats, GraphMemoryCache};
+pub use orchestrator::{InvalidationOrchestrator, PurgeReport};
 pub use outbox::{InvalidationEngine, InvalidationEvent};
 pub use watermark::{LineageWatermark, ReadView, WatermarkLineageFencer};

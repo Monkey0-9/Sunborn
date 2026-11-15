@@ -2782,7 +2782,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "sunborn-cache"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2796,7 +2796,7 @@ dependencies = [
 
 [[package]]
 name = "sunborn-core"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2816,12 +2816,14 @@ dependencies = [
 
 [[package]]
 name = "sunborn-db"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "hex",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "sqlx",
  "sunborn-core",
  "tokio",
@@ -2831,7 +2833,7 @@ dependencies = [
 
 [[package]]
 name = "sunborn-execution"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2850,7 +2852,7 @@ dependencies = [
 
 [[package]]
 name = "sunborn-gateway"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2883,7 +2885,7 @@ dependencies = [
 
 [[package]]
 name = "sunborn-identity"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "aes-gcm",
  "aws-config",
@@ -2903,16 +2905,18 @@ dependencies = [
 
 [[package]]
 name = "sunborn-invalidation"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "async-trait",
  "chrono",
  "dashmap",
+ "futures-util",
  "redis",
  "reqwest",
  "roaring",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "sunborn-cache",
  "sunborn-core",
  "sunborn-semantic",
@@ -2923,12 +2927,15 @@ dependencies = [
 
 [[package]]
 name = "sunborn-rebuild"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "ed25519-dalek",
+ "hex",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "sunborn-cache",
  "sunborn-core",
  "sunborn-db",
@@ -2940,7 +2947,7 @@ dependencies = [
 
 [[package]]
 name = "sunborn-semantic"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2957,7 +2964,7 @@ dependencies = [
 
 [[package]]
 name = "sunborn-verify"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "ed25519-dalek",

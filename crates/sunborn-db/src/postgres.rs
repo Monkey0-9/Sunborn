@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use sunborn_core::{Result, SunbornError};
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
 pub fn redact_connection_url(url: &str) -> String {
     if let Some(at_idx) = url.find('@') {
@@ -23,6 +24,12 @@ pub fn redact_connection_url(url: &str) -> String {
 }
 
 type FallbackTdekMap = Arc<RwLock<std::collections::HashMap<String, (Vec<u8>, String)>>>;
+
+const MIGRATION_0001: &str = include_str!("../../../migrations/0001_initial_schema.sql");
+const MIGRATION_0002: &str = include_str!("../../../migrations/0002_durable_identity_and_keys.sql");
+const MIGRATION_0003: &str = include_str!("../../../migrations/0003_finops_and_security.sql");
+const MIGRATION_0004: &str = include_str!("../../../migrations/0004_durable_cache_certificate.sql");
+const MIGRATION_0005: &str = include_str!("../../../migrations/0005_persistent_epochs_and_dlq.sql");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DbCircuitState {
@@ -206,169 +213,91 @@ impl PostgresDatabaseStore {
     }
 
     async fn migrate(&self, pool: &PgPool) -> std::result::Result<(), sqlx::Error> {
+        // Authoritative Singular Database Migration Runner (SSOT)
         sqlx::raw_sql(
             r#"
-            CREATE TABLE IF NOT EXISTS tenants (
-                id VARCHAR(128) PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS _sunborn_migrations (
+                version INT PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
-                status VARCHAR(64) NOT NULL,
-                rate_limit_rps INT NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS durable_cache_entries (
-                key VARCHAR(512) PRIMARY KEY,
-                tenant_id VARCHAR(128) NOT NULL,
-                application_id VARCHAR(128) NOT NULL,
-                model VARCHAR(128) NOT NULL,
-                policy_version VARCHAR(64) NOT NULL,
-                hash VARCHAR(128) NOT NULL,
-                prompt_canonical TEXT NOT NULL,
-                content TEXT NOT NULL,
-                hit_count BIGINT NOT NULL DEFAULT 0,
-                created_at TIMESTAMPTZ NOT NULL,
-                expires_at TIMESTAMPTZ,
-                last_accessed_at TIMESTAMPTZ NOT NULL,
-                certificate_json TEXT
-            );
-
-            ALTER TABLE durable_cache_entries ADD COLUMN IF NOT EXISTS certificate_json TEXT;
-
-            CREATE INDEX IF NOT EXISTS idx_cache_tenant ON durable_cache_entries(tenant_id);
-
-            CREATE TABLE IF NOT EXISTS outbox_events (
-                id BIGSERIAL PRIMARY KEY,
-                tenant_id VARCHAR(128) NOT NULL,
-                entity_type VARCHAR(64) NOT NULL,
-                entity_id VARCHAR(255) NOT NULL,
-                action VARCHAR(64) NOT NULL,
-                payload JSONB NOT NULL,
-                status VARCHAR(64) NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS audit_events (
-                request_id UUID PRIMARY KEY,
-                tenant_id VARCHAR(128) NOT NULL,
-                action VARCHAR(128) NOT NULL,
-                details JSONB NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS tenant_wrapped_keys (
-                tenant_id VARCHAR(128) PRIMARY KEY,
-                key_version INT NOT NULL DEFAULT 1,
-                wrapped_tdek BYTEA NOT NULL,
-                kms_provider VARCHAR(64) NOT NULL DEFAULT 'local-aead',
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            );
-
-            CREATE TABLE IF NOT EXISTS api_credentials (
-                key_hash VARCHAR(128) PRIMARY KEY,
-                tenant_id VARCHAR(128) NOT NULL,
-                application_id VARCHAR(128) NOT NULL,
-                rate_limit_rps INT NOT NULL DEFAULT 100,
-                allowed_models JSONB NOT NULL DEFAULT '["*"]'::jsonb,
-                is_admin BOOLEAN NOT NULL DEFAULT FALSE,
-                status VARCHAR(32) NOT NULL DEFAULT 'active',
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                expires_at TIMESTAMPTZ,
-                revoked_at TIMESTAMPTZ
-            );
-
-            ALTER TABLE api_credentials ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
-            ALTER TABLE api_credentials ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ;
-
-            CREATE TABLE IF NOT EXISTS finops_ledger (
-                id BIGSERIAL PRIMARY KEY,
-                tenant_id VARCHAR(128) NOT NULL,
-                application_id VARCHAR(128) NOT NULL,
-                model VARCHAR(128) NOT NULL,
-                cache_tier VARCHAR(32) NOT NULL,
-                prompt_tokens_avoided BIGINT NOT NULL DEFAULT 0,
-                completion_tokens_avoided BIGINT NOT NULL DEFAULT 0,
-                cost_avoided_usd NUMERIC(12, 6) NOT NULL DEFAULT 0.0,
-                storage_cost_usd NUMERIC(12, 6) NOT NULL DEFAULT 0.0,
-                net_savings_usd NUMERIC(12, 6) NOT NULL DEFAULT 0.0,
-                recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_finops_tenant_time ON finops_ledger(tenant_id, recorded_at DESC);
-
-            CREATE TABLE IF NOT EXISTS prefix_affinity_records (
-                prefix_hash VARCHAR(64) PRIMARY KEY,
-                prefix_text TEXT NOT NULL,
-                matched_tokens INTEGER NOT NULL,
-                affinity_node VARCHAR(128) NOT NULL,
-                access_count BIGINT NOT NULL DEFAULT 1,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                last_hit_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            );
-
-            CREATE TABLE IF NOT EXISTS decision_records (
-                request_id UUID PRIMARY KEY,
-                tenant_id VARCHAR(128) NOT NULL,
-                application_id VARCHAR(128) NOT NULL,
-                action VARCHAR(32) NOT NULL,
-                cache_path VARCHAR(32) NOT NULL,
-                confidence REAL NOT NULL,
-                risk_score REAL NOT NULL,
-                reason_code VARCHAR(64) NOT NULL,
-                latency_saved_ms BIGINT,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            );
-
-            CREATE TABLE IF NOT EXISTS applications (
-                id VARCHAR(64) NOT NULL,
-                tenant_id VARCHAR(128) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-                name VARCHAR(255) NOT NULL,
-                api_key_hash VARCHAR(128) NOT NULL,
-                status VARCHAR(32) NOT NULL DEFAULT 'active',
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                PRIMARY KEY (tenant_id, id)
-            );
-
-            CREATE TABLE IF NOT EXISTS knowledge_sources (
-                id UUID PRIMARY KEY,
-                tenant_id VARCHAR(128) NOT NULL,
-                name VARCHAR(255) NOT NULL,
-                uri TEXT,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            );
-
-            CREATE TABLE IF NOT EXISTS document_versions (
-                id UUID PRIMARY KEY,
-                source_id UUID NOT NULL REFERENCES knowledge_sources(id) ON DELETE CASCADE,
-                version_tag VARCHAR(64) NOT NULL,
-                content_hash VARCHAR(64) NOT NULL,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            );
-
-            CREATE TABLE IF NOT EXISTS dependency_edges (
-                source_id UUID NOT NULL REFERENCES knowledge_sources(id) ON DELETE CASCADE,
-                cache_key VARCHAR(512) NOT NULL REFERENCES durable_cache_entries(key) ON DELETE CASCADE,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                PRIMARY KEY (source_id, cache_key)
-            );
-
-            CREATE TABLE IF NOT EXISTS invalidation_outbox (
-                id BIGSERIAL PRIMARY KEY,
-                tenant_id VARCHAR(128) NOT NULL,
-                entity_type VARCHAR(64) NOT NULL,
-                entity_id VARCHAR(255) NOT NULL,
-                action VARCHAR(32) NOT NULL,
-                payload JSONB NOT NULL,
-                status VARCHAR(32) NOT NULL DEFAULT 'pending',
-                retry_count INTEGER NOT NULL DEFAULT 0,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                processed_at TIMESTAMPTZ
+                checksum VARCHAR(64) NOT NULL,
+                applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
             "#,
         )
         .execute(pool)
         .await?;
 
+        let migrations: &[(i32, &str, &str)] = &[
+            (1, "0001_initial_schema", MIGRATION_0001),
+            (2, "0002_durable_identity_and_keys", MIGRATION_0002),
+            (3, "0003_finops_and_security", MIGRATION_0003),
+            (4, "0004_durable_cache_certificate", MIGRATION_0004),
+            (5, "0005_persistent_epochs_and_dlq", MIGRATION_0005),
+        ];
+
+        for (version, name, sql) in migrations {
+            let row = sqlx::query("SELECT checksum FROM _sunborn_migrations WHERE version = $1")
+                .bind(version)
+                .fetch_optional(pool)
+                .await?;
+
+            if row.is_none() {
+                tracing::info!(
+                    version = *version,
+                    name = *name,
+                    "Applying authoritative database migration"
+                );
+                sqlx::raw_sql(sql).execute(pool).await?;
+                use sha2::Digest;
+                let checksum = hex::encode(sha2::Sha256::digest(sql.as_bytes()));
+                sqlx::query(
+                    "INSERT INTO _sunborn_migrations (version, name, checksum) VALUES ($1, $2, $3)",
+                )
+                .bind(version)
+                .bind(name)
+                .bind(&checksum)
+                .execute(pool)
+                .await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Loads all persistent knowledge source epochs from PostgreSQL.
+    pub async fn load_all_epochs(&self) -> Result<std::collections::HashMap<Uuid, u64>> {
+        if let Some(pool) = self.get_pool().await {
+            let rows = sqlx::query_as::<_, (Uuid, i64)>(
+                "SELECT source_id, current_epoch FROM tenant_source_epochs",
+            )
+            .fetch_all(&pool)
+            .await
+            .map_err(|e| SunbornError::database(e.to_string()))?;
+
+            let mut map = std::collections::HashMap::new();
+            for (src, ep) in rows {
+                map.insert(src, ep as u64);
+            }
+            Ok(map)
+        } else {
+            Ok(std::collections::HashMap::new())
+        }
+    }
+
+    /// Persists or advances the monotonic epoch for a knowledge source in PostgreSQL.
+    pub async fn persist_epoch(&self, source_id: Uuid, epoch: u64) -> Result<()> {
+        if let Some(pool) = self.get_pool().await {
+            sqlx::query(
+                "INSERT INTO tenant_source_epochs (source_id, current_epoch, updated_at)
+                 VALUES ($1, $2, NOW())
+                 ON CONFLICT (source_id) DO UPDATE SET current_epoch = EXCLUDED.current_epoch, updated_at = NOW()",
+            )
+            .bind(source_id)
+            .bind(epoch as i64)
+            .execute(&pool)
+            .await
+            .map_err(|e| SunbornError::database(e.to_string()))?;
+        }
         Ok(())
     }
 

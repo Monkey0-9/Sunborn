@@ -13,6 +13,12 @@ pub struct DecisionConfig {
     pub min_similarity_threshold: f32,
     pub max_risk_threshold: f32,
     pub revalidation_band: f32,
+    /// Number of vector candidates evaluated for ambiguity. A single candidate
+    /// cannot express uncertainty, so the default deliberately looks wider.
+    pub candidate_limit: usize,
+    /// Two candidates within this similarity delta but with different content
+    /// are treated as ambiguous and reuse abstains.
+    pub ambiguity_delta: f32,
 }
 
 impl Default for DecisionConfig {
@@ -21,6 +27,8 @@ impl Default for DecisionConfig {
             min_similarity_threshold: 0.88,
             max_risk_threshold: 0.25,
             revalidation_band: 0.05,
+            candidate_limit: 8,
+            ambiguity_delta: 0.01,
         }
     }
 }
@@ -283,12 +291,41 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                 &req.tenant_id,
                 &req.application_id,
                 &query_vec,
-                1,
+                self.config.candidate_limit.max(1),
                 min_similarity_threshold - self.config.revalidation_band,
             )
             .await?;
 
         let risk_score = Self::assess_risk(&req.prompt);
+
+        // Ambiguity abstention: when two plausibly-equivalent candidates disagree on
+        // content, there is no safe winner. Execute origin instead of guessing.
+        if let (Some(first), Some(second)) = (candidates.first(), candidates.get(1)) {
+            let near_tie = (first.score - second.score).abs() <= self.config.ambiguity_delta;
+            if near_tie && first.entry.content != second.entry.content {
+                return Ok(DecisionOutcome {
+                    decision: DecisionRecord {
+                        action: DecisionAction::Revalidate,
+                        cache_path: CachePath::Semantic,
+                        confidence: Self::compute_confidence(
+                            first.score,
+                            req.prompt.len(),
+                            req.temperature,
+                        ),
+                        risk_score,
+                        reason_code: "AMBIGUOUS_SEMANTIC_CANDIDATES".to_string(),
+                        latency_saved_ms: None,
+                        policy_version: None,
+                        policy_id: None,
+                    },
+                    matched_content: None,
+                    matched_id: None,
+                    matched_certificate: None,
+                    safety_evidence: None,
+                    matched_metadata: None,
+                });
+            }
+        }
 
         if let Some(best) = candidates.first() {
             let similarity = best.score;
@@ -541,6 +578,58 @@ mod tests {
             .await;
         assert_eq!(res4.passed_stage, CascadeStage::Stage4ExecutionOrReuse);
         assert!(res4.is_eligible_for_reuse);
+    }
+
+    #[tokio::test]
+    async fn test_decision_engine_abstains_on_ambiguous_candidates() {
+        use crate::embedding::DeterministicEmbeddingProvider;
+        use crate::vector_store::MemoryVectorStore;
+
+        let embedder = DeterministicEmbeddingProvider::new();
+        let store = MemoryVectorStore::new();
+        let query = "Summarize the Q3 revenue outlook for division Alpha";
+        let query_vec = embedder.embed(query).await.unwrap();
+
+        // Two competing answers encoded with the identical vector so both score
+        // at the top, but their content disagrees. The engine must abstain.
+        for (id, prompt, content) in [
+            (
+                "doc-a",
+                "Summarize the Q3 revenue outlook for division Alpha",
+                "Revenue will rise 12%.",
+            ),
+            (
+                "doc-b",
+                "Summarize the Q3 revenue outlook for division Alpha",
+                "Revenue will fall 12%.",
+            ),
+        ] {
+            store
+                .insert(VectorEntry {
+                    id: id.into(),
+                    tenant_id: TenantId::new("t1"),
+                    application_id: ApplicationId::new("app1"),
+                    prompt: prompt.into(),
+                    content: content.into(),
+                    vector: query_vec.clone(),
+                    metadata: serde_json::json!({}),
+                    created_at: Utc::now(),
+                })
+                .await
+                .unwrap();
+        }
+
+        let engine = DecisionEngine::new(embedder, store, DecisionConfig::default());
+        let outcome = engine
+            .evaluate(&RequestEnvelope::new("t1", "app1", "gpt-4o", query))
+            .await
+            .unwrap();
+
+        assert_eq!(outcome.decision.action, DecisionAction::Revalidate);
+        assert_eq!(
+            outcome.decision.reason_code,
+            "AMBIGUOUS_SEMANTIC_CANDIDATES"
+        );
     }
 
     #[tokio::test]

@@ -3,6 +3,7 @@ use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::sync::Arc;
 use subtle::ConstantTimeEq;
 use uuid::Uuid;
 
@@ -489,7 +490,130 @@ impl ReuseCertificate {
 
         true
     }
+}
 
+/// Versioned Cryptographic Attestation Key Ring supporting key rotation and multiple verification keys
+#[derive(Debug, Clone)]
+pub struct AttestationKeyRing {
+    primary_key_id: String,
+    primary_signing_key: SigningKey,
+    verifying_keys: std::collections::HashMap<String, VerifyingKey>,
+}
+
+impl AttestationKeyRing {
+    pub fn new(primary_key_id: impl Into<String>, seed: &[u8; 32]) -> Self {
+        let sk = SigningKey::from_bytes(seed);
+        let vk = sk.verifying_key();
+        let kid = primary_key_id.into();
+        let mut verifying_keys = std::collections::HashMap::new();
+        verifying_keys.insert(kid.clone(), vk);
+
+        Self {
+            primary_key_id: kid,
+            primary_signing_key: sk,
+            verifying_keys,
+        }
+    }
+
+    pub fn add_verifying_key(&mut self, key_id: impl Into<String>, vk: VerifyingKey) {
+        self.verifying_keys.insert(key_id.into(), vk);
+    }
+
+    pub fn primary_key_id(&self) -> &str {
+        &self.primary_key_id
+    }
+
+    pub fn primary_verifying_key(&self) -> VerifyingKey {
+        self.primary_signing_key.verifying_key()
+    }
+
+    pub fn get_verifying_key(&self, key_id: &str) -> Option<&VerifyingKey> {
+        self.verifying_keys.get(key_id)
+    }
+
+    pub fn sign(&self, message: &[u8]) -> (String, Signature) {
+        let sig = self.primary_signing_key.sign(message);
+        (self.primary_key_id.clone(), sig)
+    }
+
+    pub fn verify(
+        &self,
+        key_id: Option<&str>,
+        message: &[u8],
+        signature: &Signature,
+    ) -> Result<()> {
+        let kid = key_id.unwrap_or(&self.primary_key_id);
+        if let Some(vk) = self.verifying_keys.get(kid) {
+            vk.verify(message, signature).map_err(|e| {
+                SunbornError::validation_error(format!(
+                    "KeyRing signature verification failed: {e}"
+                ))
+            })
+        } else {
+            Err(SunbornError::validation_error(format!(
+                "Key ID '{kid}' not found in active KeyRing"
+            )))
+        }
+    }
+}
+
+/// In-memory Replay Defense Cache with Nonce & Timestamp Drift Bounding
+#[derive(Debug, Clone)]
+pub struct ReplayDefenseCache {
+    seen_certificates: Arc<std::sync::RwLock<std::collections::HashSet<Uuid>>>,
+    max_drift_seconds: i64,
+}
+
+impl Default for ReplayDefenseCache {
+    fn default() -> Self {
+        Self::new(300) // 5 minutes max clock skew tolerance
+    }
+}
+
+impl ReplayDefenseCache {
+    pub fn new(max_drift_seconds: i64) -> Self {
+        Self {
+            seen_certificates: Arc::new(std::sync::RwLock::new(std::collections::HashSet::new())),
+            max_drift_seconds,
+        }
+    }
+
+    pub fn check_and_record(
+        &self,
+        certificate: &ReuseCertificate,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
+        let drift = (now - certificate.validity_window.issued_at)
+            .num_seconds()
+            .abs();
+        if drift > self.max_drift_seconds {
+            return Err(SunbornError::validation_error(format!(
+                "Certificate timestamp exceeds maximum acceptable clock drift: {}s > {}s",
+                drift, self.max_drift_seconds
+            )));
+        }
+
+        let mut seen = self
+            .seen_certificates
+            .write()
+            .map_err(|_| SunbornError::internal("Replay defense lock poisoned"))?;
+
+        if seen.contains(&certificate.certificate_id) {
+            return Err(SunbornError::validation_error(format!(
+                "Replay detected: Certificate ID '{}' has already been evaluated",
+                certificate.certificate_id
+            )));
+        }
+
+        seen.insert(certificate.certificate_id);
+        if seen.len() > 100_000 {
+            seen.clear();
+        }
+        Ok(())
+    }
+}
+
+impl ReuseCertificate {
     /// Validates all semantic, temporal, and safety invariants authorizing cache reuse
     pub fn validate_for_reuse(&self, req_ctx: &ReuseValidationContext) -> Result<()> {
         // 1. Version gate (reject unknown or deprecated certificate versions)
@@ -1285,5 +1409,71 @@ mod tests {
         assert!(cert
             .verify_integrity(wrong_verifying_key.as_bytes())
             .is_err());
+    }
+
+    #[test]
+    fn test_attestation_key_ring_rotation_and_replay_defense() {
+        let seed_v1 = [101u8; 32];
+        let seed_v2 = [102u8; 32];
+
+        let mut keyring = AttestationKeyRing::new("key-2026-v1", &seed_v1);
+        let sk_v2 = SigningKey::from_bytes(&seed_v2);
+        keyring.add_verifying_key("key-2026-v2", sk_v2.verifying_key());
+
+        let msg = b"sunborn-execution-attestation-rfc8785-merkle-root";
+        let (kid, sig) = keyring.sign(msg);
+        assert_eq!(kid, "key-2026-v1");
+
+        // Verify with primary key ID
+        assert!(keyring.verify(Some(&kid), msg, &sig).is_ok());
+
+        // Verify signature created by retired/rotated key v2
+        let sig_v2 = sk_v2.sign(msg);
+        assert!(keyring.verify(Some("key-2026-v2"), msg, &sig_v2).is_ok());
+
+        // Unknown key ID rejected
+        assert!(keyring
+            .verify(Some("key-2025-unknown"), msg, &sig_v2)
+            .is_err());
+
+        // Replay defense test
+        let replay_cache = ReplayDefenseCache::new(300);
+        let now = Utc::now();
+        let cert = ReuseCertificate::new_signed_ed25519(
+            TenantId::new("tenant-test"),
+            ApplicationId::new("app-test"),
+            "hash-test",
+            "model-test",
+            10,
+            vec![],
+            SafetyEvidenceRecord {
+                structural_hash_match: true,
+                negation_polarity_match: true,
+                numeric_literal_match: true,
+                entity_drift_detected: false,
+                non_conformity_score: 0.01,
+                calibrated_risk_bound: 0.05,
+                heuristic_risk_score: 0.0,
+            },
+            ValidityWindow {
+                issued_at: now,
+                expires_at: now + chrono::Duration::hours(1),
+                monotonic_epoch_lease: 1,
+            },
+            &sk_v2,
+            "key-2026-v2",
+        );
+
+        // First presentation accepted
+        assert!(replay_cache.check_and_record(&cert, now).is_ok());
+
+        // Immediate replay rejected
+        assert!(replay_cache.check_and_record(&cert, now).is_err());
+
+        // Excessive clock drift (>300s) rejected
+        let mut expired_cert = cert.clone();
+        expired_cert.certificate_id = Uuid::new_v4();
+        expired_cert.validity_window.issued_at = now - chrono::Duration::seconds(350);
+        assert!(replay_cache.check_and_record(&expired_cert, now).is_err());
     }
 }

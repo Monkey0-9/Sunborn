@@ -58,6 +58,26 @@ impl TaskStratum {
     }
 }
 
+/// Persistent Conformal Calibration Manifest
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CalibrationManifest {
+    pub manifest_version: String,
+    pub model_id: String,
+    pub calibration_timestamp: String,
+    pub sha256_checksum: String,
+    pub strata: HashMap<TaskStratum, StratumCalibration>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StratumCalibration {
+    pub sample_size: usize,
+    pub alpha: f64,
+    pub non_conformity_quantile: f64,
+    pub calibrated_similarity_threshold: f64,
+    pub empirical_coverage: f64,
+    pub wilson_lower_bound: f64,
+}
+
 /// Task-Stratified Conformal Calibrator
 /// Provides distribution-free theoretical bounds on false-reuse probability per task category.
 #[derive(Clone)]
@@ -85,6 +105,29 @@ impl TaskStratifiedConformalCalibrator {
             calibration_data: Arc::new(RwLock::new(HashMap::new())),
             thresholds: Arc::new(RwLock::new(initial_thresholds)),
         }
+    }
+
+    /// Load empirical calibration parameters from a parsed manifest
+    pub async fn load_manifest(&self, manifest: &CalibrationManifest) {
+        let mut thresholds = self.thresholds.write().await;
+        for (stratum, cal) in &manifest.strata {
+            thresholds.insert(
+                *stratum,
+                cal.calibrated_similarity_threshold.clamp(0.70, 0.99),
+            );
+        }
+    }
+
+    /// Load empirical calibration parameters from a JSON string
+    pub async fn load_from_json(
+        &self,
+        json_str: &str,
+    ) -> sunborn_core::Result<CalibrationManifest> {
+        let manifest: CalibrationManifest = serde_json::from_str(json_str).map_err(|e| {
+            sunborn_core::SunbornError::internal(format!("Invalid calibration manifest JSON: {e}"))
+        })?;
+        self.load_manifest(&manifest).await;
+        Ok(manifest)
     }
 
     /// Evaluates non-conformity score S_i = (1.0 - similarity) + 0.5 * risk
@@ -488,5 +531,44 @@ mod tests {
         let (cov, (w_low, w_high)) = cal.empirical_coverage_wilson(0.90);
         assert_eq!(cov, 0.95);
         assert!(w_low > 0.85 && w_high < 1.0);
+    }
+
+    #[tokio::test]
+    async fn test_conformal_calibration_manifest_loading() {
+        let manifest_json = r#"{
+            "manifest_version": "1.0.0",
+            "model_id": "test-model-v1",
+            "calibration_timestamp": "2026-11-14T12:00:00Z",
+            "sha256_checksum": "dummy-checksum",
+            "strata": {
+                "LowRiskGeneral": {
+                    "sample_size": 1000,
+                    "alpha": 0.05,
+                    "non_conformity_quantile": 0.15,
+                    "calibrated_similarity_threshold": 0.85,
+                    "empirical_coverage": 0.95,
+                    "wilson_lower_bound": 0.93
+                },
+                "SecuritySensitive": {
+                    "sample_size": 1000,
+                    "alpha": 0.001,
+                    "non_conformity_quantile": 0.015,
+                    "calibrated_similarity_threshold": 0.985,
+                    "empirical_coverage": 0.999,
+                    "wilson_lower_bound": 0.995
+                }
+            }
+        }"#;
+
+        let calibrator = TaskStratifiedConformalCalibrator::new();
+        calibrator.load_from_json(manifest_json).await.unwrap();
+
+        let general_thresh = calibrator.get_threshold(TaskStratum::LowRiskGeneral).await;
+        assert_eq!(general_thresh, 0.85);
+
+        let sec_thresh = calibrator
+            .get_threshold(TaskStratum::SecuritySensitive)
+            .await;
+        assert_eq!(sec_thresh, 0.985);
     }
 }

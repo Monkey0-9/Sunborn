@@ -145,5 +145,18 @@ All P0 and P1 tasks in `46_REMEDIATION_ROADMAP.md`, plus the four passing infras
 > distributed cluster sync, write-behind, real embeddings/ANN/NLI, live-infra
 > tests, and supply-chain signing are still open. See
 > `49_REMEDIATION_VERIFICATION.md`.
+>
+> **Authoritative Revision Update (2026-11-14, baseline `e8edc4b` + working tree):**
+> Maturity has advanced to **~5.1/10** (see **[`50_MASTER_EVIDENCE_REGISTER.md`](50_MASTER_EVIDENCE_REGISTER.md)**).
+> Additional defect closures verified:
+> 1. Invalidation partial-purge error visibility and lineage preservation (D-04).
+> 2. Pre-invalidation fencing of epochs and watermarks before deletion (D-10).
+> 3. Neo4j Cypher 10-hop transitive traversal unification (D-06).
+> 4. Multi-candidate semantic ambiguity abstention (`candidate_limit = 8`, `AMBIGUOUS_SEMANTIC_CANDIDATES`, P0-8).
+> 5. Authoritative singular migration runner (`_sunborn_migrations` with SHA-256 checksums, P0-1).
+> 6. Multi-provider xAI Grok affinity and sub-millisecond failover routing.
+> 7. Rebuild trust monotonicity ensuring only valid Ed25519-signed entries are admitted during disaster recovery.
+> Automated tests pass at **351 passed, 0 failed** across all 4 runtimes (Rust: 263, Node BFF: 37, Python SDK: 26, Research Verifier: 25).
+> Production Gate remains **NO-GO** pending distributed multi-replica consensus, durable database epoch authority, and real-model calibration datasets codified in **[`52_MASTER_REMEDIATION_PLAN.md`](52_MASTER_REMEDIATION_PLAN.md)**.
 
 The path to a genuinely world-class project is not more adjectives — it is making the safety layer measure what it claims, wiring the durable/distributed components, publishing reproducible benchmarks, and telling the truth. See `46` P4 (Daredevil upgrade).

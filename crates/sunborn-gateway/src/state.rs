@@ -14,10 +14,26 @@ use sunborn_execution::MemoryExecutionCacheStore;
 use sunborn_identity::crypto_shred::TenantCryptoRegistry;
 use sunborn_invalidation::{
     CompressedLineageGraph, DependencyGraph, GraphMemoryCache, InvalidationEngine,
+    InvalidationOrchestrator,
 };
 use sunborn_semantic::{
     DecisionConfig, DecisionEngine, DeterministicEmbeddingProvider, MemoryVectorStore,
 };
+
+struct PostgresEpochPersistence(Arc<sunborn_db::PostgresDatabaseStore>);
+
+#[async_trait::async_trait]
+impl sunborn_invalidation::EpochPersistenceBackend for PostgresEpochPersistence {
+    async fn load_all_epochs(
+        &self,
+    ) -> sunborn_core::Result<std::collections::HashMap<uuid::Uuid, u64>> {
+        self.0.load_all_epochs().await
+    }
+
+    async fn persist_epoch(&self, source_id: uuid::Uuid, epoch: u64) -> sunborn_core::Result<()> {
+        self.0.persist_epoch(source_id, epoch).await
+    }
+}
 
 #[derive(Clone)]
 pub struct AppState {
@@ -64,6 +80,7 @@ pub struct AppState {
     pub key_provider_configuration_error: Option<String>,
     pub graph_memory_cache: Option<Arc<GraphMemoryCache>>,
     pub cluster_sync_engine: Option<Arc<sunborn_invalidation::DistributedGraphSyncEngine>>,
+    pub orchestrator: Arc<InvalidationOrchestrator>,
 }
 
 impl AppState {
@@ -164,7 +181,20 @@ impl AppState {
             selected_cache.clone(),
             selected_vector.clone(),
         ));
-        let epoch_lease_manager = Arc::new(sunborn_invalidation::EpochLeaseManager::new());
+        let epoch_lease_manager = if is_postgres {
+            let mgr = Arc::new(sunborn_invalidation::EpochLeaseManager::with_persistence(
+                Arc::new(PostgresEpochPersistence(postgres_db.clone())),
+            ));
+            if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                let mgr_clone = mgr.clone();
+                handle.spawn(async move {
+                    let _ = mgr_clone.hydrate_from_persistence().await;
+                });
+            }
+            mgr
+        } else {
+            Arc::new(sunborn_invalidation::EpochLeaseManager::new())
+        };
         let execution_store = Arc::new(MemoryExecutionCacheStore::new());
         let shadow_evaluator = Arc::new(ShadowEvaluator::with_embedder(selected_embedder.clone()));
         let radix_router = Arc::new(KvCacheRouter::new(
@@ -447,14 +477,31 @@ impl AppState {
             None
         };
 
+        let pod_id = std::env::var("POD_NAME")
+            .or_else(|_| std::env::var("HOSTNAME"))
+            .unwrap_or_else(|_| format!("gateway-{}", uuid::Uuid::new_v4()));
+
+        let redis_url = std::env::var("SUNBORN_REDIS_URL")
+            .or_else(|_| std::env::var("REDIS_URL"))
+            .ok()
+            .or_else(|| {
+                if config.cache.backend == "dragonfly" {
+                    Some(config.cache.dragonfly_url.clone())
+                } else {
+                    None
+                }
+            });
+
+        let cluster_transport = Some(sunborn_invalidation::create_cluster_transport(
+            &pod_id,
+            redis_url.as_deref(),
+            2048,
+        ));
+
         let cluster_sync_engine = if let Some(ref gmc) = graph_memory_cache {
-            let pod_id = std::env::var("POD_NAME")
-                .or_else(|_| std::env::var("HOSTNAME"))
-                .unwrap_or_else(|_| format!("gateway-{}", uuid::Uuid::new_v4()));
-            let transport = Arc::new(sunborn_invalidation::InMemoryClusterTransport::new(2048));
             let engine = Arc::new(sunborn_invalidation::DistributedGraphSyncEngine::new(
-                pod_id,
-                transport,
+                pod_id.clone(),
+                cluster_transport.as_ref().unwrap().clone(),
                 gmc.clone(),
             ));
             drop(engine.clone().start_listener());
@@ -462,6 +509,49 @@ impl AppState {
         } else {
             None
         };
+
+        let orchestrator = Arc::new(InvalidationOrchestrator::new(
+            selected_cache.clone(),
+            selected_vector.clone(),
+            graph_memory_cache.clone(),
+            dependency_graph.clone(),
+            epoch_lease_manager.clone(),
+            watermark_fencer.clone(),
+            cluster_transport,
+            pod_id,
+        ));
+
+        // Background Durable Outbox Worker (processes persistent queue if active)
+        if is_postgres {
+            if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                let db_clone = selected_db.clone();
+                let orch_clone = orchestrator.clone();
+                handle.spawn(async move {
+                    let mut interval =
+                        tokio::time::interval(tokio::time::Duration::from_millis(500));
+                    loop {
+                        interval.tick().await;
+                        if let Ok(pending) = db_clone.fetch_pending_outbox_events(50).await {
+                            for record in pending {
+                                if record.entity_type == "knowledge_source"
+                                    && record.action == "invalidate"
+                                {
+                                    if let Ok(source_uuid) =
+                                        uuid::Uuid::parse_str(&record.entity_id)
+                                    {
+                                        let tenant =
+                                            sunborn_core::TenantId::new(record.tenant_id.clone());
+                                        let _ =
+                                            orch_clone.purge_sources(&tenant, &[source_uuid]).await;
+                                    }
+                                }
+                                let _ = db_clone.mark_outbox_processed(record.id).await;
+                            }
+                        }
+                    }
+                });
+            }
+        }
 
         Self {
             config,
@@ -501,6 +591,7 @@ impl AppState {
             key_provider_configuration_error,
             graph_memory_cache,
             cluster_sync_engine,
+            orchestrator,
         }
     }
 
