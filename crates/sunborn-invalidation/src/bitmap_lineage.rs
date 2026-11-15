@@ -60,7 +60,7 @@ impl CompressedLineageGraph {
         let mut affected = RoaringTreemap::new();
         for &doc_hash in mutated_doc_hashes {
             if let Some(bitmap) = self.doc_to_records.get(&doc_hash) {
-                affected |= bitmap.value().clone();
+                affected |= bitmap.value();
             }
         }
         affected

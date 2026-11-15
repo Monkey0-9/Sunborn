@@ -5,9 +5,11 @@
 // ============================================================================
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct CachedObject<V> {
+    pub key: Arc<str>,
     pub value: V,
     pub size_bytes: usize,
     pub origin_cost_micro_usd: u64,
@@ -20,7 +22,7 @@ pub struct CachedObject<V> {
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct PriorityEntry {
     priority_bits: u64,
-    key: String,
+    key: Arc<str>,
 }
 
 impl Ord for PriorityEntry {
@@ -80,10 +82,12 @@ impl<V: Clone> FinOpsGdsfCache<V> {
             return None;
         }
 
-        // Remove old priority node, increment frequency, and re-insert with updated GDSF score
+        let key_arc = Arc::clone(&obj.key);
+
+        // Remove old priority node, increment frequency, and re-insert with updated GDSF score without string allocations
         self.priority_tree.remove(&PriorityEntry {
             priority_bits: obj.priority_key_bits,
-            key: key.to_string(),
+            key: Arc::clone(&key_arc),
         });
         obj.frequency = obj.frequency.saturating_add(1);
         let new_freq = obj.frequency;
@@ -98,7 +102,7 @@ impl<V: Clone> FinOpsGdsfCache<V> {
         }
         self.priority_tree.insert(PriorityEntry {
             priority_bits: new_priority,
-            key: key.to_string(),
+            key: key_arc,
         });
         Some(val)
     }
@@ -122,22 +126,24 @@ impl<V: Clone> FinOpsGdsfCache<V> {
             let Some(lowest) = self.priority_tree.pop_first() else {
                 break;
             };
-            if let Some(evicted) = self.entries.remove(&lowest.key) {
+            if let Some(evicted) = self.entries.remove(&*lowest.key) {
                 self.current_bytes = self.current_bytes.saturating_sub(evicted.size_bytes);
                 // Advance the global inflation clock to the evicted object's priority
                 self.inflation_clock = f64::from_bits(lowest.priority_bits);
             }
         }
 
+        let key_arc: Arc<str> = Arc::from(key.as_str());
         let priority_bits =
             self.compute_priority(1, origin_cost_micro_usd, origin_latency_ms, size_bytes);
         self.priority_tree.insert(PriorityEntry {
             priority_bits,
-            key: key.clone(),
+            key: Arc::clone(&key_arc),
         });
         self.entries.insert(
             key,
             CachedObject {
+                key: key_arc,
                 value,
                 size_bytes,
                 origin_cost_micro_usd,
@@ -156,7 +162,7 @@ impl<V: Clone> FinOpsGdsfCache<V> {
         self.current_bytes = self.current_bytes.saturating_sub(removed.size_bytes);
         self.priority_tree.remove(&PriorityEntry {
             priority_bits: removed.priority_key_bits,
-            key: key.to_string(),
+            key: Arc::clone(&removed.key),
         });
         Some(removed)
     }

@@ -53,10 +53,9 @@ impl StructuralFingerprint {
 
         // 2. Negation and antonym polarity detection
         let lower = prompt.to_lowercase();
-        let clean_tokens: Vec<String> = lower
+        let clean_tokens: Vec<&str> = lower
             .split(|c: char| !c.is_alphanumeric() && c != '\'')
             .filter(|s| !s.is_empty())
-            .map(|s| s.to_string())
             .collect();
 
         const NEGATION_ANTONYM_VOCAB: &[&str] = &[
@@ -104,13 +103,13 @@ impl StructuralFingerprint {
         let mut neg_tokens: Vec<String> = clean_tokens
             .iter()
             .filter(|w| {
-                NEGATION_ANTONYM_VOCAB.contains(&w.as_str())
+                NEGATION_ANTONYM_VOCAB.contains(w)
                     || (w.starts_with("un") && w.len() > 4)
                     || (w.starts_with("dis") && w.len() > 5)
                     || (w.starts_with("non") && w.len() > 5)
                     || w.contains("n't")
             })
-            .cloned()
+            .map(|s| s.to_string())
             .collect();
         neg_tokens.sort();
         neg_tokens.dedup();
@@ -140,7 +139,7 @@ impl StructuralFingerprint {
         let mut temp_tokens: Vec<String> = clean_tokens
             .iter()
             .filter(|w| {
-                TEMPORAL_KEYWORDS.contains(&w.as_str())
+                TEMPORAL_KEYWORDS.contains(w)
                     || (w.len() == 4
                         && (w.starts_with("19") || w.starts_with("20"))
                         && w.chars().all(|c| c.is_ascii_digit()))
@@ -149,7 +148,7 @@ impl StructuralFingerprint {
                         && w[1..].chars().all(|c| matches!(c, '1'..='4')))
                     || (w.starts_with('v') && w.len() >= 3 && w[1..].contains('.'))
             })
-            .cloned()
+            .map(|s| s.to_string())
             .collect();
         temp_tokens.sort();
         temp_tokens.dedup();
@@ -326,11 +325,9 @@ impl StructuralFingerprint {
         let mut content_tokens: Vec<String> = clean_tokens
             .iter()
             .filter(|w| {
-                w.len() >= 3
-                    && !STOPWORDS.contains(&w.as_str())
-                    && !w.chars().all(|c| c.is_ascii_digit())
+                w.len() >= 3 && !STOPWORDS.contains(w) && !w.chars().all(|c| c.is_ascii_digit())
             })
-            .cloned()
+            .map(|s| s.to_string())
             .collect();
         content_tokens.sort();
         content_tokens.dedup();
@@ -339,12 +336,12 @@ impl StructuralFingerprint {
         const QUANTIFIERS: &[&str] = &["every", "all", "each", "any", "none", "no"];
         let mut quantifier_scope_tokens: Vec<String> = Vec::new();
         for (i, w) in clean_tokens.iter().enumerate() {
-            if QUANTIFIERS.contains(&w.as_str()) {
+            if QUANTIFIERS.contains(w) {
                 let start = i.saturating_sub(4);
                 let end = (i + 5).min(clean_tokens.len());
                 for (j_offset, other_token) in clean_tokens[start..end].iter().enumerate() {
                     let j = start + j_offset;
-                    if j != i && neg_tokens.contains(other_token) {
+                    if j != i && neg_tokens.iter().any(|n| n == other_token) {
                         let scope = if j < i {
                             format!("{}_before_{}", other_token, w)
                         } else {

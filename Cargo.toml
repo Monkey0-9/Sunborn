@@ -56,3 +56,15 @@ dashmap = "6.1"
 ed25519-dalek = { version = "2.1", default-features = false, features = ["std", "rand_core", "serde"] }
 unicode-normalization = "0.1"
 
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.bench]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+
