@@ -68,6 +68,11 @@ impl HttpLlmOriginProvider {
             client,
         }
     }
+
+    /// Dedicated factory for xAI Grok API endpoints
+    pub fn for_grok(api_key: Option<String>) -> Self {
+        Self::new("https://api.x.ai/v1", api_key)
+    }
 }
 
 #[async_trait]
@@ -407,6 +412,14 @@ impl LlmOriginProvider for MultiProviderArbitrageRouter {
         {
             ordered_providers.sort_by_key(|p| {
                 if p.name.to_lowercase().contains("openai") {
+                    0
+                } else {
+                    p.priority + 1
+                }
+            });
+        } else if req.model.starts_with("grok-") {
+            ordered_providers.sort_by_key(|p| {
+                if p.name.to_lowercase().contains("grok") || p.name.to_lowercase().contains("xai") {
                     0
                 } else {
                     p.priority + 1

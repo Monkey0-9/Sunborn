@@ -1,0 +1,46 @@
+id,component,claim,evidence_path,evidence_type,status,severity,notes
+E-001,Gateway routes,49 HTTP routes registered,crates/sunborn-gateway/src/lib.rs,count,verified,info,grep -c '.route(' = 49
+E-002,Compile,Workspace builds all targets,crates/,command,verified,info,cargo check exit 0
+E-003,Rust tests,260 tests pass,crates/ apps/,command,verified,info,cargo test 36 binaries
+E-004,Exact cache,In-memory byte-budget cache,crates/sunborn-cache/src/memory.rs,test,verified,info,unit + integration
+E-005,Dragonfly cache,Redis protocol adapter,crates/sunborn-cache/src/dragonfly.rs,code,implemented_unverified,p1,no live cluster test
+E-006,Semantic cascade,4-stage verification, crates/sunborn-semantic/src/decision.rs,test,verified,info,unit stages
+E-007,Default embedder,FNV-1a LSH hash embedder,crates/sunborn-semantic/src/embedding.rs,code,simulated_default,p1,non-semantic; not production
+E-008,HTTP embedder,Remote embedding adapter,crates/sunborn-semantic/src/embedding.rs,code,implemented_unverified,p1,no quality eval
+E-009,Memory vector store,O(n*d) cosine search,crates/sunborn-semantic/src/vector_store.rs,code,verified,p1,not production scale
+E-010,Qdrant adapter,HTTP vector store,crates/sunborn-semantic/src/vector_store.rs,code,implemented_unverified,p1,mock tests only
+E-011,Qdrant delete,Canonical UUID used on delete,crates/sunborn-semantic/src/vector_store.rs,test,verified,info,prior F-006 closed
+E-012,Structural guardrails,Lexical invariant fingerprint,crates/sunborn-semantic/src/guardrails.rs,test,verified,info,heuristic not NLI
+E-013,Cross-encoder NLI,Neural NLI backend,crates/sunborn-semantic/src/guardrails.rs,code,partial,p1,trait only; table scorer wired
+E-014,Conformal calibration,Task-stratified thresholds,crates/sunborn-semantic/src/conformal.rs,code,partial,p0,seeded; in-memory; no artifact
+E-015,OOD detector,Welford streaming drift,crates/sunborn-semantic/src/conformal.rs,test,verified,p1,process-local
+E-016,Certificate signing,Ed25519 + HMAC certificates,crates/sunborn-core/src/certificate.rs,test,verified,info,integrity tested
+E-017,Measured evidence,Read path recomputes fingerprint,crates/sunborn-gateway/src/handlers.rs,code,partial,p0,still lexical
+E-018,Server epochs,Server-derived snapshot epochs,crates/sunborn-gateway/src/handlers.rs,code,verified,info,fixes client-trusted epochs
+E-019,Epoch authority,Monotonic epoch lease,crates/sunborn-invalidation/src/epoch.rs,code,partial,p0,in-process; resets on restart
+E-020,Watermark fence,Per-key writeback fence,crates/sunborn-invalidation/src/watermark.rs,test,verified,p1,process-local
+E-021,Dependency graph,Transitive key closure,crates/sunborn-invalidation/src/graph.rs,test,verified,info,in-memory
+E-022,Neo4j adapter,Cypher graph store,crates/sunborn-invalidation/src/graph.rs,code,implemented_unverified,p1,mock only
+E-023,Graph memory cache,L1 + lineage + Roaring,crates/sunborn-invalidation/src/graph_cache.rs,test,verified,info,on by default
+E-024,RTC invalidation,Exact + vector + graph purge,crates/sunborn-gateway/src/handlers.rs,test,verified,info,invalidate_graph_rtc
+E-025,Doc purge partial failure,Partial purge fails visibly and preserves lineage,crates/sunborn-invalidation/src/graph_cache.rs,test,verified,info,D-04 closed this revision
+E-026,Outbox durability,Transactional outbox,crates/sunborn-invalidation/src/outbox.rs,code,partial,p0,mpsc queue; DB row separate
+E-027,Cluster sync,Cross-pod invalidation,crates/sunborn-invalidation/src/cluster_sync.rs,code,simulated_distributed,p0,tokio broadcast in one process
+E-028,PostgreSQL store,sqlx persistence,crates/sunborn-db/src/postgres.rs,code,implemented_unverified,p0,no live stack in audit
+E-029,Migrations,Single schema authority,migrations/ + crates/sunborn-db/src/postgres.rs,code,broken,p0,two divergent DDL paths
+E-030,Envelope encryption,Per-tenant AES-GCM,TDEK,crates/sunborn-identity/src/crypto_shred.rs,test,verified,info,shred enforced
+E-031,Remote KMS,Vault Transit / AWS KMS,crates/sunborn-identity/src/crypto_shred.rs,code,implemented_unverified,p1,no live KMS test
+E-032,Execution DAG,Merkle + planner,crates/sunborn-execution/,test,verified,info,unit + integration
+E-033,Spend velocity,Atomic budget reservations,crates/sunborn-core/src/finops.rs,test,verified,p1,process-local budget
+E-034,Learning policies,Policy promotion / shadow,crates/sunborn-gateway/src/learning/,test,verified,p1,process-local store
+E-035,Provider adapters,OpenAI/Anthropic/Gemini,crates/sunborn-gateway/src/origin/,code,implemented_unverified,p0,mocked HTTP only
+E-036,Failover,429/503 arbitrage routing,crates/sunborn-gateway/src/origin/provider.rs,code,partial,p1,no live proof
+E-037,Production readiness,Fail-closed startup gates,crates/sunborn-gateway/src/state.rs,test,verified,info,rejects mocks/in-memory
+E-038,Frontend simulator,Fake backend removed,frontend/src/,absence,verified_closed,info,file absent
+E-039,Benchmarks,Performance numbers,benchmarks/*.py,code,simulated,p0,mock Roaring / simulators
+E-040,SBOM,CycloneDX artifact,sbom.cyclonedx.json,code,partial,p1,unsigned no SLSA
+E-041,Multi-replica consistency,Proven cross-pod state,none,absence,absent,p0,D-01/D-02/D-03
+E-042,Graph stats,Fabricated constants,crates/sunborn-gateway/src/handlers.rs,code,broken,p2,max_capacity/hits/misses literals
+E-043,Closure depth,Consistent traversal depth,crates/sunborn-invalidation/src/graph.rs,code,verified,info,all adapters now 10 hops
+E-044,Key hierarchy GC,Edge cleanup on purge,crates/sunborn-invalidation/src/graph.rs,code,broken,p1,unbounded growth
+E-045,Recovery provenance,Rebuild requires valid cert,crates/sunborn-gateway/src/handlers.rs,code,verified,info,improved; epochs not restored

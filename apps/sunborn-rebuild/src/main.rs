@@ -89,16 +89,49 @@ async fn main() -> anyhow::Result<()> {
             Arc::new(DeterministicEmbeddingProvider::new())
         };
 
+    let is_production = std::env::var("SUNBORN_ENV")
+        .map(|v| v.to_lowercase() == "production")
+        .unwrap_or(false);
+
+    let verifying_key: Option<ed25519_dalek::VerifyingKey> =
+        if let Ok(key_hex) = std::env::var("SUNBORN_ATTESTATION_PUBLIC_KEY") {
+            if let Ok(bytes) = hex::decode(key_hex.trim()) {
+                if let Ok(arr) = <[u8; 32]>::try_from(bytes.as_slice()) {
+                    ed25519_dalek::VerifyingKey::from_bytes(&arr).ok()
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            let secret_bytes = std::env::var("SUNBORN_CERTIFICATE_SIGNING_KEY")
+                .ok()
+                .and_then(|k| hex::decode(k.trim()).ok());
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(b"sunborn-derived-ed25519-seed-v1:");
+            if let Some(ref sec) = secret_bytes {
+                hasher.update(sec);
+            } else {
+                hasher.update(b"default-sunborn-deterministic-attestation-seed");
+            }
+            let arr: [u8; 32] = hasher.finalize().into();
+            let sk = ed25519_dalek::SigningKey::from_bytes(&arr);
+            Some(sk.verifying_key())
+        };
+
     let total_records = db.count_cache_entries().await.unwrap_or(0);
     info!(
         total_records,
-        "Durable cache entries detected in PostgreSQL"
+        is_production, "Durable cache entries detected in PostgreSQL"
     );
 
     let batch_size = 500;
     let mut offset = 0;
     let mut exact_reconstructed = 0;
     let mut vector_reconstructed = 0;
+    let mut unverified_skipped = 0;
 
     loop {
         let batch = db.scan_cache_entries(batch_size, offset).await?;
@@ -110,18 +143,75 @@ async fn main() -> anyhow::Result<()> {
         offset += batch_count;
 
         for record in batch {
-            // 1. Rebuild Exact Cache entry
+            // Trust Monotonicity Invariant: Validate cryptographic attestation before admission
+            let certificate: Option<sunborn_core::ReuseCertificate> = match &record.certificate_json
+            {
+                Some(json_str) => serde_json::from_str(json_str).ok(),
+                None => None,
+            };
+
+            let mut is_provenance_verified = false;
+            if let Some(ref cert) = certificate {
+                let sig_ok = if let Some(ref vk) = verifying_key {
+                    cert.verify_signature_ed25519(vk).is_ok()
+                } else {
+                    true
+                };
+                let expected_root = sunborn_core::ReuseCertificate::compute_merkle_root(
+                    &cert.certificate_id,
+                    cert.certificate_version,
+                    &cert.tenant_id,
+                    &cert.application_id,
+                    &cert.request_identity_hash,
+                    &cert.model_name,
+                    cert.prompt_tokens,
+                    &cert.source_snapshots,
+                    &cert.safety_evidence,
+                    &cert.validity_window,
+                    &cert.reference_fingerprint,
+                );
+                let integrity_ok = cert.merkle_root == expected_root;
+
+                if sig_ok && integrity_ok {
+                    is_provenance_verified = true;
+                } else if is_production {
+                    tracing::warn!(key = %record.key, "Record failed cryptographic verification during rebuild; skipping");
+                    unverified_skipped += 1;
+                    continue;
+                }
+            } else if is_production {
+                tracing::warn!(key = %record.key, "Record has no certificate in production rebuild; skipping");
+                unverified_skipped += 1;
+                continue;
+            }
+
+            // 1. Rebuild Exact Cache entry with provenance metadata
             let ttl_secs = record
                 .expires_at
                 .map(|exp| (exp - Utc::now()).num_seconds().max(1) as u64)
                 .unwrap_or(86400);
 
-            let entry = CacheEntry::new(&record.key, &record.content, Some(ttl_secs));
+            let mut entry = CacheEntry::new(&record.key, &record.content, Some(ttl_secs));
+            entry.metadata["provenance_verified"] = serde_json::Value::Bool(is_provenance_verified);
+            if let Some(ref cert) = certificate {
+                if let Ok(cert_val) = serde_json::to_value(cert) {
+                    entry.metadata["certificate"] = cert_val;
+                }
+            }
             cache.set(entry).await?;
             exact_reconstructed += 1;
 
-            // 2. Reconstruct Semantic Vector entry
+            // 2. Reconstruct Semantic Vector entry with verified provenance metadata
             let vector = embedder.embed(&record.prompt_canonical).await?;
+            let mut meta = serde_json::json!({
+                "model": record.model,
+                "provenance_verified": is_provenance_verified,
+            });
+            if let Some(ref cert) = certificate {
+                if let Ok(cert_val) = serde_json::to_value(cert) {
+                    meta["certificate"] = cert_val;
+                }
+            }
             let ventry = VectorEntry {
                 id: record.key.clone(),
                 tenant_id: TenantId::new(record.tenant_id),
@@ -129,7 +219,7 @@ async fn main() -> anyhow::Result<()> {
                 prompt: record.prompt_canonical,
                 content: record.content,
                 vector,
-                metadata: serde_json::json!({ "model": record.model }),
+                metadata: meta,
                 created_at: record.created_at,
             };
             vector_store.insert(ventry).await?;
@@ -138,7 +228,10 @@ async fn main() -> anyhow::Result<()> {
 
         info!(
             scanned = offset,
-            exact_reconstructed, vector_reconstructed, "Processed rebuild batch"
+            exact_reconstructed,
+            vector_reconstructed,
+            unverified_skipped,
+            "Processed rebuild batch"
         );
     }
 

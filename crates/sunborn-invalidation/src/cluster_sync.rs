@@ -98,6 +98,126 @@ impl ClusterBroadcastTransport for InMemoryClusterTransport {
     }
 }
 
+/// Production Redis / Dragonfly Cluster Broadcast Transport.
+/// Uses Redis Pub/Sub (`PUBLISH` / `SUBSCRIBE`) across independent cluster pods.
+pub struct RedisClusterTransport {
+    client: redis::Client,
+    sender: broadcast::Sender<ClusterInvalidationMessage>,
+    pod_id: String,
+    channel_name: String,
+}
+
+impl RedisClusterTransport {
+    pub fn new(redis_url: &str, pod_id: impl Into<String>, capacity: usize) -> Result<Arc<Self>> {
+        let client = redis::Client::open(redis_url).map_err(|e| {
+            sunborn_core::SunbornError::internal(format!("Invalid Redis cluster URL: {e}"))
+        })?;
+        let (sender, _) = broadcast::channel(capacity.max(16));
+        let pod_id = pod_id.into();
+        let channel_name = CLUSTER_INVALIDATION_CHANNEL.to_string();
+
+        let transport = Arc::new(Self {
+            client,
+            sender,
+            pod_id,
+            channel_name,
+        });
+
+        // Spawn background listener to pull from Redis Pub/Sub into local broadcast channel
+        transport.clone().start_subscriber();
+
+        Ok(transport)
+    }
+
+    fn start_subscriber(self: Arc<Self>) {
+        let client = self.client.clone();
+        let channel = self.channel_name.clone();
+        let tx = self.sender.clone();
+        let pod_id = self.pod_id.clone();
+
+        tokio::spawn(async move {
+            loop {
+                match client.get_async_pubsub().await {
+                    Ok(mut pubsub) => {
+                        if let Err(e) = pubsub.subscribe(&channel).await {
+                            tracing::warn!(error = %e, channel = %channel, "Redis pubsub subscribe failed, retrying in 500ms");
+                            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                            continue;
+                        }
+                        tracing::info!(pod = %pod_id, channel = %channel, "Subscribed to Redis cluster invalidation bus");
+
+                        use futures_util::StreamExt;
+                        let mut stream = pubsub.into_on_message();
+                        while let Some(msg) = stream.next().await {
+                            if let Ok(payload_str) = msg.get_payload::<String>() {
+                                if let Ok(parsed) =
+                                    serde_json::from_str::<ClusterInvalidationMessage>(&payload_str)
+                                {
+                                    let _ = tx.send(parsed);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Redis connection failed in cluster subscriber, retrying in 1s");
+                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    }
+                }
+            }
+        });
+    }
+}
+
+#[async_trait]
+impl ClusterBroadcastTransport for RedisClusterTransport {
+    async fn publish(&self, channel: &str, message: &ClusterInvalidationMessage) -> Result<()> {
+        use redis::AsyncCommands;
+        let mut conn = self
+            .client
+            .get_multiplexed_async_connection()
+            .await
+            .map_err(|e| {
+                sunborn_core::SunbornError::internal(format!("Redis publish connection error: {e}"))
+            })?;
+        let payload = serde_json::to_string(message).map_err(|e| {
+            sunborn_core::SunbornError::internal(format!(
+                "Cluster message serialization error: {e}"
+            ))
+        })?;
+
+        let _: () = conn.publish(channel, payload).await.map_err(|e| {
+            sunborn_core::SunbornError::internal(format!("Redis publish command failed: {e}"))
+        })?;
+
+        // Deliver to local subscribers as well
+        let _ = self.sender.send(message.clone());
+        Ok(())
+    }
+
+    async fn subscribe(
+        &self,
+        _channel: &str,
+    ) -> Result<broadcast::Receiver<ClusterInvalidationMessage>> {
+        Ok(self.sender.subscribe())
+    }
+}
+
+/// Helper to construct the appropriate cluster broadcast transport based on environment.
+pub fn create_cluster_transport(
+    pod_id: &str,
+    redis_url: Option<&str>,
+    capacity: usize,
+) -> Arc<dyn ClusterBroadcastTransport> {
+    if let Some(url) = redis_url {
+        if !url.trim().is_empty() {
+            if let Ok(transport) = RedisClusterTransport::new(url, pod_id, capacity) {
+                return transport;
+            }
+        }
+    }
+    Arc::new(InMemoryClusterTransport::new(capacity))
+}
+
 /// Distributed Graph Synchronization Engine
 ///
 /// Coordinates cross-pod invalidation propagation:
@@ -229,14 +349,21 @@ impl DistributedGraphSyncEngine {
     }
 
     /// Spawns a background listener task that monitors the cluster transport channel.
-    pub fn start_listener(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
-        tokio::spawn(async move {
-            if let Ok(mut rx) = self.transport.subscribe(CLUSTER_INVALIDATION_CHANNEL).await {
-                while let Ok(msg) = rx.recv().await {
-                    let _ = self.handle_cluster_message(&msg).await;
+    pub fn start_listener(self: Arc<Self>) -> Option<tokio::task::JoinHandle<()>> {
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            Some(handle.spawn(async move {
+                if let Ok(mut rx) = self.transport.subscribe(CLUSTER_INVALIDATION_CHANNEL).await {
+                    while let Ok(msg) = rx.recv().await {
+                        let _ = self.handle_cluster_message(&msg).await;
+                    }
                 }
-            }
-        })
+            }))
+        } else {
+            tracing::warn!(
+                "start_listener invoked outside Tokio runtime; cluster listener not spawned"
+            );
+            None
+        }
     }
 }
 
@@ -319,5 +446,22 @@ mod tests {
         // Echo suppression: Pod 1 must have suppressed its own echo
         assert_eq!(sync_pod1.echoes_suppressed(), 1);
         assert_eq!(sync_pod1.messages_published(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_create_cluster_transport_factory() {
+        let in_mem = create_cluster_transport("pod-1", None, 128);
+        let mut rx = in_mem.subscribe("test").await.unwrap();
+        let msg =
+            ClusterInvalidationMessage::new("pod-1", TenantId::new("t1"), vec![1, 2], vec![], 1);
+        in_mem.publish("test", &msg).await.unwrap();
+        let received = rx.recv().await.unwrap();
+        assert_eq!(received.origin_pod_id, "pod-1");
+        assert_eq!(received.mutated_doc_hashes, vec![1, 2]);
+
+        // Redis URL parsing
+        let redis_transport =
+            create_cluster_transport("pod-2", Some("redis://127.0.0.1:6379"), 128);
+        assert!(redis_transport.subscribe("test").await.is_ok());
     }
 }

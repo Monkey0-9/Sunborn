@@ -236,7 +236,8 @@ impl KnowledgeGraphStore for Neo4jCypherGraphStore {
     }
 
     async fn get_affected_cache_keys(&self, source_id: &Uuid) -> Result<Vec<String>> {
-        let cypher = "MATCH (k:CacheKey)-[:DEPENDS_ON*1..5]->(s:KnowledgeSource {id: $source_id}) \
+        let cypher =
+            "MATCH (k:CacheKey)-[:DEPENDS_ON*1..10]->(s:KnowledgeSource {id: $source_id}) \
                       RETURN DISTINCT k.key AS key";
         let params = serde_json::json!({
             "source_id": source_id.to_string()
@@ -414,7 +415,8 @@ impl KnowledgeGraphStore for MockNeo4jCypherStore {
     }
 
     async fn get_affected_cache_keys(&self, source_id: &Uuid) -> Result<Vec<String>> {
-        let cypher = "MATCH (k:CacheKey)-[:DEPENDS_ON*1..5]->(s:KnowledgeSource {id: $source_id}) \
+        let cypher =
+            "MATCH (k:CacheKey)-[:DEPENDS_ON*1..10]->(s:KnowledgeSource {id: $source_id}) \
                       RETURN DISTINCT k.key AS key";
         let params = serde_json::json!({
             "source_id": source_id.to_string()
@@ -432,7 +434,7 @@ impl KnowledgeGraphStore for MockNeo4jCypherStore {
 
         let hierarchy = self.key_hierarchy.read().await;
         let mut frontier: Vec<String> = affected.iter().cloned().collect();
-        for _ in 0..5 {
+        for _ in 0..10 {
             let mut next_frontier = Vec::new();
             for item in frontier {
                 if let Some(children) = hierarchy.get(&item) {
@@ -724,7 +726,7 @@ mod tests {
             .any(|(q, _)| q.contains("MERGE (s:KnowledgeSource") && q.contains("[:DEPENDS_ON]")));
         assert!(queries
             .iter()
-            .any(|(q, _)| q.contains("MATCH (k:CacheKey)-[:DEPENDS_ON*1..5]->")));
+            .any(|(q, _)| q.contains("MATCH (k:CacheKey)-[:DEPENDS_ON*1..10]->")));
 
         // 5. Clear dependencies triggers DETACH DELETE
         graph.clear_dependencies(&source_id).await;

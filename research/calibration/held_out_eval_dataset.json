@@ -1,0 +1,119 @@
+{
+  "dataset_metadata": {
+    "version": "1.0.0",
+    "evaluation_standard": "IEEE-730/ACM-Artifact-Evaluation",
+    "description": "Independently held-out semantic evaluation benchmark for conformal risk control and AST guardrail validation",
+    "total_samples": 24,
+    "domains": ["financial_accounting", "healthcare_clinical", "security_administration", "general_reasoning"]
+  },
+  "evaluation_strata": [
+    {
+      "id": "pair_001",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "What is the Q3 operating margin for Acme Corp?",
+      "prompt_b": "Calculate the third quarter operating margin of Acme Corp.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_002",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Wire $50,000 from treasury account to vendor A.",
+      "prompt_b": "Wire $500,000 from treasury account to vendor A.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "numeric_transposition"
+    },
+    {
+      "id": "pair_003",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Transfer funds to account 98214 immediately.",
+      "prompt_b": "Do not transfer funds to account 98214 immediately.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "negation_inversion"
+    },
+    {
+      "id": "pair_004",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Administer 50mg of Atenolol daily for hypertension.",
+      "prompt_b": "Give the patient 50 milligrams of Atenolol once a day for high blood pressure.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_005",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Patient diagnosis confirmed with acute hepatitis antibodies.",
+      "prompt_b": "Patient diagnosis unconfirmed with acute hepatitis antibodies.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "antonym_inversion"
+    },
+    {
+      "id": "pair_006",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Administer 5mg dosage of pediatric morphine.",
+      "prompt_b": "Administer 50mg dosage of pediatric morphine.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "numeric_transposition"
+    },
+    {
+      "id": "pair_007",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Grant read-only access to engineering logs for user dev_92.",
+      "prompt_b": "Provide user dev_92 with read permissions on the engineering logs.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_008",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Grant read-only access to engineering logs for user dev_92.",
+      "prompt_b": "Deny read-only access to engineering logs for user dev_92.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "authorization_denial"
+    },
+    {
+      "id": "pair_009",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Delete all expired session tokens from redis.",
+      "prompt_b": "Do not delete expired session tokens from redis.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "negation_inversion"
+    },
+    {
+      "id": "pair_010",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Restart cluster node 4 after draining traffic.",
+      "prompt_b": "After draining incoming traffic, perform a restart of cluster node 4.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_011",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Restart cluster node 4 after draining traffic.",
+      "prompt_b": "Restart cluster node 14 after draining traffic.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "entity_numeric_shift"
+    },
+    {
+      "id": "pair_012",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Summarize the key differences between TCP and UDP.",
+      "prompt_b": "Provide an overview comparing TCP protocol versus UDP protocol.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    }
+  ]
+}

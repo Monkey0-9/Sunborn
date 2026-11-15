@@ -7,6 +7,14 @@
 **Repo:** `C:\Sunborn`
 **Auditor role:** independent principal-engineer review (code, not marketing)
 
+> **Superseding notice (2026-11-14, baseline `e8edc4b`):** documents 01–49 are the original
+> audit. Several specifics have since changed and are now contradicted by the code (graph cache
+> is on by default, the Qdrant delete-ID bug is fixed, admission evidence is measured at read
+> time, the frontend simulator is gone, the Rust suite is 258 tests, not 315). Read
+> **[`50_MASTER_EVIDENCE_REGISTER.md`](50_MASTER_EVIDENCE_REGISTER.md)** first — it wins on any
+> conflict — then [`51_SEMANTIC_GRAPH_MEMORY_DESIGN.md`](51_SEMANTIC_GRAPH_MEMORY_DESIGN.md) and
+> [`52_MASTER_REMEDIATION_PLAN.md`](52_MASTER_REMEDIATION_PLAN.md).
+
 ---
 
 ## Purpose

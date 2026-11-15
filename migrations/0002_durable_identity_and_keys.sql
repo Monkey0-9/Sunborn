@@ -5,7 +5,7 @@
 
 -- 6. Persistent Enveloped Tenant Data Encryption Keys (TDEK)
 CREATE TABLE IF NOT EXISTS tenant_wrapped_keys (
-    tenant_id VARCHAR(64) PRIMARY KEY,
+    tenant_id VARCHAR(128) PRIMARY KEY,
     key_version INTEGER NOT NULL DEFAULT 1,
     wrapped_tdek BYTEA NOT NULL,
     kms_provider VARCHAR(64) NOT NULL DEFAULT 'local-aead',
@@ -15,9 +15,9 @@ CREATE TABLE IF NOT EXISTS tenant_wrapped_keys (
 
 -- 7. Durable API Credentials & Tenant RBAC Registry
 CREATE TABLE IF NOT EXISTS api_credentials (
-    key_hash VARCHAR(64) PRIMARY KEY,
-    tenant_id VARCHAR(64) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    application_id VARCHAR(64) NOT NULL,
+    key_hash VARCHAR(128) PRIMARY KEY,
+    tenant_id VARCHAR(128) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    application_id VARCHAR(128) NOT NULL,
     rate_limit_rps INTEGER NOT NULL DEFAULT 100,
     allowed_models JSONB NOT NULL DEFAULT '["*"]'::jsonb,
     is_admin BOOLEAN NOT NULL DEFAULT FALSE,

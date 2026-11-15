@@ -19,6 +19,16 @@ use sunborn_core::{Result, SunbornError};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+/// Derives a stable, deterministic 64-bit integer hash from arbitrary byte data using SHA-256.
+/// Guarantees cross-restart and cross-replica stability for Roaring Treemaps, unlike randomized SipHash.
+pub fn deterministic_hash_64(data: &[u8]) -> u64 {
+    use sha2::Digest;
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(data);
+    let result = hasher.finalize();
+    u64::from_be_bytes(result[0..8].try_into().unwrap())
+}
+
 /// Statistics representing active graph cache topology and lineage associations.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GraphCacheStats {
@@ -196,7 +206,8 @@ impl GraphMemoryCache {
         &self,
         doc_hashes: &[u64],
     ) -> Result<(RoaringTreemap, Vec<String>)> {
-        let affected_records = self.lineage_graph.invalidate_documents(doc_hashes);
+        // Peek first: lineage must survive a failed purge so the deletion can be retried.
+        let affected_records = self.lineage_graph.peek_documents(doc_hashes);
         let mut purged_keys = Vec::new();
         let mut failed_keys = Vec::new();
 
@@ -231,12 +242,18 @@ impl GraphMemoryCache {
         purged_keys.sort();
         purged_keys.dedup();
 
-        if !failed_keys.is_empty() && purged_keys.is_empty() {
+        if !failed_keys.is_empty() {
+            // Never report a partial purge as success: callers must see the failure and
+            // lineage mappings are preserved so the purge can be retried.
             return Err(SunbornError::internal(format!(
-                "Failed to purge cache keys for doc hashes: {} failures",
+                "Doc purge incomplete: {} purged, {} failed (lineage preserved for retry)",
+                purged_keys.len(),
                 failed_keys.len()
             )));
         }
+
+        // All keys acknowledged: now it is safe to drop the document lineage.
+        let _ = self.lineage_graph.invalidate_documents(doc_hashes);
 
         Ok((affected_records, purged_keys))
     }
@@ -298,6 +315,64 @@ impl ExactCacheStore for GraphMemoryCache {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sunborn_core::SunbornError;
+
+    struct FailingDeleteCache;
+
+    #[async_trait]
+    impl ExactCacheStore for FailingDeleteCache {
+        async fn get(&self, _key: &str) -> Result<Option<CacheEntry>> {
+            Ok(None)
+        }
+        async fn set(&self, _entry: CacheEntry) -> Result<()> {
+            Ok(())
+        }
+        async fn delete(&self, _key: &str) -> Result<bool> {
+            Err(SunbornError::internal("simulated backend deletion failure"))
+        }
+        async fn exists(&self, _key: &str) -> Result<bool> {
+            Ok(true)
+        }
+        async fn delete_by_prefix(&self, _prefix: &str) -> Result<usize> {
+            Ok(0)
+        }
+        async fn count_by_prefix(&self, _prefix: &str) -> Result<usize> {
+            Ok(0)
+        }
+        async fn sweep_expired(&self) -> Result<usize> {
+            Ok(0)
+        }
+    }
+
+    #[tokio::test]
+    async fn test_doc_purge_partial_failure_is_visible_and_lineage_preserved() {
+        let cache = GraphMemoryCache::new(
+            Arc::new(FailingDeleteCache),
+            Arc::new(DependencyGraph::new()),
+            Arc::new(CompressedLineageGraph::new()),
+        );
+
+        cache
+            .set_with_lineage(
+                CacheEntry::new("cache:doc:retry", "retryable content", Some(3600)),
+                &[],
+                &[777_001],
+                7,
+            )
+            .await
+            .unwrap();
+
+        let result = cache.invalidate_docs_rtc_purge(&[777_001]).await;
+        assert!(result.is_err(), "partial purge must not return Ok");
+        assert!(
+            cache.lineage_graph().contains_document(777_001),
+            "lineage must survive a failed purge so the operation can be retried"
+        );
+        assert!(
+            cache.exists("cache:doc:retry").await.unwrap(),
+            "failed deletion must leave the cache entry visible"
+        );
+    }
 
     #[tokio::test]
     async fn test_graph_memory_cache_store_and_rtc_invalidation() {

@@ -30,8 +30,8 @@ CREATE TABLE IF NOT EXISTS tenant_encryption_keys (
 -- 2. FinOps Accounting & Token Avoidance Ledger
 CREATE TABLE IF NOT EXISTS finops_ledger (
     id BIGSERIAL PRIMARY KEY,
-    tenant_id VARCHAR(64) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    application_id VARCHAR(64) NOT NULL,
+    tenant_id VARCHAR(128) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    application_id VARCHAR(128) NOT NULL,
     model VARCHAR(128) NOT NULL,
     cache_tier VARCHAR(32) NOT NULL,
     prompt_tokens_avoided BIGINT NOT NULL DEFAULT 0,

@@ -53,6 +53,19 @@ impl CompressedLineageGraph {
         }
     }
 
+    /// Computes the affected record union **without** removing lineage mappings.
+    /// Used so a failed cache/vector deletion can be retried: lineage is only cleared
+    /// after every purge is positively acknowledged.
+    pub fn peek_documents(&self, mutated_doc_hashes: &[u64]) -> RoaringTreemap {
+        let mut affected = RoaringTreemap::new();
+        for &doc_hash in mutated_doc_hashes {
+            if let Some(bitmap) = self.doc_to_records.get(&doc_hash) {
+                affected |= bitmap.value().clone();
+            }
+        }
+        affected
+    }
+
     /// Computes the exact deduplicated union of all cache records affected by a multi-document update
     /// in $O(k)$ SIMD time using fast bitwise OR (`|=`) across compressed Roaring 64-bit containers.
     pub fn invalidate_documents(&self, mutated_doc_hashes: &[u64]) -> RoaringTreemap {

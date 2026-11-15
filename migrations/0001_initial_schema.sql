@@ -5,9 +5,9 @@
 
 -- 1. Multi-Tenancy & Applications
 CREATE TABLE IF NOT EXISTS tenants (
-    id VARCHAR(64) PRIMARY KEY,
+    id VARCHAR(128) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
-    status VARCHAR(32) NOT NULL DEFAULT 'active',
+    status VARCHAR(64) NOT NULL DEFAULT 'active',
     rate_limit_rps INTEGER NOT NULL DEFAULT 100,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS tenants (
 
 CREATE TABLE IF NOT EXISTS applications (
     id VARCHAR(64) NOT NULL,
-    tenant_id VARCHAR(64) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    tenant_id VARCHAR(128) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     api_key_hash VARCHAR(128) NOT NULL,
     status VARCHAR(32) NOT NULL DEFAULT 'active',
@@ -25,12 +25,12 @@ CREATE TABLE IF NOT EXISTS applications (
 
 -- 2. Durable Cache Metadata
 CREATE TABLE IF NOT EXISTS durable_cache_entries (
-    key VARCHAR(255) PRIMARY KEY,
-    tenant_id VARCHAR(64) NOT NULL,
-    application_id VARCHAR(64) NOT NULL,
+    key VARCHAR(512) PRIMARY KEY,
+    tenant_id VARCHAR(128) NOT NULL,
+    application_id VARCHAR(128) NOT NULL,
     model VARCHAR(128) NOT NULL,
-    policy_version VARCHAR(32) NOT NULL,
-    hash VARCHAR(64) NOT NULL,
+    policy_version VARCHAR(64) NOT NULL,
+    hash VARCHAR(128) NOT NULL,
     prompt_canonical TEXT NOT NULL,
     content TEXT NOT NULL,
     hit_count BIGINT NOT NULL DEFAULT 0,
@@ -45,7 +45,7 @@ CREATE INDEX IF NOT EXISTS idx_durable_cache_expires_at ON durable_cache_entries
 -- 3. Knowledge Sources & Document Version Graph
 CREATE TABLE IF NOT EXISTS knowledge_sources (
     id UUID PRIMARY KEY,
-    tenant_id VARCHAR(64) NOT NULL,
+    tenant_id VARCHAR(128) NOT NULL,
     name VARCHAR(255) NOT NULL,
     uri TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS document_versions (
 
 CREATE TABLE IF NOT EXISTS dependency_edges (
     source_id UUID NOT NULL REFERENCES knowledge_sources(id) ON DELETE CASCADE,
-    cache_key VARCHAR(255) NOT NULL REFERENCES durable_cache_entries(key) ON DELETE CASCADE,
+    cache_key VARCHAR(512) NOT NULL REFERENCES durable_cache_entries(key) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (source_id, cache_key)
 );
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS dependency_edges (
 -- 4. Invalidation Outbox Queue
 CREATE TABLE IF NOT EXISTS invalidation_outbox (
     id BIGSERIAL PRIMARY KEY,
-    tenant_id VARCHAR(64) NOT NULL,
+    tenant_id VARCHAR(128) NOT NULL,
     entity_type VARCHAR(64) NOT NULL,
     entity_id VARCHAR(255) NOT NULL,
     action VARCHAR(32) NOT NULL,
@@ -85,8 +85,8 @@ CREATE INDEX IF NOT EXISTS idx_outbox_status ON invalidation_outbox(status);
 -- 5. Decision & Audit Records
 CREATE TABLE IF NOT EXISTS decision_records (
     request_id UUID PRIMARY KEY,
-    tenant_id VARCHAR(64) NOT NULL,
-    application_id VARCHAR(64) NOT NULL,
+    tenant_id VARCHAR(128) NOT NULL,
+    application_id VARCHAR(128) NOT NULL,
     action VARCHAR(32) NOT NULL,
     cache_path VARCHAR(32) NOT NULL,
     confidence REAL NOT NULL,

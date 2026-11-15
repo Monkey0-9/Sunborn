@@ -20,7 +20,6 @@ use sunborn_core::{
 };
 use sunborn_execution::ExecutionCacheStore;
 use sunborn_identity::{EncryptedEnvelope, IdentityEngine};
-use sunborn_invalidation::InvalidationEvent;
 use sunborn_semantic::{EmbeddingProvider, VectorEntry, VectorStore};
 use uuid::Uuid;
 
@@ -962,22 +961,19 @@ pub async fn execute_request_inner(
                             .iter()
                             .map(|s| s.source_id)
                             .collect();
-                        // Derive doc_hashes by combining source_id and content_hash (P0-01 D)
+                        // Derive doc_hashes by combining source_id and content_hash deterministically
                         let doc_hashes: Vec<u64> = req
                             .dependency_snapshots
                             .iter()
                             .map(|s| {
-                                let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                                std::hash::Hash::hash(&s.source_id, &mut hasher);
-                                std::hash::Hash::hash(&s.content_hash, &mut hasher);
-                                std::hash::Hasher::finish(&hasher)
+                                let mut bytes = Vec::with_capacity(64);
+                                bytes.extend_from_slice(s.source_id.as_bytes());
+                                bytes.extend_from_slice(s.content_hash.as_bytes());
+                                sunborn_invalidation::deterministic_hash_64(&bytes)
                             })
                             .collect();
-                        let record_id = {
-                            let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                            std::hash::Hash::hash(&identity.key, &mut hasher);
-                            std::hash::Hasher::finish(&hasher)
-                        };
+                        let record_id =
+                            sunborn_invalidation::deterministic_hash_64(identity.key.as_bytes());
                         if let Err(e) = gmc
                             .set_with_lineage(entry, &source_ids, &doc_hashes, record_id)
                             .await
@@ -1425,40 +1421,13 @@ pub async fn trigger_invalidation(
         .require_admin()
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
 
-    let event = InvalidationEvent {
-        id: Uuid::new_v4(),
-        tenant_id: TenantId::new(payload.tenant_id.clone()),
-        source_id: payload.source_id,
-        version_tag: payload.version_tag.clone(),
-        timestamp: Utc::now(),
-    };
-
-    state
-        .invalidation_engine
-        .publish(event)
+    // Authoritative Orchestrated Invalidation (D-04, D-07, D-10 unified)
+    let tenant_id = TenantId::new(payload.tenant_id.clone());
+    let purge_report = state
+        .orchestrator
+        .purge_sources(&tenant_id, &[payload.source_id])
         .await
         .map_err(AppError::from)?;
-
-    let evicted_count = state
-        .invalidation_engine
-        .process_next()
-        .await
-        .map_err(AppError::from)?
-        .unwrap_or(0);
-
-    // Immediate Real-Time Causal (RTC) cache purge on graph memory cache
-    if let Some(ref gmc) = state.graph_memory_cache {
-        let _ = gmc.invalidate_source_rtc(&payload.source_id).await;
-    }
-
-    let bumped_epoch = state
-        .epoch_lease_manager
-        .bump_epoch(payload.source_id)
-        .await;
-
-    let bumped_watermark = state
-        .watermark_fencer
-        .advance_watermark(&payload.source_id.to_string());
 
     // Record invalidation in durable PostgreSQL outbox table
     let outbox_record = sunborn_db::models::OutboxRecord {
@@ -1470,31 +1439,25 @@ pub async fn trigger_invalidation(
         payload: json!({
             "source_id": payload.source_id,
             "version_tag": payload.version_tag,
-            "bumped_epoch": bumped_epoch,
+            "bumped_epoch": purge_report.bumped_epoch,
+            "purged_keys": purge_report.purged_cache_keys,
         }),
         status: "processed".to_string(),
         created_at: Utc::now(),
     };
-    let _ = state.db.insert_outbox_event(outbox_record).await;
-
-    // Broadcast across distributed cluster pods if cluster sync is active
-    if let Some(ref sync_engine) = state.cluster_sync_engine {
-        let _ = sync_engine
-            .publish_and_invalidate(
-                TenantId::new(payload.tenant_id.clone()),
-                vec![],
-                vec![payload.source_id],
-                bumped_epoch,
-            )
-            .await;
+    if let Err(e) = state.db.insert_outbox_event(outbox_record).await {
+        tracing::warn!(error = %e, "Failed to insert outbox event into DB");
     }
 
     Ok(Json(json!({
         "status": "processed",
         "source_id": payload.source_id,
-        "bumped_epoch": bumped_epoch,
-        "bumped_watermark": bumped_watermark,
-        "evicted_cache_count": evicted_count
+        "bumped_epoch": purge_report.bumped_epoch,
+        "bumped_watermark": purge_report.watermark_advanced,
+        "evicted_cache_count": purge_report.purged_cache_keys.len(),
+        "purged_cache_keys": purge_report.purged_cache_keys,
+        "failed_cache_keys": purge_report.failed_cache_keys,
+        "cluster_broadcast_sent": purge_report.cluster_broadcast_sent,
     })))
 }
 
@@ -1605,6 +1568,11 @@ pub async fn invalidate_graph_rtc(
     let mut affected_doc_records_count = 0;
 
     for src in &payload.source_ids {
+        // Fence before deletion: bump the authoritative epoch and write-back watermark
+        // first so a concurrent completion cannot repopulate the entry mid-purge.
+        state.epoch_lease_manager.bump_epoch(*src).await;
+        state.watermark_fencer.advance_watermark(&src.to_string());
+
         let keys = state.dependency_graph.get_affected_cache_keys(src).await;
         let mut successfully_deleted_for_src = Vec::new();
 
@@ -1628,7 +1596,10 @@ pub async fn invalidate_graph_rtc(
                 successfully_deleted_for_src.push(k.clone());
                 purged_keys.push(k.clone());
                 // Remove individual dependency edge upon confirmed multi-tier deletion
-                let _ = state.dependency_graph.remove_dependency(src, k).await;
+                if let Err(e) = state.dependency_graph.remove_dependency(src, k).await {
+                    tracing::error!(source_id = %src, key = %k, error = %e, "Graph edge removal failed");
+                    failed_keys.push((k.clone(), format!("dependency_graph: {e}")));
+                }
             }
         }
 
@@ -1639,7 +1610,8 @@ pub async fn invalidate_graph_rtc(
                     purged_keys.extend(gmc_keys);
                 }
                 Err(e) => {
-                    tracing::warn!(source_id = %src, error = %e, "GMC source RTC purge had warnings");
+                    tracing::error!(source_id = %src, error = %e, "Graph memory cache purge failed during RTC invalidation");
+                    failed_keys.push((format!("graph_memory:{src}"), e.to_string()));
                 }
             }
         }
@@ -1648,9 +1620,6 @@ pub async fn invalidate_graph_rtc(
         if successfully_deleted_for_src.len() == keys.len() {
             state.dependency_graph.clear_dependencies(src).await;
         }
-
-        state.epoch_lease_manager.bump_epoch(*src).await;
-        state.watermark_fencer.advance_watermark(&src.to_string());
     }
 
     if !payload.doc_hashes.is_empty() {
@@ -1658,11 +1627,16 @@ pub async fn invalidate_graph_rtc(
             match gmc.invalidate_docs_rtc_purge(&payload.doc_hashes).await {
                 Ok((affected, doc_keys)) => {
                     affected_doc_records_count = affected.len() as usize;
-                    // Also purge corresponding vectors for doc keys
+                    // Also purge corresponding vectors for doc keys. A failed vector
+                    // delete is a failed purge, never a silent success.
                     for k in &doc_keys {
-                        let _ = state.vector_store.delete(k).await;
+                        if let Err(e) = state.vector_store.delete(k).await {
+                            tracing::error!(key = %k, error = %e, "Vector delete failed during document RTC purge");
+                            failed_keys.push((k.clone(), format!("vector_store: {e}")));
+                        } else {
+                            purged_keys.push(k.clone());
+                        }
                     }
-                    purged_keys.extend(doc_keys);
                 }
                 Err(e) => {
                     tracing::error!(error = %e, "Document hash RTC purge failed");
@@ -1724,8 +1698,19 @@ pub async fn delete_cache(
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
 
     let deleted = state.cache.delete(&key).await.map_err(AppError::from)?;
-    let _ = state.vector_store.delete(&key).await;
-    Ok(Json(json!({ "key": key, "deleted": deleted })))
+    let vector_deleted = match state.vector_store.delete(&key).await {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::error!(key = %key, error = %err, "Vector store delete failed during cache deletion");
+            if sunborn_core::is_production_mode() {
+                return Err(AppError::from(err));
+            }
+            false
+        }
+    };
+    Ok(Json(
+        json!({ "key": key, "deleted": deleted, "vector_deleted": vector_deleted }),
+    ))
 }
 
 #[derive(Deserialize)]
@@ -2179,20 +2164,19 @@ pub async fn trigger_rebuild(
                     .source_snapshots
                     .iter()
                     .map(|s| {
-                        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                        std::hash::Hash::hash(&s.source_id, &mut hasher);
-                        std::hash::Hash::hash(&s.content_hash, &mut hasher);
-                        std::hash::Hasher::finish(&hasher)
+                        let mut bytes = Vec::with_capacity(64);
+                        bytes.extend_from_slice(s.source_id.as_bytes());
+                        bytes.extend_from_slice(s.content_hash.as_bytes());
+                        sunborn_invalidation::deterministic_hash_64(&bytes)
                     })
                     .collect();
-                let record_id = {
-                    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-                    std::hash::Hash::hash(&record.key, &mut hasher);
-                    std::hash::Hasher::finish(&hasher)
-                };
-                let _ = gmc
+                let record_id = sunborn_invalidation::deterministic_hash_64(record.key.as_bytes());
+                if let Err(e) = gmc
                     .set_with_lineage(entry, &source_ids, &doc_hashes, record_id)
-                    .await;
+                    .await
+                {
+                    tracing::warn!(key = %record.key, error = %e, "Failed to repopulate graph memory cache entry");
+                }
             }
         }
 

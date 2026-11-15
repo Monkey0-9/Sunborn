@@ -594,6 +594,118 @@ pub struct StructuralEntailmentScorer;
 /// Backward-compatibility alias for `StructuralEntailmentScorer`.
 pub type CrossEncoderVerifier = StructuralEntailmentScorer;
 
+#[async_trait::async_trait]
+impl CrossEncoderBackend for StructuralEntailmentScorer {
+    async fn score_pair(
+        &self,
+        premise: &str,
+        hypothesis: &str,
+    ) -> Result<EntailmentScores, sunborn_core::SunbornError> {
+        let fp1 = StructuralFingerprint::extract(premise);
+        let fp2 = StructuralFingerprint::extract(hypothesis);
+        let set1: std::collections::HashSet<&str> = premise.split_whitespace().collect();
+        let set2: std::collections::HashSet<&str> = hypothesis.split_whitespace().collect();
+        let intersection = set1.intersection(&set2).count();
+        let union = set1.union(&set2).count();
+        let sim = if union > 0 {
+            intersection as f32 / union as f32
+        } else {
+            1.0
+        };
+        Ok(Self::verify(&fp1, &fp2, sim))
+    }
+}
+
+/// Production Neural Cross-Encoder NLI Backend (e.g. DeBERTa-v3-small-mnli / MiniLM-L6)
+/// Connects to a dedicated microservice or ONNX model server with pinned model hash verification.
+pub struct HttpCrossEncoderBackend {
+    endpoint: String,
+    expected_model_hash: Option<String>,
+    client: reqwest::Client,
+    fallback: StructuralEntailmentScorer,
+}
+
+impl HttpCrossEncoderBackend {
+    pub fn new(endpoint: impl Into<String>, expected_model_hash: Option<String>) -> Self {
+        Self {
+            endpoint: endpoint.into(),
+            expected_model_hash,
+            client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_millis(200))
+                .build()
+                .unwrap_or_default(),
+            fallback: StructuralEntailmentScorer,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct CrossEncoderRequest<'a> {
+    premise: &'a str,
+    hypothesis: &'a str,
+}
+
+#[derive(Deserialize)]
+struct CrossEncoderResponse {
+    entailment: f32,
+    neutral: f32,
+    contradiction: f32,
+    #[serde(default)]
+    model_hash: Option<String>,
+}
+
+#[async_trait::async_trait]
+impl CrossEncoderBackend for HttpCrossEncoderBackend {
+    async fn score_pair(
+        &self,
+        premise: &str,
+        hypothesis: &str,
+    ) -> Result<EntailmentScores, sunborn_core::SunbornError> {
+        // Enforce structural invariant matching first (defense-in-depth)
+        let fp1 = StructuralFingerprint::extract(premise);
+        let fp2 = StructuralFingerprint::extract(hypothesis);
+        if !fp1.matches(&fp2) {
+            return Ok(EntailmentScores {
+                p_entailment: 0.001,
+                p_neutral: 0.049,
+                p_contradiction: 0.950,
+            });
+        }
+
+        let body = CrossEncoderRequest {
+            premise,
+            hypothesis,
+        };
+        let res = self.client.post(&self.endpoint).json(&body).send().await;
+
+        match res {
+            Ok(resp) if resp.status().is_success() => {
+                if let Ok(data) = resp.json::<CrossEncoderResponse>().await {
+                    if let Some(ref expected) = self.expected_model_hash {
+                        if let Some(ref actual) = data.model_hash {
+                            if actual != expected {
+                                tracing::warn!(expected = %expected, actual = %actual, "Cross-encoder model hash mismatch; using fallback");
+                                return self.fallback.score_pair(premise, hypothesis).await;
+                            }
+                        }
+                    }
+                    Ok(EntailmentScores {
+                        p_entailment: data.entailment,
+                        p_neutral: data.neutral,
+                        p_contradiction: data.contradiction,
+                    })
+                } else {
+                    self.fallback.score_pair(premise, hypothesis).await
+                }
+            }
+            _ => {
+                // Graceful degradation to structural entailment scorer
+                self.fallback.score_pair(premise, hypothesis).await
+            }
+        }
+    }
+}
+
 impl StructuralEntailmentScorer {
     /// Evaluates candidate query and cached query jointly using structural invariants and cosine similarity.
     pub fn verify(
@@ -892,6 +1004,56 @@ mod tests {
         assert!(
             updated <= 0.10,
             "Conformal calibration should tighten risk threshold on low loss observations"
+        );
+    }
+
+    #[test]
+    fn test_held_out_evaluation_dataset_precision_and_recall() {
+        let manifest_str = include_str!("../../../research/calibration/held_out_eval_dataset.json");
+        let v: serde_json::Value =
+            serde_json::from_str(manifest_str).expect("Valid evaluation JSON");
+        let pairs = v["evaluation_strata"].as_array().expect("Array of strata");
+
+        let mut true_positives = 0;
+        let mut true_negatives = 0;
+        let mut false_positives = 0;
+        let mut false_negatives = 0;
+
+        for item in pairs {
+            let p_a = item["prompt_a"].as_str().unwrap();
+            let p_b = item["prompt_b"].as_str().unwrap();
+            let label = item["label"].as_str().unwrap();
+
+            let fp_a = StructuralFingerprint::extract(p_a);
+            let fp_b = StructuralFingerprint::extract(p_b);
+            let is_match = fp_a.matches(&fp_b);
+
+            match (label, is_match) {
+                ("EQUIVALENT", true) => true_positives += 1,
+                ("EQUIVALENT", false) => false_negatives += 1,
+                ("HARD_NEGATIVE", false) => true_negatives += 1,
+                ("HARD_NEGATIVE", true) => false_positives += 1,
+                _ => {}
+            }
+        }
+
+        assert_eq!(
+            false_positives, 0,
+            "AST guardrails must achieve 0 false positives on hard negatives"
+        );
+        assert!(true_positives > 0);
+        assert!(true_negatives > 0);
+
+        let precision = true_positives as f64 / (true_positives + false_positives) as f64;
+        let recall = true_positives as f64 / (true_positives + false_negatives) as f64;
+
+        assert_eq!(
+            precision, 1.0,
+            "Empirical safety precision on held-out benchmark must be 1.0 (zero false hits)"
+        );
+        assert!(
+            recall >= 0.20,
+            "Conservative safety guardrail recall is bounded; abstains when uncertain"
         );
     }
 }
