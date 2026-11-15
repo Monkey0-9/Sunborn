@@ -30,7 +30,7 @@ from sunborn import (
 class TestSunbornPackage(unittest.TestCase):
     def test_package_exports_and_version(self):
         self.assertTrue(hasattr(sunborn, "__version__"))
-        self.assertEqual(sunborn.__version__, "0.1.0rc1")
+        self.assertEqual(sunborn.__version__, "1.0.0")
         self.assertEqual(CachePolicy.ALLOW_STOCHASTIC, "allow-stochastic")
         self.assertEqual(FallbackPolicy.FAIL_CLOSED, "FAIL_CLOSED")
         self.assertEqual(ExecutionTier.SEMANTIC, "semantic")
