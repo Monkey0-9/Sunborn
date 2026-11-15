@@ -158,8 +158,8 @@ export function PlanetScaleStressSimulator() {
     );
     const baselineP999Ms = Math.round(baselineP99Ms * 2.8);
 
-    // 3. 260-Engineer Hardened Architecture Latency
-    // S3-FIFO in-memory tier + io_uring NVMe + Maglev consistent hashing + SIMD Roaring Lineage
+    // 3. Hardened Architecture Latency
+    // L1 In-Memory GDSF tier + L2 DragonflyDB cluster + SIMD Roaring Lineage
     const hardenedP99Ms = +(
       0.95 +
       (effectiveReqs / 1000000) * 0.35 +
@@ -479,7 +479,7 @@ export function PlanetScaleStressSimulator() {
                 </div>
                 <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3" />
-                  S3-FIFO + io_uring NVMe L3 tier
+                  L1 In-Memory GDSF + L2 DragonflyDB Tier
                 </span>
               </div>
             </div>

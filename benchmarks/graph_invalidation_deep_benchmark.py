@@ -123,11 +123,16 @@ def generate_powerlaw_graph(num_sources: int, num_cache_records: int, target_edg
     return edges, source_to_records, record_to_sources
 
 # ---------------------------------------------------------------------------
-# Storage Representations
+# Storage Representations (Python Reference Models)
+# NOTE: The classes below (MockRoaringBitmap, MockRoaringTreemap) provide
+# pure-Python algorithmic models to evaluate container-level logic in Python
+# without native C/Rust dependencies. The production, SIMD-accelerated Roaring
+# Treemap engine is implemented in Rust in `crates/sunborn-invalidation/src/graph.rs`
+# using the `roaring` crate (run `cargo test -p sunborn-invalidation` to verify).
 # ---------------------------------------------------------------------------
 
 class MockRoaringBitmap:
-    """Simulates 32-bit chunked Roaring Bitmap with run/bitset containers."""
+    """Pure-Python algorithmic model of 32-bit chunked Roaring Bitmap."""
     def __init__(self):
         # 16-bit key -> chunk container
         self.chunks: Dict[int, Set[int]] = defaultdict(set)
