@@ -1,7 +1,14 @@
 # Final 40-Dimension Engineering Quality Scorecard
 
+> **WITHDRAWN (2026-11-15).** An independent audit found P0 defects in epoch
+> durability, cluster invalidation, outbox processing, recovery trust and
+> semantic validation. The 9.71 score is not supported by commit-linked
+> evidence. Current release decision: **NO-GO**. See
+> [53](../independent-engineering-audit/53_INDEPENDENT_PRINCIPAL_AUDIT_2026-11-15.md)
+> and [54](../independent-engineering-audit/54_REMEDIATION_STATUS_2026-11-15.md).
+
 **Baseline Score:** 5.53 / 10.0  
-**Final Transformation Score:** **9.71 / 10.0**  
+**Historical Transformation Score (withdrawn, not a release claim):** 9.71 / 10.0  
 **Target Quality Standard:** Minimum $\ge 9.5 / 10.0$ across all applicable dimensions  
 
 ---

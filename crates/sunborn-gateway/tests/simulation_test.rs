@@ -119,7 +119,7 @@ async fn test_deterministic_simulation_non_accelerator_authority_under_chaos() {
     assert_eq!(inv_res.status(), StatusCode::OK);
 
     // Epoch advances upon invalidation
-    lease_manager.bump_epoch(doc_id).await;
+    lease_manager.bump_epoch(doc_id).await.unwrap();
     // Stale writeback lease must be rejected by monotonic epoch validation
     let is_valid = lease_manager.validate_lease(doc_id, read_epoch).await;
     assert!(!is_valid, "Stale lease must be rejected by epoch fence");

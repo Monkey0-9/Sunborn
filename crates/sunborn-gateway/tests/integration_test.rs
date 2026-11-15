@@ -700,7 +700,11 @@ async fn test_transactional_freshness_concurrent_invalidation_prevents_stale_wri
     let doc_source_id = uuid::Uuid::new_v4();
 
     // 1. Initial knowledge epoch is bumped to 2 by an invalidation event
-    state.epoch_lease_manager.bump_epoch(doc_source_id).await;
+    state
+        .epoch_lease_manager
+        .bump_epoch(doc_source_id)
+        .await
+        .unwrap();
 
     // 2. A client sends a request whose dependency snapshot claims stale epoch 1
     let payload_stale_lease = serde_json::json!({

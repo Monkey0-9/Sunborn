@@ -16,7 +16,7 @@ async fn test_outbox_delayed_event_stale_writeback_prevention() {
 
     // 2. Concurrently, an outbox mutation event is committed and delivered
     // While LLM generation is in flight, document updates
-    let updated_epoch = lease_mgr.bump_epoch(source_id).await;
+    let updated_epoch = lease_mgr.bump_epoch(source_id).await.unwrap();
     assert_eq!(updated_epoch, 2);
 
     // 3. Simulated slow LLM response finishes and attempts cache writeback
@@ -45,9 +45,9 @@ async fn test_outbox_duplicate_and_reordered_replay_resilience() {
 
     // Simulate 3 duplicate outbox message deliveries of the same event
     // In an idempotent outbox pipeline, monotonic epochs only advance
-    let ep1 = lease_mgr.bump_epoch(source_id).await;
-    let ep2 = lease_mgr.bump_epoch(source_id).await;
-    let ep3 = lease_mgr.bump_epoch(source_id).await;
+    let ep1 = lease_mgr.bump_epoch(source_id).await.unwrap();
+    let ep2 = lease_mgr.bump_epoch(source_id).await.unwrap();
+    let ep3 = lease_mgr.bump_epoch(source_id).await.unwrap();
 
     assert!(ep3 > ep2 && ep2 > ep1);
 
@@ -113,7 +113,7 @@ async fn test_multi_source_atomic_fencing_under_heavy_concurrency() {
 
     // Mutate just 1 out of 10 partitions (e.g. partition 7)
     let mutated_id = sources[7].source_id;
-    lease_mgr.bump_epoch(mutated_id).await;
+    lease_mgr.bump_epoch(mutated_id).await.unwrap();
 
     // The composite multi-source validation must reject reuse atomically
     assert!(

@@ -1,8 +1,9 @@
 use crate::conformal::{StreamingOODDetector, TaskStratifiedConformalCalibrator, TaskStratum};
 use crate::embedding::EmbeddingProvider;
-use crate::guardrails::{StructuralEntailmentScorer, StructuralFingerprint};
+use crate::guardrails::{CrossEncoderBackend, StructuralEntailmentScorer, StructuralFingerprint};
 use crate::vector_store::VectorStore;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use sunborn_core::certificate::SafetyEvidenceRecord;
 use sunborn_core::{
     CachePath, DecisionAction, DecisionRecord, RequestEnvelope, Result, ReuseCertificate,
@@ -216,6 +217,9 @@ pub struct DecisionEngine<E: EmbeddingProvider, V: VectorStore> {
     vector_store: V,
     config: DecisionConfig,
     cascade: VerificationCascade,
+    cross_encoder: Option<Arc<dyn CrossEncoderBackend>>,
+    min_entailment: f32,
+    max_contradiction: f32,
 }
 
 impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
@@ -225,7 +229,18 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
             vector_store,
             config,
             cascade: VerificationCascade::new(),
+            cross_encoder: None,
+            min_entailment: 0.50,
+            max_contradiction: 0.20,
         }
+    }
+
+    /// Install a real cross-encoder/NLI backend in the candidate acceptance
+    /// path. When configured, backend errors and model-hash mismatches abstain
+    /// (fail closed) instead of silently falling back to lexical scoring.
+    pub fn with_cross_encoder(mut self, backend: Arc<dyn CrossEncoderBackend>) -> Self {
+        self.cross_encoder = Some(backend);
+        self
     }
 
     /// Evaluates semantic risk for prompt (e.g. presence of mutating commands, PII, financial terms, or security overrides)
@@ -367,6 +382,55 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                 .cascade
                 .verify(req, &best.entry.prompt, similarity, causal_snapshots_valid)
                 .await;
+
+            if let Some(ref cross_encoder) = self.cross_encoder {
+                match cross_encoder
+                    .score_pair(&req.prompt, &best.entry.prompt)
+                    .await
+                {
+                    Ok(scores)
+                        if scores
+                            .is_safe_entailment(self.min_entailment, self.max_contradiction) => {}
+                    Ok(_) => {
+                        return Ok(DecisionOutcome {
+                            decision: DecisionRecord {
+                                action: DecisionAction::Revalidate,
+                                cache_path: CachePath::Semantic,
+                                confidence,
+                                risk_score,
+                                reason_code: "CROSS_ENCODER_CONTRADICTION".to_string(),
+                                latency_saved_ms: None,
+                                policy_version: None,
+                                policy_id: None,
+                            },
+                            matched_content: Some(best.entry.content.clone()),
+                            matched_id: Some(best.entry.id.clone()),
+                            matched_certificate: candidate_cert,
+                            safety_evidence: Some(cascade_res.safety_evidence),
+                            matched_metadata: Some(best.entry.metadata.clone()),
+                        });
+                    }
+                    Err(_err) => {
+                        return Ok(DecisionOutcome {
+                            decision: DecisionRecord {
+                                action: DecisionAction::Revalidate,
+                                cache_path: CachePath::Semantic,
+                                confidence,
+                                risk_score,
+                                reason_code: "CROSS_ENCODER_UNAVAILABLE".to_string(),
+                                latency_saved_ms: None,
+                                policy_version: None,
+                                policy_id: None,
+                            },
+                            matched_content: Some(best.entry.content.clone()),
+                            matched_id: Some(best.entry.id.clone()),
+                            matched_certificate: candidate_cert,
+                            safety_evidence: Some(cascade_res.safety_evidence),
+                            matched_metadata: Some(best.entry.metadata.clone()),
+                        });
+                    }
+                }
+            }
 
             // Tier C2 Context-Lineage Binding Verification:
             // If request and candidate specify ContextDigest, they must match exactly.

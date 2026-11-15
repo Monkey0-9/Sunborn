@@ -30,6 +30,7 @@ const MIGRATION_0002: &str = include_str!("../../../migrations/0002_durable_iden
 const MIGRATION_0003: &str = include_str!("../../../migrations/0003_finops_and_security.sql");
 const MIGRATION_0004: &str = include_str!("../../../migrations/0004_durable_cache_certificate.sql");
 const MIGRATION_0005: &str = include_str!("../../../migrations/0005_persistent_epochs_and_dlq.sql");
+const MIGRATION_0006: &str = include_str!("../../../migrations/0006_durable_outbox_queue.sql");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DbCircuitState {
@@ -213,6 +214,22 @@ impl PostgresDatabaseStore {
     }
 
     async fn migrate(&self, pool: &PgPool) -> std::result::Result<(), sqlx::Error> {
+        // Multiple replicas may start simultaneously. Serialize the migration
+        // bookkeeping so two processes cannot both insert the same version.
+        const MIGRATION_LOCK_ID: i64 = 0x0053_554E_424F_524E; // "SUNBORN"
+        sqlx::query("SELECT pg_advisory_lock($1)")
+            .bind(MIGRATION_LOCK_ID)
+            .execute(pool)
+            .await?;
+        let result = self.migrate_locked(pool).await;
+        let _ = sqlx::query("SELECT pg_advisory_unlock($1)")
+            .bind(MIGRATION_LOCK_ID)
+            .execute(pool)
+            .await;
+        result
+    }
+
+    async fn migrate_locked(&self, pool: &PgPool) -> std::result::Result<(), sqlx::Error> {
         // Authoritative Singular Database Migration Runner (SSOT)
         sqlx::raw_sql(
             r#"
@@ -233,6 +250,7 @@ impl PostgresDatabaseStore {
             (3, "0003_finops_and_security", MIGRATION_0003),
             (4, "0004_durable_cache_certificate", MIGRATION_0004),
             (5, "0005_persistent_epochs_and_dlq", MIGRATION_0005),
+            (6, "0006_durable_outbox_queue", MIGRATION_0006),
         ];
 
         for (version, name, sql) in migrations {
@@ -280,25 +298,39 @@ impl PostgresDatabaseStore {
             }
             Ok(map)
         } else {
-            Ok(std::collections::HashMap::new())
+            Err(SunbornError::database(
+                "PostgreSQL epoch authority unavailable; cannot hydrate epochs",
+            ))
         }
     }
 
-    /// Persists or advances the monotonic epoch for a knowledge source in PostgreSQL.
-    pub async fn persist_epoch(&self, source_id: Uuid, epoch: u64) -> Result<()> {
-        if let Some(pool) = self.get_pool().await {
-            sqlx::query(
-                "INSERT INTO tenant_source_epochs (source_id, current_epoch, updated_at)
-                 VALUES ($1, $2, NOW())
-                 ON CONFLICT (source_id) DO UPDATE SET current_epoch = EXCLUDED.current_epoch, updated_at = NOW()",
+    /// Atomically advances the monotonic epoch for a knowledge source in PostgreSQL.
+    ///
+    /// `GREATEST(current_epoch + 1, proposed)` makes concurrent writers safe: a
+    /// stale replica can never overwrite a newer durable epoch, and every caller
+    /// receives the authoritative post-write value. Returns an error when the
+    /// authoritative store is unavailable rather than silently advancing only
+    /// in process memory.
+    pub async fn advance_epoch(&self, source_id: Uuid, proposed: u64) -> Result<u64> {
+        let pool = self.get_pool().await.ok_or_else(|| {
+            SunbornError::database(
+                "PostgreSQL epoch authority unavailable; refusing non-durable epoch advance",
             )
-            .bind(source_id)
-            .bind(epoch as i64)
-            .execute(&pool)
-            .await
-            .map_err(|e| SunbornError::database(e.to_string()))?;
-        }
-        Ok(())
+        })?;
+        let row: (i64,) = sqlx::query_as(
+            "INSERT INTO tenant_source_epochs (source_id, current_epoch, updated_at)
+             VALUES ($1, $2, NOW())
+             ON CONFLICT (source_id) DO UPDATE SET
+                 current_epoch = GREATEST(tenant_source_epochs.current_epoch + 1, EXCLUDED.current_epoch),
+                 updated_at = NOW()
+             RETURNING current_epoch",
+        )
+        .bind(source_id)
+        .bind(proposed as i64)
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| SunbornError::database(format!("PostgreSQL epoch advance failed: {e}")))?;
+        Ok(row.0 as u64)
     }
 
     /// Persists an enveloped Tenant Data Encryption Key (TDEK) wrapped under the master KEK into PostgreSQL.
@@ -338,6 +370,30 @@ impl PostgresDatabaseStore {
             }
         }
         Ok(())
+    }
+
+    /// Fetches one persisted wrapped TDEK, if the tenant has already been provisioned.
+    pub async fn fetch_wrapped_tdek(&self, tenant_id: &str) -> Result<Option<(Vec<u8>, String)>> {
+        if let Some(pool) = self.get_pool().await {
+            let row: std::result::Result<Option<(Vec<u8>, String)>, sqlx::Error> = sqlx::query_as(
+                "SELECT wrapped_tdek, kms_provider FROM tenant_wrapped_keys WHERE tenant_id = $1",
+            )
+            .bind(tenant_id)
+            .fetch_optional(&pool)
+            .await;
+            match row {
+                Ok(record) => return Ok(record),
+                Err(e) => {
+                    tracing::warn!(error = %e, "Failed to query wrapped TDEK from PostgreSQL");
+                    if self.strict_durability {
+                        return Err(sunborn_core::SunbornError::database(format!(
+                            "Failed to query wrapped TDEK: {e}"
+                        )));
+                    }
+                }
+            }
+        }
+        Ok(self.fallback_tdeks.read().await.get(tenant_id).cloned())
     }
 
     /// Fetches all persisted wrapped TDEKs for startup key hydration into memory.
@@ -706,11 +762,11 @@ impl DatabaseStore for PostgresDatabaseStore {
         self.fallback_store.increment_hit_count(key).await
     }
 
-    async fn insert_outbox_event(&self, event: OutboxRecord) -> Result<()> {
+    async fn insert_outbox_event(&self, event: OutboxRecord) -> Result<i64> {
         if let Some(pool) = self.get_pool().await {
-            let res = sqlx::query(
+            let res = sqlx::query_as::<_, (i64,)>(
                 "INSERT INTO outbox_events (tenant_id, entity_type, entity_id, action, payload, status, created_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)"
+                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id"
             )
             .bind(&event.tenant_id)
             .bind(&event.entity_type)
@@ -719,13 +775,13 @@ impl DatabaseStore for PostgresDatabaseStore {
             .bind(&event.payload)
             .bind(&event.status)
             .bind(event.created_at)
-            .execute(&pool)
+            .fetch_one(&pool)
             .await;
 
             match res {
-                Ok(_) => {
+                Ok((id,)) => {
                     let _ = self.fallback_store.insert_outbox_event(event).await;
-                    return Ok(());
+                    return Ok(id);
                 }
                 Err(err) => {
                     tracing::error!(error = %err, "PostgreSQL insert_outbox_event failed");
@@ -789,14 +845,168 @@ impl DatabaseStore for PostgresDatabaseStore {
         self.fallback_store.fetch_pending_outbox_events(limit).await
     }
 
+    async fn claim_pending_outbox_events(
+        &self,
+        limit: usize,
+        worker_id: &str,
+    ) -> Result<Vec<OutboxRecord>> {
+        if let Some(pool) = self.get_pool().await {
+            let res = sqlx::query(
+                "WITH claimed AS (
+                     SELECT id FROM outbox_events
+                     WHERE status = 'PENDING'
+                        OR (status = 'PROCESSING' AND claimed_at < NOW() - INTERVAL '5 minutes')
+                     ORDER BY id
+                     LIMIT $1
+                     FOR UPDATE SKIP LOCKED
+                 )
+                 UPDATE outbox_events o
+                 SET status = 'PROCESSING', claimed_by = $2, claimed_at = NOW()
+                 FROM claimed
+                 WHERE o.id = claimed.id
+                 RETURNING o.id, o.tenant_id, o.entity_type, o.entity_id, o.action, o.payload, o.status, o.created_at",
+            )
+            .bind(limit as i64)
+            .bind(worker_id)
+            .fetch_all(&pool)
+            .await;
+
+            match res {
+                Ok(rows) => {
+                    return Ok(rows
+                        .into_iter()
+                        .map(|r| OutboxRecord {
+                            id: r.get("id"),
+                            tenant_id: r.get("tenant_id"),
+                            entity_type: r.get("entity_type"),
+                            entity_id: r.get("entity_id"),
+                            action: r.get("action"),
+                            payload: r.get("payload"),
+                            status: r.get("status"),
+                            created_at: r.get("created_at"),
+                        })
+                        .collect());
+                }
+                Err(err) => {
+                    tracing::error!(error = %err, "PostgreSQL claim_pending_outbox_events failed");
+                    if self.strict_durability {
+                        return Err(sunborn_core::SunbornError::database(format!(
+                            "PostgreSQL claim_pending_outbox_events failed: {err}"
+                        )));
+                    }
+                }
+            }
+        } else if self.strict_durability {
+            return Err(sunborn_core::SunbornError::database(
+                "PostgreSQL connection pool unavailable; fail-closed durability enforced",
+            ));
+        }
+        self.fallback_store
+            .claim_pending_outbox_events(limit, worker_id)
+            .await
+    }
+
     async fn mark_outbox_processed(&self, id: i64) -> Result<()> {
         if let Some(pool) = self.get_pool().await {
-            let _ = sqlx::query("UPDATE outbox_events SET status = 'PROCESSED' WHERE id = $1")
-                .bind(id)
-                .execute(&pool)
-                .await;
+            let res = sqlx::query(
+                "UPDATE outbox_events SET status = 'PROCESSED', processed_at = NOW()
+                 WHERE id = $1 AND status = 'PROCESSING'",
+            )
+            .bind(id)
+            .execute(&pool)
+            .await;
+            if let Err(err) = res {
+                tracing::error!(error = %err, "PostgreSQL mark_outbox_processed failed");
+                if self.strict_durability {
+                    return Err(sunborn_core::SunbornError::database(format!(
+                        "PostgreSQL mark_outbox_processed failed: {err}"
+                    )));
+                }
+            }
         }
         self.fallback_store.mark_outbox_processed(id).await
+    }
+
+    async fn mark_outbox_failed(&self, id: i64, error: &str) -> Result<()> {
+        if let Some(pool) = self.get_pool().await {
+            let mut tx = pool
+                .begin()
+                .await
+                .map_err(|e| SunbornError::database(e.to_string()))?;
+            let row = sqlx::query(
+                "UPDATE outbox_events
+                 SET retry_count = retry_count + 1,
+                     status = CASE WHEN retry_count + 1 >= max_retries THEN 'FAILED' ELSE 'PENDING' END,
+                     claimed_by = NULL,
+                     claimed_at = NULL,
+                     last_error = $2
+                 WHERE id = $1
+                 RETURNING retry_count, status, tenant_id, entity_type, entity_id, payload",
+            )
+            .bind(id)
+            .bind(error)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| SunbornError::database(e.to_string()))?;
+
+            if let Some(r) = row {
+                let status: String = r.get("status");
+                if status == "FAILED" {
+                    sqlx::query(
+                        "INSERT INTO outbox_dlq (outbox_id, tenant_id, entity_type, entity_id, payload, error_message, retry_count)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                    )
+                    .bind(id)
+                    .bind(r.get::<String, _>("tenant_id"))
+                    .bind(r.get::<String, _>("entity_type"))
+                    .bind(r.get::<String, _>("entity_id"))
+                    .bind(r.get::<serde_json::Value, _>("payload"))
+                    .bind(error)
+                    .bind(r.get::<i32, _>("retry_count"))
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| SunbornError::database(e.to_string()))?;
+                }
+            }
+            tx.commit()
+                .await
+                .map_err(|e| SunbornError::database(e.to_string()))?;
+        }
+        self.fallback_store.mark_outbox_failed(id, error).await
+    }
+
+    async fn replay_outbox_dlq(&self, limit: usize) -> Result<usize> {
+        if let Some(pool) = self.get_pool().await {
+            let rows = sqlx::query(
+                "UPDATE outbox_events
+                 SET status = 'PENDING', retry_count = 0, claimed_by = NULL,
+                     claimed_at = NULL, last_error = NULL
+                 WHERE id IN (
+                     SELECT id FROM outbox_events WHERE status = 'FAILED'
+                     ORDER BY id LIMIT $1
+                 )
+                 RETURNING id",
+            )
+            .bind(limit as i64)
+            .fetch_all(&pool)
+            .await
+            .map_err(|e| SunbornError::database(e.to_string()))?;
+            return Ok(rows.len());
+        }
+        self.fallback_store.replay_outbox_dlq(limit).await
+    }
+
+    async fn load_all_epochs(&self) -> Result<std::collections::HashMap<Uuid, u64>> {
+        let pool = self.get_pool().await.ok_or_else(|| {
+            SunbornError::database("PostgreSQL epoch authority unavailable; cannot load epochs")
+        })?;
+        let rows = sqlx::query_as::<_, (Uuid, i64)>(
+            "SELECT source_id, current_epoch FROM tenant_source_epochs",
+        )
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| SunbornError::database(e.to_string()))?;
+        Ok(rows.into_iter().map(|(src, ep)| (src, ep as u64)).collect())
     }
 
     async fn record_audit_event(&self, audit: AuditRecord) -> Result<()> {

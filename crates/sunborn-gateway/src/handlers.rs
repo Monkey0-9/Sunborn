@@ -1421,15 +1421,10 @@ pub async fn trigger_invalidation(
         .require_admin()
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
 
-    // Authoritative Orchestrated Invalidation (D-04, D-07, D-10 unified)
+    // Durable-first ordering: persist a PENDING intent before mutating state so a
+    // crash or partial failure is recoverable and visible. The event is only
+    // marked PROCESSED after every store and the cluster broadcast succeed.
     let tenant_id = TenantId::new(payload.tenant_id.clone());
-    let purge_report = state
-        .orchestrator
-        .purge_sources(&tenant_id, &[payload.source_id])
-        .await
-        .map_err(AppError::from)?;
-
-    // Record invalidation in durable PostgreSQL outbox table
     let outbox_record = sunborn_db::models::OutboxRecord {
         id: 0,
         tenant_id: payload.tenant_id.clone(),
@@ -1439,18 +1434,41 @@ pub async fn trigger_invalidation(
         payload: json!({
             "source_id": payload.source_id,
             "version_tag": payload.version_tag,
-            "bumped_epoch": purge_report.bumped_epoch,
-            "purged_keys": purge_report.purged_cache_keys,
         }),
-        status: "processed".to_string(),
+        status: "PENDING".to_string(),
         created_at: Utc::now(),
     };
-    if let Err(e) = state.db.insert_outbox_event(outbox_record).await {
-        tracing::warn!(error = %e, "Failed to insert outbox event into DB");
+    let outbox_id = state
+        .db
+        .insert_outbox_event(outbox_record)
+        .await
+        .map_err(AppError::from)?;
+
+    let purge_report = match state
+        .orchestrator
+        .purge_sources(&tenant_id, &[payload.source_id])
+        .await
+    {
+        Ok(report) => report,
+        Err(err) => {
+            let _ = state
+                .db
+                .mark_outbox_failed(outbox_id, &err.to_string())
+                .await;
+            return Err(AppError::from(err));
+        }
+    };
+
+    if let Err(err) = state.db.mark_outbox_processed(outbox_id).await {
+        // The purge completed, but we cannot confirm the durable acknowledgement.
+        // Return an error so the caller knows the event may be retried (deletes
+        // are idempotent). Do not report a clean success.
+        return Err(AppError::from(err));
     }
 
     Ok(Json(json!({
         "status": "processed",
+        "outbox_id": outbox_id,
         "source_id": payload.source_id,
         "bumped_epoch": purge_report.bumped_epoch,
         "bumped_watermark": purge_report.watermark_advanced,
@@ -1570,7 +1588,11 @@ pub async fn invalidate_graph_rtc(
     for src in &payload.source_ids {
         // Fence before deletion: bump the authoritative epoch and write-back watermark
         // first so a concurrent completion cannot repopulate the entry mid-purge.
-        state.epoch_lease_manager.bump_epoch(*src).await;
+        state
+            .epoch_lease_manager
+            .bump_epoch(*src)
+            .await
+            .map_err(AppError::from)?;
         state.watermark_fencer.advance_watermark(&src.to_string());
 
         let keys = state.dependency_graph.get_affected_cache_keys(src).await;
@@ -2296,6 +2318,32 @@ pub async fn provision_tenant(
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
 
     let tenant = TenantId::new(&payload.tenant_id);
+
+    // Idempotency: provisioning an existing tenant must not rotate its TDEK.
+    // Rotating silently would make every previously encrypted cache entry and
+    // certificate unreadable on other replicas.
+    if let Some((wrapped, provider_name)) = state
+        .postgres_db
+        .fetch_wrapped_tdek(&payload.tenant_id)
+        .await
+        .map_err(AppError::from)?
+    {
+        state
+            .crypto_registry
+            .unwrap_and_provision(tenant, &wrapped)
+            .map_err(|e| {
+                AppError::from(SunbornError::internal(format!(
+                    "Existing tenant key could not be loaded: {e}"
+                )))
+            })?;
+        return Ok(Json(serde_json::json!({
+            "status": "already_provisioned",
+            "tenant_id": payload.tenant_id,
+            "kms_provider": provider_name,
+            "durable_persistence": true,
+        })));
+    }
+
     state
         .crypto_registry
         .provision_tenant_secure(tenant.clone())

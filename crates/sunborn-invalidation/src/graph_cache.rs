@@ -93,6 +93,19 @@ impl GraphMemoryCache {
         &self.lineage_graph
     }
 
+    /// Delete exact-cache keys supplied by a peer invalidation event. This is
+    /// required when the receiving replica does not hold the origin replica's
+    /// dependency edges.
+    pub async fn delete_cache_keys(&self, keys: &[String]) -> Result<usize> {
+        let mut deleted = 0;
+        for key in keys {
+            if self.cache.delete(key).await? {
+                deleted += 1;
+            }
+        }
+        Ok(deleted)
+    }
+
     /// Stores a cache entry in memory and binds it to causal knowledge sources and document hashes.
     /// Implements atomic two-phase admission (SB-010): if dependency registration or cache storage fails,
     /// partial state is rolled back compensatorily to prevent dangling or orphaned lineage.

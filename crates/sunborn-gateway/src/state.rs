@@ -30,8 +30,12 @@ impl sunborn_invalidation::EpochPersistenceBackend for PostgresEpochPersistence 
         self.0.load_all_epochs().await
     }
 
-    async fn persist_epoch(&self, source_id: uuid::Uuid, epoch: u64) -> sunborn_core::Result<()> {
-        self.0.persist_epoch(source_id, epoch).await
+    async fn advance_epoch(
+        &self,
+        source_id: uuid::Uuid,
+        proposed: u64,
+    ) -> sunborn_core::Result<u64> {
+        self.0.advance_epoch(source_id, proposed).await
     }
 }
 
@@ -80,6 +84,9 @@ pub struct AppState {
     pub key_provider_configuration_error: Option<String>,
     pub graph_memory_cache: Option<Arc<GraphMemoryCache>>,
     pub cluster_sync_engine: Option<Arc<sunborn_invalidation::DistributedGraphSyncEngine>>,
+    /// True only when the configured cluster transport is durable (Redis
+    /// Streams). In-memory fallback is never accepted in production.
+    pub cluster_transport_durable: bool,
     pub orchestrator: Arc<InvalidationOrchestrator>,
 }
 
@@ -156,11 +163,18 @@ impl AppState {
             db.clone()
         };
 
-        let decision_engine = Arc::new(DecisionEngine::new(
+        let mut decision_engine = DecisionEngine::new(
             selected_embedder.clone(),
             selected_vector.clone(),
             DecisionConfig::default(),
-        ));
+        );
+        if let Ok(endpoint) = std::env::var("SUNBORN_CROSS_ENCODER_URL") {
+            let expected_hash = std::env::var("SUNBORN_CROSS_ENCODER_MODEL_HASH").ok();
+            decision_engine = decision_engine.with_cross_encoder(Arc::new(
+                sunborn_semantic::guardrails::HttpCrossEncoderBackend::new(endpoint, expected_hash),
+            ));
+        }
+        let decision_engine = Arc::new(decision_engine);
         // Select Neo4j for transitive lineage when configured; otherwise in-memory.
         let dependency_graph = match std::env::var("SUNBORN_NEO4J_URL") {
             Ok(url) if !url.trim().is_empty() => {
@@ -182,16 +196,12 @@ impl AppState {
             selected_vector.clone(),
         ));
         let epoch_lease_manager = if is_postgres {
-            let mgr = Arc::new(sunborn_invalidation::EpochLeaseManager::with_persistence(
+            // Hydration is performed synchronously by verify_production_readiness()
+            // before the listener accepts traffic. A persistent manager refuses to
+            // advance epochs until hydration succeeds.
+            Arc::new(sunborn_invalidation::EpochLeaseManager::with_persistence(
                 Arc::new(PostgresEpochPersistence(postgres_db.clone())),
-            ));
-            if let Ok(handle) = tokio::runtime::Handle::try_current() {
-                let mgr_clone = mgr.clone();
-                handle.spawn(async move {
-                    let _ = mgr_clone.hydrate_from_persistence().await;
-                });
-            }
-            mgr
+            ))
         } else {
             Arc::new(sunborn_invalidation::EpochLeaseManager::new())
         };
@@ -497,13 +507,21 @@ impl AppState {
             redis_url.as_deref(),
             2048,
         ));
+        let cluster_transport_durable = cluster_transport
+            .as_ref()
+            .map(|t| t.is_durable())
+            .unwrap_or(false);
 
         let cluster_sync_engine = if let Some(ref gmc) = graph_memory_cache {
-            let engine = Arc::new(sunborn_invalidation::DistributedGraphSyncEngine::new(
-                pod_id.clone(),
-                cluster_transport.as_ref().unwrap().clone(),
-                gmc.clone(),
-            ));
+            let engine = Arc::new(
+                sunborn_invalidation::DistributedGraphSyncEngine::new(
+                    pod_id.clone(),
+                    cluster_transport.as_ref().unwrap().clone(),
+                    gmc.clone(),
+                )
+                .with_vector_store(selected_vector.clone())
+                .with_epoch_manager(epoch_lease_manager.clone()),
+            );
             drop(engine.clone().start_listener());
             Some(engine)
         } else {
@@ -518,7 +536,7 @@ impl AppState {
             epoch_lease_manager.clone(),
             watermark_fencer.clone(),
             cluster_transport,
-            pod_id,
+            pod_id.clone(),
         ));
 
         // Background Durable Outbox Worker (processes persistent queue if active)
@@ -526,26 +544,63 @@ impl AppState {
             if let Ok(handle) = tokio::runtime::Handle::try_current() {
                 let db_clone = selected_db.clone();
                 let orch_clone = orchestrator.clone();
+                let worker_id = format!("{pod_id}:outbox");
                 handle.spawn(async move {
                     let mut interval =
                         tokio::time::interval(tokio::time::Duration::from_millis(500));
                     loop {
                         interval.tick().await;
-                        if let Ok(pending) = db_clone.fetch_pending_outbox_events(50).await {
-                            for record in pending {
-                                if record.entity_type == "knowledge_source"
-                                    && record.action == "invalidate"
-                                {
-                                    if let Ok(source_uuid) =
-                                        uuid::Uuid::parse_str(&record.entity_id)
+                        let pending = match db_clone
+                            .claim_pending_outbox_events(50, &worker_id)
+                            .await
+                        {
+                            Ok(pending) => pending,
+                            Err(err) => {
+                                tracing::error!(error = %err, "Outbox claim failed; will retry after lease expiry");
+                                continue;
+                            }
+                        };
+                        for record in pending {
+                            let result = if record.entity_type == "knowledge_source"
+                                && record.action == "invalidate"
+                            {
+                                match uuid::Uuid::parse_str(&record.entity_id) {
+                                    Ok(source_uuid) => {
+                                        let tenant = sunborn_core::TenantId::new(
+                                            record.tenant_id.clone(),
+                                        );
+                                        orch_clone
+                                            .purge_sources(&tenant, &[source_uuid])
+                                            .await
+                                            .map(|_| ())
+                                    }
+                                    Err(err) => Err(sunborn_core::SunbornError::invalid_payload(
+                                        format!("Invalid source id in outbox event: {err}"),
+                                    )),
+                                }
+                            } else {
+                                Err(sunborn_core::SunbornError::invalid_payload(format!(
+                                    "Unsupported outbox event {}/{}; routing to DLQ",
+                                    record.entity_type, record.action
+                                )))
+                            };
+
+                            match result {
+                                Ok(()) => {
+                                    if let Err(err) =
+                                        db_clone.mark_outbox_processed(record.id).await
                                     {
-                                        let tenant =
-                                            sunborn_core::TenantId::new(record.tenant_id.clone());
-                                        let _ =
-                                            orch_clone.purge_sources(&tenant, &[source_uuid]).await;
+                                        tracing::error!(outbox_id = record.id, error = %err, "Failed to mark outbox event processed");
                                     }
                                 }
-                                let _ = db_clone.mark_outbox_processed(record.id).await;
+                                Err(err) => {
+                                    tracing::error!(outbox_id = record.id, error = %err, "Outbox invalidation failed; event will be retried or dead-lettered");
+                                    if let Err(mark_err) =
+                                        db_clone.mark_outbox_failed(record.id, &err.to_string()).await
+                                    {
+                                        tracing::error!(outbox_id = record.id, error = %mark_err, "Failed to persist outbox failure");
+                                    }
+                                }
                             }
                         }
                     }
@@ -591,6 +646,7 @@ impl AppState {
             key_provider_configuration_error,
             graph_memory_cache,
             cluster_sync_engine,
+            cluster_transport_durable,
             orchestrator,
         }
     }
@@ -712,7 +768,6 @@ impl AppState {
                     "Production environment SUNBORN_ENV=production forbids ephemeral in-memory vector backend. Set SUNBORN_VECTOR_BACKEND=qdrant.",
                 ));
             }
-
             // P0-2: Fail-closed secret hygiene validation
             let master_kek = std::env::var("SUNBORN_MASTER_KEK")
                 .or_else(|_| std::env::var("MASTER_KEK"))
@@ -903,6 +958,17 @@ impl AppState {
             tracing::info!("Qdrant production readiness verified successfully.");
         }
 
+        // Epoch authority must be loaded before serving. A failure here is fatal:
+        // serving with an empty epoch registry would make stale writebacks and
+        // stale certificates look fresh. This runs after backend connectivity so
+        // configuration/connectivity errors retain their precise cause.
+        self.epoch_lease_manager.hydrate_from_persistence().await?;
+        if !self.epoch_lease_manager.is_hydrated() {
+            return Err(sunborn_core::SunbornError::configuration_error(
+                "Epoch registry hydration failed; refusing to serve with an unverified epoch authority",
+            ));
+        }
+
         if is_prod {
             if self.origin_provider.is_mock() {
                 return Err(sunborn_core::SunbornError::configuration_error(
@@ -914,6 +980,15 @@ impl AppState {
         }
 
         self.verify_remote_key_provider(is_prod)?;
+
+        // The durable invalidation bus is a production requirement, checked
+        // after live backend connectivity so the first actionable failure is
+        // reported (unreachable Dragonfly/Postgres/Qdrant before transport).
+        if is_prod && !self.cluster_transport_durable {
+            return Err(sunborn_core::SunbornError::configuration_error(
+                "Production requires a durable Redis Streams cluster invalidation transport. Configure REDIS_URL/SUNBORN_REDIS_URL to a reachable Redis 7+ instance; in-memory fallback is forbidden.",
+            ));
+        }
 
         Ok(())
     }

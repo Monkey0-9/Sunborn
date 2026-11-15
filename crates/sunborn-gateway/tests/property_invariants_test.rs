@@ -328,7 +328,7 @@ async fn test_property_monotonic_epoch_fence_and_vector_clock_causality() {
     assert!(manager.validate_lease(src, lease_v1).await);
 
     // Advancing epoch invalidates previous lease
-    let lease_v2 = manager.bump_epoch(src).await;
+    let lease_v2 = manager.bump_epoch(src).await.unwrap();
     assert_eq!(lease_v2, 2);
 
     // Older lease v1 is now rejected (stale write prevention)

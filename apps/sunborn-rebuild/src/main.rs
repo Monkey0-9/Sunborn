@@ -93,35 +93,47 @@ async fn main() -> anyhow::Result<()> {
         .map(|v| v.to_lowercase() == "production")
         .unwrap_or(false);
 
-    let verifying_key: Option<ed25519_dalek::VerifyingKey> =
-        if let Ok(key_hex) = std::env::var("SUNBORN_ATTESTATION_PUBLIC_KEY") {
-            if let Ok(bytes) = hex::decode(key_hex.trim()) {
-                if let Ok(arr) = <[u8; 32]>::try_from(bytes.as_slice()) {
-                    ed25519_dalek::VerifyingKey::from_bytes(&arr).ok()
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
+    // Trust root resolution is fail-closed. A malformed key is never treated as
+    // "skip verification", and production never falls back to a public default
+    // seed. The verifier must be given the same explicit key id/key material as
+    // the issuer.
+    let verifying_key: ed25519_dalek::VerifyingKey = if let Ok(key_hex) =
+        std::env::var("SUNBORN_ATTESTATION_PUBLIC_KEY")
+    {
+        let bytes = hex::decode(key_hex.trim())
+            .map_err(|e| anyhow::anyhow!("SUNBORN_ATTESTATION_PUBLIC_KEY is not valid hex: {e}"))?;
+        let arr: [u8; 32] = bytes.as_slice().try_into().map_err(|_| {
+            anyhow::anyhow!("SUNBORN_ATTESTATION_PUBLIC_KEY must decode to exactly 32 bytes")
+        })?;
+        ed25519_dalek::VerifyingKey::from_bytes(&arr).map_err(|e| {
+            anyhow::anyhow!("SUNBORN_ATTESTATION_PUBLIC_KEY is not a valid Ed25519 key: {e}")
+        })?
+    } else if is_production {
+        anyhow::bail!(
+                "SUNBORN_ATTESTATION_PUBLIC_KEY is required for a production rebuild; refusing to admit records without an explicit trust root"
+            );
+    } else {
+        tracing::warn!(
+                "No SUNBORN_ATTESTATION_PUBLIC_KEY configured; using the development-only deterministic key. This build must never be used to admit production data."
+            );
+        let secret_bytes = std::env::var("SUNBORN_CERTIFICATE_SIGNING_KEY")
+            .ok()
+            .and_then(|k| hex::decode(k.trim()).ok());
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(b"sunborn-derived-ed25519-seed-v1:");
+        if let Some(ref sec) = secret_bytes {
+            hasher.update(sec);
         } else {
-            let secret_bytes = std::env::var("SUNBORN_CERTIFICATE_SIGNING_KEY")
-                .ok()
-                .and_then(|k| hex::decode(k.trim()).ok());
-            use sha2::{Digest, Sha256};
-            let mut hasher = Sha256::new();
-            hasher.update(b"sunborn-derived-ed25519-seed-v1:");
-            if let Some(ref sec) = secret_bytes {
-                hasher.update(sec);
-            } else {
-                hasher.update(b"default-sunborn-deterministic-attestation-seed");
-            }
-            let arr: [u8; 32] = hasher.finalize().into();
-            let sk = ed25519_dalek::SigningKey::from_bytes(&arr);
-            Some(sk.verifying_key())
-        };
+            hasher.update(b"default-sunborn-deterministic-attestation-seed");
+        }
+        let arr: [u8; 32] = hasher.finalize().into();
+        let sk = ed25519_dalek::SigningKey::from_bytes(&arr);
+        sk.verifying_key()
+    };
 
     let total_records = db.count_cache_entries().await.unwrap_or(0);
+    let authoritative_epochs = db.load_all_epochs().await?;
     info!(
         total_records,
         is_production, "Durable cache entries detected in PostgreSQL"
@@ -150,13 +162,13 @@ async fn main() -> anyhow::Result<()> {
                 None => None,
             };
 
-            let mut is_provenance_verified = false;
+            // Trust monotonicity: only a record whose certificate is signed by
+            // the configured trust root, whose merkle root is intact, whose
+            // tenant/application/model binding matches the durable row, and
+            // whose source snapshots are current may enter the rebuilt caches.
+            let is_provenance_verified: bool;
             if let Some(ref cert) = certificate {
-                let sig_ok = if let Some(ref vk) = verifying_key {
-                    cert.verify_signature_ed25519(vk).is_ok()
-                } else {
-                    true
-                };
+                let sig_ok = cert.verify_signature_ed25519(&verifying_key).is_ok();
                 let expected_root = sunborn_core::ReuseCertificate::compute_merkle_root(
                     &cert.certificate_id,
                     cert.certificate_version,
@@ -171,16 +183,33 @@ async fn main() -> anyhow::Result<()> {
                     &cert.reference_fingerprint,
                 );
                 let integrity_ok = cert.merkle_root == expected_root;
+                let binding_ok = cert.tenant_id.0 == record.tenant_id
+                    && cert.application_id.0 == record.application_id
+                    && cert.model_name == record.model;
+                let epochs_ok = cert.source_snapshots.iter().all(|snapshot| {
+                    authoritative_epochs
+                        .get(&snapshot.source_id)
+                        .copied()
+                        .unwrap_or(1)
+                        == snapshot.snapshot_epoch
+                });
 
-                if sig_ok && integrity_ok {
+                if sig_ok && integrity_ok && binding_ok && epochs_ok {
                     is_provenance_verified = true;
-                } else if is_production {
-                    tracing::warn!(key = %record.key, "Record failed cryptographic verification during rebuild; skipping");
+                } else {
+                    tracing::warn!(
+                        key = %record.key,
+                        sig_ok,
+                        integrity_ok,
+                        binding_ok,
+                        epochs_ok,
+                        "Record failed provenance verification during rebuild; skipping"
+                    );
                     unverified_skipped += 1;
                     continue;
                 }
-            } else if is_production {
-                tracing::warn!(key = %record.key, "Record has no certificate in production rebuild; skipping");
+            } else {
+                tracing::warn!(key = %record.key, "Record has no certificate; refusing to invent provenance during rebuild");
                 unverified_skipped += 1;
                 continue;
             }

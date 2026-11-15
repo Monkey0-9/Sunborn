@@ -521,6 +521,10 @@ impl VectorStore for QdrantVectorStore {
             "exact": true
         });
         match self.client.post(&url).json(&payload).send().await {
+            // A fresh deployment has no collection yet; that means zero points,
+            // not an unavailable vector store. Other HTTP failures still fail
+            // closed in strict mode.
+            Ok(resp) if resp.status().as_u16() == 404 => Ok(0),
             Ok(resp) if resp.status().is_success() => {
                 if let Ok(data) = resp.json::<serde_json::Value>().await {
                     if let Some(count) = data

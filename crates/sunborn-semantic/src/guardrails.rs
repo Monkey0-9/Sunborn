@@ -619,7 +619,6 @@ pub struct HttpCrossEncoderBackend {
     endpoint: String,
     expected_model_hash: Option<String>,
     client: reqwest::Client,
-    fallback: StructuralEntailmentScorer,
 }
 
 impl HttpCrossEncoderBackend {
@@ -631,7 +630,6 @@ impl HttpCrossEncoderBackend {
                 .timeout(std::time::Duration::from_millis(200))
                 .build()
                 .unwrap_or_default(),
-            fallback: StructuralEntailmentScorer,
         }
     }
 }
@@ -677,28 +675,39 @@ impl CrossEncoderBackend for HttpCrossEncoderBackend {
 
         match res {
             Ok(resp) if resp.status().is_success() => {
-                if let Ok(data) = resp.json::<CrossEncoderResponse>().await {
-                    if let Some(ref expected) = self.expected_model_hash {
-                        if let Some(ref actual) = data.model_hash {
-                            if actual != expected {
-                                tracing::warn!(expected = %expected, actual = %actual, "Cross-encoder model hash mismatch; using fallback");
-                                return self.fallback.score_pair(premise, hypothesis).await;
-                            }
+                let data = resp.json::<CrossEncoderResponse>().await.map_err(|e| {
+                    sunborn_core::SunbornError::internal(format!(
+                        "Cross-encoder response could not be parsed: {e}"
+                    ))
+                })?;
+                if let Some(ref expected) = self.expected_model_hash {
+                    match data.model_hash.as_deref() {
+                        Some(actual) if actual == expected => {}
+                        Some(actual) => {
+                            return Err(sunborn_core::SunbornError::internal(format!(
+                                "Cross-encoder model hash mismatch: expected {expected}, got {actual}"
+                            )));
+                        }
+                        None => {
+                            return Err(sunborn_core::SunbornError::internal(
+                                "Cross-encoder response omitted the pinned model_hash",
+                            ));
                         }
                     }
-                    Ok(EntailmentScores {
-                        p_entailment: data.entailment,
-                        p_neutral: data.neutral,
-                        p_contradiction: data.contradiction,
-                    })
-                } else {
-                    self.fallback.score_pair(premise, hypothesis).await
                 }
+                Ok(EntailmentScores {
+                    p_entailment: data.entailment,
+                    p_neutral: data.neutral,
+                    p_contradiction: data.contradiction,
+                })
             }
-            _ => {
-                // Graceful degradation to structural entailment scorer
-                self.fallback.score_pair(premise, hypothesis).await
-            }
+            Ok(resp) => Err(sunborn_core::SunbornError::internal(format!(
+                "Cross-encoder returned HTTP {}",
+                resp.status()
+            ))),
+            Err(err) => Err(sunborn_core::SunbornError::internal(format!(
+                "Cross-encoder endpoint unavailable: {err}"
+            ))),
         }
     }
 }

@@ -90,26 +90,34 @@ impl InvalidationOrchestrator {
 
         for src in source_ids {
             // Step 1: Pre-fencing invariant - advance epoch & watermark BEFORE delete (D-10)
-            last_bumped_epoch = self.epoch_manager.bump_epoch(*src).await;
+            last_bumped_epoch = self.epoch_manager.bump_epoch(*src).await?;
             self.watermark_fencer.advance_watermark(&src.to_string());
 
             // Step 2: Query dependency graph for affected keys
             let keys = self.dependency_graph.get_affected_cache_keys(src).await;
             for k in &keys {
+                let mut key_failed = false;
                 // Evict exact cache
                 match self.cache.delete(k).await {
                     Ok(_) => purged_keys.push(k.clone()),
-                    Err(e) => failed_keys.push((k.clone(), format!("exact_cache: {e}"))),
+                    Err(e) => {
+                        key_failed = true;
+                        failed_keys.push((k.clone(), format!("exact_cache: {e}")));
+                    }
                 }
 
                 // Evict vector store
                 if let Err(e) = self.vector_store.delete(k).await {
+                    key_failed = true;
                     failed_keys.push((k.clone(), format!("vector_store: {e}")));
                 }
 
-                // Remove dependency edge upon successful purge
-                if !failed_keys.iter().any(|(failed_k, _)| failed_k == k) {
-                    let _ = self.dependency_graph.remove_dependency(src, k).await;
+                // Remove the dependency edge only when every store for THIS key
+                // succeeded. A failure for another source must not block cleanup.
+                if !key_failed {
+                    if let Err(e) = self.dependency_graph.remove_dependency(src, k).await {
+                        failed_keys.push((k.clone(), format!("dependency_graph: {e}")));
+                    }
                 }
             }
 
@@ -128,18 +136,19 @@ impl InvalidationOrchestrator {
         // Step 4: Emit cluster broadcast to peer replicas
         let mut broadcast_sent = false;
         if let Some(ref transport) = self.cluster_transport {
-            let msg = ClusterInvalidationMessage::new(
+            let mut msg = ClusterInvalidationMessage::new(
                 &self.pod_id,
                 tenant_id.clone(),
                 vec![],
                 source_ids.to_vec(),
                 last_bumped_epoch,
             );
-            if transport
-                .publish(CLUSTER_INVALIDATION_CHANNEL, &msg)
-                .await
-                .is_ok()
-            {
+            // Carry the exact keys so a peer with a local-only dependency graph
+            // can still purge the same exact-cache and vector entries.
+            msg.mutated_cache_keys = purged_keys.clone();
+            if let Err(e) = transport.publish(CLUSTER_INVALIDATION_CHANNEL, &msg).await {
+                failed_keys.push(("cluster_broadcast".to_string(), e.to_string()));
+            } else {
                 broadcast_sent = true;
             }
         }
@@ -157,7 +166,8 @@ impl InvalidationOrchestrator {
             return Err(SunbornError::internal(format!(
                 "Orchestrated purge encountered {} store failures",
                 report.failed_cache_keys.len()
-            )));
+            ))
+            .with_details(serde_json::to_value(&report).unwrap_or_default()));
         }
 
         Ok(report)
@@ -198,18 +208,17 @@ impl InvalidationOrchestrator {
 
         let mut broadcast_sent = false;
         if let Some(ref transport) = self.cluster_transport {
-            let msg = ClusterInvalidationMessage::new(
+            let mut msg = ClusterInvalidationMessage::new(
                 &self.pod_id,
                 tenant_id.clone(),
                 doc_hashes.to_vec(),
                 vec![],
-                1,
+                0,
             );
-            if transport
-                .publish(CLUSTER_INVALIDATION_CHANNEL, &msg)
-                .await
-                .is_ok()
-            {
+            msg.mutated_cache_keys = purged_keys.clone();
+            if let Err(e) = transport.publish(CLUSTER_INVALIDATION_CHANNEL, &msg).await {
+                failed_keys.push(("cluster_broadcast".to_string(), e.to_string()));
+            } else {
                 broadcast_sent = true;
             }
         }
@@ -227,7 +236,8 @@ impl InvalidationOrchestrator {
             return Err(SunbornError::internal(format!(
                 "Document purge failed with {} errors",
                 report.failed_cache_keys.len()
-            )));
+            ))
+            .with_details(serde_json::to_value(&report).unwrap_or_default()));
         }
 
         Ok(report)

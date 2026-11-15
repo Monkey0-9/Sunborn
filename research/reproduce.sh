@@ -96,7 +96,9 @@ echo "==> All unit, integration, and contract tests PASSED."
 echo ""
 echo "[3/5] Executing Live Gateway Performance & Latency Verification..."
 PERF_LOG=$(mktemp)
-"${CARGO_BIN}" test --test performance_test -- --nocapture | tee "${PERF_LOG}"
+# Latency SLO is a release-mode gate. The debug test profile intentionally uses
+# a looser assertion and must not be compared against the 5 ms production SLO.
+"${CARGO_BIN}" test --release --test performance_test -- --nocapture | tee "${PERF_LOG}"
 echo "------------------------------------------------------------------------"
 echo "Empirical Latency Decomposition (ACM/IEEE Discipline):"
 echo "  [Table I]  In-Process CPU Engine Overhead (Zero-Network L1 Baseline):"

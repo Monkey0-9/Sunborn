@@ -74,7 +74,10 @@ impl VectorClock {
 #[async_trait::async_trait]
 pub trait EpochPersistenceBackend: Send + Sync {
     async fn load_all_epochs(&self) -> sunborn_core::Result<HashMap<Uuid, u64>>;
-    async fn persist_epoch(&self, source_id: Uuid, epoch: u64) -> sunborn_core::Result<()>;
+    /// Atomically advances the durable epoch to at least `proposed` and returns
+    /// the authoritative value. Implementations MUST be monotonic under
+    /// concurrent writers (for PostgreSQL: GREATEST(current + 1, proposed)).
+    async fn advance_epoch(&self, source_id: Uuid, proposed: u64) -> sunborn_core::Result<u64>;
 }
 
 /// Thread-safe Epoch and Causality Lease Manager supporting multi-source validation.
@@ -83,6 +86,7 @@ pub struct EpochLeaseManager {
     epochs: Arc<RwLock<HashMap<Uuid, Arc<AtomicU64>>>>,
     vector_clocks: Arc<RwLock<HashMap<String, VectorClock>>>,
     persistence: Option<Arc<dyn EpochPersistenceBackend>>,
+    hydrated: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl EpochLeaseManager {
@@ -91,6 +95,7 @@ impl EpochLeaseManager {
             epochs: Arc::new(RwLock::new(HashMap::new())),
             vector_clocks: Arc::new(RwLock::new(HashMap::new())),
             persistence: None,
+            hydrated: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         }
     }
 
@@ -99,7 +104,15 @@ impl EpochLeaseManager {
             epochs: Arc::new(RwLock::new(HashMap::new())),
             vector_clocks: Arc::new(RwLock::new(HashMap::new())),
             persistence: Some(persistence),
+            // A persistent manager is not usable until hydration succeeds.
+            hydrated: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
+    }
+
+    /// True when the manager has an authoritative epoch view. A manager without
+    /// a persistence backend is always considered hydrated.
+    pub fn is_hydrated(&self) -> bool {
+        self.hydrated.load(Ordering::SeqCst)
     }
 
     /// Hydrate in-memory epoch counters from persistent database store at startup
@@ -111,8 +124,10 @@ impl EpochLeaseManager {
             for (source_id, epoch) in loaded {
                 map.insert(source_id, Arc::new(AtomicU64::new(epoch)));
             }
+            self.hydrated.store(true, Ordering::SeqCst);
             Ok(count)
         } else {
+            self.hydrated.store(true, Ordering::SeqCst);
             Ok(0)
         }
     }
@@ -126,9 +141,13 @@ impl EpochLeaseManager {
         counter.load(Ordering::SeqCst)
     }
 
-    /// Advance epoch upon knowledge update / document invalidation
-    pub async fn bump_epoch(&self, source_id: Uuid) -> u64 {
-        let new_epoch = {
+    /// Advance epoch upon knowledge update / document invalidation.
+    ///
+    /// When a persistence backend is configured this is fail-closed: a database
+    /// error is propagated and never reported as a successful advance. The
+    /// durable implementation is monotonic under concurrent replicas.
+    pub async fn bump_epoch(&self, source_id: Uuid) -> sunborn_core::Result<u64> {
+        let proposed = {
             let mut map = self.epochs.write().await;
             let counter = map
                 .entry(source_id)
@@ -137,10 +156,32 @@ impl EpochLeaseManager {
         };
 
         if let Some(ref p) = self.persistence {
-            let _ = p.persist_epoch(source_id, new_epoch).await;
+            if !self.is_hydrated() {
+                return Err(sunborn_core::SunbornError::internal(
+                    "epoch registry is not hydrated; refusing to advance an unverified epoch",
+                ));
+            }
+            let authoritative = p.advance_epoch(source_id, proposed).await?;
+            let mut map = self.epochs.write().await;
+            let counter = map
+                .entry(source_id)
+                .or_insert_with(|| Arc::new(AtomicU64::new(1)));
+            counter.fetch_max(authoritative, Ordering::SeqCst);
+            return Ok(authoritative.max(proposed));
         }
 
-        new_epoch
+        Ok(proposed)
+    }
+
+    /// Apply an epoch received from a peer replica without re-persisting it
+    /// (the origin replica already committed it durably). Local value only moves
+    /// forward, so a delayed or replayed message cannot roll a replica back.
+    pub async fn observe_epoch(&self, source_id: Uuid, observed_epoch: u64) -> u64 {
+        let mut map = self.epochs.write().await;
+        let counter = map
+            .entry(source_id)
+            .or_insert_with(|| Arc::new(AtomicU64::new(1)));
+        counter.fetch_max(observed_epoch, Ordering::SeqCst)
     }
 
     /// Check if write back is safe for a single source
@@ -203,7 +244,7 @@ mod tests {
         assert_eq!(lease_epoch, 1);
 
         // 2. Document mutation arrives at t=50ms and bumps epoch (epoch=2)
-        let new_epoch = manager.bump_epoch(doc_id).await;
+        let new_epoch = manager.bump_epoch(doc_id).await.unwrap();
         assert_eq!(new_epoch, 2);
 
         // 3. Stale LLM response finishes at t=200ms and attempts writeback
@@ -252,7 +293,7 @@ mod tests {
         assert!(manager.validate_multi_source_leases(&snapshots).await);
 
         // Invalidate single source s2 (mid-flight mutation)
-        manager.bump_epoch(s2).await;
+        manager.bump_epoch(s2).await.unwrap();
 
         // Multi-source validation must reject reuse immediately
         assert!(!manager.validate_multi_source_leases(&snapshots).await);
@@ -290,10 +331,11 @@ mod tests {
             Ok(guard.clone())
         }
 
-        async fn persist_epoch(&self, source_id: Uuid, epoch: u64) -> sunborn_core::Result<()> {
+        async fn advance_epoch(&self, source_id: Uuid, proposed: u64) -> sunborn_core::Result<u64> {
             let mut guard = self.storage.lock().await;
-            guard.insert(source_id, epoch);
-            Ok(())
+            let next = guard.get(&source_id).copied().unwrap_or(0).max(proposed);
+            guard.insert(source_id, next);
+            Ok(next)
         }
     }
 
@@ -306,11 +348,12 @@ mod tests {
 
         let src = Uuid::new_v4();
 
-        // 1. First process run: bump epoch to 5
+        // 1. First process run: hydrate the authoritative state, then bump to 5
         let mgr1 = EpochLeaseManager::with_persistence(backend.clone());
+        assert_eq!(mgr1.hydrate_from_persistence().await.unwrap(), 0);
         assert_eq!(mgr1.acquire_lease(src).await, 1);
         for _ in 0..4 {
-            mgr1.bump_epoch(src).await;
+            mgr1.bump_epoch(src).await.unwrap();
         }
         assert_eq!(mgr1.acquire_lease(src).await, 5);
 
@@ -321,8 +364,43 @@ mod tests {
 
         // Monotonicity property: must not reset to 1, must resume from 5 and bump to 6
         assert_eq!(mgr2.acquire_lease(src).await, 5);
-        let bumped = mgr2.bump_epoch(src).await;
+        let bumped = mgr2.bump_epoch(src).await.unwrap();
         assert_eq!(bumped, 6);
         assert_eq!(mgr2.acquire_lease(src).await, 6);
+    }
+
+    struct FailingEpochDb;
+
+    #[async_trait::async_trait]
+    impl EpochPersistenceBackend for FailingEpochDb {
+        async fn load_all_epochs(&self) -> sunborn_core::Result<HashMap<Uuid, u64>> {
+            Ok(HashMap::new())
+        }
+
+        async fn advance_epoch(
+            &self,
+            _source_id: Uuid,
+            _proposed: u64,
+        ) -> sunborn_core::Result<u64> {
+            Err(sunborn_core::SunbornError::database(
+                "simulated epoch authority outage",
+            ))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_epoch_advance_fails_closed_when_authority_unavailable() {
+        let mgr = EpochLeaseManager::with_persistence(Arc::new(FailingEpochDb));
+        assert_eq!(mgr.hydrate_from_persistence().await.unwrap(), 0);
+        let source = Uuid::new_v4();
+        let err = mgr.bump_epoch(source).await.unwrap_err();
+        assert!(err.to_string().contains("simulated epoch authority outage"));
+    }
+
+    #[tokio::test]
+    async fn test_epoch_advance_refuses_before_hydration() {
+        let mgr = EpochLeaseManager::with_persistence(Arc::new(FailingEpochDb));
+        assert!(!mgr.is_hydrated());
+        assert!(mgr.bump_epoch(Uuid::new_v4()).await.is_err());
     }
 }

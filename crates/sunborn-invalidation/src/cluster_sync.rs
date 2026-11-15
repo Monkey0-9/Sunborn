@@ -1,29 +1,38 @@
 //! # Multi-Node Cluster Invalidation Broadcast & Distributed Graph Sync
 //!
-//! Resolves Gap 4: Node-Local Roaring Bitmaps in Multi-Node Clusters.
+//! Mutations on one gateway replica must invalidate exact-cache entries, vector
+//! points, and Roaring lineage on every peer. The durable transport is Redis
+//! Streams with a consumer group:
 //!
-//! In horizontally scaled deployments (e.g. 10 gateway pods behind a load balancer),
-//! mutations on Pod A must immediately invalidate local in-memory L1 caches and
-//! `CompressedLineageGraph` Roaring bitmaps across all peer pods (Pod B, Pod C, ...)
-//! without awaiting TTL expiration or falling into stale cache read windows.
+//! * `publish` appends to `sunborn:invalidation:events` and returns the stream id.
+//! * each pod consumes with `XREADGROUP` and only `XACK`s after the local purge
+//!   succeeds; a failed purge remains pending for replay.
+//! * the message carries the exact cache keys and the authoritative epoch so a
+//!   peer with a local-only dependency graph can still purge vectors and advance
+//!   its fence.
 //!
-//! Provides `ClusterInvalidationMessage`, `ClusterBroadcastTransport`,
-//! and `DistributedGraphSyncEngine` communicating over `sunborn:invalidation:events`.
+//! The in-memory transport remains for unit tests and development only. Production
+//! readiness rejects it.
 
+use crate::epoch::EpochLeaseManager;
 use crate::graph_cache::GraphMemoryCache;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use redis::streams::{StreamReadOptions, StreamReadReply};
+use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use sunborn_core::{Result, TenantId};
+use sunborn_core::{Result, SunbornError, TenantId};
+use sunborn_semantic::VectorStore;
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
-/// Default Redis / cluster pub-sub topic for invalidation events
+/// Default Redis stream / cluster channel for invalidation events.
 pub const CLUSTER_INVALIDATION_CHANNEL: &str = "sunborn:invalidation:events";
+const CLUSTER_CONSUMER_GROUP: &str = "sunborn-gateway";
 
-/// Broadcast payload distributed across cluster nodes on knowledge mutation
+/// Broadcast payload distributed across cluster nodes on knowledge mutation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ClusterInvalidationMessage {
     pub message_id: Uuid,
@@ -31,8 +40,15 @@ pub struct ClusterInvalidationMessage {
     pub tenant_id: TenantId,
     pub mutated_doc_hashes: Vec<u64>,
     pub mutated_source_ids: Vec<Uuid>,
+    /// Exact cache keys resolved by the origin replica. Peers use these when
+    /// their dependency graph is process-local.
+    #[serde(default)]
+    pub mutated_cache_keys: Vec<String>,
     pub monotonic_epoch: u64,
     pub timestamp: DateTime<Utc>,
+    /// Redis stream entry id. Empty for in-memory messages.
+    #[serde(default)]
+    pub stream_id: String,
 }
 
 impl ClusterInvalidationMessage {
@@ -49,13 +65,15 @@ impl ClusterInvalidationMessage {
             tenant_id,
             mutated_doc_hashes,
             mutated_source_ids,
+            mutated_cache_keys: Vec::new(),
             monotonic_epoch,
             timestamp: Utc::now(),
+            stream_id: String::new(),
         }
     }
 }
 
-/// Abstract transport for cluster pub-sub event distribution
+/// Abstract transport for cluster pub-sub/stream event distribution.
 #[async_trait]
 pub trait ClusterBroadcastTransport: Send + Sync {
     async fn publish(&self, channel: &str, message: &ClusterInvalidationMessage) -> Result<()>;
@@ -63,9 +81,18 @@ pub trait ClusterBroadcastTransport: Send + Sync {
         &self,
         channel: &str,
     ) -> Result<broadcast::Receiver<ClusterInvalidationMessage>>;
+    /// Acknowledge successful local processing. In-memory transports are no-ops.
+    async fn ack(&self, _stream_id: &str) -> Result<()> {
+        Ok(())
+    }
+    /// True only for a transport that survives a pod restart and can replay
+    /// unacknowledged events.
+    fn is_durable(&self) -> bool {
+        false
+    }
 }
 
-/// In-memory cluster broadcast transport using tokio broadcast channels
+/// In-memory cluster broadcast transport for unit tests and local development.
 pub struct InMemoryClusterTransport {
     sender: broadcast::Sender<ClusterInvalidationMessage>,
 }
@@ -98,99 +125,203 @@ impl ClusterBroadcastTransport for InMemoryClusterTransport {
     }
 }
 
-/// Production Redis / Dragonfly Cluster Broadcast Transport.
-/// Uses Redis Pub/Sub (`PUBLISH` / `SUBSCRIBE`) across independent cluster pods.
+/// Durable Redis Streams transport with a consumer group.
 pub struct RedisClusterTransport {
     client: redis::Client,
     sender: broadcast::Sender<ClusterInvalidationMessage>,
     pod_id: String,
-    channel_name: String,
+    stream_key: String,
+    consumer_group: String,
 }
 
 impl RedisClusterTransport {
     pub fn new(redis_url: &str, pod_id: impl Into<String>, capacity: usize) -> Result<Arc<Self>> {
-        let client = redis::Client::open(redis_url).map_err(|e| {
-            sunborn_core::SunbornError::internal(format!("Invalid Redis cluster URL: {e}"))
-        })?;
+        let client = redis::Client::open(redis_url)
+            .map_err(|e| SunbornError::internal(format!("Invalid Redis cluster URL: {e}")))?;
         let (sender, _) = broadcast::channel(capacity.max(16));
         let pod_id = pod_id.into();
-        let channel_name = CLUSTER_INVALIDATION_CHANNEL.to_string();
+        let stream_key = CLUSTER_INVALIDATION_CHANNEL.to_string();
 
         let transport = Arc::new(Self {
             client,
             sender,
             pod_id,
-            channel_name,
+            stream_key,
+            consumer_group: CLUSTER_CONSUMER_GROUP.to_string(),
         });
-
-        // Spawn background listener to pull from Redis Pub/Sub into local broadcast channel
         transport.clone().start_subscriber();
-
         Ok(transport)
     }
 
     fn start_subscriber(self: Arc<Self>) {
+        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            tracing::warn!(
+                "Redis stream listener not started: no active Tokio runtime at construction"
+            );
+            return;
+        };
+
         let client = self.client.clone();
-        let channel = self.channel_name.clone();
+        let stream = self.stream_key.clone();
+        let group = self.consumer_group.clone();
+        let consumer = self.pod_id.clone();
         let tx = self.sender.clone();
-        let pod_id = self.pod_id.clone();
 
-        tokio::spawn(async move {
+        handle.spawn(async move {
             loop {
-                match client.get_async_pubsub().await {
-                    Ok(mut pubsub) => {
-                        if let Err(e) = pubsub.subscribe(&channel).await {
-                            tracing::warn!(error = %e, channel = %channel, "Redis pubsub subscribe failed, retrying in 500ms");
-                            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                            continue;
-                        }
-                        tracing::info!(pod = %pod_id, channel = %channel, "Subscribed to Redis cluster invalidation bus");
-
-                        use futures_util::StreamExt;
-                        let mut stream = pubsub.into_on_message();
-                        while let Some(msg) = stream.next().await {
-                            if let Ok(payload_str) = msg.get_payload::<String>() {
-                                if let Ok(parsed) =
-                                    serde_json::from_str::<ClusterInvalidationMessage>(&payload_str)
-                                {
-                                    let _ = tx.send(parsed);
-                                }
-                            }
-                        }
-                    }
+                let conn = match client.get_multiplexed_async_connection().await {
+                    Ok(conn) => conn,
                     Err(e) => {
-                        tracing::warn!(error = %e, "Redis connection failed in cluster subscriber, retrying in 1s");
-                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                        tracing::warn!(error = %e, "Redis stream connection failed; retrying in 1s");
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                        continue;
+                    }
+                };
+                let mut conn = conn;
+
+                if let Err(e) = ensure_consumer_group(&mut conn, &stream, &group).await {
+                    tracing::warn!(error = %e, "Redis consumer group setup failed; retrying in 1s");
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    continue;
+                }
+
+                // Replay events this consumer previously received but did not ack
+                // (crash or failed purge).
+                if let Ok(pending) = read_stream(
+                    &mut conn,
+                    &stream,
+                    &group,
+                    &consumer,
+                    "0",
+                    64,
+                    10,
+                )
+                .await
+                {
+                    dispatch_reply(pending, &tx);
+                }
+
+                tracing::info!(
+                    pod = %consumer,
+                    stream = %stream,
+                    group = %group,
+                    "Consuming durable Redis Stream invalidation events"
+                );
+
+                loop {
+                    match read_stream(&mut conn, &stream, &group, &consumer, ">", 64, 2000)
+                        .await
+                    {
+                        Ok(reply) => dispatch_reply(reply, &tx),
+                        Err(e) => {
+                            tracing::warn!(error = %e, "Redis stream read failed; reconnecting");
+                            break;
+                        }
                     }
                 }
+                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
             }
         });
     }
 }
 
+async fn ensure_consumer_group(
+    conn: &mut redis::aio::MultiplexedConnection,
+    stream: &str,
+    group: &str,
+) -> std::result::Result<(), redis::RedisError> {
+    let res: redis::RedisResult<()> = redis::cmd("XGROUP")
+        .arg("CREATE")
+        .arg(stream)
+        .arg(group)
+        .arg("0")
+        .arg("MKSTREAM")
+        .query_async(conn)
+        .await;
+    match res {
+        Ok(()) => Ok(()),
+        Err(e) if e.to_string().contains("BUSYGROUP") => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
+async fn read_stream(
+    conn: &mut redis::aio::MultiplexedConnection,
+    stream: &str,
+    group: &str,
+    consumer: &str,
+    id: &str,
+    count: usize,
+    block_ms: usize,
+) -> std::result::Result<StreamReadReply, redis::RedisError> {
+    let opts = StreamReadOptions::default()
+        .group(group, consumer)
+        .count(count)
+        .block(block_ms);
+    conn.xread_options::<&str, &str, StreamReadReply>(&[stream], &[id], &opts)
+        .await
+}
+
+fn dispatch_reply(reply: StreamReadReply, tx: &broadcast::Sender<ClusterInvalidationMessage>) {
+    for key in reply.keys {
+        for entry in key.ids {
+            let Some(payload) = entry.get::<String>("payload") else {
+                tracing::warn!(stream_id = %entry.id, "Cluster stream entry missing payload");
+                continue;
+            };
+            match serde_json::from_str::<ClusterInvalidationMessage>(&payload) {
+                Ok(mut message) => {
+                    message.stream_id = entry.id.clone();
+                    // If there are no local subscribers the send fails and the
+                    // entry stays pending, so a later listener can replay it.
+                    if let Err(e) = tx.send(message) {
+                        tracing::warn!(
+                            stream_id = %entry.id,
+                            error = %e,
+                            "No local cluster listener; invalidation remains pending"
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(
+                        stream_id = %entry.id,
+                        error = %e,
+                        "Malformed cluster invalidation payload; acknowledging poison entry"
+                    );
+                }
+            }
+        }
+    }
+}
+
 #[async_trait]
 impl ClusterBroadcastTransport for RedisClusterTransport {
-    async fn publish(&self, channel: &str, message: &ClusterInvalidationMessage) -> Result<()> {
-        use redis::AsyncCommands;
+    async fn publish(&self, _channel: &str, message: &ClusterInvalidationMessage) -> Result<()> {
         let mut conn = self
             .client
             .get_multiplexed_async_connection()
             .await
             .map_err(|e| {
-                sunborn_core::SunbornError::internal(format!("Redis publish connection error: {e}"))
+                SunbornError::internal(format!("Redis stream publish connection error: {e}"))
             })?;
         let payload = serde_json::to_string(message).map_err(|e| {
-            sunborn_core::SunbornError::internal(format!(
-                "Cluster message serialization error: {e}"
-            ))
+            SunbornError::internal(format!("Cluster message serialization error: {e}"))
         })?;
 
-        let _: () = conn.publish(channel, payload).await.map_err(|e| {
-            sunborn_core::SunbornError::internal(format!("Redis publish command failed: {e}"))
-        })?;
+        let stream_id: String = redis::cmd("XADD")
+            .arg(&self.stream_key)
+            .arg("*")
+            .arg("payload")
+            .arg(payload)
+            .query_async(&mut conn)
+            .await
+            .map_err(|e| SunbornError::internal(format!("Redis XADD failed: {e}")))?;
 
-        // Deliver to local subscribers as well
-        let _ = self.sender.send(message.clone());
+        // Deliver to local subscribers too (with the stream id so the local
+        // engine can ack exactly what it processed).
+        let mut local = message.clone();
+        local.stream_id = stream_id;
+        let _ = self.sender.send(local);
         Ok(())
     }
 
@@ -200,35 +331,74 @@ impl ClusterBroadcastTransport for RedisClusterTransport {
     ) -> Result<broadcast::Receiver<ClusterInvalidationMessage>> {
         Ok(self.sender.subscribe())
     }
+
+    async fn ack(&self, stream_id: &str) -> Result<()> {
+        if stream_id.is_empty() {
+            return Ok(());
+        }
+        let mut conn = self
+            .client
+            .get_multiplexed_async_connection()
+            .await
+            .map_err(|e| SunbornError::internal(format!("Redis XACK connection error: {e}")))?;
+        let _: i64 = redis::cmd("XACK")
+            .arg(&self.stream_key)
+            .arg(&self.consumer_group)
+            .arg(stream_id)
+            .query_async(&mut conn)
+            .await
+            .map_err(|e| SunbornError::internal(format!("Redis XACK failed: {e}")))?;
+        Ok(())
+    }
+
+    fn is_durable(&self) -> bool {
+        true
+    }
 }
 
-/// Helper to construct the appropriate cluster broadcast transport based on environment.
+/// Strict factory: returns an error instead of silently degrading to in-memory.
+pub fn create_cluster_transport_checked(
+    pod_id: &str,
+    redis_url: Option<&str>,
+    capacity: usize,
+) -> Result<Arc<dyn ClusterBroadcastTransport>> {
+    let url = redis_url
+        .filter(|url| !url.trim().is_empty())
+        .ok_or_else(|| {
+            SunbornError::configuration_error(
+                "Durable cluster transport requires REDIS_URL or SUNBORN_REDIS_URL",
+            )
+        })?;
+    let transport = RedisClusterTransport::new(url, pod_id, capacity)?;
+    Ok(transport)
+}
+
+/// Development factory: logs loudly and falls back to in-memory. Production
+/// readiness rejects the result because `is_durable()` is false.
 pub fn create_cluster_transport(
     pod_id: &str,
     redis_url: Option<&str>,
     capacity: usize,
 ) -> Arc<dyn ClusterBroadcastTransport> {
-    if let Some(url) = redis_url {
-        if !url.trim().is_empty() {
-            if let Ok(transport) = RedisClusterTransport::new(url, pod_id, capacity) {
-                return transport;
-            }
+    match create_cluster_transport_checked(pod_id, redis_url, capacity) {
+        Ok(transport) => transport,
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "Cluster transport falling back to in-memory; multi-replica invalidation is NOT durable"
+            );
+            Arc::new(InMemoryClusterTransport::new(capacity))
         }
     }
-    Arc::new(InMemoryClusterTransport::new(capacity))
 }
 
-/// Distributed Graph Synchronization Engine
-///
-/// Coordinates cross-pod invalidation propagation:
-/// 1. Emits cluster broadcast when local pod processes knowledge mutations.
-/// 2. Subscribes to cluster broadcast and immediately purges local in-memory L1 cache
-///    and Roaring bitmap lineage structures when peer pods broadcast.
-/// 3. Suppresses local self-echoes to avoid redundant local invalidation work.
+/// Distributed Graph Synchronization Engine.
 pub struct DistributedGraphSyncEngine {
     pod_id: String,
     transport: Arc<dyn ClusterBroadcastTransport>,
     graph_cache: Arc<GraphMemoryCache>,
+    vector_store: Option<Arc<dyn VectorStore>>,
+    epoch_manager: Option<Arc<EpochLeaseManager>>,
     messages_published: AtomicU64,
     messages_received: AtomicU64,
     echoes_suppressed: AtomicU64,
@@ -245,11 +415,23 @@ impl DistributedGraphSyncEngine {
             pod_id: pod_id.into(),
             transport,
             graph_cache,
+            vector_store: None,
+            epoch_manager: None,
             messages_published: AtomicU64::new(0),
             messages_received: AtomicU64::new(0),
             echoes_suppressed: AtomicU64::new(0),
             records_invalidated: AtomicU64::new(0),
         }
+    }
+
+    pub fn with_vector_store(mut self, vector_store: Arc<dyn VectorStore>) -> Self {
+        self.vector_store = Some(vector_store);
+        self
+    }
+
+    pub fn with_epoch_manager(mut self, epoch_manager: Arc<EpochLeaseManager>) -> Self {
+        self.epoch_manager = Some(epoch_manager);
+        self
     }
 
     pub fn pod_id(&self) -> &str {
@@ -280,12 +462,10 @@ impl DistributedGraphSyncEngine {
         source_ids: Vec<Uuid>,
         monotonic_epoch: u64,
     ) -> Result<usize> {
-        // 1. Invalidate locally first
         let local_affected = self
-            .apply_local_invalidation(&doc_hashes, &source_ids)
+            .apply_local_invalidation(&doc_hashes, &source_ids, &[])
             .await?;
 
-        // 2. Broadcast to cluster peers
         let msg = ClusterInvalidationMessage::new(
             &self.pod_id,
             tenant_id,
@@ -302,23 +482,41 @@ impl DistributedGraphSyncEngine {
         Ok(local_affected)
     }
 
-    /// Handles a cluster message received from the broadcast channel.
+    /// Handles a cluster message received from the transport. The stream entry
+    /// is acknowledged only after every local purge succeeds.
     pub async fn handle_cluster_message(
         &self,
         message: &ClusterInvalidationMessage,
     ) -> Result<usize> {
-        // Echo suppression: Ignore notifications originating from self
         if message.origin_pod_id == self.pod_id {
             self.echoes_suppressed.fetch_add(1, Ordering::Relaxed);
             return Ok(0);
         }
 
+        // Apply the origin's authoritative epoch before admitting any future
+        // writeback; a delayed message can only move the local fence forward.
+        if let Some(ref epoch_manager) = self.epoch_manager {
+            for source_id in &message.mutated_source_ids {
+                epoch_manager
+                    .observe_epoch(*source_id, message.monotonic_epoch)
+                    .await;
+            }
+        }
+
         self.messages_received.fetch_add(1, Ordering::Relaxed);
         let affected = self
-            .apply_local_invalidation(&message.mutated_doc_hashes, &message.mutated_source_ids)
+            .apply_local_invalidation(
+                &message.mutated_doc_hashes,
+                &message.mutated_source_ids,
+                &message.mutated_cache_keys,
+            )
             .await?;
         self.records_invalidated
             .fetch_add(affected as u64, Ordering::Relaxed);
+
+        // Ack only after the local state is consistent. On failure the entry
+        // remains pending and is replayed.
+        self.transport.ack(&message.stream_id).await?;
 
         Ok(affected)
     }
@@ -327,34 +525,79 @@ impl DistributedGraphSyncEngine {
         &self,
         doc_hashes: &[u64],
         source_ids: &[Uuid],
+        cache_keys: &[String],
     ) -> Result<usize> {
         let mut total_affected = 0;
 
-        // 1. Invalidate 64-bit Roaring Treemap document lineage and purge resolved cache keys
+        // 1. Exact keys named by the origin replica. This is the only complete
+        // path when the peer does not share the origin's dependency graph.
+        if !cache_keys.is_empty() {
+            total_affected += self.graph_cache.delete_cache_keys(cache_keys).await?;
+            if let Some(ref vector_store) = self.vector_store {
+                for key in cache_keys {
+                    vector_store.delete(key).await?;
+                }
+            }
+        }
+
+        // 2. Invalidate 64-bit Roaring document lineage and its exact keys.
         if !doc_hashes.is_empty() {
-            let (roaring_affected, _doc_keys) = self
+            let (roaring_affected, doc_keys) = self
                 .graph_cache
                 .invalidate_docs_rtc_purge(doc_hashes)
                 .await?;
             total_affected += roaring_affected.len() as usize;
+            if let Some(ref vector_store) = self.vector_store {
+                for key in &doc_keys {
+                    vector_store.delete(key).await?;
+                }
+            }
         }
 
-        // 2. Invalidate upstream knowledge source dependencies
+        // 3. Invalidate upstream knowledge-source dependencies.
         for source_id in source_ids {
             let source_keys = self.graph_cache.invalidate_source_rtc(source_id).await?;
             total_affected += source_keys.len();
+            if let Some(ref vector_store) = self.vector_store {
+                for key in &source_keys {
+                    vector_store.delete(key).await?;
+                }
+            }
         }
 
         Ok(total_affected)
     }
 
-    /// Spawns a background listener task that monitors the cluster transport channel.
+    /// Spawns a background listener task monitoring the cluster transport.
     pub fn start_listener(self: Arc<Self>) -> Option<tokio::task::JoinHandle<()>> {
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             Some(handle.spawn(async move {
-                if let Ok(mut rx) = self.transport.subscribe(CLUSTER_INVALIDATION_CHANNEL).await {
-                    while let Ok(msg) = rx.recv().await {
-                        let _ = self.handle_cluster_message(&msg).await;
+                let Ok(mut rx) = self
+                    .transport
+                    .subscribe(CLUSTER_INVALIDATION_CHANNEL)
+                    .await
+                else {
+                    tracing::error!("Failed to subscribe to cluster invalidation transport");
+                    return;
+                };
+                loop {
+                    match rx.recv().await {
+                        Ok(msg) => {
+                            if let Err(e) = self.handle_cluster_message(&msg).await {
+                                tracing::error!(
+                                    stream_id = %msg.stream_id,
+                                    error = %e,
+                                    "Cluster invalidation failed; entry remains pending for replay"
+                                );
+                            }
+                        }
+                        Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                            tracing::warn!(
+                                skipped,
+                                "Cluster listener lagged; entries remain pending and will be replayed"
+                            );
+                        }
+                        Err(broadcast::error::RecvError::Closed) => break,
                     }
                 }
             }))
@@ -371,13 +614,13 @@ impl DistributedGraphSyncEngine {
 mod tests {
     use super::*;
     use sunborn_cache::{CacheEntry, ExactCacheStore};
+    use sunborn_core::ApplicationId;
+    use sunborn_semantic::{MemoryVectorStore, VectorEntry};
 
     #[tokio::test]
     async fn test_multi_pod_distributed_graph_sync() {
-        // Shared cluster transport bus
         let transport = Arc::new(InMemoryClusterTransport::new(256));
 
-        // Pod 1
         let cache_pod1 = Arc::new(GraphMemoryCache::new_default());
         let sync_pod1 = Arc::new(DistributedGraphSyncEngine::new(
             "pod-us-east-1a",
@@ -386,7 +629,6 @@ mod tests {
         ));
         let _listener_pod1 = sync_pod1.clone().start_listener();
 
-        // Pod 2
         let cache_pod2 = Arc::new(GraphMemoryCache::new_default());
         let sync_pod2 = Arc::new(DistributedGraphSyncEngine::new(
             "pod-us-east-1b",
@@ -395,20 +637,17 @@ mod tests {
         ));
         let _listener_pod2 = sync_pod2.clone().start_listener();
 
-        // Wait briefly for subscribers to attach
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
 
         let src_doc: u64 = 0xdead_beef_1337;
         let tenant_id = TenantId::new("tenant-finance-alpha");
 
-        // Seed Pod 1 with cached query dependent on src_doc
         let entry1 = CacheEntry::new("cache:financial:report:q3", "revenue: $4.2B", Some(3600));
         cache_pod1
             .set_with_lineage(entry1, &[], &[src_doc], 101)
             .await
             .expect("set pod1");
 
-        // Seed Pod 2 with cached query dependent on src_doc
         let entry2 = CacheEntry::new("cache:financial:report:summary", "net: $1.1B", Some(3600));
         cache_pod2
             .set_with_lineage(entry2, &[], &[src_doc], 202)
@@ -418,7 +657,6 @@ mod tests {
         assert!(cache_pod1.lineage_graph().contains_document(src_doc));
         assert!(cache_pod2.lineage_graph().contains_document(src_doc));
 
-        // Pod 1 receives an external document mutation and broadcasts cluster sync
         let local_evicted = sync_pod1
             .publish_and_invalidate(tenant_id, vec![src_doc], vec![], 42)
             .await
@@ -431,10 +669,8 @@ mod tests {
             .await
             .unwrap());
 
-        // Allow cluster broadcast propagation to Pod 2
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-        // Pod 2 must have processed the cluster broadcast and evicted its local Roaring bitmap and cache key!
         assert!(!cache_pod2.lineage_graph().contains_document(src_doc));
         assert!(!cache_pod2
             .exists("cache:financial:report:summary")
@@ -442,15 +678,68 @@ mod tests {
             .unwrap());
         assert_eq!(sync_pod2.messages_received(), 1);
         assert_eq!(sync_pod2.records_invalidated(), 1);
-
-        // Echo suppression: Pod 1 must have suppressed its own echo
         assert_eq!(sync_pod1.echoes_suppressed(), 1);
         assert_eq!(sync_pod1.messages_published(), 1);
     }
 
     #[tokio::test]
+    async fn test_peer_purges_exact_keys_and_vectors_without_shared_graph() {
+        let transport = Arc::new(InMemoryClusterTransport::new(64));
+        let cache = Arc::new(GraphMemoryCache::new_default());
+        let vectors = Arc::new(MemoryVectorStore::new());
+        let engine = Arc::new(
+            DistributedGraphSyncEngine::new("pod-b", transport.clone(), cache.clone())
+                .with_vector_store(vectors.clone()),
+        );
+
+        let key = "exact:cross-replica:q1";
+        cache
+            .cache()
+            .set(CacheEntry::new(key, "stale answer", Some(3600)))
+            .await
+            .unwrap();
+        vectors
+            .insert(VectorEntry {
+                id: key.to_string(),
+                tenant_id: TenantId::new("t1"),
+                application_id: ApplicationId::new("app1"),
+                prompt: "q1".to_string(),
+                content: "stale answer".to_string(),
+                vector: vec![0.1, 0.2],
+                metadata: serde_json::json!({}),
+                created_at: Utc::now(),
+            })
+            .await
+            .unwrap();
+        assert!(vectors.delete(key).await.is_ok());
+        vectors
+            .insert(VectorEntry {
+                id: key.to_string(),
+                tenant_id: TenantId::new("t1"),
+                application_id: ApplicationId::new("app1"),
+                prompt: "q1".to_string(),
+                content: "stale answer".to_string(),
+                vector: vec![0.1, 0.2],
+                metadata: serde_json::json!({}),
+                created_at: Utc::now(),
+            })
+            .await
+            .unwrap();
+
+        let mut message =
+            ClusterInvalidationMessage::new("pod-a", TenantId::new("t1"), vec![], vec![], 7);
+        message.mutated_cache_keys = vec![key.to_string()];
+
+        let affected = engine.handle_cluster_message(&message).await.unwrap();
+        assert_eq!(affected, 1);
+        assert!(!cache.cache().exists(key).await.unwrap());
+        assert_eq!(vectors.count(&TenantId::new("t1")).await.unwrap(), 0);
+    }
+
+    #[tokio::test]
     async fn test_create_cluster_transport_factory() {
         let in_mem = create_cluster_transport("pod-1", None, 128);
+        assert!(!in_mem.is_durable());
         let mut rx = in_mem.subscribe("test").await.unwrap();
         let msg =
             ClusterInvalidationMessage::new("pod-1", TenantId::new("t1"), vec![1, 2], vec![], 1);
@@ -459,9 +748,7 @@ mod tests {
         assert_eq!(received.origin_pod_id, "pod-1");
         assert_eq!(received.mutated_doc_hashes, vec![1, 2]);
 
-        // Redis URL parsing
-        let redis_transport =
-            create_cluster_transport("pod-2", Some("redis://127.0.0.1:6379"), 128);
-        assert!(redis_transport.subscribe("test").await.is_ok());
+        let strict = create_cluster_transport_checked("pod-2", None, 128);
+        assert!(strict.is_err());
     }
 }
