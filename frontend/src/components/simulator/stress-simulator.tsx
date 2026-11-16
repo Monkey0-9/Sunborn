@@ -243,7 +243,7 @@ export function PlanetScaleStressSimulator() {
               <span className="text-xs font-mono text-cyan-300">
                 Notional Architecture Profile
               </span>
-              <span className="text-slate-500">·</span>
+              <span className="text-slate-400">·</span>
               <span className="text-xs font-mono text-slate-400">
                 8 Distributed Subsystems
               </span>
@@ -336,7 +336,7 @@ export function PlanetScaleStressSimulator() {
                 onChange={(e) => setIngestionReqs(Number(e.target.value))}
                 className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
               />
-              <div className="flex justify-between text-[10px] font-mono text-slate-500">
+              <div className="flex justify-between text-[10px] font-mono text-slate-400">
                 <span>10k</span>
                 <span>500k</span>
                 <span>1,000k</span>
@@ -359,7 +359,7 @@ export function PlanetScaleStressSimulator() {
                 onChange={(e) => setCacheMissRate(Number(e.target.value))}
                 className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-400"
               />
-              <div className="flex justify-between text-[10px] font-mono text-slate-500">
+              <div className="flex justify-between text-[10px] font-mono text-slate-400">
                 <span>5% (Hot)</span>
                 <span>25%</span>
                 <span>50% (Cold)</span>
@@ -384,7 +384,7 @@ export function PlanetScaleStressSimulator() {
                 onChange={(e) => setDocChurnPerHour(Number(e.target.value))}
                 className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-violet-400"
               />
-              <div className="flex justify-between text-[10px] font-mono text-slate-500">
+              <div className="flex justify-between text-[10px] font-mono text-slate-400">
                 <span>10/hr</span>
                 <span>5,000/hr</span>
                 <span>10,000/hr</span>
@@ -407,7 +407,7 @@ export function PlanetScaleStressSimulator() {
                 onChange={(e) => setMultiRegions(Number(e.target.value))}
                 className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-400"
               />
-              <div className="flex justify-between text-[10px] font-mono text-slate-500">
+              <div className="flex justify-between text-[10px] font-mono text-slate-400">
                 <span>1 (US-East)</span>
                 <span>3 (Global)</span>
                 <span>5 (Edge)</span>
@@ -643,7 +643,7 @@ export function PlanetScaleStressSimulator() {
                 </div>
 
                 <div className="space-y-1 pt-2 border-t border-white/5">
-                  <span className="text-[10px] font-mono uppercase text-slate-500 font-bold">
+                  <span className="text-[10px] font-mono uppercase text-slate-400 font-bold">
                     Target Primitives:
                   </span>
                   <p className="text-[11px] font-mono text-slate-300 leading-snug">

@@ -270,42 +270,42 @@ export default function LearningControllerPage() {
             <CardContent className="space-y-4 font-mono text-xs">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="p-3 rounded-lg bg-slate-900 border border-white/10 space-y-0.5">
-                  <span className="text-[10px] text-slate-500">MIN SIMILARITY (&tau;)</span>
+                  <span className="text-[10px] text-slate-400">MIN SIMILARITY (&tau;)</span>
                   <div className="text-lg font-bold text-cyan-300">
                     {activePolicy?.weights.min_similarity_threshold.toFixed(2) ?? "0.88"}
                   </div>
                   <span className="text-[10px] text-slate-400">&ge; 0.75 floor invariant</span>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-900 border border-white/10 space-y-0.5">
-                  <span className="text-[10px] text-slate-500">MAX CONFORMAL RISK</span>
+                  <span className="text-[10px] text-slate-400">MAX CONFORMAL RISK</span>
                   <div className="text-lg font-bold text-amber-300">
                     {activePolicy?.weights.max_risk_threshold.toFixed(2) ?? "0.25"}
                   </div>
                   <span className="text-[10px] text-slate-400">&le; 0.25 ceiling</span>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-900 border border-white/10 space-y-0.5">
-                  <span className="text-[10px] text-slate-500">CONFORMAL ALPHA (&alpha;)</span>
+                  <span className="text-[10px] text-slate-400">CONFORMAL ALPHA (&alpha;)</span>
                   <div className="text-lg font-bold text-emerald-300">
                     {activePolicy?.weights.conformal_alpha.toFixed(2) ?? "0.01"}
                   </div>
                   <span className="text-[10px] text-slate-400">99% coverage guarantee</span>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-900 border border-white/10 space-y-0.5">
-                  <span className="text-[10px] text-slate-500">PREFETCH CONFIDENCE</span>
+                  <span className="text-[10px] text-slate-400">PREFETCH CONFIDENCE</span>
                   <div className="text-lg font-bold text-white">
                     {activePolicy?.weights.prefetch_confidence_threshold.toFixed(2) ?? "0.60"}
                   </div>
                   <span className="text-[10px] text-slate-400">Markov trigger</span>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-900 border border-white/10 space-y-0.5">
-                  <span className="text-[10px] text-slate-500">STALENESS WEIGHT</span>
+                  <span className="text-[10px] text-slate-400">STALENESS WEIGHT</span>
                   <div className="text-lg font-bold text-slate-300">
                     {activePolicy?.weights.eviction_staleness_weight.toFixed(2) ?? "0.40"}
                   </div>
                   <span className="text-[10px] text-slate-400">W-TinyLFU ratio</span>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-900 border border-white/10 space-y-0.5">
-                  <span className="text-[10px] text-slate-500">COST WEIGHT</span>
+                  <span className="text-[10px] text-slate-400">COST WEIGHT</span>
                   <div className="text-lg font-bold text-slate-300">
                     {activePolicy?.weights.eviction_cost_weight.toFixed(2) ?? "0.60"}
                   </div>
@@ -359,7 +359,7 @@ export default function LearningControllerPage() {
                   onChange={(e) => setCanaryPercentage(Number(e.target.value))}
                   className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
                 />
-                <div className="flex justify-between text-[10px] text-slate-500">
+                <div className="flex justify-between text-[10px] text-slate-400">
                   <span>5% (Conservative)</span>
                   <span>15% (Recommended)</span>
                   <span>25% (Maximum Safe)</span>
@@ -438,13 +438,13 @@ export default function LearningControllerPage() {
             <CardContent className="space-y-4 font-mono text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-lg bg-slate-900 border border-white/10">
-                  <span className="text-[10px] text-slate-500">TOTAL VERIFIED EVENTS</span>
+                  <span className="text-[10px] text-slate-400">TOTAL VERIFIED EVENTS</span>
                   <div className="text-xl font-bold text-emerald-300 mt-0.5">
                     {totalFeedbackEvents}
                   </div>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-900 border border-white/10">
-                  <span className="text-[10px] text-slate-500">TENANT EVENTS</span>
+                  <span className="text-[10px] text-slate-400">TENANT EVENTS</span>
                   <div className="text-xl font-bold text-cyan-300 mt-0.5">
                     {tenantEvents}
                   </div>
@@ -481,7 +481,7 @@ export default function LearningControllerPage() {
             </CardHeader>
             <CardContent className="space-y-3 font-mono text-xs">
               {auditLogs.length === 0 ? (
-                <div className="p-6 rounded-lg bg-slate-900/50 border border-dashed border-white/10 text-center text-slate-500 text-xs">
+                <div className="p-6 rounded-lg bg-slate-900/50 border border-dashed border-white/10 text-center text-slate-400 text-xs">
                   No state transitions recorded in this session.
                 </div>
               ) : (
@@ -504,12 +504,12 @@ export default function LearningControllerPage() {
                         >
                           {log.action}
                         </Badge>
-                        <span className="text-slate-500 text-[10px]">
+                        <span className="text-slate-400 text-[10px]">
                           {new Date(log.timestamp).toLocaleTimeString()}
                         </span>
                       </div>
                       <div className="text-slate-300">{log.reason}</div>
-                      <div className="text-slate-500 text-[10px]">Policy: {log.policy_id} (v{log.version})</div>
+                      <div className="text-slate-400 text-[10px]">Policy: {log.policy_id} (v{log.version})</div>
                     </div>
                   ))}
                 </div>

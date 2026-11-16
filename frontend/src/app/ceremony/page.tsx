@@ -150,8 +150,8 @@ export default function CeremonyPage() {
           Demonstration mode. Performance, security, savings, and cluster claims are not measured on this page.
         </div>
         <dl className="mt-4 grid gap-2 text-xs font-mono text-slate-300 sm:grid-cols-2" aria-label="Unverified gateway status">
-          <div><dt className="inline text-slate-500">Gateway-reported provider: </dt><dd className="inline">{kmsProvider}</dd></div>
-          <div><dt className="inline text-slate-500">Gateway-reported cluster state: </dt><dd className="inline">{clusterStatus}</dd></div>
+          <div><dt className="inline text-slate-400">Gateway-reported provider: </dt><dd className="inline">{kmsProvider}</dd></div>
+          <div><dt className="inline text-slate-400">Gateway-reported cluster state: </dt><dd className="inline">{clusterStatus}</dd></div>
         </dl>
       </div>
 
@@ -177,7 +177,7 @@ export default function CeremonyPage() {
                 aria-label="Delegation Credentials"
                 value={delegation}
                 onChange={(e) => setDelegation(e.target.value)}
-                className="w-full bg-slate-950 border border-white/15 rounded-xl px-3 py-2.5 text-xs font-mono text-amber-300 focus:outline-none focus:border-amber-400"
+                className="w-full bg-slate-950 border border-white/15 rounded-xl px-3 py-2.5 text-xs font-mono text-amber-300 focus:border-amber-400"
               >
                 <option value="demo-profile-a">Demo profile A</option>
                 <option value="demo-profile-b">Demo profile B</option>
@@ -207,6 +207,7 @@ export default function CeremonyPage() {
                 <div className="text-[10px] text-slate-400">UI state only; no offline failover is connected</div>
               </div>
               <button
+                aria-label="Toggle offline replay mode"
                 aria-pressed={offlineMode}
                 onClick={() => setOfflineMode(!offlineMode)}
                 className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${

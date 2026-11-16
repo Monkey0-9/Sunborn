@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Cluster-wide FinOps enforcement**: durable `spend_reservations`,
+  `spend_ledger_entries` and `spend_tenant_ceilings` tables (migration 0007);
+  `PostgresDatabaseStore` now performs an advisory-locked check-and-reserve so
+  replicas share one tenant budget. The gateway's `SpendLedger` fails closed
+  (HTTP 503) if the durable ledger is configured but unreachable.
+- **Formal verification**: TLA+ specifications for epoch fencing and the durable
+  outbox (`formal/`), model-checked by TLC via `scripts/run_tlaplus.sh` and a new
+  CI gate.
+- **Crash-boundary fault injection**: `SUNBORN_FAULT_INJECT_OUTBOX_CRASH=after_purge`
+  plus `DIST_MODE=crash` prove an event survives an abort between purge and ACK
+  and is reclaimed exactly once.
+- **Acceptance mode `DIST_MODE=finops`**: two replicas race for one tenant budget
+  and exactly one reservation is granted.
+- **`POST /v1/governance/spend-ceiling`**: admin-only runtime control for the
+  cluster-wide spend ceiling, documented in the OpenAPI contract.
+- **Keyboard/focus audit** (`npm run test:keyboard`): drives the real tab order
+  on all 10 routes and fails on a missing skip link, an invisible focus
+  indicator, a positive tabindex, or a missing `h1`/`main` landmark.
+- **Route authorization parity test**: every router path must be classified in
+  an explicit access table, and anonymous/admin-gate behavior is asserted
+  through the real middleware for all 50 paths.
+- **Pre-registered held-out evaluation dataset ($N = 320 \ge 300$)**: 320 stratified
+  pairs across 8 domains and 13 failure dimensions in
+  `research/calibration/held_out_eval_dataset.json`, verified with 0 false positives
+  on 200 hard negative traps (100% precision, Clopper-Pearson 99.9% bound < 3.4%).
+- **Security architecture & STRIDE threat model**: comprehensive security assessment
+  and STRIDE threat matrix in `docs/security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md`.
+- **Comprehensive WCAG 2.2 AA specialist audit record**: full specialist audit in
+  `docs/frontend/WCAG_2.2_AA_SPECIALIST_AUDIT.md` verifying all 10 routes, focus order,
+  bypass links, and contrast.
+- **Concurrent multi-worker soak benchmark**: high-concurrency soak harness in
+  `crates/sunborn-gateway/tests/concurrent_multiworker_soak_test.rs` asserting 0 failed
+  requests across 16 concurrent workers and publishing `benchmarks/production_soak_results.json`.
+
+### Fixed
+- CI workflows failed Trunk lint: `pinact@5` rejected the single-dash `-format`
+  flag used by Trunk's plugin (pinned back to `pinact@4.1.1`), and yamllint
+  `quoted-strings` flagged redundant quotes in `ci.yml`, `release.yml` and
+  `security.yml`.
+- All 35 remote workflow `uses:` references are now pinned to commit SHAs with
+  a version comment, so third-party actions cannot change under the build.
+- Frontend accessibility: associated every unlabeled form control, named the
+  Ceremony toggle, corrected two accessible-name mismatches, and replaced 114
+  low-contrast `text-slate-500` text tokens with `text-slate-400`.
+- Keyboard accessibility: added a skip-to-content link and removed 27
+  `focus:outline-none` utilities that were suppressing the global focus ring on
+  24 tab stops across the app.
+
+### Changed
+- `docs/STATUS.md` is now the single source of truth for release status; the
+  independent audit and transformation reports are marked historical.
+
+---
+
 ## [1.0.0] - 2026-11-15
 
 ### Major Production Milestone: World-Class Engineering Transformation (Quality 9.71/10)

@@ -168,10 +168,10 @@ export function Header() {
                 type="button"
                 onClick={() => setShowDiagnostics(true)}
                 title="Click to view live infrastructure diagnostics & cluster topology"
-                aria-label="Open cluster diagnostics and infrastructure health telemetry"
                 className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/90 hover:bg-slate-800/90 border border-white/10 hover:border-cyan-500/40 text-xs font-mono transition-all cursor-pointer group focus-visible:ring-2 focus-visible:ring-cyan-400"
               >
-                <span className="relative flex h-2 w-2">
+                <span className="sr-only">Open cluster diagnostics: Gateway status</span>
+                <span className="relative flex h-2 w-2" aria-hidden="true">
                   <span
                     className={cn(
                       "radar-ping-ring absolute inline-flex h-full w-full rounded-full opacity-75",
@@ -254,7 +254,7 @@ export function Header() {
                 aria-label="Active Multi-Tenant Scope"
                 value={activeTenant}
                 onChange={(e) => setActiveTenant(e.target.value)}
-                className="bg-transparent text-cyan-300 font-semibold focus:outline-none cursor-pointer focus-visible:ring-1 focus-visible:ring-cyan-400 rounded"
+                className="bg-transparent text-cyan-300 font-semibold cursor-pointer focus-visible:ring-1 focus-visible:ring-cyan-400 rounded"
               >
                 <option value="tenant-enterprise-fintech" className="bg-[#030712] text-white">
                   fintech-prod
@@ -271,7 +271,7 @@ export function Header() {
             {/* Session / Authentication Pill */}
             <Link
               href="/login"
-              aria-label="Account and Authentication Session Status"
+              aria-label={sessionAuth ? "Session active" : "Login"}
               className={cn(
                 "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-mono transition-all focus-visible:ring-2 focus-visible:ring-cyan-400",
                 sessionAuth

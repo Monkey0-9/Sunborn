@@ -18,6 +18,7 @@
 //! ```
 
 pub mod autonomic;
+pub mod finops;
 pub mod handlers;
 pub mod learning;
 pub mod middleware;
@@ -117,6 +118,10 @@ pub fn create_router(state: AppState) -> Router {
         )
         .route("/v1/governance/shred", post(handlers::crypto_shred_tenant))
         .route("/v1/governance/provision", post(handlers::provision_tenant))
+        .route(
+            "/v1/governance/spend-ceiling",
+            post(handlers::set_spend_ceiling),
+        )
         .route(
             "/v1/governance/attest",
             post(handlers::generate_merkle_attestation),

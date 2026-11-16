@@ -312,10 +312,10 @@ export default function KnowledgePage() {
               </div>
               <div className="space-y-1 font-mono text-xs">
                 <div className="p-2 rounded bg-slate-950 text-slate-300">
-                  <span className="text-slate-500">Query A:</span> "Please approve transfer #9182 for $10,000"
+                  <span className="text-slate-400">Query A:</span> "Please approve transfer #9182 for $10,000"
                 </div>
                 <div className="p-2 rounded bg-slate-950 text-rose-300">
-                  <span className="text-slate-500">Query B:</span> "Please do NOT approve transfer #9182 for $10,000"
+                  <span className="text-slate-400">Query B:</span> "Please do NOT approve transfer #9182 for $10,000"
                 </div>
               </div>
               <div className="pt-2 text-xs font-mono text-slate-400 flex items-center justify-between">
@@ -334,10 +334,10 @@ export default function KnowledgePage() {
               </div>
               <div className="space-y-1 font-mono text-xs">
                 <div className="p-2 rounded bg-slate-950 text-slate-300">
-                  <span className="text-slate-500">Query A:</span> "Set capital reserve tier to 4.5%"
+                  <span className="text-slate-400">Query A:</span> "Set capital reserve tier to 4.5%"
                 </div>
                 <div className="p-2 rounded bg-slate-950 text-amber-300">
-                  <span className="text-slate-500">Query B:</span> "Set capital reserve tier to 45.0%"
+                  <span className="text-slate-400">Query B:</span> "Set capital reserve tier to 45.0%"
                 </div>
               </div>
               <div className="pt-2 text-xs font-mono text-slate-400 flex items-center justify-between">
@@ -396,21 +396,23 @@ export default function KnowledgePage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-xs font-mono text-slate-400">QUERY A (REFERENCE ENTRY)</label>
+              <label htmlFor="knowledge-query-a" className="text-xs font-mono text-slate-400">QUERY A (REFERENCE ENTRY)</label>
               <textarea
+                id="knowledge-query-a"
                 rows={2}
                 value={simQueryA}
                 onChange={(e) => setSimQueryA(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-cyan-500"
+                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white focus:border-cyan-500"
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-mono text-slate-400">QUERY B (INCOMING CANDIDATE)</label>
+              <label htmlFor="knowledge-query-b" className="text-xs font-mono text-slate-400">QUERY B (INCOMING CANDIDATE)</label>
               <textarea
+                id="knowledge-query-b"
                 rows={2}
                 value={simQueryB}
                 onChange={(e) => setSimQueryB(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-cyan-500"
+                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white focus:border-cyan-500"
               />
             </div>
           </div>
@@ -418,11 +420,11 @@ export default function KnowledgePage() {
           <div className="flex items-center justify-between pt-1">
             <div className="flex items-center gap-4 text-xs font-mono">
               <div className="flex items-center gap-1.5">
-                <span className="text-slate-500">Cosine:</span>
+                <span className="text-slate-400">Cosine:</span>
                 <span className="text-cyan-300 font-bold">{simResult.cosine.toFixed(3)}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="text-slate-500">Negation:</span>
+                <span className="text-slate-400">Negation:</span>
                 <span
                   className={
                     simResult.negationCheck === "PASS"
@@ -434,7 +436,7 @@ export default function KnowledgePage() {
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="text-slate-500">Numeric:</span>
+                <span className="text-slate-400">Numeric:</span>
                 <span
                   className={
                     simResult.numericCheck === "PASS"
@@ -446,7 +448,7 @@ export default function KnowledgePage() {
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="text-slate-500">Entity:</span>
+                <span className="text-slate-400">Entity:</span>
                 <span className="text-emerald-400 font-bold">{simResult.entityCheck}</span>
               </div>
             </div>
@@ -510,7 +512,7 @@ export default function KnowledgePage() {
                 <span>CACHED RECORDS</span>
               </div>
               <div className="text-xl font-bold font-mono text-white">
-                {graphStats.cached_entries} <span className="text-xs text-slate-500">/ {graphStats.max_capacity}</span>
+                {graphStats.cached_entries} <span className="text-xs text-slate-400">/ {graphStats.max_capacity}</span>
               </div>
               <div className="text-[10px] font-mono text-emerald-300">In Graph Cache</div>
             </div>
@@ -536,15 +538,16 @@ export default function KnowledgePage() {
                   <Search className="w-3.5 h-3.5" />
                   <span>INSPECT CACHE LINEAGE</span>
                 </span>
-                <span className="text-[10px] font-mono text-slate-500">GET /v1/cache/graph/lineage</span>
+                <span className="text-[10px] font-mono text-slate-400">GET /v1/cache/graph/lineage</span>
               </div>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
+                  aria-label="Cache key or hash to inspect"
                   value={graphLookupKey}
                   onChange={(e) => setGraphLookupKey(e.target.value)}
                   placeholder="Enter Cache Key or Hash..."
-                  className="flex-1 px-3 py-2 rounded-lg bg-slate-950 border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-cyan-500"
+                  className="flex-1 px-3 py-2 rounded-lg bg-slate-950 border border-white/10 text-xs font-mono text-white focus:border-cyan-500"
                 />
                 <button
                   type="button"
@@ -572,7 +575,7 @@ export default function KnowledgePage() {
                         </div>
                       ))
                     ) : (
-                      <div className="text-slate-500 italic text-[10px]">No upstream dependency bindings</div>
+                      <div className="text-slate-400 italic text-[10px]">No upstream dependency bindings</div>
                     )}
                   </div>
                 </div>
@@ -586,7 +589,7 @@ export default function KnowledgePage() {
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>TRIGGER RTC INVALIDATION</span>
                 </span>
-                <span className="text-[10px] font-mono text-slate-500">POST /v1/cache/graph/invalidate</span>
+                <span className="text-[10px] font-mono text-slate-400">POST /v1/cache/graph/invalidate</span>
               </div>
               <p className="text-[11px] text-slate-400">
                 Trigger instant SIMD Roaring Treemap bitmap operations to invalidate all downstream caches linked to the selected document.
@@ -686,12 +689,13 @@ export default function KnowledgePage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-mono text-slate-400">NEW VERSION TAG</label>
+                <label htmlFor="knowledge-version-tag" className="text-xs font-mono text-slate-400">NEW VERSION TAG</label>
                 <input
+                  id="knowledge-version-tag"
                   type="text"
                   value={newVersion}
                   onChange={(e) => setNewVersion(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-cyan-300 focus:outline-none focus:border-cyan-500"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-cyan-300 focus:border-cyan-500"
                 />
               </div>
 

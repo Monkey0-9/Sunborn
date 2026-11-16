@@ -614,15 +614,15 @@ export default function OverviewPage() {
               </div>
               <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Source:</span>
+                  <span className="text-slate-400">Source:</span>
                   <span className="text-slate-300">Gateway Worker (Process-Local)</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Period:</span>
+                  <span className="text-slate-400">Period:</span>
                   <span className="text-slate-300">Process Lifetime</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Status:</span>
+                  <span className="text-slate-400">Status:</span>
                   <span className="text-emerald-400 font-semibold">Live Telemetry</span>
                 </div>
               </div>
@@ -640,15 +640,15 @@ export default function OverviewPage() {
               </div>
               <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Source:</span>
+                  <span className="text-slate-400">Source:</span>
                   <span className="text-slate-300">Atomic Hit Counters (C0–C2)</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Hits / Reused:</span>
+                  <span className="text-slate-400">Hits / Reused:</span>
                   <span className="text-slate-300">{formatNumber(metrics.cachedEntries)} hits</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Status:</span>
+                  <span className="text-slate-400">Status:</span>
                   <span className="text-emerald-400 font-semibold">Live Telemetry</span>
                 </div>
               </div>
@@ -668,15 +668,15 @@ export default function OverviewPage() {
               </div>
               <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Source:</span>
+                  <span className="text-slate-400">Source:</span>
                   <span className="text-slate-300">Ingress Latency Histogram</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Measurement:</span>
+                  <span className="text-slate-400">Measurement:</span>
                   <span className="text-slate-300">Live Rolling Window</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Status:</span>
+                  <span className="text-slate-400">Status:</span>
                   <span className={metrics.p99LatencyUs !== null ? "text-emerald-400 font-semibold" : "text-amber-400 font-semibold"}>
                     {metrics.p99LatencyUs !== null ? "Live Measured" : "Not measured (Requires Prometheus)"}
                   </span>
@@ -696,15 +696,15 @@ export default function OverviewPage() {
               </div>
               <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Source:</span>
+                  <span className="text-slate-400">Source:</span>
                   <span className="text-slate-300">FinOps Telemetry Engine</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Pricing Model:</span>
+                  <span className="text-slate-400">Pricing Model:</span>
                   <span className="text-slate-300">Modeled (GPT-4o rates)</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Status:</span>
+                  <span className="text-slate-400">Status:</span>
                   <span className="text-violet-400 font-semibold">Modeled from Live Tokens</span>
                 </div>
               </div>
@@ -742,19 +742,19 @@ export default function OverviewPage() {
               </div>
               <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Source:</span>
+                  <span className="text-slate-400">Source:</span>
                   <span className="text-slate-300">SemanticCacheBench B3</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Sample Size:</span>
+                  <span className="text-slate-400">Sample Size:</span>
                   <span className="text-slate-300">N=124 queries (8 categories)</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">95% Wilson CI:</span>
+                  <span className="text-slate-400">95% Wilson CI:</span>
                   <span className="text-cyan-300 font-semibold">[88.3%, 100.0%]</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Status:</span>
+                  <span className="text-slate-400">Status:</span>
                   <span className="text-cyan-400 font-semibold">Verified Benchmark</span>
                 </div>
               </div>
@@ -772,19 +772,19 @@ export default function OverviewPage() {
               </div>
               <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Source:</span>
+                  <span className="text-slate-400">Source:</span>
                   <span className="text-slate-300">Verification Cascade (α ≤ 0.001)</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Sample Size:</span>
+                  <span className="text-slate-400">Sample Size:</span>
                   <span className="text-slate-300">N=124 queries</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">95% Wilson CI:</span>
+                  <span className="text-slate-400">95% Wilson CI:</span>
                   <span className="text-emerald-300 font-semibold">[0.0%, 3.0%]</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Status:</span>
+                  <span className="text-slate-400">Status:</span>
                   <span className="text-emerald-400 font-semibold">Verified Benchmark</span>
                 </div>
               </div>
@@ -802,19 +802,19 @@ export default function OverviewPage() {
               </div>
               <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Source:</span>
+                  <span className="text-slate-400">Source:</span>
                   <span className="text-slate-300">B3 vs B0 No-Cache Baseline</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Pricing Basis:</span>
+                  <span className="text-slate-400">Pricing Basis:</span>
                   <span className="text-slate-300">Synthetic ($0.00625/call)</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Sample Size:</span>
+                  <span className="text-slate-400">Sample Size:</span>
                   <span className="text-slate-300">N=124 queries</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Status:</span>
+                  <span className="text-slate-400">Status:</span>
                   <span className="text-violet-400 font-semibold">Modeled Benchmark Savings</span>
                 </div>
               </div>
@@ -832,19 +832,19 @@ export default function OverviewPage() {
               </div>
               <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Source:</span>
+                  <span className="text-slate-400">Source:</span>
                   <span className="text-slate-300">Local AEAD TDEK Zeroization</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Sample Iterations:</span>
+                  <span className="text-slate-400">Sample Iterations:</span>
                   <span className="text-slate-300">N=10,000 Key Eradication Runs</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Key Erasure RPO:</span>
+                  <span className="text-slate-400">Key Erasure RPO:</span>
                   <span className="text-amber-300 font-semibold">TDEK Zeroization (Local Store)</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Status:</span>
+                  <span className="text-slate-400">Status:</span>
                   <span className="text-amber-400 font-semibold">Measured Microbenchmark</span>
                 </div>
               </div>
@@ -887,7 +887,7 @@ export default function OverviewPage() {
               In-Memory W-TinyLFU + DragonflyDB (Redis RESP). Single-flight mutex coalescing with sub-millisecond RAM lookup.
             </p>
             <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between text-xs font-mono">
-              <span className="text-slate-500">Lookup Latency:</span>
+              <span className="text-slate-400">Lookup Latency:</span>
               <span className="text-cyan-300 font-bold">Sub-ms RAM (Live: Not measured)</span>
             </div>
           </div>
@@ -902,7 +902,7 @@ export default function OverviewPage() {
               Qdrant Vector Store with micro-batched FastEmbed. Negation trap and numeric inversion guardrails eliminate drift.
             </p>
             <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between text-xs font-mono">
-              <span className="text-slate-500">Benchmark Rate:</span>
+              <span className="text-slate-400">Benchmark Rate:</span>
               <span className="text-violet-300 font-bold">0.0% observed (α≤0.001)</span>
             </div>
           </div>
@@ -917,7 +917,7 @@ export default function OverviewPage() {
               Deterministic tool memoization. Merkle inclusion proofs attest safe execution subgraphs without re-running pure tools.
             </p>
             <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between text-xs font-mono">
-              <span className="text-slate-500">Attestation:</span>
+              <span className="text-slate-400">Attestation:</span>
               <span className="text-emerald-300 font-bold">SHA-256 Merkle</span>
             </div>
           </div>
@@ -932,7 +932,7 @@ export default function OverviewPage() {
               PostgreSQL Outbox + Write-Behind Committer. Reconstruct all ephemeral vector and cache tiers via POST /v1/rebuild.
             </p>
             <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between text-xs font-mono">
-              <span className="text-slate-500">Durability:</span>
+              <span className="text-slate-400">Durability:</span>
               <span className="text-amber-300 font-bold">RPO=0 / WAL Log</span>
             </div>
           </div>
@@ -1044,7 +1044,7 @@ export default function OverviewPage() {
                   value={runnerQuery}
                   onChange={(e) => setRunnerQuery(e.target.value)}
                   placeholder="Enter test query to route through Sunborn Multi-Tier Gateway..."
-                  className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-white/10 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
+                  className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-white/10 text-xs font-mono text-white placeholder-slate-500 focus:border-cyan-500 transition-colors"
                 />
               </div>
               <button
@@ -1084,7 +1084,7 @@ export default function OverviewPage() {
                 {/* Multi-Tier Execution Stepper */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 font-mono text-xs">
                   <div className="p-2.5 rounded-lg bg-slate-950/70 border border-cyan-500/30">
-                    <span className="text-[10px] text-slate-500 block">STEP 1: IDENTITY</span>
+                    <span className="text-[10px] text-slate-400 block">STEP 1: IDENTITY</span>
                     <span className="text-cyan-300 font-semibold truncate block">10-D BLAKE3 Derivation</span>
                     <span className="text-[10px] text-emerald-400">✓ Canonical Match</span>
                   </div>
@@ -1093,9 +1093,9 @@ export default function OverviewPage() {
                     "p-2.5 rounded-lg bg-slate-950/70 border",
                     activePreset === "exact" ? "border-emerald-500/50 bg-emerald-950/20" : "border-white/10"
                   )}>
-                    <span className="text-[10px] text-slate-500 block">STEP 2: TIER 0/1</span>
+                    <span className="text-[10px] text-slate-400 block">STEP 2: TIER 0/1</span>
                     <span className="text-white font-semibold truncate block">W-TinyLFU / Dragonfly</span>
-                    <span className={activePreset === "exact" ? "text-emerald-400 text-[10px]" : "text-slate-500 text-[10px]"}>
+                    <span className={activePreset === "exact" ? "text-emerald-400 text-[10px]" : "text-slate-400 text-[10px]"}>
                       {activePreset === "exact" ? "✓ Exact Hit (0.24ms)" : "Bypass (Cache Miss)"}
                     </span>
                   </div>
@@ -1104,9 +1104,9 @@ export default function OverviewPage() {
                     "p-2.5 rounded-lg bg-slate-950/70 border",
                     activePreset === "semantic" ? "border-violet-500/50 bg-violet-950/20" : activePreset === "negation" ? "border-rose-500/50 bg-rose-950/20" : "border-white/10"
                   )}>
-                    <span className="text-[10px] text-slate-500 block">STEP 3: TIER 2</span>
+                    <span className="text-[10px] text-slate-400 block">STEP 3: TIER 2</span>
                     <span className="text-white font-semibold truncate block">Structural Guardrail</span>
-                    <span className={activePreset === "negation" ? "text-rose-400 text-[10px] font-bold" : activePreset === "semantic" ? "text-violet-400 text-[10px]" : "text-slate-500 text-[10px]"}>
+                    <span className={activePreset === "negation" ? "text-rose-400 text-[10px] font-bold" : activePreset === "semantic" ? "text-violet-400 text-[10px]" : "text-slate-400 text-[10px]"}>
                       {activePreset === "negation" ? "⚠ Negation Polarity Shift" : activePreset === "semantic" ? "✓ Cosine ≥ 0.88 (Safe)" : "Skipped"}
                     </span>
                   </div>
@@ -1115,9 +1115,9 @@ export default function OverviewPage() {
                     "p-2.5 rounded-lg bg-slate-950/70 border",
                     activePreset === "dag" ? "border-emerald-500/50 bg-emerald-950/20" : "border-white/10"
                   )}>
-                    <span className="text-[10px] text-slate-500 block">STEP 4: TIER 3</span>
+                    <span className="text-[10px] text-slate-400 block">STEP 4: TIER 3</span>
                     <span className="text-white font-semibold truncate block">Merkle DAG Attestation</span>
-                    <span className={activePreset === "dag" ? "text-emerald-400 text-[10px]" : "text-slate-500 text-[10px]"}>
+                    <span className={activePreset === "dag" ? "text-emerald-400 text-[10px]" : "text-slate-400 text-[10px]"}>
                       {activePreset === "dag" ? "✓ Merkle Root Verified" : "Pass-Through"}
                     </span>
                   </div>
@@ -1125,7 +1125,7 @@ export default function OverviewPage() {
 
                 {/* Content Payload Preview */}
                 <div className="p-3 rounded-xl bg-slate-950 border border-white/10 font-mono text-xs space-y-1">
-                  <div className="flex items-center justify-between text-slate-500 text-[10px]">
+                  <div className="flex items-center justify-between text-slate-400 text-[10px]">
                     <span>RESPONSE CONTENT PAYLOAD:</span>
                     <span>KEY: {queryTrace.keyHash}</span>
                   </div>
@@ -1189,7 +1189,7 @@ export default function OverviewPage() {
             <button
               type="button"
               onClick={() => setSyncStatusMsg(null)}
-              className="text-slate-500 hover:text-white text-[10px]"
+              className="text-slate-400 hover:text-white text-[10px]"
             >
               Dismiss
             </button>
@@ -1228,7 +1228,7 @@ export default function OverviewPage() {
                   <span>CPU Load Factor:</span>
                   <span className="text-slate-300">{node.loadFactor} (Nominal)</span>
                 </div>
-                <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[10px] text-slate-500">
+                <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[10px] text-slate-400">
                   <span>Anti-Entropy: Merkle Gossip</span>
                   <span>RPO: 0.0s</span>
                 </div>
@@ -1270,7 +1270,7 @@ export default function OverviewPage() {
                         <Badge variant="outline" className="text-[10px]">
                           {item.origin}
                         </Badge>
-                        <span className="text-xs text-slate-500 font-mono">
+                        <span className="text-xs text-slate-400 font-mono">
                           {item.time}
                         </span>
                       </div>
@@ -1283,7 +1283,7 @@ export default function OverviewPage() {
 
                   <div className="flex items-center gap-6 font-mono text-xs">
                     <div>
-                      <span className="text-slate-500">DETAIL:</span>{" "}
+                      <span className="text-slate-400">DETAIL:</span>{" "}
                       <span className="text-slate-300">{item.detail}</span>
                     </div>
                     <div className="px-2.5 py-1 rounded-md bg-cyan-950/40 border border-cyan-500/30 text-cyan-300 font-bold">
@@ -1296,7 +1296,7 @@ export default function OverviewPage() {
           ) : (
             <div className="p-8 text-center text-slate-400 font-mono text-xs space-y-1">
               <p className="text-slate-300 font-semibold">No live execution traces recorded yet</p>
-              <p className="text-slate-500">Execute cache queries in Cache Explorer or via the Python SDK to stream real production telemetry.</p>
+              <p className="text-slate-400">Execute cache queries in Cache Explorer or via the Python SDK to stream real production telemetry.</p>
             </div>
           )}
         </div>
@@ -1347,7 +1347,7 @@ export default function OverviewPage() {
                 aria-label="Monthly Ingress Requests Slider"
                 className="w-full h-2 bg-slate-900 rounded-lg appearance-none cursor-pointer accent-cyan-400"
               />
-              <div className="flex justify-between text-[10px] font-mono text-slate-500">
+              <div className="flex justify-between text-[10px] font-mono text-slate-400">
                 <span>100k</span>
                 <span>5M</span>
                 <span>10M</span>
@@ -1370,7 +1370,7 @@ export default function OverviewPage() {
                 aria-label="Average Tokens per Query Slider"
                 className="w-full h-2 bg-slate-900 rounded-lg appearance-none cursor-pointer accent-violet-400"
               />
-              <div className="flex justify-between text-[10px] font-mono text-slate-500">
+              <div className="flex justify-between text-[10px] font-mono text-slate-400">
                 <span>128</span>
                 <span>2048</span>
                 <span>4096</span>
@@ -1393,7 +1393,7 @@ export default function OverviewPage() {
                 aria-label="Target Cache Hit Ratio Slider"
                 className="w-full h-2 bg-slate-900 rounded-lg appearance-none cursor-pointer accent-emerald-400"
               />
-              <div className="flex justify-between text-[10px] font-mono text-slate-500">
+              <div className="flex justify-between text-[10px] font-mono text-slate-400">
                 <span>20% (Conservative)</span>
                 <span>68% (Typical)</span>
                 <span>95% (Synthetic)</span>

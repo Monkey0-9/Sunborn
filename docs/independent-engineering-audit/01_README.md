@@ -1,5 +1,10 @@
 # SUNBORN — Independent Engineering Audit
 
+> **HISTORICAL — do not use as current status (2026-11-16).** The single source of
+> truth for implementation and release status is
+> **[`../STATUS.md`](../STATUS.md)**. This suite is retained unchanged as the record of
+> what was found at its baseline commit.
+
 **Suite:** 48-deliverable independent audit
 **Audit branch:** `audit/independent-2026-11`
 **Baseline commit:** `0e412f8` (`pre-audit-0e412f8` tag)

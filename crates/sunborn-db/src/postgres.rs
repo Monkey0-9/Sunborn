@@ -31,6 +31,18 @@ const MIGRATION_0003: &str = include_str!("../../../migrations/0003_finops_and_s
 const MIGRATION_0004: &str = include_str!("../../../migrations/0004_durable_cache_certificate.sql");
 const MIGRATION_0005: &str = include_str!("../../../migrations/0005_persistent_epochs_and_dlq.sql");
 const MIGRATION_0006: &str = include_str!("../../../migrations/0006_durable_outbox_queue.sql");
+const MIGRATION_0007: &str = include_str!("../../../migrations/0007_distributed_spend_ledger.sql");
+
+/// Outcome of a cluster-wide spend reservation attempt.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SpendReservationOutcome {
+    /// The reservation is durable and visible to every replica.
+    Granted(Uuid),
+    /// The tenant's rolling-window commitment would exceed its ceiling.
+    Denied { committed: f64, ceiling: f64 },
+    /// The authoritative store could not be reached. Callers must fail closed.
+    StoreUnavailable,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DbCircuitState {
@@ -251,6 +263,7 @@ impl PostgresDatabaseStore {
             (4, "0004_durable_cache_certificate", MIGRATION_0004),
             (5, "0005_persistent_epochs_and_dlq", MIGRATION_0005),
             (6, "0006_durable_outbox_queue", MIGRATION_0006),
+            (7, "0007_distributed_spend_ledger", MIGRATION_0007),
         ];
 
         for (version, name, sql) in migrations {
@@ -280,6 +293,247 @@ impl PostgresDatabaseStore {
         }
 
         Ok(())
+    }
+
+    /// Sets a durable per-tenant spend ceiling shared by every replica.
+    pub async fn set_spend_ceiling(&self, tenant_id: &str, ceiling_usd: f64) -> Result<()> {
+        let pool = self.get_pool().await.ok_or_else(|| {
+            SunbornError::database("PostgreSQL connection pool unavailable for spend ceiling")
+        })?;
+        sqlx::query(
+            "INSERT INTO spend_tenant_ceilings (tenant_id, ceiling_usd, updated_at)
+             VALUES ($1, $2, NOW())
+             ON CONFLICT (tenant_id) DO UPDATE
+             SET ceiling_usd = EXCLUDED.ceiling_usd, updated_at = NOW()",
+        )
+        .bind(tenant_id)
+        .bind(ceiling_usd)
+        .execute(&pool)
+        .await
+        .map_err(|e| SunbornError::database(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Atomically reserves budget against the tenant's cluster-wide rolling window.
+    ///
+    /// The transaction takes a per-tenant advisory lock, so concurrent replicas
+    /// cannot both observe an under-ceiling commitment and both spend into it.
+    pub async fn reserve_spend(
+        &self,
+        tenant_id: &str,
+        estimated_cost: f64,
+        default_ceiling: f64,
+        window: Duration,
+    ) -> SpendReservationOutcome {
+        if !estimated_cost.is_finite() || !(0.0..=100_000.0).contains(&estimated_cost) {
+            return SpendReservationOutcome::Denied {
+                committed: 0.0,
+                ceiling: default_ceiling,
+            };
+        }
+        let Some(pool) = self.get_pool().await else {
+            return SpendReservationOutcome::StoreUnavailable;
+        };
+        let window_secs = window.as_secs_f64().max(1.0);
+
+        let mut tx = match pool.begin().await {
+            Ok(tx) => tx,
+            Err(err) => {
+                tracing::error!(error = %err, "Failed to begin spend reservation transaction");
+                return SpendReservationOutcome::StoreUnavailable;
+            }
+        };
+
+        // Serialize reservation attempts per tenant across all replicas.
+        if let Err(err) = sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind(tenant_id)
+            .execute(&mut *tx)
+            .await
+        {
+            tracing::error!(error = %err, "Failed to acquire spend ledger tenant lock");
+            return SpendReservationOutcome::StoreUnavailable;
+        }
+
+        let ceiling: f64 = match sqlx::query_scalar::<_, Option<f64>>(
+            "SELECT ceiling_usd FROM spend_tenant_ceilings WHERE tenant_id = $1",
+        )
+        .bind(tenant_id)
+        .fetch_one(&mut *tx)
+        .await
+        {
+            Ok(Some(value)) => value,
+            Ok(None) => default_ceiling,
+            Err(err) => {
+                tracing::error!(error = %err, "Failed to read durable spend ceiling");
+                return SpendReservationOutcome::StoreUnavailable;
+            }
+        };
+
+        let committed: f64 = match sqlx::query_scalar::<_, f64>(
+            "SELECT
+                 COALESCE((SELECT SUM(amount_usd) FROM spend_ledger_entries
+                           WHERE tenant_id = $1 AND recorded_at > NOW() - ($2 * INTERVAL '1 second')), 0)
+               + COALESCE((SELECT SUM(amount_usd) FROM spend_reservations
+                           WHERE tenant_id = $1 AND reserved_at > NOW() - ($2 * INTERVAL '1 second')), 0)",
+        )
+        .bind(tenant_id)
+        .bind(window_secs)
+        .fetch_one(&mut *tx)
+        .await
+        {
+            Ok(value) => value,
+            Err(err) => {
+                tracing::error!(error = %err, "Failed to read spend ledger commitment");
+                return SpendReservationOutcome::StoreUnavailable;
+            }
+        };
+
+        let would_commit = committed + estimated_cost;
+        if committed >= ceiling || (committed > 0.0 && would_commit > ceiling) {
+            // Rolling back also releases the advisory lock.
+            return SpendReservationOutcome::Denied {
+                committed: would_commit,
+                ceiling,
+            };
+        }
+
+        let reservation_id = Uuid::new_v4();
+        let insert = sqlx::query(
+            "INSERT INTO spend_reservations (reservation_id, tenant_id, amount_usd, reserved_at)
+             VALUES ($1, $2, $3, NOW())",
+        )
+        .bind(reservation_id)
+        .bind(tenant_id)
+        .bind(estimated_cost)
+        .execute(&mut *tx)
+        .await;
+
+        if let Err(err) = insert {
+            tracing::error!(error = %err, "Failed to persist spend reservation");
+            return SpendReservationOutcome::StoreUnavailable;
+        }
+        if let Err(err) = tx.commit().await {
+            tracing::error!(error = %err, "Failed to commit spend reservation");
+            return SpendReservationOutcome::StoreUnavailable;
+        }
+
+        SpendReservationOutcome::Granted(reservation_id)
+    }
+
+    /// Settles a durable reservation with the actual cost and returns the tenant's
+    /// rolling-window spend. Returns `None` when the store is unavailable.
+    pub async fn settle_spend(
+        &self,
+        tenant_id: &str,
+        reservation_id: Uuid,
+        actual_cost: f64,
+        window: Duration,
+    ) -> Option<f64> {
+        let valid_cost = if actual_cost.is_finite() && actual_cost >= 0.0 {
+            actual_cost.min(100_000.0)
+        } else {
+            0.0
+        };
+        let pool = self.get_pool().await?;
+        let window_secs = window.as_secs_f64().max(1.0);
+
+        let mut tx = pool.begin().await.ok()?;
+        if sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind(tenant_id)
+            .execute(&mut *tx)
+            .await
+            .is_err()
+        {
+            return None;
+        }
+        // Idempotent: a duplicate settlement for the same reservation is ignored.
+        sqlx::query("DELETE FROM spend_reservations WHERE reservation_id = $1 AND tenant_id = $2")
+            .bind(reservation_id)
+            .bind(tenant_id)
+            .execute(&mut *tx)
+            .await
+            .ok()?;
+        sqlx::query(
+            "INSERT INTO spend_ledger_entries (tenant_id, reservation_id, amount_usd, recorded_at)
+             VALUES ($1, $2, $3, NOW())
+             ON CONFLICT (reservation_id) DO NOTHING",
+        )
+        .bind(tenant_id)
+        .bind(reservation_id)
+        .bind(valid_cost)
+        .execute(&mut *tx)
+        .await
+        .ok()?;
+        // Bound table growth without a background job: drop entries that cannot
+        // affect any supported window (clamped to one hour).
+        sqlx::query(
+            "DELETE FROM spend_ledger_entries
+             WHERE tenant_id = $1 AND recorded_at < NOW() - INTERVAL '1 hour'",
+        )
+        .bind(tenant_id)
+        .execute(&mut *tx)
+        .await
+        .ok()?;
+        let total: f64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(amount_usd), 0) FROM spend_ledger_entries
+             WHERE tenant_id = $1 AND recorded_at > NOW() - ($2 * INTERVAL '1 second')",
+        )
+        .bind(tenant_id)
+        .bind(window_secs)
+        .fetch_one(&mut *tx)
+        .await
+        .ok()?;
+        tx.commit().await.ok()?;
+        Some(total)
+    }
+
+    /// Releases an unused durable reservation (cache hit or aborted request).
+    pub async fn release_spend(&self, tenant_id: &str, reservation_id: Uuid) -> bool {
+        let Some(pool) = self.get_pool().await else {
+            return false;
+        };
+        sqlx::query("DELETE FROM spend_reservations WHERE reservation_id = $1 AND tenant_id = $2")
+            .bind(reservation_id)
+            .bind(tenant_id)
+            .execute(&pool)
+            .await
+            .is_ok()
+    }
+
+    /// Reads the tenant's cluster-wide rolling-window spend.
+    pub async fn spend_window_total(&self, tenant_id: &str, window: Duration) -> Option<f64> {
+        let pool = self.get_pool().await?;
+        sqlx::query_scalar(
+            "SELECT COALESCE(SUM(amount_usd), 0) FROM spend_ledger_entries
+             WHERE tenant_id = $1 AND recorded_at > NOW() - ($2 * INTERVAL '1 second')",
+        )
+        .bind(tenant_id)
+        .bind(window.as_secs_f64().max(1.0))
+        .fetch_one(&pool)
+        .await
+        .ok()
+    }
+
+    /// Removes all durable spend state for a tenant. Intended for operator resets.
+    pub async fn reset_spend(&self, tenant_id: &str) -> bool {
+        let Some(pool) = self.get_pool().await else {
+            return false;
+        };
+        let mut tx = match pool.begin().await {
+            Ok(tx) => tx,
+            Err(_) => return false,
+        };
+        let ok = sqlx::query("DELETE FROM spend_reservations WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .execute(&mut *tx)
+            .await
+            .is_ok()
+            && sqlx::query("DELETE FROM spend_ledger_entries WHERE tenant_id = $1")
+                .bind(tenant_id)
+                .execute(&mut *tx)
+                .await
+                .is_ok();
+        ok && tx.commit().await.is_ok()
     }
 
     /// Loads all persistent knowledge source epochs from PostgreSQL.

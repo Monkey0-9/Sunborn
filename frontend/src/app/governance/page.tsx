@@ -238,12 +238,13 @@ export default function GovernancePage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-mono text-slate-400">TARGET TENANT IDENTIFIER</label>
+                <label htmlFor="governance-tenant-shred" className="text-xs font-mono text-slate-400">TARGET TENANT IDENTIFIER</label>
                 <input
+                  id="governance-tenant-shred"
                   type="text"
                   value={tenantToShred}
                   onChange={(e) => setTenantToShred(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-rose-500"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white focus:border-rose-500"
                 />
               </div>
 
@@ -406,13 +407,13 @@ export default function GovernancePage() {
             <CardContent className="space-y-3 font-mono text-xs">
               <div className="grid grid-cols-2 gap-2">
                 <div className="p-2.5 rounded-lg bg-slate-900 border border-white/10">
-                  <span className="text-[10px] text-slate-500">ACTIVE PRODUCTION POLICY</span>
+                  <span className="text-[10px] text-slate-400">ACTIVE PRODUCTION POLICY</span>
                   <div className="text-emerald-400 font-bold mt-0.5">
                     {learningState?.activePolicyId || "policy-v1-baseline"}
                   </div>
                 </div>
                 <div className="p-2.5 rounded-lg bg-slate-900 border border-white/10">
-                  <span className="text-[10px] text-slate-500">TOTAL VERIFIED EVENTS</span>
+                  <span className="text-[10px] text-slate-400">TOTAL VERIFIED EVENTS</span>
                   <div className="text-cyan-300 font-bold mt-0.5">
                     {learningState?.totalEvents ?? 0}
                   </div>
@@ -460,19 +461,19 @@ export default function GovernancePage() {
             <CardContent className="space-y-3 font-mono text-xs">
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="p-2.5 rounded-lg bg-slate-900 border border-white/10">
-                  <span className="text-[10px] text-slate-500">Node ID</span>
+                  <span className="text-[10px] text-slate-400">Node ID</span>
                   <div className="text-emerald-400 font-bold mt-0.5 truncate">
                     {clusterInfo?.nodeId || "gateway-node-1"}
                   </div>
                 </div>
                 <div className="p-2.5 rounded-lg bg-slate-900 border border-white/10">
-                  <span className="text-[10px] text-slate-500">Region</span>
+                  <span className="text-[10px] text-slate-400">Region</span>
                   <div className="text-emerald-400 font-bold mt-0.5">
                     {clusterInfo?.region || "us-east-1"}
                   </div>
                 </div>
                 <div className="p-2.5 rounded-lg bg-slate-900 border border-white/10">
-                  <span className="text-[10px] text-slate-500">Vector Clock</span>
+                  <span className="text-[10px] text-slate-400">Vector Clock</span>
                   <div className="text-emerald-400 font-bold mt-0.5">
                     Epoch #{Object.values(clusterInfo?.vectorClock || {})[0] ?? 1}
                   </div>
@@ -506,7 +507,7 @@ export default function GovernancePage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left font-mono text-xs">
               <thead>
-                <tr className="border-b border-white/10 text-slate-500 text-[10px]">
+                <tr className="border-b border-white/10 text-slate-400 text-[10px]">
                   <th className="pb-3 font-semibold">TENANT IDENTIFIER</th>
                   <th className="pb-3 font-semibold">KEY VERSION</th>
                   <th className="pb-3 font-semibold">KMS HARDWARE BOUNDARY</th>

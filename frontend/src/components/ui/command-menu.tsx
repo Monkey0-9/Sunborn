@@ -175,9 +175,9 @@ export function CommandMenu() {
       <button
         onClick={() => setIsOpen(true)}
         className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-mono text-slate-400 hover:text-slate-200 transition-all duration-200"
-        aria-label="Open command palette"
       >
-        <Search className="w-3.5 h-3.5 text-cyan-400" />
+        <span className="sr-only">Open</span>
+        <Search className="w-3.5 h-3.5 text-cyan-400" aria-hidden="true" />
         <span>Command Menu...</span>
         <kbd className="px-1.5 py-0.5 rounded bg-white/[0.08] text-[10px] text-slate-400 font-sans border border-white/[0.08]">
           ⌘K
@@ -205,7 +205,7 @@ export function CommandMenu() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Type a command or search platform systems..."
-            className="w-full bg-transparent border-0 text-white placeholder-slate-500 focus:outline-none text-sm font-sans"
+            className="w-full bg-transparent border-0 text-white placeholder-slate-500 text-sm font-sans"
           />
           <kbd className="px-2 py-0.5 rounded bg-white/[0.06] text-xs text-slate-400 font-mono border border-white/[0.08]">
             ESC
@@ -215,7 +215,7 @@ export function CommandMenu() {
         {/* Results List */}
         <div className="max-h-[60vh] overflow-y-auto p-2 divide-y divide-white/[0.04]">
           {filtered.length === 0 ? (
-            <div className="p-8 text-center text-slate-500 text-sm font-mono">
+            <div className="p-8 text-center text-slate-400 text-sm font-mono">
               No matching platform subsystem or command found.
             </div>
           ) : (
@@ -253,7 +253,7 @@ export function CommandMenu() {
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-2.5 border-t border-white/[0.08] bg-slate-950/80 flex items-center justify-between text-[11px] text-slate-500 font-mono">
+        <div className="px-4 py-2.5 border-t border-white/[0.08] bg-slate-950/80 flex items-center justify-between text-[11px] text-slate-400 font-mono">
           <span>Sunborn FAANG Enterprise Navigation</span>
           <div className="flex items-center gap-3">
             <span>

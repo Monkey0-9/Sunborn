@@ -218,7 +218,7 @@ export default function ExecutionDAGPage() {
                 {/* Node Step Marker */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-mono font-bold text-slate-500">
+                    <span className="text-[10px] font-mono font-bold text-slate-400">
                       STEP 0{idx + 1}
                     </span>
                     <Badge
@@ -241,7 +241,7 @@ export default function ExecutionDAGPage() {
                 </div>
 
                 <div className="mt-3 pt-2.5 border-t border-white/10 flex items-center justify-between text-[11px] font-mono">
-                  <span className="text-slate-500">Latency:</span>
+                  <span className="text-slate-400">Latency:</span>
                   <span className={node.reused ? "text-emerald-400 font-bold" : "text-slate-300 font-bold"}>
                     {node.latency}
                   </span>
@@ -400,7 +400,7 @@ export default function ExecutionDAGPage() {
                   value={currentAction}
                   onChange={(e) => setCurrentAction(e.target.value)}
                   placeholder="e.g. search_documents"
-                  className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-cyan-500"
+                  className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white focus:border-cyan-500"
                 />
                 <button
                   onClick={() => handlePredictSpeculative(currentAction)}
@@ -427,14 +427,14 @@ export default function ExecutionDAGPage() {
                         <span className="text-slate-400">
                           Confidence: <strong className="text-emerald-400">{(pred.confidence_score * 100).toFixed(0)}%</strong>
                         </span>
-                        <span className="text-slate-500">
+                        <span className="text-slate-400">
                           Est. Savings: <strong className="text-violet-400">+{pred.estimated_savings_ms} ms</strong>
                         </span>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <span className="text-xs font-mono text-slate-500">No high-confidence predictions above threshold (&gt; 0.50)</span>
+                  <span className="text-xs font-mono text-slate-400">No high-confidence predictions above threshold (&gt; 0.50)</span>
                 )}
               </div>
             </div>

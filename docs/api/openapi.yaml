@@ -192,6 +192,21 @@ components:
           type: string
           example: "tenant-corp-42"
 
+    SetSpendCeilingRequest:
+      type: object
+      required:
+        - tenant_id
+        - ceiling_usd
+      properties:
+        tenant_id:
+          type: string
+          example: "tenant-corp-42"
+        ceiling_usd:
+          type: number
+          format: double
+          minimum: 0
+          example: 100.0
+
     ShredTenantRequest:
       type: object
       required:
@@ -698,6 +713,26 @@ paths:
           description: Tenant provisioned successfully
         '403':
           description: Administrative privileges required
+
+  /v1/governance/spend-ceiling:
+    post:
+      summary: Set Tenant Spend Ceiling
+      description: Sets the rolling-window spend ceiling for a tenant. When PostgreSQL is the active backend the ceiling is persisted and enforced atomically across every replica; otherwise it applies to the receiving process.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetSpendCeilingRequest'
+      responses:
+        '200':
+          description: Ceiling updated
+        '400':
+          description: Invalid tenant identifier or ceiling value
+        '403':
+          description: Administrative privileges required
+        '503':
+          description: Durable spend ledger unavailable (fail-closed)
 
   /v1/governance/shred:
     post:

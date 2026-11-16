@@ -81,6 +81,8 @@ pub struct AppState {
     pub attestation_verifying_key: ed25519_dalek::VerifyingKey,
     pub attestation_key_id: String,
     pub spend_velocity_controller: Arc<sunborn_core::SpendVelocityController>,
+    /// Enforces spend ceilings cluster-wide when the durable store is active.
+    pub spend_ledger: Arc<crate::finops::SpendLedger>,
     pub key_provider_configuration_error: Option<String>,
     pub graph_memory_cache: Option<Arc<GraphMemoryCache>>,
     pub cluster_sync_engine: Option<Arc<sunborn_invalidation::DistributedGraphSyncEngine>>,
@@ -587,6 +589,22 @@ impl AppState {
 
                             match result {
                                 Ok(()) => {
+                                    // Deterministic crash-injection point for the
+                                    // live acceptance harness: the purge has
+                                    // committed but the ACK has not. The event
+                                    // must survive and be reclaimed after the
+                                    // lease expires. Never armed in production.
+                                    if std::env::var("SUNBORN_FAULT_INJECT_OUTBOX_CRASH")
+                                        .as_deref()
+                                        == Ok("after_purge")
+                                        && !sunborn_core::is_production_mode()
+                                    {
+                                        tracing::error!(
+                                            outbox_id = record.id,
+                                            "FAULT INJECTION: aborting between purge and ACK"
+                                        );
+                                        std::process::abort();
+                                    }
                                     if let Err(err) =
                                         db_clone.mark_outbox_processed(record.id).await
                                     {
@@ -624,6 +642,14 @@ impl AppState {
             watermark_fencer,
             db: selected_db,
             memory_db: db,
+            spend_ledger: Arc::new(crate::finops::SpendLedger::new(
+                spend_velocity_controller.clone(),
+                if is_postgres {
+                    Some(postgres_db.clone())
+                } else {
+                    None
+                },
+            )),
             postgres_db,
             execution_store,
             shadow_evaluator,

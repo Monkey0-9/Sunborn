@@ -376,7 +376,7 @@ export function CanvasManifold({
           </div>
         </div>
 
-        <div className="text-[11px] font-mono text-slate-500 bg-slate-950/80 px-3 py-2 rounded-xl border border-white/10">
+        <div className="text-[11px] font-mono text-slate-400 bg-slate-950/80 px-3 py-2 rounded-xl border border-white/10">
           <span>Click canvas to emit cache query pulse wave</span>
         </div>
       </div>

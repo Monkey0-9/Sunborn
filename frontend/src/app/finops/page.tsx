@@ -296,15 +296,15 @@ export default function FinOpsPage() {
           </div>
           <div className="flex items-center gap-6 text-slate-300">
             <div>
-              <span className="text-slate-500 mr-1.5">Exact Hits:</span>
+              <span className="text-slate-400 mr-1.5">Exact Hits:</span>
               <span className="text-cyan-400 font-bold">{formatNumber(liveReport.exactHits)}</span>
             </div>
             <div>
-              <span className="text-slate-500 mr-1.5">Semantic Hits:</span>
+              <span className="text-slate-400 mr-1.5">Semantic Hits:</span>
               <span className="text-emerald-400 font-bold">{formatNumber(liveReport.semanticHits)}</span>
             </div>
             <div>
-              <span className="text-slate-500 mr-1.5">Modeled Estimate:</span>
+              <span className="text-slate-400 mr-1.5">Modeled Estimate:</span>
               <span className="text-emerald-300 font-bold">{formatCurrency(liveReport.estimatedSavingsUsd)}</span>
             </div>
           </div>
@@ -389,11 +389,12 @@ export default function FinOpsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-mono text-slate-400">MODEL TIER & TOKEN RATES</label>
+                <label htmlFor="finops-model-tier" className="text-xs font-mono text-slate-400">MODEL TIER & TOKEN RATES</label>
                 <select
+                  id="finops-model-tier"
                   value={modelPricing}
                   onChange={(e) => setModelPricing(e.target.value as any)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-cyan-300 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-cyan-300 focus:border-cyan-500 cursor-pointer"
                 >
                   <option value="gpt-4o">OpenAI GPT-4o ($2.50 in / $10.00 out per M)</option>
                   <option value="claude-3-5-sonnet">Anthropic Claude 3.5 Sonnet ($3.00 in / $15.00 out per M)</option>
@@ -437,21 +438,23 @@ export default function FinOpsPage() {
 
               <div className="grid grid-cols-2 gap-3 pt-2">
                 <div className="space-y-1">
-                  <label className="text-xs font-mono text-slate-400">AVG PROMPT TOKENS</label>
+                  <label htmlFor="finops-avg-prompt-tokens" className="text-xs font-mono text-slate-400">AVG PROMPT TOKENS</label>
                   <input
+                    id="finops-avg-prompt-tokens"
                     type="number"
                     value={avgInputTokens}
                     onChange={(e) => setAvgInputTokens(parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white focus:outline-none"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-mono text-slate-400">AVG COMPLETION TOKENS</label>
+                  <label htmlFor="finops-avg-completion-tokens" className="text-xs font-mono text-slate-400">AVG COMPLETION TOKENS</label>
                   <input
+                    id="finops-avg-completion-tokens"
                     type="number"
                     value={avgOutputTokens}
                     onChange={(e) => setAvgOutputTokens(parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white focus:outline-none"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white"
                   />
                 </div>
               </div>
@@ -532,26 +535,26 @@ export default function FinOpsPage() {
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 font-mono text-xs">
             <div className="p-3 rounded-xl bg-slate-900 border border-white/10 space-y-1">
-              <span className="text-[10px] text-slate-500">TENANT CEILING</span>
+              <span className="text-[10px] text-slate-400">TENANT CEILING</span>
               <div className="text-sm font-bold text-white">${velocityCeiling.toFixed(2)}</div>
               <span className="text-[10px] text-slate-400">Fixed Budget Cap</span>
             </div>
             <div className="p-3 rounded-xl bg-slate-900 border border-white/10 space-y-1">
-              <span className="text-[10px] text-slate-500">CURRENT SPEND (SETTLED)</span>
+              <span className="text-[10px] text-slate-400">CURRENT SPEND (SETTLED)</span>
               <div className="text-sm font-bold text-emerald-400">
                 ${reservationState.currentSpend.toFixed(2)}
               </div>
               <span className="text-[10px] text-slate-400">Durable Ledger</span>
             </div>
             <div className="p-3 rounded-xl bg-slate-900 border border-white/10 space-y-1">
-              <span className="text-[10px] text-slate-500">IN-FLIGHT RESERVED</span>
+              <span className="text-[10px] text-slate-400">IN-FLIGHT RESERVED</span>
               <div className="text-sm font-bold text-amber-400">
                 ${reservationState.currentReserved.toFixed(2)}
               </div>
               <span className="text-[10px] text-slate-400">Atomic Lock Active</span>
             </div>
             <div className="p-3 rounded-xl bg-slate-900 border border-white/10 space-y-1">
-              <span className="text-[10px] text-slate-500">TOTAL COMMITMENT</span>
+              <span className="text-[10px] text-slate-400">TOTAL COMMITMENT</span>
               <div className="text-sm font-bold text-cyan-300">
                 ${reservationState.totalCommitted.toFixed(2)} / ${velocityCeiling.toFixed(2)}
               </div>
@@ -589,7 +592,7 @@ export default function FinOpsPage() {
                 }}
               />
             </div>
-            <div className="flex items-center gap-4 text-[10px] text-slate-500 pt-1">
+            <div className="flex items-center gap-4 text-[10px] text-slate-400 pt-1">
               <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
                 <span>Settled Spend</span>

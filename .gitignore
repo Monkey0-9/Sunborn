@@ -1,6 +1,10 @@
 # Build output
 /target
 **/target/
+
+# TLA+ toolkit (fetched by scripts/run_tlaplus.sh) and TLC scratch output
+/formal/tla2tools.jar
+/formal/*.tmp
 *.rs.bk
 dist/
 build/

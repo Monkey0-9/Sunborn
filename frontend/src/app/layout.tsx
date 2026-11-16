@@ -32,11 +32,23 @@ export default function RootLayout({
             <div className="absolute inset-0 bg-aerospace-grid [mask-image:radial-gradient(ellipse_75%_65%_at_50%_0%,#000_60%,transparent_100%)] opacity-70" />
           </div>
 
+          {/* Keyboard bypass mechanism (WCAG 2.4.1). Visible only when focused. */}
+          <a
+            href="#main-content"
+            className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:rounded-lg focus:bg-cyan-400 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-slate-950 focus:shadow-glow"
+          >
+            Skip to main content
+          </a>
+
           {/* Floating Flagship Navigation Header */}
           <Header />
 
           {/* Main Viewport Container */}
-          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+          <main
+            id="main-content"
+            tabIndex={-1}
+            className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10"
+          >
             {children}
           </main>
 

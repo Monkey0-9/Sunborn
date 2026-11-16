@@ -1,17 +1,42 @@
 {
   "dataset_metadata": {
-    "version": "1.0.0",
-    "evaluation_standard": "IEEE-730/ACM-Artifact-Evaluation",
-    "description": "Independently held-out semantic evaluation benchmark for conformal risk control and AST guardrail validation",
-    "total_samples": 24,
-    "domains": ["financial_accounting", "healthcare_clinical", "security_administration", "general_reasoning"]
+    "version": "2.0.0",
+    "evaluation_standard": "IEEE-730/ACM-Artifact-Evaluation/ISO-IEC-25010",
+    "description": "Pre-registered held-out semantic evaluation benchmark for conformal risk control and AST guardrail validation (N=320 stratified pairs across 8 domains and 13 failure dimensions)",
+    "total_samples": 320,
+    "domains": [
+      "financial_accounting",
+      "healthcare_clinical",
+      "security_sensitive",
+      "system_administrative",
+      "legal_compliance",
+      "devops_cloud",
+      "software_engineering",
+      "general_reasoning"
+    ],
+    "strata_breakdown": {
+      "FinancialAccounting": 40,
+      "HealthcareMedical": 40,
+      "SecuritySensitive": 40,
+      "SystemAdministrative": 40,
+      "LegalCompliance": 40,
+      "DevOpsCloud": 40,
+      "SoftwareEngineering": 40,
+      "GeneralReasoning": 40
+    },
+    "statistical_design": {
+      "alpha_nominal": 0.001,
+      "target_false_positive_rate": 0.0,
+      "confidence_level": 0.999,
+      "min_sample_size": 300
+    }
   },
   "evaluation_strata": [
     {
       "id": "pair_001",
       "stratum": "FinancialAccounting",
-      "prompt_a": "What is the Q3 operating margin for Acme Corp?",
-      "prompt_b": "Calculate the third quarter operating margin of Acme Corp.",
+      "prompt_a": "Retrieve the quarterly cash flow statement for Acme Corp.",
+      "prompt_b": "Fetch the quarterly cash flow statement for Acme Corp.",
       "label": "EQUIVALENT",
       "expected_decision": "REUSE_SAFE",
       "structural_shift": "none"
@@ -19,32 +44,500 @@
     {
       "id": "pair_002",
       "stratum": "FinancialAccounting",
-      "prompt_a": "Wire $50,000 from treasury account to vendor A.",
-      "prompt_b": "Wire $500,000 from treasury account to vendor A.",
-      "label": "HARD_NEGATIVE",
-      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
-      "structural_shift": "numeric_transposition"
+      "prompt_a": "What is the total operational expense reported by Beta LLC?",
+      "prompt_b": "Show the total operational expense reported by Beta LLC.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
     },
     {
       "id": "pair_003",
       "stratum": "FinancialAccounting",
-      "prompt_a": "Transfer funds to account 98214 immediately.",
-      "prompt_b": "Do not transfer funds to account 98214 immediately.",
-      "label": "HARD_NEGATIVE",
-      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
-      "structural_shift": "negation_inversion"
+      "prompt_a": "Calculate the gross revenue for portfolio Alpha in Q1.",
+      "prompt_b": "Determine the gross revenue for portfolio Alpha in Q1.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
     },
     {
       "id": "pair_004",
-      "stratum": "HealthcareMedical",
-      "prompt_a": "Administer 50mg of Atenolol daily for hypertension.",
-      "prompt_b": "Give the patient 50 milligrams of Atenolol once a day for high blood pressure.",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "List all accounts receivable exceeding 10000 dollars.",
+      "prompt_b": "Show all accounts receivable exceeding 10000 dollars.",
       "label": "EQUIVALENT",
       "expected_decision": "REUSE_SAFE",
       "structural_shift": "none"
     },
     {
       "id": "pair_005",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Audit ledger entries for reconciliation discrepancies.",
+      "prompt_b": "Examine ledger entries for reconciliation discrepancies.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_006",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Display the balance sheet assets for Delta Holdings.",
+      "prompt_b": "Show the balance sheet assets for Delta Holdings.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_007",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Summarize the annual depreciation schedule for equipment.",
+      "prompt_b": "Describe the annual depreciation schedule for equipment.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_008",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Verify wire payment confirmation for invoice 9021.",
+      "prompt_b": "Check wire payment confirmation for invoice 9021.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_009",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Report treasury liquidity reserves for capital requirements.",
+      "prompt_b": "Show treasury liquidity reserves for capital requirements.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_010",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Extract EBITDA metrics across European subsidiary entities.",
+      "prompt_b": "List EBITDA metrics across European subsidiary entities.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_011",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Confirm tax liability estimation for fiscal cycle 2025.",
+      "prompt_b": "Verify tax liability estimation for fiscal cycle 2025.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_012",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Provide net operating profit margin for division Omega.",
+      "prompt_b": "Show net operating profit margin for division Omega.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_013",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Review vendor disbursement logs for payment batch 504.",
+      "prompt_b": "Audit vendor disbursement logs for payment batch 504.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_014",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Analyze currency hedging portfolio against foreign exchange risk.",
+      "prompt_b": "Evaluate currency hedging portfolio against foreign exchange risk.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_015",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Fetch the general ledger journal entry 7712.",
+      "prompt_b": "Retrieve the general ledger journal entry 7712.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_016",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Wire 50000 dollars from treasury to vendor Apex.",
+      "prompt_b": "Wire 500000 dollars from treasury to vendor Apex.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "numeric_magnitude_shift"
+    },
+    {
+      "id": "pair_017",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Approve wire disbursement of 25000 dollars to account 4401.",
+      "prompt_b": "Deny wire disbursement of 25000 dollars to account 4401.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "authorization_inversion"
+    },
+    {
+      "id": "pair_018",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Transfer 100000 dollars from account 8812 to account 9934.",
+      "prompt_b": "Transfer 100000 dollars from account 9934 to account 8812.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "role_numeric_transposition"
+    },
+    {
+      "id": "pair_019",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Confirm audit clearance for fiscal year 2024.",
+      "prompt_b": "Confirm audit clearance for fiscal year 2025.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "temporal_year_shift"
+    },
+    {
+      "id": "pair_020",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Release payment batch 108 to supplier Delta.",
+      "prompt_b": "Do not release payment batch 108 to supplier Delta.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "negation_inversion"
+    },
+    {
+      "id": "pair_021",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "The quarterly earnings statement indicates a profitable quarter.",
+      "prompt_b": "The quarterly earnings statement indicates an unprofitable quarter.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "antonym_inversion"
+    },
+    {
+      "id": "pair_022",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "All offshore accounts are subject to mandatory tax reporting.",
+      "prompt_b": "Not all offshore accounts are subject to mandatory tax reporting.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "quantifier_scope_inversion"
+    },
+    {
+      "id": "pair_023",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Verify invoice 4022 for payment of 1500 euros.",
+      "prompt_b": "Verify invoice 4022 for payment of 1500 pounds.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "currency_mutation"
+    },
+    {
+      "id": "pair_024",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Credit account 7710 with dividend distribution of 3200 dollars.",
+      "prompt_b": "Debit account 7710 with dividend distribution of 3200 dollars.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "transaction_type_inversion"
+    },
+    {
+      "id": "pair_025",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Generate profit report for Q2 operating performance.",
+      "prompt_b": "Generate profit report for Q3 operating performance.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "temporal_quarter_shift"
+    },
+    {
+      "id": "pair_026",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Authorize escrow release for merger transaction Alpha.",
+      "prompt_b": "Block escrow release for merger transaction Alpha.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "authorization_denial"
+    },
+    {
+      "id": "pair_027",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Record interest accrued of 450 dollars on treasury note.",
+      "prompt_b": "Record interest accrued of 4500 dollars on treasury note.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "numeric_magnitude_shift"
+    },
+    {
+      "id": "pair_028",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Allocate 75000 dollars capital expenditure to robotics division.",
+      "prompt_b": "Allocate 75000 dollars capital expenditure to logistics division.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "entity_substitution"
+    },
+    {
+      "id": "pair_029",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Confirm that customer billing records remain encrypted in storage.",
+      "prompt_b": "Confirm that customer billing records remain unencrypted in storage.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "security_negation_flip"
+    },
+    {
+      "id": "pair_030",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Disburse 12000 dollars bonus compensation to employee 891.",
+      "prompt_b": "Disburse 12000 dollars bonus compensation to employee 892.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "entity_numeric_shift"
+    },
+    {
+      "id": "pair_031",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Settle trade execution on exchange Nasdaq for ticker MSFT.",
+      "prompt_b": "Settle trade execution on exchange Nasdaq for ticker AAPL.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "ticker_substitution"
+    },
+    {
+      "id": "pair_032",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Apply late penalty fee of 150 dollars to overdue invoice.",
+      "prompt_b": "Waive late penalty fee of 150 dollars to overdue invoice.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "action_inversion"
+    },
+    {
+      "id": "pair_033",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Authorize credit line expansion to 2000000 dollars.",
+      "prompt_b": "Reject credit line expansion to 2000000 dollars.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "decision_reversal"
+    },
+    {
+      "id": "pair_034",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Audit report verified zero material compliance defects.",
+      "prompt_b": "Audit report identified unapproved material compliance defects.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "finding_inversion"
+    },
+    {
+      "id": "pair_035",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Transfer funds to beneficiary in London branch.",
+      "prompt_b": "Transfer funds to beneficiary in Zurich branch.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "jurisdiction_shift"
+    },
+    {
+      "id": "pair_036",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Approve vendor expense invoice 8820 for payment.",
+      "prompt_b": "Flag vendor expense invoice 8820 for fraud investigation.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "fraud_flag_inversion"
+    },
+    {
+      "id": "pair_037",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Recognize deferred revenue of 60000 dollars in current fiscal period.",
+      "prompt_b": "Defer revenue recognition of 60000 dollars to next fiscal period.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "timing_recognition_shift"
+    },
+    {
+      "id": "pair_038",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Confirm loan collateral valuation exceeds 500000 dollars.",
+      "prompt_b": "Confirm loan collateral valuation falls below 500000 dollars.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "relational_bound_inversion"
+    },
+    {
+      "id": "pair_039",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "The financial forecast indicates positive cash flow.",
+      "prompt_b": "The financial forecast indicates negative cash flow.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "polarity_inversion"
+    },
+    {
+      "id": "pair_040",
+      "stratum": "FinancialAccounting",
+      "prompt_a": "Disallow transaction processing for unverified cardholder 4110.",
+      "prompt_b": "Allow transaction processing for unverified cardholder 4110.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "permission_flip"
+    },
+    {
+      "id": "pair_041",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Administer 50mg of Atenolol daily for hypertension.",
+      "prompt_b": "Provide 50mg of Atenolol once a day for high blood pressure.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_042",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Review cardiac ultrasound imaging for left ventricular ejection fraction.",
+      "prompt_b": "Examine cardiac ultrasound imaging for left ventricular ejection fraction.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_043",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Check serum potassium concentration from blood test panel.",
+      "prompt_b": "Evaluate serum potassium concentration from blood test panel.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_044",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Retrieve patient immunization history for tetanus vaccination.",
+      "prompt_b": "Fetch patient immunization history for tetanus vaccination.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_045",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Analyze diagnostic biopsy specimens for cellular dysplasia.",
+      "prompt_b": "Examine diagnostic biopsy specimens for cellular dysplasia.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_046",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Summarize clinical recommendations for diabetic peripheral neuropathy.",
+      "prompt_b": "Outline clinical recommendations for diabetic peripheral neuropathy.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_047",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Verify insulin dosage titration protocol for type 2 diabetes.",
+      "prompt_b": "Check insulin dosage titration protocol for type 2 diabetes.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_048",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Display post-operative recovery guidelines for knee arthroplasty.",
+      "prompt_b": "Show post-operative recovery guidelines for knee arthroplasty.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_049",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Assess renal glomerular filtration rate from serum creatinine.",
+      "prompt_b": "Measure renal glomerular filtration rate from serum creatinine.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_050",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "List contraindications for prescribing cephalosporin antibiotics.",
+      "prompt_b": "Show contraindications for prescribing cephalosporin antibiotics.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_051",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Monitor vital signs telemetry for intensive care bed 12.",
+      "prompt_b": "Observe vital signs telemetry for intensive care bed 12.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_052",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Retrieve clinical trial efficacy results for oncology compound TX-400.",
+      "prompt_b": "Fetch clinical trial efficacy results for oncology compound TX-400.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_053",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Review medication reconciliation record for patient admission 7102.",
+      "prompt_b": "Check medication reconciliation record for patient admission 7102.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_054",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Explain emergency treatment pathway for acute myocardial infarction.",
+      "prompt_b": "Describe emergency treatment pathway for acute myocardial infarction.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_055",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Inspect continuous glucose monitoring telemetry logs.",
+      "prompt_b": "Review continuous glucose monitoring telemetry logs.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_056",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Administer 5mg dosage of pediatric morphine.",
+      "prompt_b": "Administer 50mg dosage of pediatric morphine.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "numeric_magnitude_shift"
+    },
+    {
+      "id": "pair_057",
       "stratum": "HealthcareMedical",
       "prompt_a": "Patient diagnosis confirmed with acute hepatitis antibodies.",
       "prompt_b": "Patient diagnosis unconfirmed with acute hepatitis antibodies.",
@@ -53,34 +546,358 @@
       "structural_shift": "antonym_inversion"
     },
     {
-      "id": "pair_006",
+      "id": "pair_058",
       "stratum": "HealthcareMedical",
-      "prompt_a": "Administer 5mg dosage of pediatric morphine.",
-      "prompt_b": "Administer 50mg dosage of pediatric morphine.",
+      "prompt_a": "Administer oral anticoagulant warfarin 2mg to patient.",
+      "prompt_b": "Do not administer oral anticoagulant warfarin 2mg to patient.",
       "label": "HARD_NEGATIVE",
       "expected_decision": "ABSTAIN_OR_RECOMPUTE",
-      "structural_shift": "numeric_transposition"
+      "structural_shift": "negation_inversion"
     },
     {
-      "id": "pair_007",
+      "id": "pair_059",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Prescribe amoxicillin 500mg for streptococcal bacterial pharyngitis in Patient Alpha.",
+      "prompt_b": "Prescribe amoxicillin 500mg for streptococcal bacterial pharyngitis in Patient Beta.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "patient_entity_shift"
+    },
+    {
+      "id": "pair_060",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Patient reports no documented allergy to penicillin derivatives.",
+      "prompt_b": "Patient reports documented severe allergy to penicillin derivatives.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "allergy_negation_inversion"
+    },
+    {
+      "id": "pair_061",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Infuse intravenous saline at 100ml per hour.",
+      "prompt_b": "Infuse intravenous saline at 1000ml per hour.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "infusion_rate_magnitude"
+    },
+    {
+      "id": "pair_062",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Discontinue corticosteroid therapy immediately due to adverse reaction.",
+      "prompt_b": "Continue corticosteroid therapy immediately due to adverse reaction.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "therapy_continuation_flip"
+    },
+    {
+      "id": "pair_063",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Administer insulin lispro 10 units before evening meal.",
+      "prompt_b": "Administer insulin lispro 10 units before morning breakfast.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "temporal_meal_shift"
+    },
+    {
+      "id": "pair_064",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Patient blood pressure reading is 120 over 80 mmHg.",
+      "prompt_b": "Patient blood pressure reading is 180 over 120 mmHg.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "vitals_numeric_transposition"
+    },
+    {
+      "id": "pair_065",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Confirm safe administration of drug A with drug B.",
+      "prompt_b": "Contraindicated lethal interaction between drug A and drug B.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "interaction_safety_reversal"
+    },
+    {
+      "id": "pair_066",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "All intensive care telemetry sensors are properly calibrated.",
+      "prompt_b": "Not all intensive care telemetry sensors are properly calibrated.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "quantifier_scope_inversion"
+    },
+    {
+      "id": "pair_067",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Patient test result for influenza antigen was positive.",
+      "prompt_b": "Patient test result for influenza antigen was negative.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "diagnostic_polarity_flip"
+    },
+    {
+      "id": "pair_068",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Administer oral chemotherapy tablet once weekly on monday.",
+      "prompt_b": "Administer oral chemotherapy tablet once weekly on friday.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "temporal_day_shift"
+    },
+    {
+      "id": "pair_069",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Discharge patient 409 from recovery ward today.",
+      "prompt_b": "Do not discharge patient 409 from recovery ward today.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "discharge_negation_flip"
+    },
+    {
+      "id": "pair_070",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Inject epinephrine 0.3mg intramuscularly for anaphylaxis.",
+      "prompt_b": "Inject epinephrine 3.0mg intramuscularly for anaphylaxis.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "emergency_dosage_magnitude"
+    },
+    {
+      "id": "pair_071",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Patient oxygen saturation measured at 98 percent on room air.",
+      "prompt_b": "Patient oxygen saturation measured at 84 percent on room air.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "oxygenation_critical_drop"
+    },
+    {
+      "id": "pair_072",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Biopsy histology revealed verified benign adenoma tissue.",
+      "prompt_b": "Biopsy histology revealed unverified benign adenoma tissue.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "histology_verification_flip"
+    },
+    {
+      "id": "pair_073",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Prepare patient for surgical resection of left kidney.",
+      "prompt_b": "Prepare patient for surgical resection of right kidney.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "anatomical_laterality_inversion"
+    },
+    {
+      "id": "pair_074",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Administer pediatric tylenol suspension 160mg orally.",
+      "prompt_b": "Administer adult aspirin tablets 325mg orally.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "pediatric_contraindication_switch"
+    },
+    {
+      "id": "pair_075",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Confirm patient signed informed consent for surgical procedure.",
+      "prompt_b": "Confirm patient revoked informed consent for surgical procedure.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "consent_revocation_flip"
+    },
+    {
+      "id": "pair_076",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Infuse blood unit packed red cells type O negative.",
+      "prompt_b": "Infuse blood unit packed red cells type AB positive.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "blood_type_incompatibility"
+    },
+    {
+      "id": "pair_077",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Serum troponin test confirmed myocardial injury was prevented.",
+      "prompt_b": "Serum troponin test confirmed myocardial injury was not prevented.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "biomarker_interpretation_flip"
+    },
+    {
+      "id": "pair_078",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Patient exhibits ventricular arrhythmia at rate of 75 bpm.",
+      "prompt_b": "Patient exhibits ventricular arrhythmia at rate of 175 bpm.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "cardiac_rate_numeric_shift"
+    },
+    {
+      "id": "pair_079",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Increase ventilator positive end-expiratory pressure to 8 cmH2O.",
+      "prompt_b": "Decrease ventilator positive end-expiratory pressure to 4 cmH2O.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "ventilator_titration_inversion"
+    },
+    {
+      "id": "pair_080",
+      "stratum": "HealthcareMedical",
+      "prompt_a": "Prescribe topical hydrocortisone ointment 1 percent twice daily.",
+      "prompt_b": "Prescribe systemic prednisone tablets 40mg twice daily.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "administration_route_substitution"
+    },
+    {
+      "id": "pair_081",
       "stratum": "SecuritySensitive",
-      "prompt_a": "Grant read-only access to engineering logs for user dev_92.",
-      "prompt_b": "Provide user dev_92 with read permissions on the engineering logs.",
+      "prompt_a": "Grant read-only access to engineering telemetry for user dev_92.",
+      "prompt_b": "Provide user dev_92 with read permissions on engineering telemetry.",
       "label": "EQUIVALENT",
       "expected_decision": "REUSE_SAFE",
       "structural_shift": "none"
     },
     {
-      "id": "pair_008",
+      "id": "pair_082",
       "stratum": "SecuritySensitive",
-      "prompt_a": "Grant read-only access to engineering logs for user dev_92.",
-      "prompt_b": "Deny read-only access to engineering logs for user dev_92.",
+      "prompt_a": "Verify cryptographic signature on artifact build 204.",
+      "prompt_b": "Validate cryptographic signature on artifact build 204.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_083",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Audit failed authentication attempts recorded in auth service.",
+      "prompt_b": "Review failed authentication attempts recorded in auth service.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_084",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "List active IAM service accounts in production project.",
+      "prompt_b": "Show active IAM service accounts in production project.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_085",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Inspect TLS cipher suites enabled on edge load balancer.",
+      "prompt_b": "Check TLS cipher suites enabled on edge load balancer.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_086",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Retrieve audit trail for credential generation in tenant T1.",
+      "prompt_b": "Fetch audit trail for credential generation in tenant T1.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_087",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Verify HMAC digest for incoming webhook event 881.",
+      "prompt_b": "Validate HMAC digest for incoming webhook event 881.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_088",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Inspect firewall egress security rules for private subnet.",
+      "prompt_b": "Review firewall egress security rules for private subnet.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_089",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Display active session tokens for user admin_01.",
+      "prompt_b": "Show active session tokens for user admin_01.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_090",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Check rate limiting quota status for client API key.",
+      "prompt_b": "Verify rate limiting quota status for client API key.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_091",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "List revoked certificates stored in revocation list 44.",
+      "prompt_b": "Show revoked certificates stored in revocation list 44.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_092",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Analyze security vulnerability scan results for container base image.",
+      "prompt_b": "Examine security vulnerability scan results for container base image.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_093",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Verify zero-knowledge cryptographic proof for identity assertion.",
+      "prompt_b": "Validate zero-knowledge cryptographic proof for identity assertion.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_094",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Display authorized public keys registered for bastion host.",
+      "prompt_b": "Show authorized public keys registered for bastion host.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_095",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Fetch role-based access permissions assigned to role security_auditor.",
+      "prompt_b": "Retrieve role-based access permissions assigned to role security_auditor.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_096",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Grant read-only access to engineering telemetry for user dev_92.",
+      "prompt_b": "Deny read-only access to engineering telemetry for user dev_92.",
       "label": "HARD_NEGATIVE",
       "expected_decision": "ABSTAIN_OR_RECOMPUTE",
       "structural_shift": "authorization_denial"
     },
     {
-      "id": "pair_009",
+      "id": "pair_097",
       "stratum": "SecuritySensitive",
       "prompt_a": "Delete all expired session tokens from redis.",
       "prompt_b": "Do not delete expired session tokens from redis.",
@@ -89,31 +906,2011 @@
       "structural_shift": "negation_inversion"
     },
     {
-      "id": "pair_010",
+      "id": "pair_098",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Allow anonymous external traffic to administrative metrics port 9090.",
+      "prompt_b": "Disallow anonymous external traffic to administrative metrics port 9090.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "antonym_inversion"
+    },
+    {
+      "id": "pair_099",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Rotate master encryption key KEK version 1 to version 2.",
+      "prompt_b": "Rotate master encryption key KEK version 1 to version 3.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "version_numeric_shift"
+    },
+    {
+      "id": "pair_100",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Permit SSH access from corporate VPN gateway 10.0.0.1.",
+      "prompt_b": "Prohibit SSH access from corporate VPN gateway 10.0.0.1.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "permission_prohibition_flip"
+    },
+    {
+      "id": "pair_101",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Confirm authentication token validity for user 4410.",
+      "prompt_b": "Revoke authentication token validity for user 4410.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "token_revocation_flip"
+    },
+    {
+      "id": "pair_102",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Enable mutual TLS client certificate verification on ingress.",
+      "prompt_b": "Disable mutual TLS client certificate verification on ingress.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "tls_enforcement_inversion"
+    },
+    {
+      "id": "pair_103",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "All tenant data buckets are protected by customer-managed KMS keys.",
+      "prompt_b": "Not all tenant data buckets are protected by customer-managed KMS keys.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "quantifier_scope_inversion"
+    },
+    {
+      "id": "pair_104",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Allow developer service account to assume role production_deployer.",
+      "prompt_b": "Block developer service account from assuming role production_deployer.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "role_assumption_block"
+    },
+    {
+      "id": "pair_105",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Enforce mandatory multi-factor authentication on administrative login.",
+      "prompt_b": "Bypass mandatory multi-factor authentication on administrative login.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "mfa_bypass_inversion"
+    },
+    {
+      "id": "pair_106",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Authorize cryptographic shredding of tenant T1 data keys.",
+      "prompt_b": "Cancel cryptographic shredding of tenant T1 data keys.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "shred_cancellation"
+    },
+    {
+      "id": "pair_107",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Verify SHA-256 hash checksum matches release binary.",
+      "prompt_b": "Detected checksum mismatch indicating tampered release binary.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "integrity_check_failure"
+    },
+    {
+      "id": "pair_108",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Allow outbound TCP traffic on port 443 to external API.",
+      "prompt_b": "Allow outbound TCP traffic on port 22 to external API.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "port_number_shift"
+    },
+    {
+      "id": "pair_109",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Authenticate incoming request using HMAC signature validation.",
+      "prompt_b": "Accept unverified request without HMAC signature validation.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "signature_validation_bypass"
+    },
+    {
+      "id": "pair_110",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Set session token expiration timeout to 3600 seconds.",
+      "prompt_b": "Set session token expiration timeout to 36000 seconds.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "timeout_magnitude_expansion"
+    },
+    {
+      "id": "pair_111",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Lock user account 810 after 5 consecutive failed attempts.",
+      "prompt_b": "Unlock user account 810 after 5 consecutive failed attempts.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "account_lock_inversion"
+    },
+    {
+      "id": "pair_112",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Permit read access to encrypted database tables.",
+      "prompt_b": "Permit read access to plaintext unencrypted database tables.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "encryption_state_mutation"
+    },
+    {
+      "id": "pair_113",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Restrict API key usage to verified IP address 192.168.1.50.",
+      "prompt_b": "Allow API key usage from unrestricted public IP range.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "ip_restriction_removal"
+    },
+    {
+      "id": "pair_114",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Promote user account 202 to cluster administrator role.",
+      "prompt_b": "Demote user account 202 from cluster administrator role.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "privilege_elevation_reversal"
+    },
+    {
+      "id": "pair_115",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Reject unauthenticated RPC invocations from untrusted hosts.",
+      "prompt_b": "Approve unauthenticated RPC invocations from untrusted hosts.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "access_gate_reversal"
+    },
+    {
+      "id": "pair_116",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Verify authorization token signature using Ed25519 public key.",
+      "prompt_b": "Accept forged authorization token with forged signature.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "cryptographic_forgery_trap"
+    },
+    {
+      "id": "pair_117",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Quarantine compromised worker node 15 from production fleet.",
+      "prompt_b": "Return compromised worker node 15 to production fleet.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "quarantine_release_hazard"
+    },
+    {
+      "id": "pair_118",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Enforce strict CORS origin whitelist on authentication handler.",
+      "prompt_b": "Disable CORS origin check on authentication handler.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "cors_protection_removal"
+    },
+    {
+      "id": "pair_119",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Mask customer personal identifying information in application logs.",
+      "prompt_b": "Expose raw unmasked customer personal identifying information in application logs.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "pii_exposure_flip"
+    },
+    {
+      "id": "pair_120",
+      "stratum": "SecuritySensitive",
+      "prompt_a": "Confirm zero vulnerabilities found in static code analysis.",
+      "prompt_b": "Static code analysis detected critical remote code execution vulnerability.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "vulnerability_presence_flip"
+    },
+    {
+      "id": "pair_121",
       "stratum": "SystemAdministrative",
-      "prompt_a": "Restart cluster node 4 after draining traffic.",
+      "prompt_a": "Restart cluster node 4 after draining incoming traffic.",
       "prompt_b": "After draining incoming traffic, perform a restart of cluster node 4.",
       "label": "EQUIVALENT",
       "expected_decision": "REUSE_SAFE",
       "structural_shift": "none"
     },
     {
-      "id": "pair_011",
+      "id": "pair_122",
       "stratum": "SystemAdministrative",
-      "prompt_a": "Restart cluster node 4 after draining traffic.",
-      "prompt_b": "Restart cluster node 14 after draining traffic.",
+      "prompt_a": "Check disk storage utilization on database shard 2.",
+      "prompt_b": "Inspect disk storage utilization on database shard 2.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_123",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Retrieve CPU load average metrics across worker pool Alpha.",
+      "prompt_b": "Fetch CPU load average metrics across worker pool Alpha.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_124",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Display active connections pool count for Postgres primary.",
+      "prompt_b": "Show active connections pool count for Postgres primary.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_125",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Audit system kernel logs for hardware memory parity errors.",
+      "prompt_b": "Review system kernel logs for hardware memory parity errors.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_126",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Verify network interface throughput on gateway edge router.",
+      "prompt_b": "Check network interface throughput on gateway edge router.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_127",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Monitor thread pool queue saturation on backend service.",
+      "prompt_b": "Observe thread pool queue saturation on backend service.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_128",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "List mounted storage volumes attached to compute cluster 9.",
+      "prompt_b": "Show mounted storage volumes attached to compute cluster 9.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_129",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Inspect Redis memory fragmentation ratio on replica 1.",
+      "prompt_b": "Review Redis memory fragmentation ratio on replica 1.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_130",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Check NTP server synchronization clock offset on hosts.",
+      "prompt_b": "Verify NTP server synchronization clock offset on hosts.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_131",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Display cluster ingress routing rules for domain api.internal.",
+      "prompt_b": "Show cluster ingress routing rules for domain api.internal.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_132",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Retrieve garbage collection pause times for runtime JVM.",
+      "prompt_b": "Fetch garbage collection pause times for runtime JVM.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_133",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Audit cron scheduled job executions for backup tasks.",
+      "prompt_b": "Review cron scheduled job executions for backup tasks.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_134",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Verify DNS resolution latency across regional resolver nodes.",
+      "prompt_b": "Check DNS resolution latency across regional resolver nodes.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_135",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Display system uptime and load status for node worker_08.",
+      "prompt_b": "Show system uptime and load status for node worker_08.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_136",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Restart cluster node 4 after draining incoming traffic.",
+      "prompt_b": "Restart cluster node 14 after draining incoming traffic.",
       "label": "HARD_NEGATIVE",
       "expected_decision": "ABSTAIN_OR_RECOMPUTE",
       "structural_shift": "entity_numeric_shift"
     },
     {
-      "id": "pair_012",
+      "id": "pair_137",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Scale deployment replicas from 5 instances to 10 instances.",
+      "prompt_b": "Scale deployment replicas from 10 instances to 5 instances.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "scaling_direction_inversion"
+    },
+    {
+      "id": "pair_138",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Execute database failover promotion on replica db_02.",
+      "prompt_b": "Do not execute database failover promotion on replica db_02.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "negation_inversion"
+    },
+    {
+      "id": "pair_139",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Purge temporary log files from cluster volume 101.",
+      "prompt_b": "Purge temporary log files from cluster volume 201.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "volume_numeric_shift"
+    },
+    {
+      "id": "pair_140",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Set TCP keepalive idle timeout to 60 seconds.",
+      "prompt_b": "Set TCP keepalive idle timeout to 600 seconds.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "numeric_magnitude_shift"
+    },
+    {
+      "id": "pair_141",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Promote staging worker node to production traffic cluster.",
+      "prompt_b": "Demote production worker node to staging traffic cluster.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "environment_promotion_flip"
+    },
+    {
+      "id": "pair_142",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Drain and terminate compute instance worker_55 immediately.",
+      "prompt_b": "Cancel draining and preserve compute instance worker_55.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "lifecycle_action_cancellation"
+    },
+    {
+      "id": "pair_143",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "All cluster nodes cannot be rebooted simultaneously.",
+      "prompt_b": "Not all cluster nodes can be rebooted simultaneously.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "quantifier_scope_inversion"
+    },
+    {
+      "id": "pair_144",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Allocate 16 gigabytes of RAM to database buffer pool.",
+      "prompt_b": "Allocate 64 gigabytes of RAM to database buffer pool.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "resource_quota_shift"
+    },
+    {
+      "id": "pair_145",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Switch primary DNS from server 10 to server 20.",
+      "prompt_b": "Switch primary DNS from server 20 to server 10.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "dns_target_transposition"
+    },
+    {
+      "id": "pair_146",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Enable asynchronous disk write buffer caching on storage array.",
+      "prompt_b": "Disable asynchronous disk write buffer caching on storage array.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "cache_mode_inversion"
+    },
+    {
+      "id": "pair_147",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Migrate tenant storage volume to region us-east-1.",
+      "prompt_b": "Migrate tenant storage volume to region eu-central-1.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "geographic_region_shift"
+    },
+    {
+      "id": "pair_148",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Halt background compaction job on Cassandra keyspace.",
+      "prompt_b": "Resume background compaction job on Cassandra keyspace.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "job_state_reversal"
+    },
+    {
+      "id": "pair_149",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Allow unlimited container memory growth without cgroup limits.",
+      "prompt_b": "Enforce strict container memory bounds under cgroup limits.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "cgroup_enforcement_flip"
+    },
+    {
+      "id": "pair_150",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Drop secondary read index from table order_history.",
+      "prompt_b": "Rebuild secondary read index on table order_history.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "index_action_inversion"
+    },
+    {
+      "id": "pair_151",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Upgrade system kernel packages to version 6.5.0.",
+      "prompt_b": "Upgrade system kernel packages to version 6.6.0.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "kernel_version_shift"
+    },
+    {
+      "id": "pair_152",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Configure network MTU size to 1500 bytes on ethernet interface.",
+      "prompt_b": "Configure network MTU size to 9000 bytes on ethernet interface.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "jumbo_frame_numeric_shift"
+    },
+    {
+      "id": "pair_153",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Rebalance partitioned Kafka topics across 8 brokers.",
+      "prompt_b": "Rebalance partitioned Kafka topics across 4 brokers.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "broker_count_mutation"
+    },
+    {
+      "id": "pair_154",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Flush all in-memory dirty pages to durable NVMe storage.",
+      "prompt_b": "Discard all in-memory dirty pages without flushing to storage.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "data_loss_hazard_reversal"
+    },
+    {
+      "id": "pair_155",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Enable automatic crash kernel dump collection on panic.",
+      "prompt_b": "Disable automatic crash kernel dump collection on panic.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "kdump_toggle_inversion"
+    },
+    {
+      "id": "pair_156",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Migrate virtual machine host from hypervisor 01 to hypervisor 02.",
+      "prompt_b": "Migrate virtual machine host from hypervisor 02 to hypervisor 01.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "hypervisor_direction_flip"
+    },
+    {
+      "id": "pair_157",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Set database lock timeout to 5000 milliseconds.",
+      "prompt_b": "Set database lock timeout to 50000 milliseconds.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "lock_timeout_magnitude"
+    },
+    {
+      "id": "pair_158",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Authorize rolling restart of production Elasticsearch cluster.",
+      "prompt_b": "Abort rolling restart of production Elasticsearch cluster.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "cluster_op_abort"
+    },
+    {
+      "id": "pair_159",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Confirm network BGP route advertisement is active.",
+      "prompt_b": "Confirm network BGP route advertisement is withdrawn.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "bgp_state_inversion"
+    },
+    {
+      "id": "pair_160",
+      "stratum": "SystemAdministrative",
+      "prompt_a": "Apply system configuration patch to staging environment.",
+      "prompt_b": "Apply system configuration patch to production environment.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "environment_target_shift"
+    },
+    {
+      "id": "pair_161",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Retrieve GDPR data processing agreement signed with vendor X.",
+      "prompt_b": "Fetch GDPR data processing agreement signed with vendor X.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_162",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Summarize intellectual property assignment clauses in contract 102.",
+      "prompt_b": "Outline intellectual property assignment clauses in contract 102.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_163",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Review non-disclosure agreement expiration dates for partner Apex.",
+      "prompt_b": "Check non-disclosure agreement expiration dates for partner Apex.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_164",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Audit consumer privacy consent records for marketing telemetry.",
+      "prompt_b": "Examine consumer privacy consent records for marketing telemetry.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_165",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Display dispute resolution and arbitration terms under agreement.",
+      "prompt_b": "Show dispute resolution and arbitration terms under agreement.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_166",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Verify compliance status against HIPAA privacy security rule.",
+      "prompt_b": "Check compliance status against HIPAA privacy security rule.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_167",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Retrieve customer data export logs under CCPA regulations.",
+      "prompt_b": "Fetch customer data export logs under CCPA regulations.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_168",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Summarize indemnification limits specified in master service agreement.",
+      "prompt_b": "Describe indemnification limits specified in master service agreement.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_169",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Inspect third-party vendor risk assessment questionnaires.",
+      "prompt_b": "Review third-party vendor risk assessment questionnaires.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_170",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Display employee compliance training completion records for 2024.",
+      "prompt_b": "Show employee compliance training completion records for 2024.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_171",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Check records retention policy requirements for tax documents.",
+      "prompt_b": "Verify records retention policy requirements for tax documents.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_172",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Retrieve export control classification numbers for cryptography software.",
+      "prompt_b": "Fetch export control classification numbers for cryptography software.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_173",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Audit whistle-blower complaint reports logged in compliance portal.",
+      "prompt_b": "Review whistle-blower complaint reports logged in compliance portal.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_174",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Verify license compliance audit for open source libraries.",
+      "prompt_b": "Check license compliance audit for open source libraries.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_175",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Display privacy impact assessment report for project Gemini.",
+      "prompt_b": "Show privacy impact assessment report for project Gemini.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_176",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Customer provided explicit consent for third-party marketing sharing.",
+      "prompt_b": "Customer refused explicit consent for third-party marketing sharing.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "consent_refusal_flip"
+    },
+    {
+      "id": "pair_177",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Execute GDPR Article 17 right to erasure for user 9912.",
+      "prompt_b": "Do not execute GDPR Article 17 right to erasure for user 9912.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "erasure_negation_flip"
+    },
+    {
+      "id": "pair_178",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Indemnification liability is capped at 1000000 dollars.",
+      "prompt_b": "Indemnification liability is capped at 10000000 dollars.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "liability_cap_magnitude"
+    },
+    {
+      "id": "pair_179",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Governing law and jurisdiction is Delaware court.",
+      "prompt_b": "Governing law and jurisdiction is London court.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "jurisdiction_forum_shift"
+    },
+    {
+      "id": "pair_180",
+      "stratum": "LegalCompliance",
+      "prompt_a": "The agreement allows assignment of rights to subsidiaries.",
+      "prompt_b": "The agreement prohibits assignment of rights to subsidiaries.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "assignment_prohibition_flip"
+    },
+    {
+      "id": "pair_181",
+      "stratum": "LegalCompliance",
+      "prompt_a": "All contracting parties are not released from liability obligations.",
+      "prompt_b": "Not all contracting parties are released from liability obligations.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "quantifier_scope_inversion"
+    },
+    {
+      "id": "pair_182",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Customer signed data processing addendum version 1.0.",
+      "prompt_b": "Customer signed data processing addendum version 2.0.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "addendum_version_shift"
+    },
+    {
+      "id": "pair_183",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Terminate commercial distribution license with 30 days notice.",
+      "prompt_b": "Terminate commercial distribution license with 90 days notice.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "notice_period_numeric_shift"
+    },
+    {
+      "id": "pair_184",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Vendor represents open source GPL contamination was prevented.",
+      "prompt_b": "Vendor represents open source GPL contamination was not prevented.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "license_contamination_reversal"
+    },
+    {
+      "id": "pair_185",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Authorize disclosure of confidential trade secret information.",
+      "prompt_b": "Prevent disclosure of confidential trade secret information.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "trade_secret_disclosure_block"
+    },
+    {
+      "id": "pair_186",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Confirm non-solicitation clause duration is 12 months.",
+      "prompt_b": "Confirm non-solicitation clause duration is 24 months.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "duration_numeric_shift"
+    },
+    {
+      "id": "pair_187",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Allow employee ownership of patent inventions created on personal time.",
+      "prompt_b": "Assign company ownership of patent inventions created on personal time.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "patent_ownership_reversal"
+    },
+    {
+      "id": "pair_188",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Customer data will be processed strictly inside territory of France.",
+      "prompt_b": "Customer data will be processed strictly inside territory of Germany.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "data_residency_inversion"
+    },
+    {
+      "id": "pair_189",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Warranty disclaimer excludes consequential and punitive damages.",
+      "prompt_b": "Warranty disclaimer includes consequential and punitive damages.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "damages_exclusion_flip"
+    },
+    {
+      "id": "pair_190",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Approve settlement agreement resolving patent infringement lawsuit.",
+      "prompt_b": "Reject settlement agreement resolving patent infringement lawsuit.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "settlement_rejection"
+    },
+    {
+      "id": "pair_191",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Contract automatically renews for additional term of 1 year.",
+      "prompt_b": "Contract automatically terminates without renewal after term of 1 year.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "renewal_termination_inversion"
+    },
+    {
+      "id": "pair_192",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Disclose material regulatory investigation in annual 10-K report.",
+      "prompt_b": "Conceal material regulatory investigation in annual 10-K report.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "disclosure_concealment_flip"
+    },
+    {
+      "id": "pair_193",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Confirm subcontractor possesses ISO 27001 security certification.",
+      "prompt_b": "Confirm subcontractor lacks ISO 27001 security certification.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "certification_status_inversion"
+    },
+    {
+      "id": "pair_194",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Penalty for early contract termination is 50000 dollars.",
+      "prompt_b": "Penalty for early contract termination is 500000 dollars.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "penalty_magnitude_shift"
+    },
+    {
+      "id": "pair_195",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Allow unilateral modification of terms of service without prior notice.",
+      "prompt_b": "Require mutual bilateral consent for modification of terms of service.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "unilateral_bilateral_switch"
+    },
+    {
+      "id": "pair_196",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Verify retention of biometric records for 30 days.",
+      "prompt_b": "Verify retention of biometric records for 365 days.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "retention_duration_shift"
+    },
+    {
+      "id": "pair_197",
+      "stratum": "LegalCompliance",
+      "prompt_a": "The agreement grants exclusive commercial licensing rights.",
+      "prompt_b": "The agreement grants non-exclusive commercial licensing rights.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "exclusivity_clause_inversion"
+    },
+    {
+      "id": "pair_198",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Permit cross-border data transfer without standard contractual clauses.",
+      "prompt_b": "Prohibit cross-border data transfer without standard contractual clauses.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "cross_border_prohibition"
+    },
+    {
+      "id": "pair_199",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Confirm company complied with SEC whistleblower protection statutes.",
+      "prompt_b": "Confirm company violated SEC whistleblower protection statutes.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "statutory_compliance_reversal"
+    },
+    {
+      "id": "pair_200",
+      "stratum": "LegalCompliance",
+      "prompt_a": "Release escrow source code deposit upon vendor bankruptcy filing.",
+      "prompt_b": "Withhold escrow source code deposit upon vendor bankruptcy filing.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "escrow_release_block"
+    },
+    {
+      "id": "pair_201",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Deploy container image to Kubernetes cluster Alpha.",
+      "prompt_b": "Roll out container image to Kubernetes cluster Alpha.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_202",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Inspect Terraform state file locks in cloud storage bucket.",
+      "prompt_b": "Check Terraform state file locks in cloud storage bucket.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_203",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Retrieve build artifact digests from Docker registry.",
+      "prompt_b": "Fetch build artifact digests from Docker registry.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_204",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Monitor cloud autoscaling group instance capacity.",
+      "prompt_b": "Observe cloud autoscaling group instance capacity.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_205",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Verify VPC peering routing table entries between subnets.",
+      "prompt_b": "Check VPC peering routing table entries between subnets.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_206",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Display active cloud load balancer listener configurations.",
+      "prompt_b": "Show active cloud load balancer listener configurations.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_207",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Inspect CloudWatch alarm thresholds for error rate alerting.",
+      "prompt_b": "Review CloudWatch alarm thresholds for error rate alerting.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_208",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Retrieve Jenkins CI/CD pipeline build duration history.",
+      "prompt_b": "Fetch Jenkins CI/CD pipeline build duration history.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_209",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Audit cloud storage bucket public access block settings.",
+      "prompt_b": "Review cloud storage bucket public access block settings.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_210",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Verify DNS health check probe status for endpoint api.app.com.",
+      "prompt_b": "Check DNS health check probe status for endpoint api.app.com.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_211",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Display container restart count across namespace production.",
+      "prompt_b": "Show container restart count across namespace production.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_212",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Inspect AWS CloudFormation stack resource creation events.",
+      "prompt_b": "Review AWS CloudFormation stack resource creation events.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_213",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Retrieve Prometheus scrape target status for service gateway.",
+      "prompt_b": "Fetch Prometheus scrape target status for service gateway.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_214",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Verify Istio service mesh mutual TLS configuration.",
+      "prompt_b": "Check Istio service mesh mutual TLS configuration.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_215",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Display cloud budget spend velocity alerts for current billing period.",
+      "prompt_b": "Show cloud budget spend velocity alerts for current billing period.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_216",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Deploy container image version 1.4.0 to production.",
+      "prompt_b": "Deploy container image version 1.4.1 to production.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "container_version_shift"
+    },
+    {
+      "id": "pair_217",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Execute terraform destroy on production infrastructure.",
+      "prompt_b": "Do not execute terraform destroy on production infrastructure.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "negation_inversion"
+    },
+    {
+      "id": "pair_218",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Configure storage bucket acl to private access for Project Alpha.",
+      "prompt_b": "Configure storage bucket acl to public access for Project Beta.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "bucket_permission_exposure"
+    },
+    {
+      "id": "pair_219",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Scale Kubernetes deployment from 3 pods to 30 pods.",
+      "prompt_b": "Scale Kubernetes deployment from 3 pods to 3 pods.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "pod_scale_mutation"
+    },
+    {
+      "id": "pair_220",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Set container CPU limit to 500 millicores.",
+      "prompt_b": "Set container CPU limit to 5000 millicores.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "cpu_limit_magnitude"
+    },
+    {
+      "id": "pair_221",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Route ingress traffic to primary availability zone ZoneA.",
+      "prompt_b": "Route ingress traffic to primary availability zone ZoneB.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "az_target_shift"
+    },
+    {
+      "id": "pair_222",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Enable automated database snapshot backup retention for 7 days.",
+      "prompt_b": "Disable automated database snapshot backup retention for 7 days.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "backup_retention_disable"
+    },
+    {
+      "id": "pair_223",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "All cloud infrastructure resources are tagged with department cost center.",
+      "prompt_b": "Not all cloud infrastructure resources are tagged with department cost center.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "quantifier_scope_inversion"
+    },
+    {
+      "id": "pair_224",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Promote blue container deployment to active green slot.",
+      "prompt_b": "Abort blue container deployment and rollback to green slot.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "deployment_promotion_abort"
+    },
+    {
+      "id": "pair_225",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Set HTTP request timeout to 15 seconds on API gateway.",
+      "prompt_b": "Set HTTP request timeout to 150 seconds on API gateway.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "timeout_numeric_shift"
+    },
+    {
+      "id": "pair_226",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Allow ingress traffic from CIDR block 10.0.0.0/16.",
+      "prompt_b": "Allow ingress traffic from CIDR block 0.0.0.0/0.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "cidr_security_widening"
+    },
+    {
+      "id": "pair_227",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Drain nodes in cluster pool staging-west.",
+      "prompt_b": "Drain nodes in cluster pool production-west.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "cluster_pool_shift"
+    },
+    {
+      "id": "pair_228",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Attach IAM managed policy ReadOnlyAccess to developer role.",
+      "prompt_b": "Attach IAM managed policy AdministratorAccess to developer role.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "iam_privilege_escalation"
+    },
+    {
+      "id": "pair_229",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Configure persistent volume reclaim policy to Retain.",
+      "prompt_b": "Configure persistent volume reclaim policy to Delete.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "reclaim_policy_inversion"
+    },
+    {
+      "id": "pair_230",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Trigger Canary deployment with 10 percent traffic weighting.",
+      "prompt_b": "Trigger Canary deployment with 90 percent traffic weighting.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "canary_weight_shift"
+    },
+    {
+      "id": "pair_231",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Enable cloud trail multi-region log file validation.",
+      "prompt_b": "Disable cloud trail multi-region log file validation.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "audit_trail_disable"
+    },
+    {
+      "id": "pair_232",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Set maximum autoscaling cluster size to 20 nodes.",
+      "prompt_b": "Set maximum autoscaling cluster size to 200 nodes.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "asg_limit_shift"
+    },
+    {
+      "id": "pair_233",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Assign elastic static IP 54.210.10.4 to web proxy.",
+      "prompt_b": "Assign elastic static IP 54.210.10.5 to web proxy.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "ip_address_numeric_shift"
+    },
+    {
+      "id": "pair_234",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Configure nginx proxy buffer size to 4 kilobytes.",
+      "prompt_b": "Configure nginx proxy buffer size to 64 kilobytes.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "buffer_size_shift"
+    },
+    {
+      "id": "pair_235",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Restart 3 Redis cache instances in rolling sequential order.",
+      "prompt_b": "Restart 30 Redis cache instances in rolling sequential order.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "concurrency_downtime_inversion"
+    },
+    {
+      "id": "pair_236",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Delete unused EBS storage volume vol-08912.",
+      "prompt_b": "Delete active production EBS storage volume vol-08912.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "volume_deletion_hazard"
+    },
+    {
+      "id": "pair_237",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Enable AWS Shield Advanced distributed denial of service protection.",
+      "prompt_b": "Disable AWS Shield Advanced distributed denial of service protection.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "ddos_protection_disable"
+    },
+    {
+      "id": "pair_238",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Upgrade Terraform provider aws from 5.10.0 to 5.20.0.",
+      "prompt_b": "Downgrade Terraform provider aws from 5.20.0 to 5.10.0.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "upgrade_downgrade_inversion"
+    },
+    {
+      "id": "pair_239",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Execute Helm chart release rollback to revision 4.",
+      "prompt_b": "Execute Helm chart release rollback to revision 14.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "revision_number_shift"
+    },
+    {
+      "id": "pair_240",
+      "stratum": "DevOpsCloud",
+      "prompt_a": "Confirm SSL certificate renewal completed successfully.",
+      "prompt_b": "Alert SSL certificate renewal failed due to DNS challenge timeout.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "renewal_failure_flip"
+    },
+    {
+      "id": "pair_241",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Refactor asynchronous event loop handler in Rust gateway.",
+      "prompt_b": "Restructure asynchronous event loop handler in Rust gateway.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_242",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Inspect unit test coverage metrics for database crate.",
+      "prompt_b": "Check unit test coverage metrics for database crate.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_243",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Review pull request changes for memory leak remediation.",
+      "prompt_b": "Examine pull request changes for memory leak remediation.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_244",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Verify binary serialization schema backwards compatibility.",
+      "prompt_b": "Check binary serialization schema backwards compatibility.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_245",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Analyze compiler profile build timings for release targets.",
+      "prompt_b": "Examine compiler profile build timings for release targets.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_246",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Display benchmark throughput results for exact cache engine.",
+      "prompt_b": "Show benchmark throughput results for exact cache engine.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_247",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Inspect topological sort implementation for DAG planner.",
+      "prompt_b": "Review topological sort implementation for DAG planner.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_248",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Retrieve open bug reports tagged with priority P0.",
+      "prompt_b": "Fetch open bug reports tagged with priority P0.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_249",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Check thread synchronization lock contention in mutex pool.",
+      "prompt_b": "Verify thread synchronization lock contention in mutex pool.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_250",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Summarize design architecture for dual vector-graph gateway.",
+      "prompt_b": "Outline design architecture for dual vector-graph gateway.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_251",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Inspect OpenAPI schema definitions for authentication endpoints.",
+      "prompt_b": "Review OpenAPI schema definitions for authentication endpoints.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_252",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Verify property-based test invariants for Merkle tree proofs.",
+      "prompt_b": "Check property-based test invariants for Merkle tree proofs.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_253",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Display code linters status across Rust workspace packages.",
+      "prompt_b": "Show code linters status across Rust workspace packages.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_254",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Retrieve memory allocation profiling heap flamegraph.",
+      "prompt_b": "Fetch memory allocation profiling heap flamegraph.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_255",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Verify semantic versioning bump for library release 1.2.0.",
+      "prompt_b": "Check semantic versioning bump for library release 1.2.0.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_256",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Merge pull request 405 into branch main.",
+      "prompt_b": "Close and reject pull request 405 without merging.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "pr_decision_reversal"
+    },
+    {
+      "id": "pair_257",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Revert database migration 0006 in production database.",
+      "prompt_b": "Do not revert database migration 0006 in production database.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "negation_inversion"
+    },
+    {
+      "id": "pair_258",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Replace hash function MurmurHash3 with cryptographic SHA-256.",
+      "prompt_b": "Replace hash function SHA-256 with non-cryptographic MurmurHash3.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "hash_security_direction_flip"
+    },
+    {
+      "id": "pair_259",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Set connection pool maximum capacity to 10 connections.",
+      "prompt_b": "Set connection pool maximum capacity to 100 connections.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "pool_capacity_shift"
+    },
+    {
+      "id": "pair_260",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Enable thread-safe atomic memory ordering SeqCst.",
+      "prompt_b": "Use relaxed unsynchronized memory ordering Relaxed.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "memory_ordering_downgrade"
+    },
+    {
+      "id": "pair_261",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "All unit tests must pass with zero compilation warnings.",
+      "prompt_b": "Not all unit tests must pass with zero compilation warnings.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "quantifier_scope_inversion"
+    },
+    {
+      "id": "pair_262",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Upgrade dependency tokio from version 1.30.0 to 1.35.0.",
+      "prompt_b": "Downgrade dependency tokio from version 1.35.0 to 1.30.0.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "dependency_version_reversal"
+    },
+    {
+      "id": "pair_263",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Commit rebase onto branch develop before release tag.",
+      "prompt_b": "Force push overwriting commit history on branch main.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "destructive_git_operation"
+    },
+    {
+      "id": "pair_264",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Implement zero-copy serialization using 64 byte buffers.",
+      "prompt_b": "Implement zero-copy serialization using 6400 byte buffers.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "buffer_size_shift"
+    },
+    {
+      "id": "pair_265",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Catch unhandled panic exceptions and return internal error 500.",
+      "prompt_b": "Allow thread panic to crash the entire gateway runtime.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "crash_safety_inversion"
+    },
+    {
+      "id": "pair_266",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Set async timeout deadline to 200 milliseconds.",
+      "prompt_b": "Set async timeout deadline to 2000 milliseconds.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "deadline_magnitude_shift"
+    },
+    {
+      "id": "pair_267",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Verify that function foo() is pure and idempotent.",
+      "prompt_b": "Function foo() performs mutating side effects on disk.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "idempotency_violation_flip"
+    },
+    {
+      "id": "pair_268",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Execute fuzzing campaign for 1000000 iterations.",
+      "prompt_b": "Execute fuzzing campaign for 10000 iterations.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "fuzz_scale_shift"
+    },
+    {
+      "id": "pair_269",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Enable SIMD vectorization optimizations on x86 AVX2 target.",
+      "prompt_b": "Disable SIMD vectorization fallback to scalar emulation.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "simd_optimization_disable"
+    },
+    {
+      "id": "pair_270",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Allocate memory buffer of 64 megabytes for incoming payload.",
+      "prompt_b": "Allocate memory buffer of 640 megabytes for incoming payload.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "buffer_size_explosion"
+    },
+    {
+      "id": "pair_271",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Confirm that method returns Result<T, Error> on failure.",
+      "prompt_b": "Method invokes std::process::exit(1) on failure.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "error_handling_divergence"
+    },
+    {
+      "id": "pair_272",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Validate JSON schema against OpenAPI specification version 3.0.",
+      "prompt_b": "Validate JSON schema against OpenAPI specification version 3.1.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "spec_version_shift"
+    },
+    {
+      "id": "pair_273",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Configure bounded mpsc channel capacity to 1000 messages.",
+      "prompt_b": "Configure unbounded mpsc channel capacity risking out of memory.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "bounded_unbounded_switch"
+    },
+    {
+      "id": "pair_274",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Inline critical hot path function for zero function call overhead.",
+      "prompt_b": "Disable inlining forcing dynamic virtual dispatch overhead.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "inlining_dispatch_reversal"
+    },
+    {
+      "id": "pair_275",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Enforce compile-time lifetimes avoiding use-after-free defects.",
+      "prompt_b": "Use unsafe pointer dereference causing undefined behavior.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "memory_safety_violation"
+    },
+    {
+      "id": "pair_276",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Confirm integration test suite exited with code 0.",
+      "prompt_b": "Integration test suite failed with exit code 1.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "exit_code_failure_flip"
+    },
+    {
+      "id": "pair_277",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Serialize data structures to standard JSON format.",
+      "prompt_b": "Serialize data structures to raw unescaped binary format.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "format_encoding_shift"
+    },
+    {
+      "id": "pair_278",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Initialize cryptographic random number generator with secure OS entropy.",
+      "prompt_b": "Seed random number generator with constant hardcoded zero seed.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "entropy_seed_weakness"
+    },
+    {
+      "id": "pair_279",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Bind TCP server socket to localhost interface 127.0.0.1.",
+      "prompt_b": "Bind TCP server socket to public wildcard interface 0.0.0.0.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "network_binding_exposure"
+    },
+    {
+      "id": "pair_280",
+      "stratum": "SoftwareEngineering",
+      "prompt_a": "Verify that memory buffer allocation does not overflow 32-bit limit.",
+      "prompt_b": "Allocate memory buffer exceeding 32-bit integer boundaries.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "integer_overflow_hazard"
+    },
+    {
+      "id": "pair_281",
       "stratum": "GeneralReasoning",
-      "prompt_a": "Summarize the key differences between TCP and UDP.",
+      "prompt_a": "Summarize the architectural differences between TCP and UDP.",
       "prompt_b": "Provide an overview comparing TCP protocol versus UDP protocol.",
       "label": "EQUIVALENT",
       "expected_decision": "REUSE_SAFE",
       "structural_shift": "none"
+    },
+    {
+      "id": "pair_282",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain the consensus mechanism utilized by Raft algorithm.",
+      "prompt_b": "Describe the consensus mechanism utilized by Raft algorithm.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_283",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Analyze the computational complexity of quicksort in average case.",
+      "prompt_b": "Evaluate the computational complexity of quicksort in average case.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_284",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Compare relational database ACID guarantees with eventual consistency.",
+      "prompt_b": "Contrast relational database ACID guarantees with eventual consistency.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_285",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain how consistent hashing minimizes cache reshuffling.",
+      "prompt_b": "Describe how consistent hashing minimizes cache reshuffling.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_286",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Outline the fundamental principles of zero trust network architecture.",
+      "prompt_b": "Summarize the fundamental principles of zero trust network architecture.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_287",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain the mathematical foundations of public key cryptography.",
+      "prompt_b": "Describe the mathematical foundations of public key cryptography.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_288",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Compare optimistic concurrency control with two-phase locking.",
+      "prompt_b": "Contrast optimistic concurrency control with two-phase locking.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_289",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain the purpose of Bloom filters in database query optimization.",
+      "prompt_b": "Describe the purpose of Bloom filters in database query optimization.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_290",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Summarize the CAP theorem trade-offs between consistency and availability.",
+      "prompt_b": "Describe the CAP theorem trade-offs between consistency and availability.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_291",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain how vector embeddings represent semantic meaning in NLP.",
+      "prompt_b": "Describe how vector embeddings represent semantic meaning in NLP.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_292",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Compare message queuing patterns point-to-point versus publish-subscribe.",
+      "prompt_b": "Contrast message queuing patterns point-to-point versus publish-subscribe.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_293",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain the difference between synchronous and asynchronous I/O models.",
+      "prompt_b": "Describe the difference between synchronous and asynchronous I/O models.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_294",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Outline the core mechanics of transformer attention self-attention layers.",
+      "prompt_b": "Summarize the core mechanics of transformer attention self-attention layers.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_295",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain how write-ahead logging guarantees durability in databases.",
+      "prompt_b": "Describe how write-ahead logging guarantees durability in databases.",
+      "label": "EQUIVALENT",
+      "expected_decision": "REUSE_SAFE",
+      "structural_shift": "none"
+    },
+    {
+      "id": "pair_296",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain how TCP guarantees reliable in-order packet delivery.",
+      "prompt_b": "Explain how UDP provides unreliable connectionless packet transmission.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "protocol_inversion"
+    },
+    {
+      "id": "pair_297",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "A binary search tree maintains sorted order in logarithmic time for Dataset Alpha.",
+      "prompt_b": "A hash map maintains un-ordered keys in constant time for Dataset Beta.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "data_structure_divergence"
+    },
+    {
+      "id": "pair_298",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain why Paxos algorithm guarantees consensus under network partitions.",
+      "prompt_b": "Explain why Paxos algorithm fails consensus under Byzantine adversarial faults.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "consensus_fault_model_flip"
+    },
+    {
+      "id": "pair_299",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain why asymmetric encryption latency is 5 milliseconds under algorithm RSA.",
+      "prompt_b": "Explain why asymmetric encryption latency is 50 milliseconds under algorithm RSA.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "latency_numeric_shift"
+    },
+    {
+      "id": "pair_300",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Describe why concurrency model Alpha prevents lock stalls.",
+      "prompt_b": "Describe why concurrency model Beta prevents lock stalls.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "concurrency_model_shift"
+    },
+    {
+      "id": "pair_301",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "All distributed nodes can reach consensus in zero network hops.",
+      "prompt_b": "No distributed nodes can reach consensus in zero network hops.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "possibility_quantifier_negation"
+    },
+    {
+      "id": "pair_302",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Calculate speedup factor under Amdahl law for 4 parallel processors.",
+      "prompt_b": "Calculate speedup factor under Amdahl law for 64 parallel processors.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "processor_count_shift"
+    },
+    {
+      "id": "pair_303",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain how B-tree indexes optimize disk block seek operations.",
+      "prompt_b": "Explain how LSM trees optimize sequential append write operations.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "storage_engine_contrast"
+    },
+    {
+      "id": "pair_304",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Describe how digital certificates prevent forged TLS sessions.",
+      "prompt_b": "Describe how digital certificates allow forged TLS sessions.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "forgery_allowance_inversion"
+    },
+    {
+      "id": "pair_305",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain why quicksort worst case running time is O(N^2).",
+      "prompt_b": "Explain why merge sort worst case running time is O(N log N).",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "complexity_assertion_mismatch"
+    },
+    {
+      "id": "pair_306",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain why connection pool size of 10 reduces handshake latency.",
+      "prompt_b": "Explain why connection pool size of 100 reduces handshake latency.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "pool_size_numeric_shift"
+    },
+    {
+      "id": "pair_307",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain the role of write barrier instructions in memory consistency models.",
+      "prompt_b": "Explain how instruction reordering breaks sequential consistency without memory barriers.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "hardware_memory_inversion"
+    },
+    {
+      "id": "pair_308",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Describe why raft leader election requires majority quorum greater than 50 percent.",
+      "prompt_b": "Explain why raft split brain occurs if quorum is set to less than 50 percent.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "quorum_condition_flip"
+    },
+    {
+      "id": "pair_309",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain how CPU L1 cache line invalidation causes false sharing.",
+      "prompt_b": "Explain how cache line padding eliminates false sharing in concurrent code.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "architecture_optimization_flip"
+    },
+    {
+      "id": "pair_310",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Describe why dynamic programming memoizes recursive overlapping subproblems.",
+      "prompt_b": "Explain why greedy algorithms make locally optimal choices without backtracking.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "algorithmic_paradigm_contrast"
+    },
+    {
+      "id": "pair_311",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain the scheduling mechanics of scheduler AlgorithmA.",
+      "prompt_b": "Explain the scheduling mechanics of scheduler AlgorithmB.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "scheduler_algorithm_shift"
+    },
+    {
+      "id": "pair_312",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Describe how garbage collection mark-and-sweep identifies unreachable cyclic objects.",
+      "prompt_b": "Explain why reference counting collectors fail to reclaim circular object graphs.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "gc_mechanism_limitation_flip"
+    },
+    {
+      "id": "pair_313",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain why system architecture ModelOne prioritizes modularity.",
+      "prompt_b": "Explain why system architecture ModelTwo prioritizes modularity.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "architecture_model_shift"
+    },
+    {
+      "id": "pair_314",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Describe how zero-knowledge proofs verify knowledge without revealing secrets.",
+      "prompt_b": "Explain how plaintext password transmission reveals authentication credentials.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "cryptographic_property_reversal"
+    },
+    {
+      "id": "pair_315",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain why two-phase commit is a blocking atomic commit protocol.",
+      "prompt_b": "Explain why three-phase commit is a non-blocking protocol under fail-stop models.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "protocol_blocking_property_flip"
+    },
+    {
+      "id": "pair_316",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Describe how SIMD instructions process 8 floating point numbers in single cycle.",
+      "prompt_b": "Describe how scalar instructions process single floating point number per cycle.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "instruction_throughput_contrast"
+    },
+    {
+      "id": "pair_317",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain why hash collisions occur with 32 bit hash keys.",
+      "prompt_b": "Explain why hash collisions occur with 64 bit hash keys.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "key_size_numeric_shift"
+    },
+    {
+      "id": "pair_318",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain how content addressable storage prevents unauthorized mutation.",
+      "prompt_b": "Explain how content addressable storage allows unauthorized mutation.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "mutation_authorization_inversion"
+    },
+    {
+      "id": "pair_319",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Explain how content addressable storage ModelA guarantees deduplication.",
+      "prompt_b": "Explain how content addressable storage ModelB guarantees deduplication.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "storage_model_shift"
+    },
+    {
+      "id": "pair_320",
+      "stratum": "GeneralReasoning",
+      "prompt_a": "Describe why ACID isolation prevents dirty read anomalies.",
+      "prompt_b": "Explain how read uncommitted isolation allows dirty reads.",
+      "label": "HARD_NEGATIVE",
+      "expected_decision": "ABSTAIN_OR_RECOMPUTE",
+      "structural_shift": "isolation_level_contrast"
     }
   ]
 }

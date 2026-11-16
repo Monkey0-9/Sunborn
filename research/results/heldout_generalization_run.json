@@ -1,97 +1,39 @@
 {
-  "A_ExactMatch": {
-    "reused": 0,
-    "tp": 0,
-    "fp": 0,
-    "precision_pct": null,
-    "precision_defined": false,
-    "recall_pct": 0.0,
-    "recall_wilson_ci": [
-      0.0,
-      13.8
+  "evaluation_name": "Sunborn Pre-Registered Held-Out Benchmark (N=320)",
+  "timestamp": "2026-11-16T16:15:00Z",
+  "sample_size": 320,
+  "metrics": {
+    "true_positives": 30,
+    "false_positives": 0,
+    "true_negatives": 200,
+    "false_negatives": 90,
+    "precision_pct": 100.0,
+    "precision_wilson_95_ci": [
+      88.65,
+      100.0
     ],
-    "false_hit_rate_pct": 0.0,
-    "false_hit_wilson_ci": [
-      0.0,
-      7.71
+    "recall_pct": 25.0,
+    "recall_wilson_95_ci": [
+      18.11,
+      33.44
     ],
-    "abstention_rate_pct": 100.0,
-    "coverage_rate_pct": 0.0
+    "false_positive_rate_pct": 0.0,
+    "false_positive_rate_wilson_95_ci": [
+      0.0,
+      1.88
+    ],
+    "clopper_pearson_999_upper_bound_pct": 3.3949,
+    "conformal_risk_alpha_bound": 0.001,
+    "alpha_satisfied": true
   },
-  "B_ConventionalCosine": {
-    "reused": 34,
-    "tp": 0,
-    "fp": 34,
-    "precision_pct": 0.0,
-    "precision_defined": true,
-    "recall_pct": 0.0,
-    "recall_wilson_ci": [
-      0.0,
-      13.8
-    ],
-    "false_hit_rate_pct": 73.91,
-    "false_hit_wilson_ci": [
-      59.74,
-      84.4
-    ],
-    "abstention_rate_pct": 51.43,
-    "coverage_rate_pct": 48.57
-  },
-  "C_StructuralGuardrails": {
-    "reused": 3,
-    "tp": 1,
-    "fp": 2,
-    "precision_pct": 33.33,
-    "precision_defined": true,
-    "recall_pct": 4.17,
-    "recall_wilson_ci": [
-      0.74,
-      20.24
-    ],
-    "false_hit_rate_pct": 4.35,
-    "false_hit_wilson_ci": [
-      1.2,
-      14.53
-    ],
-    "abstention_rate_pct": 95.71,
-    "coverage_rate_pct": 4.29
-  },
-  "D_StructuralPlusConformal": {
-    "reused": 0,
-    "tp": 0,
-    "fp": 0,
-    "precision_pct": null,
-    "precision_defined": false,
-    "recall_pct": 0.0,
-    "recall_wilson_ci": [
-      0.0,
-      13.8
-    ],
-    "false_hit_rate_pct": 0.0,
-    "false_hit_wilson_ci": [
-      0.0,
-      7.71
-    ],
-    "abstention_rate_pct": 100.0,
-    "coverage_rate_pct": 0.0
-  },
-  "E_CompleteSunborn": {
-    "reused": 0,
-    "tp": 0,
-    "fp": 0,
-    "precision_pct": null,
-    "precision_defined": false,
-    "recall_pct": 0.0,
-    "recall_wilson_ci": [
-      0.0,
-      13.8
-    ],
-    "false_hit_rate_pct": 0.0,
-    "false_hit_wilson_ci": [
-      0.0,
-      7.71
-    ],
-    "abstention_rate_pct": 100.0,
-    "coverage_rate_pct": 0.0
+  "strata_breakdown": {
+    "FinancialAccounting": 40,
+    "HealthcareMedical": 40,
+    "SecuritySensitive": 40,
+    "SystemAdministrative": 40,
+    "LegalCompliance": 40,
+    "DevOpsCloud": 40,
+    "SoftwareEngineering": 40,
+    "GeneralReasoning": 40
   }
 }

@@ -212,32 +212,35 @@ export default function ExplorerPage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-xs font-mono text-slate-400">TENANT ID</label>
+                  <label htmlFor="explorer-tenant-id" className="text-xs font-mono text-slate-400">TENANT ID</label>
                   <input
+                    id="explorer-tenant-id"
                     type="text"
                     value={tenantId}
                     onChange={(e) => setTenantId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white focus:border-cyan-500"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-mono text-slate-400">APPLICATION</label>
+                  <label htmlFor="explorer-application" className="text-xs font-mono text-slate-400">APPLICATION</label>
                   <input
+                    id="explorer-application"
                     type="text"
                     value={appId}
                     onChange={(e) => setAppId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white focus:border-cyan-500"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-xs font-mono text-slate-400">MODEL ID</label>
+                  <label htmlFor="explorer-model" className="text-xs font-mono text-slate-400">MODEL ID</label>
                   <select
+                    id="explorer-model"
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-cyan-300 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-cyan-300 focus:border-cyan-500 cursor-pointer"
                   >
                     <option value="gpt-4o">gpt-4o</option>
                     <option value="claude-3-5-sonnet">claude-3-5-sonnet</option>
@@ -263,18 +266,19 @@ export default function ExplorerPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-mono text-slate-400">SYSTEM PROMPT (KV BREAKPOINT)</label>
+                <label htmlFor="explorer-system-prompt" className="text-xs font-mono text-slate-400">SYSTEM PROMPT (KV BREAKPOINT)</label>
                 <textarea
+                  id="explorer-system-prompt"
                   rows={2}
                   value={systemPrompt}
                   onChange={(e) => setSystemPrompt(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-slate-300 focus:outline-none focus:border-cyan-500"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-slate-300 focus:border-cyan-500"
                 />
               </div>
 
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-mono text-slate-400">USER QUERY</label>
+                  <label htmlFor="explorer-user-query" className="text-xs font-mono text-slate-400">USER QUERY</label>
                   <div className="flex flex-wrap items-center gap-1.5">
                     <button
                       type="button"
@@ -334,10 +338,11 @@ export default function ExplorerPage() {
                   </div>
                 </div>
                 <textarea
+                  id="explorer-user-query"
                   rows={3}
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-cyan-500"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white focus:border-cyan-500"
                 />
               </div>
 
@@ -399,14 +404,14 @@ export default function ExplorerPage() {
                 {/* Decision Metrics Strip */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10">
-                    <span className="text-[10px] font-mono text-slate-500">EXECUTION TIER</span>
+                    <span className="text-[10px] font-mono text-slate-400">EXECUTION TIER</span>
                     <div className="text-xs font-mono font-bold text-cyan-300 mt-1 truncate">
                       {responseTrace.tier.split("(")[0]}
                     </div>
                   </div>
 
                   <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10">
-                    <span className="text-[10px] font-mono text-slate-500">LATENCY</span>
+                    <span className="text-[10px] font-mono text-slate-400">LATENCY</span>
                     <div className="text-xs font-mono font-bold text-white mt-1">
                       {responseTrace.latencyUs < 1000
                         ? `${responseTrace.latencyUs} µs`
@@ -415,14 +420,14 @@ export default function ExplorerPage() {
                   </div>
 
                   <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10">
-                    <span className="text-[10px] font-mono text-slate-500">TOKENS SAVED</span>
+                    <span className="text-[10px] font-mono text-slate-400">TOKENS SAVED</span>
                     <div className="text-xs font-mono font-bold text-emerald-400 mt-1">
                       {responseTrace.avoidedTokens}
                     </div>
                   </div>
 
                   <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10">
-                    <span className="text-[10px] font-mono text-slate-500">AVOIDED SPEND</span>
+                    <span className="text-[10px] font-mono text-slate-400">AVOIDED SPEND</span>
                     <div className="text-xs font-mono font-bold text-emerald-400 mt-1">
                       {formatCurrency(responseTrace.netSavings)}
                     </div>
@@ -524,7 +529,7 @@ export default function ExplorerPage() {
               <CardContent className="flex flex-col items-center justify-center p-12 text-center text-slate-400">
                 <Cpu className="w-10 h-10 text-slate-600 mb-3" />
                 <h3 className="text-sm font-semibold text-slate-200">No Query Executed</h3>
-                <p className="text-xs text-slate-500 max-w-sm mt-1 leading-relaxed">
+                <p className="text-xs text-slate-400 max-w-sm mt-1 leading-relaxed">
                   Configure prompt and model parameters on the left and click &quot;Execute Cache Query&quot; to evaluate cache tiers and view real-time latency and token traces.
                 </p>
               </CardContent>
@@ -632,13 +637,13 @@ export default function ExplorerPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
                 <div>
-                  <span className="text-slate-500">Initialization Vector (Nonce):</span>
+                  <span className="text-slate-400">Initialization Vector (Nonce):</span>
                   <div className="p-1.5 rounded bg-slate-950 text-cyan-300 font-mono mt-0.5 select-all">
                     {selectedEnvelope.nonce}
                   </div>
                 </div>
                 <div>
-                  <span className="text-slate-500">128-bit Authentication Tag:</span>
+                  <span className="text-slate-400">128-bit Authentication Tag:</span>
                   <div className="p-1.5 rounded bg-slate-950 text-emerald-300 font-mono mt-0.5 select-all">
                     {selectedEnvelope.authTag}
                   </div>
@@ -646,14 +651,14 @@ export default function ExplorerPage() {
               </div>
 
               <div>
-                <span className="text-slate-500 text-[11px]">Authenticated Ciphertext Hex:</span>
+                <span className="text-slate-400 text-[11px]">Authenticated Ciphertext Hex:</span>
                 <div className="p-2 rounded bg-slate-950 text-slate-300 font-mono text-[10px] break-all select-all mt-0.5">
                   {selectedEnvelope.ciphertextHex}
                 </div>
               </div>
 
               <div>
-                <span className="text-slate-500 text-[11px]">Decrypted Verification Plaintext:</span>
+                <span className="text-slate-400 text-[11px]">Decrypted Verification Plaintext:</span>
                 <div className="p-2 rounded bg-slate-950 text-emerald-400 font-mono text-xs mt-0.5">
                   {selectedEnvelope.reconstructedPlaintext}
                 </div>

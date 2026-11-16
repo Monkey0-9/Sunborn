@@ -122,7 +122,7 @@ export default function LoginPage() {
               type="button"
               onClick={handleLogout}
               disabled={isLoading}
-              className="w-full py-2.5 px-4 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded-lg text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-rose-500"
+              className="w-full py-2.5 px-4 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded-lg text-sm font-medium transition focus:ring-2 focus:ring-rose-500"
             >
               Sign Out & Invalidate Session
             </button>
@@ -192,7 +192,7 @@ export default function LoginPage() {
                     value={clientId}
                     onChange={(e) => setClientId(e.target.value)}
                     placeholder="e.g. enterprise-admin"
-                    className="w-full bg-slate-950/80 border border-white/[0.1] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono"
+                    className="w-full bg-slate-950/80 border border-white/[0.1] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-cyan-500 font-mono"
                   />
                 </div>
               </div>
@@ -212,7 +212,7 @@ export default function LoginPage() {
                     value={clientSecret}
                     onChange={(e) => setClientSecret(e.target.value)}
                     placeholder="sb_live_..."
-                    className="w-full bg-slate-950/80 border border-white/[0.1] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono"
+                    className="w-full bg-slate-950/80 border border-white/[0.1] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-cyan-500 font-mono"
                   />
                 </div>
               </div>
@@ -231,14 +231,14 @@ export default function LoginPage() {
                     value={tenantId}
                     onChange={(e) => setTenantId(e.target.value)}
                     placeholder="e.g. tenant-finance"
-                    className="w-full bg-slate-950/80 border border-white/[0.1] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono"
+                    className="w-full bg-slate-950/80 border border-white/[0.1] rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:ring-2 focus:ring-cyan-500 font-mono"
                   />
                 </div>
               </div>
 
               {/* Quick Fill Preset Pills */}
               <div className="pt-1 flex items-center gap-2">
-                <span className="text-[11px] font-mono text-slate-500">Quick Fill:</span>
+                <span className="text-[11px] font-mono text-slate-400">Quick Fill:</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -266,7 +266,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-2.5 px-4 bg-cyan-600 hover:bg-cyan-500 text-white font-medium rounded-lg text-sm transition flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-cyan-400 disabled:opacity-50"
+                className="w-full py-2.5 px-4 bg-cyan-600 hover:bg-cyan-500 text-white font-medium rounded-lg text-sm transition flex items-center justify-center gap-2 focus:ring-2 focus:ring-cyan-400 disabled:opacity-50"
               >
                 {isLoading ? (
                   <span>Authenticating...</span>
@@ -282,7 +282,7 @@ export default function LoginPage() {
         </Card>
       )}
 
-      <div className="text-xs text-slate-500 font-mono text-center space-y-1">
+      <div className="text-xs text-slate-400 font-mono text-center space-y-1">
         <p>Sessions are cryptographically bound to HttpOnly, SameSite=Lax browser cookies.</p>
         <p>Never transmit raw master keys or production database credentials via client forms.</p>
       </div>

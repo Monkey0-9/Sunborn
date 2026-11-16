@@ -141,13 +141,18 @@ impl RedisClusterTransport {
         let (sender, _) = broadcast::channel(capacity.max(16));
         let pod_id = pod_id.into();
         let stream_key = CLUSTER_INVALIDATION_CHANNEL.to_string();
+        // A consumer group load-balances each entry to exactly one consumer.
+        // Cluster invalidation is a broadcast, so every replica needs its own
+        // group; otherwise one healthy peer can consume an event that another
+        // peer never sees, and a disconnected peer loses it entirely.
+        let consumer_group = format!("{CLUSTER_CONSUMER_GROUP}:{pod_id}");
 
         let transport = Arc::new(Self {
             client,
             sender,
             pod_id,
             stream_key,
-            consumer_group: CLUSTER_CONSUMER_GROUP.to_string(),
+            consumer_group,
         });
         transport.clone().start_subscriber();
         Ok(transport)
@@ -230,11 +235,14 @@ async fn ensure_consumer_group(
     stream: &str,
     group: &str,
 ) -> std::result::Result<(), redis::RedisError> {
+    // Start new groups at the current tail: a replica with an empty local cache
+    // does not need historical invalidations. Restarted replicas reuse their
+    // existing group and replay their own pending entries below.
     let res: redis::RedisResult<()> = redis::cmd("XGROUP")
         .arg("CREATE")
         .arg(stream)
         .arg(group)
-        .arg("0")
+        .arg("$")
         .arg("MKSTREAM")
         .query_async(conn)
         .await;

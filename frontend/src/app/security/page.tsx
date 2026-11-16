@@ -275,10 +275,12 @@ export default function SecurityPage() {
                   </div>
                 </div>
                 <textarea
+                  id="security-test-prompt"
+                  aria-label="Security probe prompt"
                   rows={3}
                   value={testPrompt}
                   onChange={(e) => setTestPrompt(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-cyan-500"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-white focus:border-cyan-500"
                 />
               </div>
 
@@ -410,7 +412,7 @@ export default function SecurityPage() {
                   <p className="text-[11px] text-slate-400 leading-relaxed">
                     {ev.detail}
                   </p>
-                  <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-white/5">
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-white/5">
                     <span>IP: {ev.origin}</span>
                     <span>{ev.time}</span>
                   </div>
@@ -449,33 +451,36 @@ export default function SecurityPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="space-y-1">
-                <label className="text-[10px] text-slate-400">TENANT IDENTIFIER</label>
+                <label htmlFor="security-new-key-tenant" className="text-[10px] text-slate-400">TENANT IDENTIFIER</label>
                 <input
+                  id="security-new-key-tenant"
                   type="text"
                   value={newKeyTenant}
                   onChange={(e) => setNewKeyTenant(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-cyan-500 text-xs"
+                  className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-white/10 text-white focus:border-cyan-500 text-xs"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] text-slate-400">APPLICATION SCOPE</label>
+                <label htmlFor="security-new-key-app" className="text-[10px] text-slate-400">APPLICATION SCOPE</label>
                 <input
+                  id="security-new-key-app"
                   type="text"
                   value={newKeyApp}
                   onChange={(e) => setNewKeyApp(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-cyan-500 text-xs"
+                  className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-white/10 text-white focus:border-cyan-500 text-xs"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] text-slate-400">ALLOWED MODELS (COMMA-SEPARATED)</label>
+                <label htmlFor="security-new-key-models" className="text-[10px] text-slate-400">ALLOWED MODELS (COMMA-SEPARATED)</label>
                 <input
+                  id="security-new-key-models"
                   type="text"
                   value={newKeyModels}
                   onChange={(e) => setNewKeyModels(e.target.value)}
                   placeholder="*, gpt-4o, claude-3-5-sonnet"
-                  className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-white/10 text-cyan-300 focus:outline-none focus:border-cyan-500 text-xs"
+                  className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-white/10 text-cyan-300 focus:border-cyan-500 text-xs"
                 />
               </div>
 
@@ -596,7 +601,7 @@ export default function SecurityPage() {
                             <span>Revoke</span>
                           </button>
                         ) : (
-                          <span className="text-[10px] text-slate-500">Revoked</span>
+                          <span className="text-[10px] text-slate-400">Revoked</span>
                         )}
                       </td>
                     </tr>

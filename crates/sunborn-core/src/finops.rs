@@ -184,6 +184,11 @@ impl SpendVelocityController {
         self.max_spend_per_window_usd
     }
 
+    /// Length of the rolling spend window.
+    pub fn window_duration(&self) -> Duration {
+        self.window_duration
+    }
+
     /// Set an explicit custom spend velocity ceiling for a specific tenant
     pub fn set_tenant_ceiling(&self, tenant_id: impl Into<String>, ceiling_usd: f64) {
         let mut ceilings = self.tenant_ceilings.write().unwrap();

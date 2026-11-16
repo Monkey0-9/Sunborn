@@ -291,11 +291,12 @@ pub async fn execute_request_inner(
     );
 
     let reservation_id = match state
-        .spend_velocity_controller
-        .reserve_spend(&req.tenant_id.0, estimated_cost)
+        .spend_ledger
+        .reserve(&req.tenant_id.0, estimated_cost)
+        .await
     {
         Ok(id) => id,
-        Err((committed, ceiling)) => {
+        Err(crate::finops::SpendLedgerError::CeilingExceeded { committed, ceiling }) => {
             SPEND_VELOCITY_REJECTIONS_TOTAL.fetch_add(1, Ordering::Relaxed);
             RATE_LIMITED_TOTAL.fetch_add(1, Ordering::Relaxed);
             return Err(SunbornError::rate_limit(format!(
@@ -303,6 +304,10 @@ pub async fn execute_request_inner(
                 ceiling, req.tenant_id.0, committed
             ))
             .into());
+        }
+        Err(crate::finops::SpendLedgerError::Unavailable(detail)) => {
+            tracing::error!(tenant = %req.tenant_id.0, error = %detail, "Spend ledger unavailable; failing closed");
+            return Err(SunbornError::cache_unavailable(detail).into());
         }
     };
 
@@ -443,8 +448,9 @@ pub async fn execute_request_inner(
                                 Err(err) => {
                                     tracing::warn!(tenant = %req.tenant_id.0, error = %err, "TDEK decryption failed or key shredded -> Rejecting cached entry");
                                     state
-                                        .spend_velocity_controller
-                                        .release_reservation(&req.tenant_id.0, reservation_id);
+                                        .spend_ledger
+                                        .release(&req.tenant_id.0, reservation_id)
+                                        .await;
                                     return Err(SunbornError::forbidden(format!(
                                         "Tenant '{}' key shredded or unprovisioned",
                                         req.tenant_id.0
@@ -454,8 +460,9 @@ pub async fn execute_request_inner(
                             }
                         } else if cached_entry.content.starts_with("sunborn:enc:v1:") {
                             state
-                                .spend_velocity_controller
-                                .release_reservation(&req.tenant_id.0, reservation_id);
+                                .spend_ledger
+                                .release(&req.tenant_id.0, reservation_id)
+                                .await;
                             return Err(SunbornError::forbidden(format!(
                                 "Tenant '{}' key shredded or unprovisioned",
                                 req.tenant_id.0
@@ -466,8 +473,9 @@ pub async fn execute_request_inner(
                         };
 
                         state
-                            .spend_velocity_controller
-                            .release_reservation(&req.tenant_id.0, reservation_id);
+                            .spend_ledger
+                            .release(&req.tenant_id.0, reservation_id)
+                            .await;
                         REQUEST_DURATION_MS_SUM.fetch_add(duration_ms, Ordering::Relaxed);
                         return Ok(ResponseEnvelope {
                             request_id: req.request_id,
@@ -660,8 +668,9 @@ pub async fn execute_request_inner(
                                         "TDEK decryption failed on semantic hit or key shredded -> Rejecting cached entry"
                                     );
                                     state
-                                        .spend_velocity_controller
-                                        .release_reservation(&req.tenant_id.0, reservation_id);
+                                        .spend_ledger
+                                        .release(&req.tenant_id.0, reservation_id)
+                                        .await;
                                     return Err(SunbornError::forbidden(format!(
                                         "Tenant '{}' key shredded or unprovisioned",
                                         req.tenant_id.0
@@ -671,8 +680,9 @@ pub async fn execute_request_inner(
                             }
                         } else if content.starts_with("sunborn:enc:v1:") {
                             state
-                                .spend_velocity_controller
-                                .release_reservation(&req.tenant_id.0, reservation_id);
+                                .spend_ledger
+                                .release(&req.tenant_id.0, reservation_id)
+                                .await;
                             return Err(SunbornError::forbidden(format!(
                                 "Tenant '{}' key shredded or unprovisioned",
                                 req.tenant_id.0
@@ -683,8 +693,9 @@ pub async fn execute_request_inner(
                         };
 
                         state
-                            .spend_velocity_controller
-                            .release_reservation(&req.tenant_id.0, reservation_id);
+                            .spend_ledger
+                            .release(&req.tenant_id.0, reservation_id)
+                            .await;
 
                         REQUEST_DURATION_MS_SUM.fetch_add(duration_ms, Ordering::Relaxed);
                         return Ok(ResponseEnvelope {
@@ -716,8 +727,9 @@ pub async fn execute_request_inner(
         Ok(res) => res,
         Err(err) => {
             state
-                .spend_velocity_controller
-                .release_reservation(&req.tenant_id.0, reservation_id);
+                .spend_ledger
+                .release(&req.tenant_id.0, reservation_id)
+                .await;
             return Err(err.into());
         }
     };
@@ -731,8 +743,9 @@ pub async fn execute_request_inner(
     );
     // Settle the atomic reservation with actual origin cost
     state
-        .spend_velocity_controller
-        .settle_spend(&req.tenant_id.0, reservation_id, actual_cost);
+        .spend_ledger
+        .settle(&req.tenant_id.0, reservation_id, actual_cost)
+        .await;
 
     let origin_ledger = sunborn_db::models::FinOpsLedgerRecord {
         tenant_id: req.tenant_id.0.clone(),
@@ -1406,6 +1419,56 @@ pub async fn anthropic_messages(
 }
 
 #[derive(Deserialize)]
+pub struct SpendCeilingRequest {
+    pub tenant_id: String,
+    pub ceiling_usd: f64,
+}
+
+/// Operator control for the spend ceiling. With the Postgres backend active the
+/// ceiling is written to the durable ledger, so every replica enforces it.
+pub async fn set_spend_ceiling(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    Json(payload): Json<SpendCeilingRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    sec_ctx
+        .require_admin()
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
+    if payload.tenant_id.trim().is_empty() {
+        return Err(SunbornError::invalid_payload("tenant_id is required").into());
+    }
+    if !payload.ceiling_usd.is_finite() || payload.ceiling_usd < 0.0 {
+        return Err(SunbornError::invalid_payload(
+            "ceiling_usd must be a finite non-negative value",
+        )
+        .into());
+    }
+
+    state
+        .spend_ledger
+        .set_ceiling(&payload.tenant_id, payload.ceiling_usd)
+        .await
+        .map_err(|err| match err {
+            crate::finops::SpendLedgerError::Unavailable(detail) => {
+                AppError::from(SunbornError::cache_unavailable(detail))
+            }
+            crate::finops::SpendLedgerError::CeilingExceeded { committed, ceiling } => {
+                AppError::from(SunbornError::invalid_payload(format!(
+                    "rejected ceiling update (committed: {committed}, ceiling: {ceiling})"
+                )))
+            }
+        })?;
+
+    Ok(Json(json!({
+        "status": "updated",
+        "tenant_id": payload.tenant_id,
+        "ceiling_usd": payload.ceiling_usd,
+        "enforcement_scope": state.spend_ledger.enforcement_scope(),
+    })))
+}
+
+#[derive(Deserialize)]
 pub struct InvalidationRequest {
     pub source_id: Uuid,
     pub tenant_id: String,
@@ -1458,6 +1521,15 @@ pub async fn trigger_invalidation(
             return Err(AppError::from(err));
         }
     };
+
+    // Deterministic crash-injection point for the live acceptance harness: the
+    // purge has committed but the ACK has not. Never armed in production.
+    if std::env::var("SUNBORN_FAULT_INJECT_OUTBOX_CRASH").as_deref() == Ok("after_purge")
+        && !sunborn_core::is_production_mode()
+    {
+        tracing::error!(outbox_id, "FAULT INJECTION: aborting between purge and ACK");
+        std::process::abort();
+    }
 
     if let Err(err) = state.db.mark_outbox_processed(outbox_id).await {
         // The purge completed, but we cannot confirm the durable acknowledgement.
@@ -2643,7 +2715,8 @@ pub async fn get_cluster_sync_status(State(state): State<AppState>) -> impl Into
         "anti_entropy_protocol": "single-node-epoch",
         "consensus_mode": "single_node_authoritative",
         "kms_provider": kms_provider,
-        "spend_velocity_enforcement": "active_enforced"
+        "spend_velocity_enforcement": "active_enforced",
+        "spend_velocity_scope": state.spend_ledger.enforcement_scope()
     }))
 }
 
@@ -3069,6 +3142,7 @@ impl IntoResponse for AppError {
             sunborn_core::ErrorCode::InvalidPayload => StatusCode::BAD_REQUEST,
             sunborn_core::ErrorCode::RateLimitExceeded => StatusCode::TOO_MANY_REQUESTS,
             sunborn_core::ErrorCode::CacheMiss => StatusCode::NOT_FOUND,
+            sunborn_core::ErrorCode::CacheUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 

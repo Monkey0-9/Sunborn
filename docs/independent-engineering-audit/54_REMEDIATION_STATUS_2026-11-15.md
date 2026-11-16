@@ -1,5 +1,10 @@
 # 54 — P0 Remediation Status (2026-11-15)
 
+> **HISTORICAL (superseded 2026-11-16).** Distributed FinOps, crash-boundary
+> fault injection, and formal verification have since been implemented and
+> model-checked. Current status and evidence live in
+> [`../STATUS.md`](../STATUS.md).
+
 **Status: remediation in progress. Release decision remains NO-GO until the
 acceptance evidence below is produced on live infrastructure.**
 
@@ -34,11 +39,30 @@ are closed without evidence.
   epoch manager before accepting future writes.
 - Production readiness rejects an in-memory cluster transport
   (`cluster_transport_durable == false`).
-- **Live proof (exact cache):** `scripts/test_distributed_invalidation.sh` runs
-  Redis 7, PostgreSQL 16, Qdrant and two independent gateway processes. It seeds
-  the same exact-cache key on both replicas, records the dependency only on A,
-  mutates on A, and asserts B's local cache is purged by the stream event. The
-  run passes with `cluster_broadcast_sent=true` and no failed keys.
+- **Live proof (exact cache):** `DIST_MODE=exact bash
+  scripts/test_distributed_invalidation.sh` runs Redis 7, PostgreSQL 16, Qdrant
+  and two independent gateway processes. It seeds the same exact-cache key on
+  both replicas, records the dependency only on A, mutates on A, and asserts B's
+  local cache is purged by the stream event. The run passes with
+  `cluster_broadcast_sent=true` and no failed keys.
+- **Live proof (shared Qdrant semantic cache):** `DIST_MODE=semantic` writes a
+  semantic candidate on A, asserts B serves that shared candidate (one Qdrant
+  point), records the dependency only on A, mutates on A, asserts the shared
+  Qdrant count drops to zero, and asserts B falls through to origin instead of
+  serving stale semantic content.
+- **Live proof (disconnect/reconnect replay):** `DIST_MODE=replay` routes B
+  through a test TCP proxy, severs the proxy, mutates A while B is disconnected,
+  asserts the event remains durable (`XLEN=1`) and B still serves its stale local
+  entry, then restarts the proxy and asserts B reconnects, drains the stream, and
+  purges the entry.
+- That replay gate exposed a real broadcast defect: every replica joined the
+  same Redis consumer group, so the stream load-balanced each event to one peer
+  instead of delivering it to all peers. A disconnected peer could therefore
+  miss an event even though the stream retained it. Consumer groups are now
+  namespaced per pod (`sunborn-gateway:<pod_id>`), restoring broadcast semantics
+  and per-pod pending replay. New groups start at the stream tail (`$`), so a
+  fresh replica does not replay retained history; a restarted replica keeps its
+  existing group and replays only its own unacknowledged entries.
 - The live run also exposed and fixed two startup defects: concurrent replicas
   raced the migration bookkeeping table (now serialized with a PostgreSQL
   advisory lock), and a fresh Qdrant deployment returned 404 for a missing
@@ -47,7 +71,8 @@ are closed without evidence.
   instead of rotated, so one replica cannot invalidate another replica's
   encrypted cache entries.
 - The live harness is enforced in CI as the `distributed-invalidation-verification`
-  job (`.github/workflows/ci.yml`), so this proof cannot silently regress.
+  job (`.github/workflows/ci.yml`), which runs exact, semantic, replay, and
+  outbox modes, so these proofs cannot silently regress.
 
 ### P0-04 — Durable outbox
 - Migration `0006_durable_outbox_queue.sql` creates the missing `outbox_events`
@@ -60,6 +85,11 @@ are closed without evidence.
   PROCESSED only after a fully successful purge, and returns an error if the
   durable acknowledgement fails.
 - The worker no longer ignores purge errors or marks failed events processed.
+- **Live proof:** `DIST_MODE=outbox` inserts a PENDING event, an expired
+  PROCESSING claim owned by a dead worker, and a poison event against PostgreSQL.
+  The live gateway worker processes the first two, and the poison event reaches
+  `FAILED` with `retry_count=2` and exactly one durable `outbox_dlq` row while
+  retaining the failure reason.
 
 ### P0-05 — Rebuild trust
 - A malformed `SUNBORN_ATTESTATION_PUBLIC_KEY` now fails immediately; missing
@@ -95,9 +125,7 @@ are closed without evidence.
 
 | Item | Why it is still open | Required evidence |
 |---|---|---|
-| Live multi-process cluster proof (exact cache) | **PASS** — exact-cache peer purge is now proven by `scripts/test_distributed_invalidation.sh`; disconnect/reconnect and crash replay are still untested | Forced Redis disconnect/reconnect; kill A mid-broadcast; assert replay |
-| Live Qdrant cross-replica purge | Vector deletion still exercised only with `MemoryVectorStore`; the live gate disables semantic hits so it proves the exact-cache path | Shared Qdrant, mutate on A, assert B's semantic search cannot return the stale point |
-| Live PostgreSQL outbox crash test | Memory implementation tested; SQL schema/claim not run against Postgres | Kill worker between claim and ack; assert retry/DLQ |
+| In-flight process-kill fault injection | Disconnect/reconnect and expired-lease reclaim are proven, but no test kills a process at the exact ACK/commit boundary | Inject a crash between purge and ACK/commit; assert no loss or duplicate side effects |
 | Independent semantic dataset | Still 12 pairs in-repo; no external annotation | Pre-registered held-out set, n ≥ 300, lower confidence bound |
 | Distributed FinOps | `SpendVelocityController` remains process-local | Atomic shared reservation/settlement with concurrent replicas |
 | Formal verification | No TLA+/Alloy model | Model-check epoch monotonicity, outbox at-least-once, trust monotonicity |
@@ -108,14 +136,17 @@ are closed without evidence.
 
 ## 3. Verification
 
-Run on 2026-11-15 (Windows/Git Bash):
+Run on 2026-11-16 (Windows/Git Bash):
 
 | Check | Command | Result |
 |---|---|---|
 | Workspace compile | `cargo check --workspace --all-targets` | **PASS**, exit 0 |
 | Rust tests | `cargo test --workspace --all-targets` | **275 passed, 0 failed**, exit 0 |
 | Release gateway latency | `cargo test --release -p sunborn-gateway --test performance_test -- --nocapture` | **14,202.9 req/s, P99 0.144 ms**, exit 0 |
-| Live two-replica invalidation | `bash scripts/test_distributed_invalidation.sh` | **PASS** — replica B local cache purged by replica A's Redis Stream event; broadcast clean; tenant provisioning idempotent |
+| Live two-replica exact-cache invalidation | `DIST_MODE=exact bash scripts/test_distributed_invalidation.sh` | **PASS** — replica B local cache purged by replica A's Redis Stream event; broadcast clean; provisioning idempotent |
+| Live shared-Qdrant semantic invalidation | `DIST_MODE=semantic bash scripts/test_distributed_invalidation.sh` | **PASS** — B served A's shared candidate; after A's mutation Qdrant count reached 0 and B fell through to origin |
+| Live Redis disconnect/reconnect replay | `DIST_MODE=replay bash scripts/test_distributed_invalidation.sh` | **PASS** — event durable while B disconnected; B reconnected, replayed the stream, and purged its stale local entry |
+| Live PostgreSQL outbox crash/retry/DLQ | `DIST_MODE=outbox bash scripts/test_distributed_invalidation.sh` | **PASS** — pending and expired-claim events processed; poison event retried twice, reached `FAILED`, and produced one DLQ row |
 | Frontend | `npm test --prefix frontend` | 37/37 (run before the Rust-only changes) |
 | Python SDK | `python -m unittest ...` | 26/26 (run before the Rust-only changes) |
 | Clippy | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | **exit 0, no warnings** |
