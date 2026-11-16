@@ -103,6 +103,7 @@ impl DbCircuitBreaker {
 pub struct PostgresDatabaseStore {
     pub connection_url: String,
     pool: Arc<RwLock<Option<PgPool>>>,
+    pool_init_lock: Arc<tokio::sync::Mutex<()>>,
     fallback_store: Arc<MemoryDatabaseStore>,
     fallback_tdeks: FallbackTdekMap,
     pub strict_durability: bool,
@@ -125,6 +126,7 @@ impl PostgresDatabaseStore {
         Self {
             connection_url: url_str,
             pool: Arc::new(RwLock::new(None)),
+            pool_init_lock: Arc::new(tokio::sync::Mutex::new(())),
             fallback_store: Arc::new(MemoryDatabaseStore::new()),
             fallback_tdeks: Arc::new(RwLock::new(std::collections::HashMap::new())),
             strict_durability: strict,
@@ -137,6 +139,7 @@ impl PostgresDatabaseStore {
         Self {
             connection_url: url_str,
             pool: Arc::new(RwLock::new(None)),
+            pool_init_lock: Arc::new(tokio::sync::Mutex::new(())),
             fallback_store: Arc::new(MemoryDatabaseStore::new()),
             fallback_tdeks: Arc::new(RwLock::new(std::collections::HashMap::new())),
             strict_durability: true,
@@ -193,6 +196,14 @@ impl PostgresDatabaseStore {
             }
         }
 
+        let _init_guard = self.pool_init_lock.lock().await;
+        {
+            let guard = self.pool.read().await;
+            if let Some(pool) = guard.as_ref() {
+                return Some(pool.clone());
+            }
+        }
+
         match PgPoolOptions::new()
             .max_connections(20)
             .acquire_timeout(Duration::from_secs(2))
@@ -228,16 +239,21 @@ impl PostgresDatabaseStore {
     async fn migrate(&self, pool: &PgPool) -> std::result::Result<(), sqlx::Error> {
         // Multiple replicas may start simultaneously. Serialize the migration
         // bookkeeping so two processes cannot both insert the same version.
+        // Acquire an exclusive connection from the pool so that pg_advisory_lock
+        // and pg_advisory_unlock are executed on the exact same backend session,
+        // preventing leaked session advisory locks and mismatched unlock warnings.
         const MIGRATION_LOCK_ID: i64 = 0x0053_554E_424F_524E; // "SUNBORN"
+        let mut lock_conn = pool.acquire().await?;
         sqlx::query("SELECT pg_advisory_lock($1)")
             .bind(MIGRATION_LOCK_ID)
-            .execute(pool)
+            .execute(&mut *lock_conn)
             .await?;
         let result = self.migrate_locked(pool).await;
         let _ = sqlx::query("SELECT pg_advisory_unlock($1)")
             .bind(MIGRATION_LOCK_ID)
-            .execute(pool)
+            .execute(&mut *lock_conn)
             .await;
+        drop(lock_conn);
         result
     }
 

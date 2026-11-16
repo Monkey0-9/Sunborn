@@ -45,6 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   requests across 16 concurrent workers and publishing `benchmarks/production_soak_results.json`.
 
 ### Fixed
+- **PostgreSQL advisory lock session isolation & startup serialization**:
+  - Bound `pg_advisory_lock` and `pg_advisory_unlock` to a dedicated exclusive connection `lock_conn` acquired from `PgPool` during schema migration, ensuring lock acquisition and release operate on the exact same backend session. This eliminates the PostgreSQL notice `you don't own a lock of type ExclusiveLock`, prevents advisory lock leaks, and resolves the startup deadlock in `scripts/test_distributed_invalidation.sh`.
+  - Implemented `pool_init_lock` double-checked locking in `PostgresDatabaseStore::get_pool` to serialize connection pool establishment and prevent concurrent in-process tasks from racing migrations.
 - CI workflows failed Trunk lint: `pinact@5` rejected the single-dash `-format`
   flag used by Trunk's plugin (pinned back to `pinact@4.1.1`), and yamllint
   `quoted-strings` flagged redundant quotes in `ci.yml`, `release.yml` and
