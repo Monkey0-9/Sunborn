@@ -13,10 +13,11 @@ services:
     volumes:
       - ../migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sunborn -d sunborn"]
+      test: ["CMD-SHELL", "pg_isready -U sunborn -d sunborn && psql -U sunborn -d sunborn -c 'SELECT 1;'"]
       interval: 2s
       timeout: 3s
       retries: 30
+      start_period: 5s
 
   redis:
     image: redis:7-alpine

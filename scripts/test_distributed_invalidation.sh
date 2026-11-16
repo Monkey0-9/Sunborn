@@ -71,6 +71,8 @@ fail() {
     tail -60 "${A_LOG}" >&2 2>/dev/null || true
     echo "--- replica B log (tail) ---" >&2
     tail -60 "${B_LOG}" >&2 2>/dev/null || true
+    echo "--- postgres container log (tail) ---" >&2
+    docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" logs --tail 40 postgres >&2 2>/dev/null || true
     exit 1
 }
 
@@ -97,17 +99,32 @@ BIN="${ROOT_DIR}/target/debug/sunborn-gateway.exe"
 echo "=== 2/7: start Redis 7 / PostgreSQL 16 / Qdrant ==="
 docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" down -v --remove-orphans >/dev/null 2>&1 || true
 docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" up -d >/dev/null
-for _ in $(seq 1 60); do
-    if docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" exec -T postgres pg_isready -U sunborn -d sunborn >/dev/null 2>&1 \
+
+# Clean up any leftover logs or artifacts from previous runs or CI caches
+rm -f "${A_LOG}" "${B_LOG}" "${A_LOG}.crash" "${ROOT_DIR}/target/finops-"*.json "${ROOT_DIR}/target/dist-"*.json "${ROOT_DIR}/target/redis-proxy.log"
+
+echo "Waiting for PostgreSQL, Redis, and Qdrant to be fully operational..."
+READY=0
+for i in $(seq 1 90); do
+    # Require psql to successfully execute a query on sunborn db to ensure init scripts are done and server restarted
+    if docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" exec -T postgres psql -U sunborn -d sunborn -c "SELECT 1;" >/dev/null 2>&1 \
         && docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" exec -T redis redis-cli ping 2>/dev/null | grep -q PONG \
         && curl -fsS http://127.0.0.1:56333/readyz >/dev/null 2>&1; then
-        break
+        # Double check: ensure postgres didn't just accept a query during temporary initdb execution
+        if docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" exec -T postgres psql -U sunborn -d sunborn -c "SELECT 1 FROM spend_ledger_entries LIMIT 1;" >/dev/null 2>&1; then
+            READY=1
+            break
+        fi
+        sleep 1
+        if docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" exec -T postgres psql -U sunborn -d sunborn -c "SELECT 1;" >/dev/null 2>&1; then
+            READY=1
+            break
+        fi
     fi
     sleep 1
 done
-curl -fsS http://127.0.0.1:56333/readyz >/dev/null || fail "Qdrant did not become ready"
-docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" exec -T postgres pg_isready -U sunborn -d sunborn >/dev/null || fail "PostgreSQL did not become ready"
-docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" exec -T redis redis-cli ping | grep -q PONG || fail "Redis did not become ready"
+
+[ "${READY}" = "1" ] || fail "PostgreSQL, Redis, or Qdrant did not become ready within 90s"
 
 # The test tenant/application must exist before finops/cache writes (foreign keys).
 docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" exec -T postgres \
