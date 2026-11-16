@@ -370,11 +370,11 @@ impl PostgresDatabaseStore {
             return SpendReservationOutcome::StoreUnavailable;
         }
 
-        let ceiling: f64 = match sqlx::query_scalar::<_, Option<f64>>(
+        let ceiling: f64 = match sqlx::query_scalar::<_, f64>(
             "SELECT ceiling_usd FROM spend_tenant_ceilings WHERE tenant_id = $1",
         )
         .bind(tenant_id)
-        .fetch_one(&mut *tx)
+        .fetch_optional(&mut *tx)
         .await
         {
             Ok(Some(value)) => value,
