@@ -1,0 +1,139 @@
+{
+  "metadata": {
+    "title": "Sunborn Competitive Evaluation & Net Financial Savings Benchmark",
+    "timestamp_utc": "2026-11-17T11:54:12.261667+00:00",
+    "workload_size": 25,
+    "cost_model": {
+      "avg_tokens_per_query": 850,
+      "cost_per_token_usd": 8.5e-06,
+      "blended_query_cost_usd": 0.007225,
+      "sunborn_infra_per_req_usd": 2e-06,
+      "naive_cache_infra_per_req_usd": 5e-06
+    }
+  },
+  "baselines": {
+    "B0_DirectOrigin": {
+      "name": "Direct Origin LLM (No Cache)",
+      "tp": 0,
+      "fp": 0,
+      "tn": 15,
+      "fn": 10,
+      "hits": 0,
+      "hit_rate_pct": 0.0,
+      "hit_rate_ci_95": [
+        0.0,
+        13.32
+      ],
+      "false_hits": 0,
+      "false_hit_rate_pct": 0.0,
+      "false_hit_ci_95": [
+        0.0,
+        13.32
+      ],
+      "precision_pct": 100.0,
+      "precision_ci_95": [
+        0.0,
+        0.0
+      ],
+      "recall_pct": 0.0,
+      "recall_ci_95": [
+        0.0,
+        27.75
+      ],
+      "latency_p50_ms": 956.0,
+      "latency_p90_ms": 1100.0,
+      "latency_p95_ms": 1103.0,
+      "latency_p99_ms": 1138.0,
+      "llm_token_spend_usd": 0.180625,
+      "infra_overhead_usd": 0.0,
+      "total_incurred_spend_usd": 0.180625,
+      "net_dollar_savings_usd": 0.0,
+      "net_savings_pct": 0.0,
+      "stale_reads_after_mutation": 0,
+      "total_mutation_reads": 6,
+      "stale_read_rate_pct": 0.0
+    },
+    "B1_NaiveCosineCache": {
+      "name": "Naive Cosine Cache (e.g. GPTCache / Redis Semantic)",
+      "tp": 10,
+      "fp": 13,
+      "tn": 2,
+      "fn": 0,
+      "hits": 23,
+      "hit_rate_pct": 92.0,
+      "hit_rate_ci_95": [
+        75.03,
+        97.78
+      ],
+      "false_hits": 13,
+      "false_hit_rate_pct": 52.0,
+      "false_hit_ci_95": [
+        33.5,
+        69.97
+      ],
+      "precision_pct": 43.48,
+      "precision_ci_95": [
+        25.63,
+        63.19
+      ],
+      "recall_pct": 100.0,
+      "recall_ci_95": [
+        72.25,
+        100.0
+      ],
+      "latency_p50_ms": 44.0,
+      "latency_p90_ms": 49.0,
+      "latency_p95_ms": 889.0,
+      "latency_p99_ms": 967.0,
+      "llm_token_spend_usd": 0.01445,
+      "infra_overhead_usd": 0.000125,
+      "total_incurred_spend_usd": 0.014575,
+      "net_dollar_savings_usd": 0.16605,
+      "net_savings_pct": 91.93,
+      "stale_reads_after_mutation": 5,
+      "total_mutation_reads": 6,
+      "stale_read_rate_pct": 83.33
+    },
+    "B2_SunbornDualGateway": {
+      "name": "Sunborn Dual Gateway (Full Architecture)",
+      "tp": 8,
+      "fp": 0,
+      "tn": 15,
+      "fn": 2,
+      "hits": 8,
+      "hit_rate_pct": 32.0,
+      "hit_rate_ci_95": [
+        17.21,
+        51.59
+      ],
+      "false_hits": 0,
+      "false_hit_rate_pct": 0.0,
+      "false_hit_ci_95": [
+        0.0,
+        13.32
+      ],
+      "precision_pct": 100.0,
+      "precision_ci_95": [
+        67.56,
+        100.0
+      ],
+      "recall_pct": 80.0,
+      "recall_ci_95": [
+        49.02,
+        94.33
+      ],
+      "latency_p50_ms": 885.0,
+      "latency_p90_ms": 1072.0,
+      "latency_p95_ms": 1100.0,
+      "latency_p99_ms": 1138.0,
+      "llm_token_spend_usd": 0.122825,
+      "infra_overhead_usd": 5e-05,
+      "total_incurred_spend_usd": 0.122875,
+      "net_dollar_savings_usd": 0.05775,
+      "net_savings_pct": 31.97,
+      "stale_reads_after_mutation": 0,
+      "total_mutation_reads": 6,
+      "stale_read_rate_pct": 0.0
+    }
+  }
+}

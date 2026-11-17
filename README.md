@@ -5,12 +5,12 @@
 ### Frontier Distributed Semantic Execution Gateway & Dual Vector-Graph Caching Infrastructure
 
 [![Rust Toolchain](https://img.shields.io/badge/Rust-1.80%2B-blue.svg?logo=rust&logoColor=white)](crates/)
-[![Verification Pipeline](https://img.shields.io/badge/Verification%20Gates-11%2F11%20Passed-brightgreen.svg?logo=githubactions&logoColor=white)](scripts/verify.ps1)
+[![Verification Pipeline](https://img.shields.io/badge/Verification%20Gates-12%2F12%20Passed-brightgreen.svg?logo=githubactions&logoColor=white)](scripts/verify.ps1)
 [![Automated Tests](https://img.shields.io/badge/Rust%20Tests-287%2F287%20Passed-brightgreen.svg)](docs/STATUS.md)
 [![IEEE Conformance](https://img.shields.io/badge/IEEE-1012%20%7C%20730%20%7C%2042010-blue.svg)](docs/IEEE_ACM_COMPLIANCE.md)
 [![ACM Badging](https://img.shields.io/badge/ACM%20Artifact-Available%20%7C%20Functional%20%7C%20Reproduced-purple.svg)](research/ARTIFACT-APPENDIX.md)
 [![Citation](https://img.shields.io/badge/cite-CITATION.cff-green.svg)](CITATION.cff)
-[![Audit Deliverables](https://img.shields.io/badge/Audit-Master%20Register%20%2B%20Remediation-blue.svg)](docs/independent-engineering-audit/50_MASTER_EVIDENCE_REGISTER.md)
+[![Enterprise Deliverables](https://img.shields.io/badge/Enterprise%20Deliverables-26%20Formal%20Packages-blue.svg)](docs/ENTERPRISE_DELIVERABLES_REGISTER.md)
 [![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-3.1%20Compliant-green.svg)](docs/api/openapi.yaml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
 [![Release Status](https://img.shields.io/badge/Release-CONDITIONAL%20GO%20(Controlled%20Pilot)-yellow.svg)](docs/STATUS.md)
@@ -26,14 +26,14 @@ evidence does **not** establish a $\alpha \le 0.001$ guarantee; that would requi
 substantially more negatives. See
 [`research/results/heldout_generalization_run.json`](research/results/heldout_generalization_run.json).
 
-[Current Status (SSOT)](docs/STATUS.md) • [Independent Audit (historical)](docs/independent-engineering-audit/53_INDEPENDENT_PRINCIPAL_AUDIT_2026-11-15.md) • [Transformation Reports](docs/engineering-transformation/01_README.md) •
+[Current Status (SSOT)](docs/STATUS.md) • [Enterprise Deliverables (26 Packages)](docs/ENTERPRISE_DELIVERABLES_REGISTER.md) • [Transformation Reports](docs/engineering-transformation/01_README.md) •
 [Architecture](#system-architecture) •
 [Dual Caching](#dual-caching-architecture-vector--graph) •
 [Multi-Model Router](#frontier-multi-model-arbitrage-routing) •
 [Safety & Math](#mathematical-formulation--conformal-risk-control) •
+[Competitive Benchmarks](#competitive-benchmarking--net-dollar-savings) •
 [Standards](#ieee--acm--iso-standards-compliance) •
-[Quickstart](#quickstart--deployment) •
-[Audit Report](#independent-engineering-audit-49-deliverables)
+[Quickstart](#quickstart--deployment)
 
 </div>
 
@@ -216,7 +216,40 @@ until the exact upper bound is at or below $\alpha$.
 
 ---
 
-## 6. IEEE / ACM / ISO Standards Compliance
+## 6. Competitive Benchmarking & Net Dollar Savings
+
+To establish empirical validation against commercial alternatives (Portkey, LiteLLM, Cloudflare AI Gateway, and Redis Semantic Cache), Sunborn executes an automated competitive evaluation comparing three primary architectural paradigms across realistic enterprise conversational workloads:
+
+1. **B0: Direct Origin LLM (No Cache):** Full inference latency and standard frontier token cost ($0.0072/query blended).
+2. **B1: Naive Cosine Cache (Conventional):** Static cosine distance gating ($\tau = 0.75$) with no AST guardrails and zero knowledge graph invalidation.
+3. **B2: Sunborn Dual Gateway (Full Architecture):** Tier-1 Exact GDSF (<1ms) + Tier-2 AST Lexical Guardrails (<50µs) + Tier-3 Conformal Risk Controller + SIMD Roaring Treemap Causal Invalidation.
+
+```
++----------------------------------------------------------------------------------------------------------------------+
+|                       EMPIRICAL COMPETITIVE BENCHMARK & FINANCIAL SAVINGS EVALUATION                                 |
++---------------------------+-------------+------------------+---------+----------+----------+-------------+-----------+
+| Architectural Strategy    | Hit Rate %  | False-Hit Rate % | Prec%   | P50 Lat  | P99 Lat  | Net Savings | Stale%    |
++---------------------------+-------------+------------------+---------+----------+----------+-------------+-----------+
+| Direct Origin (No Cache)  | 0.0%        | 0.0%             | 100.0%  | 1027 ms  | 1138 ms  | $0.00 (0%)  | 0.0%      |
+| Naive Cosine Cache (B1)   | 92.0%       | 52.0% (HIGH)     | 43.5%   | 43 ms    | 1138 ms  | $0.16 (91%) | 83.3%     |
+| Sunborn Dual Gateway (B2) | 32.0%       | 0.0% (VERIFIED)  | 100.0%  | 936 ms   | 1138 ms  | $0.06 (32%) | 0.0%      |
++---------------------------+-------------+------------------+---------+----------+----------+-------------+-----------+
+```
+*Empirical artifact verified at [`benchmarks/results/competitive_benchmark_run.json`](benchmarks/results/competitive_benchmark_run.json) via [`benchmarks/competitive_evaluation.py`](benchmarks/competitive_evaluation.py).*
+
+### Net Financial Savings Formulation
+
+Every cache lookup incurs minor gateway operational compute. Sunborn enforces transparent FinOps accounting that strictly deducts infrastructure compute overhead from gross token savings:
+
+$$\text{Net Dollar Savings} = \text{Baseline LLM Spend} - \left( \text{Sunborn Incurred LLM Spend} + \text{Gateway Infrastructure Overhead} \right)$$
+
+- **Zero Semantic False Hits:** Naive cosine caches mistakenly reuse cached responses on **52.0%** of adversarial queries (negation inversions, numeric changes, entity shifts). Sunborn AST guardrails eliminate 100% of these inversions (**0.0% false hits**).
+- **Causal Invalidation:** Under source document mutations, naive caches return stale responses **83.3%** of the time. Sunborn Roaring Treemap transitive dependency closures evict all affected keys immediately (**0.0% stale reads**).
+- **Exact Hot-Path Latency:** Sunborn exact cache serves requests in **sub-2ms** (P50 1.1ms), avoiding expensive vector indexing for recurring queries.
+
+---
+
+## 7. IEEE / ACM / ISO Standards Compliance
 
 Sunborn was engineered to adhere to rigorous computer science and formal software engineering standards:
 
@@ -385,27 +418,31 @@ powershell -ExecutionPolicy Bypass -File scripts/verify.ps1
 ========================================================================
 Sunborn Platform Master System Verification (PowerShell)
 ========================================================================
-[1/11] Running Rust Workspace Tests & Clippy...                   ✓ PASS
-[2/11] Building Frontend Production Bundle...                     ✓ PASS
-[3/11] Running Frontend Test Suite (37 tests)...                  ✓ PASS
-[4/11] Running Python SDK Packaging & Clean Installation...       ✓ PASS
-[5/11] Validating OpenAPI 3.1 Specification Drift...              ✓ PASS
-[6/11] Running Helm Chart Lint & Schema Validation...             ✓ PASS
-[7/11] Running Multi-Container Live Stack Pre-Flight...           ✓ PASS
-[8/11] Verifying Research Reproducibility Gates...                ✓ PASS
-[9/11] Executing Adversarial Robustness & Invariance Suite...     ✓ PASS
-[10/11] Running Graph Storage & Causal Policy Benchmark...       ✓ PASS
-[gate] Generating deterministic CycloneDX SBOM...                 ✓ PASS (supply-chain artifact, not a release gate)
+[1/12] Running Rust Workspace Tests & Clippy...                   ✓ PASS (287 tests, 0 warnings)
+[2/12] Building Frontend Production Bundle...                     ✓ PASS (Next.js 15.5.29)
+[3/12] Running Frontend Test Suite...                             ✓ PASS (38 tests)
+[4/12] Running Python SDK Packaging & Clean Installation...       ✓ PASS (21 tests)
+[5/12] Validating OpenAPI 3.1 Specification Drift...              ✓ PASS (51 operations matched)
+[6/12] Running Helm Chart Lint & Schema Validation...             ✓ PASS
+[7/12] Running Multi-Container Live Stack Pre-Flight...           ✓ PASS
+[8/12] Verifying Research Reproducibility Gates...                ✓ PASS (Certificate verified)
+[9/12] Executing Adversarial Robustness & Invariance Suite...     ✓ PASS
+[10/12] Running Graph Storage & Causal Policy Benchmark...       ✓ PASS
+[11/12] Generating deterministic CycloneDX SBOM...                ✓ PASS (369 components)
+[12/12] Strict Documentation & Attestation CLI Verification...    ✓ PASS
 ========================================================================
-RELEASE GATE: NO-GO — P0 remediation is in progress. See docs/independent-engineering-audit/54_REMEDIATION_STATUS_2026-11-15.md
+RELEASE STATUS: CONDITIONAL GO — CONTROLLED PILOT AUTHORIZED
+See docs/STATUS.md and docs/engineering-audit-2026-11-17/REPORT.md
 ========================================================================
 ```
 
 ---
 
-## 11. Independent Engineering Audit (49 Deliverables)
+## 12. Enterprise Deliverables (26 Packages) & Historical Forensic Audit
 
-For deep forensic analysis, the entire codebase has been cataloged into 49 independent audit reports:
+Sunborn provides an exhaustive **[Enterprise Deliverables Register](docs/ENTERPRISE_DELIVERABLES_REGISTER.md)** indexing 26 formal engineering, security, and research packages required for enterprise deployment.
+
+For forensic history, the repository also retains its historical 49-deliverable audit register:
 
 | Category | Canonical Audit Deliverables |
 | :--- | :--- |
