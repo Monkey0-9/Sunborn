@@ -583,12 +583,14 @@ impl DependencyGraph {
             .await
     }
 
-    /// Find all cache keys that must be invalidated when source_id is updated
-    pub async fn get_affected_cache_keys(&self, source_id: &Uuid) -> Vec<String> {
-        self.store
-            .get_affected_cache_keys(source_id)
-            .await
-            .unwrap_or_default()
+    /// Find all cache keys that must be invalidated when source_id is updated.
+    ///
+    /// Errors are propagated rather than collapsed into an empty set: treating a
+    /// backend outage as "nothing depends on this source" would report a purge
+    /// as successful while leaving stale entries in place, and a caller that then
+    /// clears the dependency edges would destroy the lineage needed to retry.
+    pub async fn get_affected_cache_keys(&self, source_id: &Uuid) -> Result<Vec<String>> {
+        self.store.get_affected_cache_keys(source_id).await
     }
 
     /// Remove a single dependency edge between a knowledge source and a cache key
@@ -596,9 +598,11 @@ impl DependencyGraph {
         self.store.remove_dependency(source_id, cache_key).await
     }
 
-    /// Clear recorded dependencies for a source after invalidation
-    pub async fn clear_dependencies(&self, source_id: &Uuid) {
-        let _ = self.store.clear_dependencies(source_id).await;
+    /// Clear recorded dependencies for a source after invalidation.
+    /// Failures are surfaced so a caller never reports lineage cleanup it did
+    /// not actually perform.
+    pub async fn clear_dependencies(&self, source_id: &Uuid) -> Result<()> {
+        self.store.clear_dependencies(source_id).await
     }
 
     /// Find all upstream knowledge sources that a cache key depends on
@@ -636,13 +640,13 @@ mod tests {
         graph.record_dependency(src_id, "key:alpha").await.unwrap();
         graph.record_dependency(src_id, "key:beta").await.unwrap();
 
-        let affected = graph.get_affected_cache_keys(&src_id).await;
+        let affected = graph.get_affected_cache_keys(&src_id).await.unwrap();
         assert_eq!(affected.len(), 2);
         assert!(affected.contains(&"key:alpha".to_string()));
         assert!(affected.contains(&"key:beta".to_string()));
 
-        graph.clear_dependencies(&src_id).await;
-        let after_clear = graph.get_affected_cache_keys(&src_id).await;
+        graph.clear_dependencies(&src_id).await.unwrap();
+        let after_clear = graph.get_affected_cache_keys(&src_id).await.unwrap();
         assert_eq!(after_clear.len(), 0);
     }
 
@@ -675,7 +679,7 @@ mod tests {
             .await
             .unwrap();
 
-        let affected = graph.get_affected_cache_keys(&src_id).await;
+        let affected = graph.get_affected_cache_keys(&src_id).await.unwrap();
         assert_eq!(
             affected.len(),
             4,
@@ -709,7 +713,7 @@ mod tests {
             .await;
 
         // 3. Multi-hop transitive graph traversal resolves all 3 affected keys
-        let affected = graph.get_affected_cache_keys(&source_id).await;
+        let affected = graph.get_affected_cache_keys(&source_id).await.unwrap();
         assert_eq!(
             affected.len(),
             3,
@@ -729,14 +733,61 @@ mod tests {
             .any(|(q, _)| q.contains("MATCH (k:CacheKey)-[:DEPENDS_ON*1..10]->")));
 
         // 5. Clear dependencies triggers DETACH DELETE
-        graph.clear_dependencies(&source_id).await;
+        graph.clear_dependencies(&source_id).await.unwrap();
         let queries_after_clear = mock_store.recorded_queries().await;
         assert!(queries_after_clear
             .iter()
             .any(|(q, _)| q.contains("DETACH DELETE")));
 
-        let affected_after_clear = graph.get_affected_cache_keys(&source_id).await;
+        let affected_after_clear = graph.get_affected_cache_keys(&source_id).await.unwrap();
         assert_eq!(affected_after_clear.len(), 0);
+    }
+
+    /// A backend that is unreachable must surface the error instead of being
+    /// reported as "no dependents", otherwise an invalidation would silently
+    /// succeed and the caller would clear the lineage needed for a retry.
+    #[tokio::test]
+    async fn test_affected_keys_propagate_backend_failure() {
+        struct UnavailableStore;
+
+        #[async_trait::async_trait]
+        impl KnowledgeGraphStore for UnavailableStore {
+            fn backend_name(&self) -> &str {
+                "unavailable"
+            }
+            async fn record_dependency(&self, _s: Uuid, _k: &str) -> Result<()> {
+                Err(SunbornError::internal("graph backend down"))
+            }
+            async fn get_affected_cache_keys(&self, _s: &Uuid) -> Result<Vec<String>> {
+                Err(SunbornError::internal("graph backend down"))
+            }
+            async fn remove_dependency(&self, _s: &Uuid, _k: &str) -> Result<()> {
+                Err(SunbornError::internal("graph backend down"))
+            }
+            async fn clear_dependencies(&self, _s: &Uuid) -> Result<()> {
+                Err(SunbornError::internal("graph backend down"))
+            }
+            async fn execute_cypher(
+                &self,
+                _c: &str,
+                _p: serde_json::Value,
+            ) -> Result<serde_json::Value> {
+                Err(SunbornError::internal("graph backend down"))
+            }
+            async fn is_healthy(&self) -> bool {
+                false
+            }
+        }
+
+        let graph = DependencyGraph::with_store(Arc::new(UnavailableStore));
+        let source_id = Uuid::new_v4();
+
+        let err = graph
+            .get_affected_cache_keys(&source_id)
+            .await
+            .expect_err("backend failure must not be reported as an empty dependant set");
+        assert!(err.to_string().contains("graph backend down"));
+        assert!(graph.clear_dependencies(&source_id).await.is_err());
     }
 
     #[tokio::test]

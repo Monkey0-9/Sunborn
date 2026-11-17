@@ -1050,6 +1050,19 @@ mod tests {
         assert!(true_positives > 0);
         assert!(true_negatives > 0);
 
+        // Cross-language single source of truth: the statistics runner
+        // (`research/eval_conformal_benchmark.py`) must not carry hand-typed
+        // counts. It reads this checked-in matrix, and this test fails if the
+        // matrix ever stops matching what the guardrail actually produces.
+        let matrix: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../research/results/heldout_confusion_matrix.json"
+        ))
+        .expect("valid confusion matrix JSON");
+        assert_eq!(matrix["true_positives"].as_u64().unwrap(), true_positives);
+        assert_eq!(matrix["false_positives"].as_u64().unwrap(), false_positives);
+        assert_eq!(matrix["true_negatives"].as_u64().unwrap(), true_negatives);
+        assert_eq!(matrix["false_negatives"].as_u64().unwrap(), false_negatives);
+
         let precision = true_positives as f64 / (true_positives + false_positives) as f64;
         let recall = true_positives as f64 / (true_positives + false_negatives) as f64;
 

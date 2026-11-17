@@ -172,7 +172,7 @@ impl GraphMemoryCache {
         let affected_keys = self
             .dependency_graph
             .get_affected_cache_keys(source_id)
-            .await;
+            .await?;
 
         let mut successfully_purged = Vec::new();
         let mut failed_purges = Vec::new();
@@ -199,7 +199,15 @@ impl GraphMemoryCache {
         }
 
         if failed_purges.is_empty() {
-            self.dependency_graph.clear_dependencies(source_id).await;
+            self.dependency_graph
+                .clear_dependencies(source_id)
+                .await
+                .map_err(|e| {
+                    SunbornError::internal(format!(
+                        "RTC invalidation purged keys for source {} but failed to clear dependency edges: {e}",
+                        source_id
+                    ))
+                })?;
             Ok(successfully_purged)
         } else {
             Err(SunbornError::internal(format!(

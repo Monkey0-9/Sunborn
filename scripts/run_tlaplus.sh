@@ -18,6 +18,16 @@ if [ ! -f "${JAR}" ]; then
     mv "${JAR}.tmp" "${JAR}"
 fi
 
+if ! command -v java >/dev/null 2>&1; then
+    if [ -x "/mnt/c/Program Files/Common Files/Oracle/Java/javapath/java.exe" ]; then
+        export PATH="/mnt/c/Program Files/Common Files/Oracle/Java/javapath:${PATH}"
+    elif [ -x "/c/Program Files/Common Files/Oracle/Java/javapath/java.exe" ]; then
+        export PATH="/c/Program Files/Common Files/Oracle/Java/javapath:${PATH}"
+    elif [ -n "${JAVA_HOME:-}" ] && [ -x "${JAVA_HOME}/bin/java" ]; then
+        export PATH="${JAVA_HOME}/bin:${PATH}"
+    fi
+fi
+
 if ! java -version >/dev/null 2>&1; then
     echo "FAIL: Java 17+ is required to run TLC" >&2
     exit 1

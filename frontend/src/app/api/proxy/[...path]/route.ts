@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { evaluateProxySecurity } from "@/lib/proxy-policy";
+import { buildGatewayUrl, evaluateProxySecurity } from "@/lib/proxy-policy";
 
 const GATEWAY_URL =
   process.env.SUNBORN_GATEWAY_URL ||
@@ -45,11 +45,20 @@ async function handleProxy(req: NextRequest, context: RouteContext) {
     );
   }
 
-  // 4. Construct Target Gateway URL & Headers
-  const targetUrl = new URL(
-    pathSegment,
-    GATEWAY_URL.endsWith("/") ? GATEWAY_URL : `${GATEWAY_URL}/`
-  );
+  // 4. Construct Target Gateway URL & Headers.
+  // The URL is derived from the same normalized path the security policy
+  // evaluated, and pinned to the configured gateway origin, so a
+  // scheme-relative or absolute path cannot redirect the request (and the
+  // caller's Authorization header) to another host.
+  const targetDecision = buildGatewayUrl(GATEWAY_URL, pathSegment);
+  if (!targetDecision.ok) {
+    return NextResponse.json(
+      { error: targetDecision.error, detail: targetDecision.detail },
+      { status: targetDecision.status }
+    );
+  }
+
+  const targetUrl = new URL(targetDecision.url);
 
   req.nextUrl.searchParams.forEach((value, key) => {
     targetUrl.searchParams.append(key, value);

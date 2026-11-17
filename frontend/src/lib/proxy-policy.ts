@@ -34,7 +34,9 @@ export function normalizePath(rawPath: string): string {
   } catch {
     // Keep raw decoded if percent-decoding throws
   }
-  const segments = decoded.replace(/\/+/g, "/").split("/");
+  // A backslash is a path separator to several HTTP parsers; treat it as one
+  // here too so `\\attacker` cannot be resolved as an authority.
+  const segments = decoded.replace(/[\\/]+/g, "/").split("/");
   const resolved: string[] = [];
   for (const seg of segments) {
     if (!seg || seg === ".") continue;
@@ -62,6 +64,81 @@ export function isPublicRoute(path: string): boolean {
 export type AuthDecision =
   | { allowed: true }
   | { allowed: false; status: number; error: string; detail: string };
+
+export type GatewayUrlDecision =
+  | { ok: true; url: string }
+  | { ok: false; status: number; error: string; detail: string };
+
+/**
+ * Resolves a proxied path against the configured gateway origin.
+ *
+ * The security policy evaluates `normalizePath(rawPath)`, so the URL must be
+ * built from that same normalized value. Resolving the raw path would let a
+ * request such as `//attacker.example/x` or `https://attacker.example/x`
+ * override the origin, turning the server-side BFF into an SSRF primitive that
+ * also forwards the caller's Authorization header to the attacker.
+ */
+export function buildGatewayUrl(
+  gatewayBaseUrl: string,
+  rawPath: string
+): GatewayUrlDecision {
+  const normalizedPath = normalizePath(rawPath);
+
+  let base: URL;
+  try {
+    base = new URL(gatewayBaseUrl);
+  } catch {
+    return {
+      ok: false,
+      status: 500,
+      error: "INVALID_GATEWAY_URL",
+      detail: "The configured gateway URL is not a valid absolute URL.",
+    };
+  }
+
+  if (!["http:", "https:"].includes(base.protocol)) {
+    return {
+      ok: false,
+      status: 500,
+      error: "INVALID_GATEWAY_URL",
+      detail: "The configured gateway URL must use HTTP or HTTPS.",
+    };
+  }
+
+  if (normalizedPath === "") {
+    return {
+      ok: false,
+      status: 400,
+      error: "EMPTY_PROXY_PATH",
+      detail: "A resource path is required.",
+    };
+  }
+
+  let target: URL;
+  try {
+    // The leading slash keeps the path relative, so an absolute or
+    // scheme-relative path can never replace the configured origin.
+    target = new URL(`/${normalizedPath}`, base.origin);
+  } catch {
+    return {
+      ok: false,
+      status: 400,
+      error: "INVALID_PROXY_PATH",
+      detail: "The requested resource path is malformed.",
+    };
+  }
+
+  if (target.origin !== base.origin) {
+    return {
+      ok: false,
+      status: 403,
+      error: "PROXY_ORIGIN_ESCAPE",
+      detail: "Proxied requests may only target the configured gateway origin.",
+    };
+  }
+
+  return { ok: true, url: target.toString() };
+}
 
 export function evaluateProxySecurity(params: {
   method: string;

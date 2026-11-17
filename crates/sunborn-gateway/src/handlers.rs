@@ -1667,7 +1667,14 @@ pub async fn invalidate_graph_rtc(
             .map_err(AppError::from)?;
         state.watermark_fencer.advance_watermark(&src.to_string());
 
-        let keys = state.dependency_graph.get_affected_cache_keys(src).await;
+        // A dependency-graph outage must fail the invalidation rather than look
+        // like "this source has no dependants". Reporting success here would
+        // return a stale-serving cache and clear the lineage needed to retry.
+        let keys = state
+            .dependency_graph
+            .get_affected_cache_keys(src)
+            .await
+            .map_err(AppError::from)?;
         let mut successfully_deleted_for_src = Vec::new();
 
         for k in &keys {
@@ -1712,7 +1719,11 @@ pub async fn invalidate_graph_rtc(
 
         // If all keys for this source were successfully deleted, clear remaining source dependencies
         if successfully_deleted_for_src.len() == keys.len() {
-            state.dependency_graph.clear_dependencies(src).await;
+            state
+                .dependency_graph
+                .clear_dependencies(src)
+                .await
+                .map_err(AppError::from)?;
         }
     }
 

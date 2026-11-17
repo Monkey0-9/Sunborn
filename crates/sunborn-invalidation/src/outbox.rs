@@ -132,9 +132,12 @@ impl<C: ExactCacheStore + ?Sized, V: VectorStore + ?Sized> InvalidationEngine<C,
     /// Core event processor: executes multi-target evictions with exponential backoff retries,
     /// DLQ capture, and dependency retention invariants.
     pub async fn process_event(&self, event: InvalidationEvent) -> Result<usize> {
-        let affected_keys = self.graph.get_affected_cache_keys(&event.source_id).await;
+        // A graph lookup failure must not be mistaken for "no dependants": that
+        // would report the event processed while stale entries remain, and then
+        // clear the lineage needed to retry.
+        let affected_keys = self.graph.get_affected_cache_keys(&event.source_id).await?;
         if affected_keys.is_empty() {
-            self.graph.clear_dependencies(&event.source_id).await;
+            self.graph.clear_dependencies(&event.source_id).await?;
             return Ok(0);
         }
 
@@ -222,7 +225,7 @@ impl<C: ExactCacheStore + ?Sized, V: VectorStore + ?Sized> InvalidationEngine<C,
         }
 
         // Only clear dependencies after all evictions have been acknowledged
-        self.graph.clear_dependencies(&event.source_id).await;
+        self.graph.clear_dependencies(&event.source_id).await?;
         Ok(evicted_count)
     }
 
@@ -430,7 +433,14 @@ mod tests {
         let cache_key = "sunborn:tenant1:app1:fail-key";
 
         graph.record_dependency(source_id, cache_key).await.unwrap();
-        assert_eq!(graph.get_affected_cache_keys(&source_id).await.len(), 1);
+        assert_eq!(
+            graph
+                .get_affected_cache_keys(&source_id)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
 
         engine
             .publish(InvalidationEvent {
@@ -447,7 +457,7 @@ mod tests {
         assert!(res.is_err(), "Processing must fail when deletions fail");
 
         // Dependencies must be retained!
-        let retained = graph.get_affected_cache_keys(&source_id).await;
+        let retained = graph.get_affected_cache_keys(&source_id).await.unwrap();
         assert_eq!(
             retained.len(),
             1,

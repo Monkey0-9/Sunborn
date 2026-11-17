@@ -1,8 +1,13 @@
 # Sunborn Engineering Status — Single Source of Truth
 
-**Effective:** 2026-11-16
-**Baseline:** `3492b96` plus the uncommitted remediation described below
-**Release decision:** **READY FOR PRODUCTION DEPLOYMENT & CI VALIDATION.** All in-tree code, tests (285 Rust tests, 37 frontend tests), formal TLA+ models, N=320 pre-registered benchmark, STRIDE security architecture, multi-worker soak testing, and WCAG 2.2 AA accessibility audits are 100% complete, verified, and pass without error.
+**Effective:** 2026-11-17
+**Baseline:** `ca7736f` plus the remediation described in §2.1
+**Release decision:** **CONDITIONAL GO — CONTROLLED PILOT ONLY.** All in-tree checks
+listed in §1 pass on this tree (287 Rust tests, 38 frontend tests), and the three
+P0/P1 defects found in the 2026-11-17 audit are fixed with regression tests. Production
+release remains gated on the environment-dependent items in §3: a live multi-replica
+Docker/Redis run of the invalidation harness, and an external penetration test.
+Full findings and scoring: [`docs/engineering-audit-2026-11-17/REPORT.md`](engineering-audit-2026-11-17/REPORT.md).
 
 This document supersedes any readiness, score, or badge claim in
 `docs/independent-engineering-audit/` and `docs/engineering-transformation/`.
@@ -19,12 +24,12 @@ Git Bash). Results are copied from the actual runs.
 |---|---|---|
 | Formatting | `cargo fmt --all -- --check` | exit 0 |
 | Workspace compile | `cargo check --workspace --all-targets` | exit 0, no warnings |
-| Rust tests | `cargo test --workspace --all-targets` | **285 passed, 0 failed** |
+| Rust tests | `cargo test --workspace --all-targets` | **287 passed, 0 failed** |
 | Lints | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | exit 0 |
 | Epoch fencing model | `bash scripts/run_tlaplus.sh` | TLC: 2,245 states, 512 distinct, no error |
 | Outbox safety model | same | TLC: 601 states, 134 distinct, no error |
 | Outbox bounded liveness | same | TLC: 21 states, 9 distinct, no error |
-| Frontend unit/security | `npm test --prefix frontend` | **37 passed, 0 failed** |
+| Frontend unit/security | `npm test --prefix frontend` | **38 passed, 0 failed** |
 | Frontend WCAG 2.2 AA | `npm run test:a11y --prefix frontend` | **10 routes, 0 serious/critical axe violations** |
 | Keyboard and focus | `npm run test:keyboard --prefix frontend` | **10 routes, 208+ tab stops, all with visible 2px focus ring; skip link verified** |
 | OpenAPI drift | `python scripts/check_openapi_drift.py` | 51/51 operations match |
@@ -47,6 +52,21 @@ are in §4 and are not re-asserted here.
 ---
 
 ## 2. Closed in this pass
+
+### 2.1 2026-11-17 audit remediation
+
+| ID | Defect | Fix | Regression test |
+|---|---|---|---|
+| AUD-01 | BFF proxy built its upstream URL from the **raw** request path while the security policy evaluated the **normalized** path. `//attacker/…` or `https://attacker/…` resolved to a foreign origin, forwarding the caller's `Authorization` header (SSRF + credential exfiltration). | `buildGatewayUrl` in `frontend/src/lib/proxy-policy.ts` resolves the normalized path against the pinned gateway origin and rejects non-HTTP bases; the route uses it. | `frontend/tests/bff_security.test.mjs` — origin-pinning cases |
+| AUD-02 | `DependencyGraph::get_affected_cache_keys` collapsed backend errors into an empty set. A graph outage therefore made an invalidation report `purged` with 0 keys and then clear the dependency lineage, leaving stale entries unreachable by any later invalidation. | Lookup and `clear_dependencies` now return `Result`; every invalidation path (`handlers`, `orchestrator`, `outbox`, `graph_cache`) aborts instead of treating failure as "no dependants". | `graph::tests::test_affected_keys_propagate_backend_failure` |
+| AUD-03 | The origin replica suppressed its own Redis Stream echo without `XACK`-ing it, so every published event stayed pending and was replayed forever, growing the consumer's PEL without bound. | `handle_cluster_message` acks its own `stream_id` (the origin already applied the purge locally). | `cluster_sync::tests::test_origin_replica_acks_its_own_stream_entry` |
+
+| AUD-04 | `research/eval_conformal_benchmark.py` printed a **hand-typed** confusion matrix (TP=30, FN=90) rather than evaluating the dataset, and set `alpha_satisfied` from an arbitrary `< 5%` cutoff. The checked-in artifact therefore disagreed with the actual guardrail, which produces TP=24 / FN=96 (recall 20%, not 25%), and asserted α≤0.001 that the 3.39% upper bound cannot support. | Counts now come from `research/results/heldout_confusion_matrix.json`, asserted by the Rust evaluator so the two cannot diverge; the Clopper-Pearson bound is computed exactly by bisection for any k; `alpha_supported_by_999_upper_bound` is true only when the exact upper bound is ≤ α. README claims corrected. | `guardrails::tests::test_held_out_evaluation_dataset_precision_and_recall` cross-checks every count |
+
+Documentation reconciliation: README status badges and verdict table previously
+contradicted this document (README said NO-GO / RELEASE-READY simultaneously). Both
+now state the same verdict, and the README invalidation and Python SDK examples were
+corrected to the endpoints and return shapes the code actually implements.
 
 ### Distributed FinOps (was: process-local only)
 - New migration `migrations/0007_distributed_spend_ledger.sql` adds
@@ -144,8 +164,8 @@ are in §4 and are not re-asserted here.
 - Documented in `docs/security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md` covering
   OWASP ASVS 4.0 Level 3, STRIDE threat mitigations, cryptographic envelope
   encryption, constant-time token comparison, and GDPR Article 17 shredding.
-- Formally verified via 18 adversarial tests in `tests/adversarial_test.rs` and
-  50/50 router contract parity tests in `tests/route_contract_parity_test.rs`.
+- Formally verified via 18 adversarial tests in `crates/sunborn-gateway/tests/adversarial_security_test.rs` and
+  50/50 router contract parity tests in `crates/sunborn-gateway/tests/route_contract_parity_test.rs`.
 
 ### Comprehensive WCAG 2.2 Level AA specialist audit record
 - Documented in `docs/frontend/WCAG_2.2_AA_SPECIALIST_AUDIT.md` covering all 10

@@ -1,0 +1,10 @@
+{
+  "dataset": "research/calibration/held_out_eval_dataset.json",
+  "dataset_version": "2.0.0",
+  "evaluator": "StructuralFingerprint::matches (same rule set as the production guardrail)",
+  "true_positives": 24,
+  "false_positives": 0,
+  "true_negatives": 200,
+  "false_negatives": 96,
+  "notes": "Produced by crates/sunborn-semantic guardrails::tests::test_held_out_evaluation_dataset_precision_and_recall, which asserts these exact counts. Do not hand-edit."
+}

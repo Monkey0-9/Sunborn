@@ -5,6 +5,7 @@ import {
   isPrivilegedRoute,
   isPublicRoute,
   evaluateProxySecurity,
+  buildGatewayUrl,
 } from "../src/lib/proxy-policy.ts";
 
 test("BFF Security: Privileged administrative routes detection", () => {
@@ -288,4 +289,40 @@ test("BFF Security: Path normalization prevents traversal bypasses of privileged
     assert.equal(decision.status, 401);
     assert.equal(decision.error, "UNAUTHORIZED");
   }
+});
+
+test("BFF Security: proxied URL is pinned to the configured gateway origin", () => {
+  const base = "http://127.0.0.1:8080";
+
+  const normal = buildGatewayUrl(base, "v1/finops/report");
+  assert.equal(normal.ok, true);
+  assert.equal(normal.url, "http://127.0.0.1:8080/v1/finops/report");
+
+  // Scheme-relative, absolute, and backslash authority escapes must all stay on
+  // the configured origin instead of becoming an SSRF primitive.
+  const escapeAttempts = [
+    "//attacker.example/collect",
+    "https://attacker.example/collect",
+    "http://attacker.example/collect",
+    "\\attacker.example\collect",
+    "v1/../../attacker.example",
+  ];
+
+  for (const rawPath of escapeAttempts) {
+    const decision = buildGatewayUrl(base, rawPath);
+    assert.equal(decision.ok, true, `'${rawPath}' should normalize to a gateway path`);
+    assert.equal(
+      new URL(decision.url).origin,
+      base,
+      `Proxied path '${rawPath}' escaped the gateway origin`
+    );
+  }
+
+  const empty = buildGatewayUrl(base, "");
+  assert.equal(empty.ok, false);
+  assert.equal(empty.status, 400);
+
+  const badScheme = buildGatewayUrl("file:///etc/passwd", "v1/health");
+  assert.equal(badScheme.ok, false);
+  assert.equal(badScheme.error, "INVALID_GATEWAY_URL");
 });

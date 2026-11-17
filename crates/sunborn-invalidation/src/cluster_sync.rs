@@ -498,6 +498,11 @@ impl DistributedGraphSyncEngine {
     ) -> Result<usize> {
         if message.origin_pod_id == self.pod_id {
             self.echoes_suppressed.fetch_add(1, Ordering::Relaxed);
+            // The origin applied the invalidation locally before publishing, so
+            // its own stream entry is already satisfied. Acknowledging it is not
+            // optional: leaving it pending makes every restart replay the same
+            // echo forever and grows the consumer's pending list without bound.
+            self.transport.ack(&message.stream_id).await?;
             return Ok(0);
         }
 
@@ -742,6 +747,67 @@ mod tests {
         assert_eq!(affected, 1);
         assert!(!cache.cache().exists(key).await.unwrap());
         assert_eq!(vectors.count(&TenantId::new("t1")).await.unwrap(), 0);
+    }
+
+    /// The origin replica must acknowledge its own published stream entries.
+    /// Otherwise each entry stays pending and is replayed on every restart.
+    #[tokio::test]
+    async fn test_origin_replica_acks_its_own_stream_entry() {
+        use std::sync::Mutex;
+
+        struct AckRecordingTransport {
+            sender: broadcast::Sender<ClusterInvalidationMessage>,
+            acks: Arc<Mutex<Vec<String>>>,
+        }
+
+        #[async_trait::async_trait]
+        impl ClusterBroadcastTransport for AckRecordingTransport {
+            async fn publish(
+                &self,
+                _channel: &str,
+                message: &ClusterInvalidationMessage,
+            ) -> Result<()> {
+                let _ = self.sender.send(message.clone());
+                Ok(())
+            }
+            async fn subscribe(
+                &self,
+                _channel: &str,
+            ) -> Result<broadcast::Receiver<ClusterInvalidationMessage>> {
+                Ok(self.sender.subscribe())
+            }
+            async fn ack(&self, stream_id: &str) -> Result<()> {
+                if !stream_id.is_empty() {
+                    self.acks.lock().unwrap().push(stream_id.to_string());
+                }
+                Ok(())
+            }
+            fn is_durable(&self) -> bool {
+                true
+            }
+        }
+
+        let (sender, _) = broadcast::channel(16);
+        let acks = Arc::new(Mutex::new(Vec::new()));
+        let transport = Arc::new(AckRecordingTransport {
+            sender,
+            acks: acks.clone(),
+        });
+        let cache = Arc::new(GraphMemoryCache::new_default());
+        let engine = DistributedGraphSyncEngine::new("pod-self", transport, cache);
+
+        let mut message =
+            ClusterInvalidationMessage::new("pod-self", TenantId::new("t1"), vec![], vec![], 9);
+        message.stream_id = "1700000000000-0".to_string();
+
+        let affected = engine.handle_cluster_message(&message).await.unwrap();
+        assert_eq!(affected, 0);
+        assert_eq!(engine.echoes_suppressed(), 1);
+        assert_eq!(
+            acks.lock().unwrap().as_slice(),
+            ["1700000000000-0"],
+            "origin replica must ack its own stream entry so it is not replayed"
+        );
     }
 
     #[tokio::test]

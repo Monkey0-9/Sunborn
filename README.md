@@ -6,17 +6,25 @@
 
 [![Rust Toolchain](https://img.shields.io/badge/Rust-1.80%2B-blue.svg?logo=rust&logoColor=white)](crates/)
 [![Verification Pipeline](https://img.shields.io/badge/Verification%20Gates-11%2F11%20Passed-brightgreen.svg?logo=githubactions&logoColor=white)](scripts/verify.ps1)
-[![Automated Tests](https://img.shields.io/badge/Rust%20Tests-285%2F285%20Passed-brightgreen.svg)](docs/STATUS.md)
+[![Automated Tests](https://img.shields.io/badge/Rust%20Tests-287%2F287%20Passed-brightgreen.svg)](docs/STATUS.md)
 [![IEEE Conformance](https://img.shields.io/badge/IEEE-1012%20%7C%20730%20%7C%2042010-blue.svg)](docs/IEEE_ACM_COMPLIANCE.md)
 [![ACM Badging](https://img.shields.io/badge/ACM%20Artifact-Available%20%7C%20Functional%20%7C%20Reproduced-purple.svg)](research/ARTIFACT-APPENDIX.md)
 [![Citation](https://img.shields.io/badge/cite-CITATION.cff-green.svg)](CITATION.cff)
 [![Audit Deliverables](https://img.shields.io/badge/Audit-Master%20Register%20%2B%20Remediation-blue.svg)](docs/independent-engineering-audit/50_MASTER_EVIDENCE_REGISTER.md)
 [![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-3.1%20Compliant-green.svg)](docs/api/openapi.yaml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
-[![Release Status](https://img.shields.io/badge/Release-READY%20(100%25%20Verified)-brightgreen.svg)](docs/STATUS.md)
+[![Release Status](https://img.shields.io/badge/Release-CONDITIONAL%20GO%20(Controlled%20Pilot)-yellow.svg)](docs/STATUS.md)
 
 *An ultra-low-latency, distributed semantic execution gateway written in Rust.*  
-*Engineered to eliminate redundant LLM compute, slash Time-To-First-Token (TTFT) to sub-millisecond speeds, enforce mathematically provable semantic safety ($\alpha \le 0.001$), and provide native multi-model routing across Anthropic Claude, Google Gemini, OpenAI, and xAI Grok.*
+*Engineered to eliminate redundant LLM compute, slash Time-To-First-Token (TTFT) to sub-millisecond speeds, bound semantic-reuse risk with a calibrated abstention gate, and provide native multi-model routing across Anthropic Claude, Google Gemini, OpenAI, and xAI Grok.*
+
+> **Measured safety, stated honestly.** On the checked-in 320-pair held-out set the
+guardrail makes 24 correct reuses, 200 correct abstentions, and **0 false hits** over
+200 hard negatives (recall 20%, precision 100%). With 200 negatives the exact
+Clopper-Pearson 99.9% upper bound on the false-hit rate is **3.39%**, so the current
+evidence does **not** establish a $\alpha \le 0.001$ guarantee; that would require
+substantially more negatives. See
+[`research/results/heldout_generalization_run.json`](research/results/heldout_generalization_run.json).
 
 [Current Status (SSOT)](docs/STATUS.md) • [Independent Audit (historical)](docs/independent-engineering-audit/53_INDEPENDENT_PRINCIPAL_AUDIT_2026-11-15.md) • [Transformation Reports](docs/engineering-transformation/01_README.md) •
 [Architecture](#system-architecture) •
@@ -57,7 +65,7 @@ Frontier artificial intelligence applications executing high-volume generative w
 |    |      |-- AST Guardrails: Negation, Quantifiers, Numeric Values, Entities, Units (<50µs)     |
 |    |      |-- Qdrant Vector Store: Cosine Semantic Proximity Filter                               |
 |    |      |-- SIMD Roaring Treemap: Causal Knowledge Graph Transitive Lineage Check               |
-|    |      |-- Conformal Risk Gate: Evaluates risk against calibrated bound (alpha <= 0.001)       |
+|    |      |-- Conformal Risk Gate: Evaluates risk against a calibrated, explicit abstention bound  |
 |    |      |-- Verified Safe? --> Return cryptographically certified cached response               |
 |    |                                                                                              |
 |  FALLBACK & RECOMPUTE (On Miss or Safety Rejection)                                               |
@@ -182,9 +190,14 @@ Sunborn executes 5 structural linguistic invariant checks in $<50\,\mu\text{s}$ 
 - **Temporal & Calendar Drift**: Flags date/time discrepancies across fiscal periods and maintenance schedules.
 
 ### Non-Exchangeable Conformal Risk Control
-For semantic variations that pass structural guardrails, Sunborn applies Non-Exchangeable Conformal Risk Control (Tibshirani et al., Angelopoulos & Bates) to guarantee that the expected risk of an incorrect cache reuse does not exceed a user-defined threshold $\alpha$ (default $\alpha \le 0.001$, i.e., 99.9% semantic safety):
+For semantic variations that pass structural guardrails, Sunborn applies conformal-risk-style calibration with an explicit abstention path, targeting a user-defined risk threshold $\alpha$ (default $\alpha \le 0.001$):
 
 $$\mathbb{E}[L(Y_{\text{reused}}, Y_{\text{true}})] \le \alpha$$
+
+This is a target, not a proven guarantee: as reported above, the current
+held-out evidence bounds the false-hit rate at 3.39% (99.9% upper), and the
+evaluator (`research/eval_conformal_benchmark.py`) marks alpha as unsupported
+until the exact upper bound is at or below $\alpha$.
 
 ```
 +---------------------------------------------------------------------------------------------------+
@@ -312,16 +325,19 @@ curl -X POST http://localhost:8080/v1/messages \
   }'
 ```
 
-### 3. Real-Time Graphical Cache Invalidation
+### 3. Real-Time Graphical Cache Invalidation (admin key required)
 ```bash
-curl -X POST http://localhost:8080/api/v1/cache/invalidate/graph \
+curl -X POST http://localhost:8080/v1/cache/graph/invalidate \
   -H "Content-Type: application/json" \
-  -H "x-api-key: dev-key-alpha" \
+  -H "Authorization: Bearer $SUNBORN_ADMIN_KEY" \
   -d '{
-    "source_id": "018f3a2b-8c4d-7e1f-9a2b-3c4d5e6f7a8b",
-    "content_hash": 10086
+    "source_ids": ["018f3a2b-8c4d-7e1f-9a2b-3c4d5e6f7a8b"],
+    "doc_hashes": [10086]
   }'
-# Response: {"status":"purged","keys_invalidated":1,"vector_points_deleted":1,"source_id":"..."}
+# Response (exact keys and counts are those actually purged):
+# {"status":"purged","purged_cache_keys":[...],"purged_count":1,
+#  "evicted_records":1,"affected_doc_records_count":0,"failed_keys":[]}
+# status is "purged", "partially_purged", or "failed" — never success on a failed delete.
 ```
 
 ---
@@ -331,25 +347,27 @@ curl -X POST http://localhost:8080/api/v1/cache/invalidate/graph \
 Install and initialize the high-performance Python client:
 
 ```python
-from sunborn import SunbornClient, CachePolicy
+from sunborn import SunbornClient
 
 client = SunbornClient(
-    base_url="http://localhost:8080/v1",
+    base_url="http://localhost:8080",
     api_key="your-tenant-api-key",
     tenant_id="enterprise-corp",
-    application_id="rag-pipeline-prod"
+    application_id="rag-pipeline-prod",
 )
 
-# Execute query with exact and semantic caching enabled
-response = client.chat(
+# POST /v1/chat/completions. Returns the raw gateway JSON document.
+response = client.chat_completion(
     model="claude-3-5-sonnet-20241022",
     messages=[{"role": "user", "content": "Synthesize the Q3 revenue findings."}],
-    policy=CachePolicy.SEMANTIC_SAFE
+    temperature=0.0,
 )
 
-print(f"Content: {response.content}")
-print(f"Execution Tier: {response.execution_tier}") # e.g. TIER_1_EXACT, TIER_2_SEMANTIC, or ORIGIN
-print(f"Tokens Avoided: {response.tokens_avoided}")
+print(response["content"])
+print(response["cached"])                       # True on a cache hit
+print(response["decision"]["cache_path"])       # "exact", "semantic", or "miss"
+print(response["decision"]["action"])           # "SafeHit", "Revalidate", or "OriginExecute"
+print(response["certificate"])                  # ReuseCertificate on a governed hit
 ```
 
 ---
@@ -447,7 +465,7 @@ Sunborn provides dual publication manuscripts, formal machine-readable citations
 |                            PUBLIC DEPLOYMENT & LAUNCH READINESS VERDICT                           |
 +---------------------------------------------------------------------------------------------------+
 |  TARGET APPLICATION ENVIRONMENT : ENTERPRISE GENERATIVE EXECUTION GATEWAY                         |
-|  CODEBASE QUALITY STATUS        : NO-GO — P0 REMEDIATION IN PROGRESS                             |
+|  CODEBASE QUALITY STATUS        : CONDITIONAL GO — CONTROLLED PILOT ONLY                         |
 |  FAIL-CLOSED SECURITY           : ENFORCED IN PRODUCTION MODE                                     |
 |  DEPENDENCY VULNERABILITIES     : ZERO KNOWN HIGH/CRITICAL CVEs                                   |
 |  STANDARDS CONFORMANCE          : IEEE 1012, IEEE 730, IEEE 42010, IEEE 754, ACM, ISO 27001     |

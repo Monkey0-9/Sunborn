@@ -93,8 +93,9 @@ impl InvalidationOrchestrator {
             last_bumped_epoch = self.epoch_manager.bump_epoch(*src).await?;
             self.watermark_fencer.advance_watermark(&src.to_string());
 
-            // Step 2: Query dependency graph for affected keys
-            let keys = self.dependency_graph.get_affected_cache_keys(src).await;
+            // Step 2: Query dependency graph for affected keys. A lookup failure
+            // aborts the purge instead of being read as "no dependants".
+            let keys = self.dependency_graph.get_affected_cache_keys(src).await?;
             for k in &keys {
                 let mut key_failed = false;
                 // Evict exact cache

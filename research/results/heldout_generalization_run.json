@@ -1,21 +1,21 @@
 {
-  "evaluation_name": "Sunborn Pre-Registered Held-Out Benchmark (N=320)",
-  "timestamp": "2026-11-16T16:15:00Z",
+  "evaluation_name": "Sunborn Pre-Registered Held-Out Benchmark",
   "sample_size": 320,
+  "source_confusion_matrix": "research\\results\\heldout_confusion_matrix.json",
   "metrics": {
-    "true_positives": 30,
+    "true_positives": 24,
     "false_positives": 0,
     "true_negatives": 200,
-    "false_negatives": 90,
+    "false_negatives": 96,
     "precision_pct": 100.0,
     "precision_wilson_95_ci": [
-      88.65,
+      86.2,
       100.0
     ],
-    "recall_pct": 25.0,
+    "recall_pct": 20.0,
     "recall_wilson_95_ci": [
-      18.11,
-      33.44
+      13.82,
+      28.04
     ],
     "false_positive_rate_pct": 0.0,
     "false_positive_rate_wilson_95_ci": [
@@ -24,7 +24,7 @@
     ],
     "clopper_pearson_999_upper_bound_pct": 3.3949,
     "conformal_risk_alpha_bound": 0.001,
-    "alpha_satisfied": true
+    "alpha_supported_by_999_upper_bound": false
   },
   "strata_breakdown": {
     "FinancialAccounting": 40,
