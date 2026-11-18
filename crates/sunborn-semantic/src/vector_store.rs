@@ -113,26 +113,32 @@ impl VectorStore for MemoryVectorStore {
     ) -> Result<Vec<ScoredVectorEntry>> {
         let entries = self.entries.read().await;
 
-        let mut scored: Vec<ScoredVectorEntry> = entries
+        // Collect references and scores without eagerly cloning heavy vectors and metadata
+        let mut candidates: Vec<(&VectorEntry, f32)> = entries
             .iter()
             .filter(|e| e.tenant_id == *tenant_id && e.application_id == *application_id)
-            .map(|e| {
+            .filter_map(|e| {
                 let score = cosine_similarity(query_vector, &e.vector);
-                ScoredVectorEntry {
-                    entry: e.clone(),
-                    score,
+                if score >= min_score {
+                    Some((e, score))
+                } else {
+                    None
                 }
             })
-            .filter(|s| s.score >= min_score)
             .collect();
 
-        // Sort descending by score
-        scored.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        scored.truncate(top_k);
+        // Sort descending by score (using total_cmp for IEEE-754 correctness and speed)
+        candidates.sort_by(|a, b| b.1.total_cmp(&a.1));
+        candidates.truncate(top_k);
+
+        // Only clone the top_k winning entries
+        let scored: Vec<ScoredVectorEntry> = candidates
+            .into_iter()
+            .map(|(e, score)| ScoredVectorEntry {
+                entry: e.clone(),
+                score,
+            })
+            .collect();
 
         Ok(scored)
     }

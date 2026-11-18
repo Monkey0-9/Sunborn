@@ -171,9 +171,29 @@ impl SingleflightStreamer {
         };
 
         tokio::spawn(async move {
+            struct SingleflightCleanupGuard {
+                in_flight: InFlightMap,
+                identity_hash: [u8; 32],
+            }
+            impl Drop for SingleflightCleanupGuard {
+                fn drop(&mut self) {
+                    let in_flight = Arc::clone(&self.in_flight);
+                    let hash = self.identity_hash;
+                    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                        handle.spawn(async move {
+                            let mut map = in_flight.write().await;
+                            map.remove(&hash);
+                        });
+                    }
+                }
+            }
+
+            let _guard = SingleflightCleanupGuard {
+                in_flight: Arc::clone(&map_ref),
+                identity_hash,
+            };
+
             origin_task(sender).await;
-            let mut map = map_ref.write().await;
-            map.remove(&identity_hash);
         });
 
         (ReplayStreamReceiver::new(history, rx), true)
