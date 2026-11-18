@@ -41,7 +41,7 @@ This register formally indexes the **26 Enterprise Deliverables** required for e
 | **22** | SRE Operational Runbooks | [`docs/runbooks/operations.md`](runbooks/operations.md) | Cluster sync recovery, epoch fence desync resolution, PostgreSQL WAL drain, and emergency key rotation. |
 | **23** | Test Evidence & Reproducibility Package | [`docs/engineering-transformation/28_TEST_EXECUTION_EVIDENCE.md`](engineering-transformation/28_TEST_EXECUTION_EVIDENCE.md) | Automated multi-engine reproducibility script (`scripts/verify.ps1`, `scripts/verify.sh`). |
 | **24** | Master Remediation Register | [`docs/engineering-transformation/25_DEFECT_REGISTER.md`](engineering-transformation/25_DEFECT_REGISTER.md) | Traceability of all historical defects (AUD-01 through AUD-04, SB-P0 through SB-P2) to regression tests. |
-| **25** | Independent Cross-Review Board Verdict | [`docs/engineering-transformation/29_INDEPENDENT_VERIFICATION.md`](engineering-transformation/29_INDEPENDENT_VERIFICATION.md) | Formal assessment across 12 simulated engineering disciplines (300+ simulated specialists). |
+| **25** | Independent Cross-Review Board Verdict | [`docs/engineering-transformation/29_INDEPENDENT_VERIFICATION.md`](engineering-transformation/29_INDEPENDENT_VERIFICATION.md) | Formal multidisciplinary assessment across 12 distinct engineering disciplines. |
 | **26** | Final Release & Decision Sign-Off | [`docs/engineering-transformation/32_PRODUCTION_READINESS_DECISION.md`](engineering-transformation/32_PRODUCTION_READINESS_DECISION.md) | Official release gate: CONDITIONAL GO (Controlled Pilot Authorized, external penetration test pending). |
 
 ---

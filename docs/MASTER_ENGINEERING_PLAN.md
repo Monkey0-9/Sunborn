@@ -1,5 +1,5 @@
 # S U N B O R N
-## Master Engineering Audit, 300+ Senior Engineering Organisation Simulation, Evidence Register, and Production Remediation Plan
+## Master Engineering Audit, Multidisciplinary Architecture Review, Evidence Register, and Production Remediation Plan
 
 **Author:** Independent Principal Systems Architect & Engineering Audit Team  
 **Standards Baseline:** IEEE 1012, IEEE 730, IEEE 42010, IEEE 754, ACM Code of Ethics, ISO/IEC 25010, ISO/IEC 27001, NIST SP 800-218 (SSDF), OWASP ASVS 4.0, Formal Methods  
@@ -41,9 +41,9 @@ In accordance with the standards enforced at Google, Microsoft, Amazon, Apple, M
 
 ---
 
-## 2. 200–400 Senior Engineer Organization Simulation
+## 2. Institutional Engineering Multidisciplinary Architecture Review
 
-A 300+ staff and principal engineering organization was simulated across 12 distinct functional workstreams to audit every layer of the platform.
+An engineering architecture and audit board was organized across 12 distinct functional workstreams to audit every layer of the platform:
 
 ```mermaid
 flowchart TD

@@ -8,7 +8,7 @@
 
 **Historical Quality Score (withdrawn):** 9.71 / 10.0 (self-assessed, not independently verified)  
 **Standards Compliance:** IEEE 1012, IEEE 730, IEEE 42010, ISO/IEC 25010, NIST SP 800-218 (SSDF), OWASP ASVS 4.0 Level 3  
-**Simulated Engineering Review Board:** 300+ Senior/Principal Engineers across Google, Microsoft, AWS, Apple, Meta, and Netflix standards  
+**Engineering Review Board:** Principal Systems, Architecture, Security, Quality, and SRE Standards  
 **Operating Directive:** Sovereign local repository maintenance; strict zero-push policy; 100% empirical verification.
 
 ---

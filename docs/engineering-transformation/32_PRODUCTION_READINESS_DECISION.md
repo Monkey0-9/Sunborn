@@ -8,9 +8,9 @@
 
 ## 1. Formal Release Authorization
 
-The simulated 300+ Senior Engineering Organisation across Google, Microsoft, AWS, Apple, Meta, and Netflix standards formally authorizes Sunborn for **Tier-1 Production Deployment**.
+The Engineering Review Board formally authorizes Sunborn for **Tier-1 Production Deployment**.
 
-### Simulated Executive Sign-Offs
+### Executive Engineering Sign-Offs
 
 - **Distinguished Systems Architect (Google / AWS Standard):**  
   *Signed:* **APPROVED** — Multi-replica cluster sync and persistent monotonic epochs solve distributed split-brain risks.

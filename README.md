@@ -141,7 +141,7 @@ flowchart TD
 
 ## 3. Native C SIMD Acceleration & Zero-Copy Vector Engine
 
-To compete directly with frontier native infrastructure (Anthropic, OpenAI, Google), Sunborn implements bare-metal C SIMD kernels and zero-copy memory patterns on its hottest execution paths.
+For ultra-low-latency vector evaluation and high-throughput semantic filtering, Sunborn implements bare-metal C SIMD kernels and zero-copy memory patterns on its hottest execution paths.
 
 ### 3.1 8-Wide Unrolled C SIMD Vector Kernels
 - **Source**: [`crates/sunborn-semantic/c/sunborn_simd_accelerator.c`](crates/sunborn-semantic/c/sunborn_simd_accelerator.c) | [Header](crates/sunborn-semantic/c/sunborn_simd_accelerator.h)
