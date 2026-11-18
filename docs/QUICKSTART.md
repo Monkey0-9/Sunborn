@@ -121,3 +121,19 @@ npm run dev
 ```
 
 Visit [http://localhost:3000](http://localhost:3000) to inspect cache entries, test semantic execution DAGs, and monitor FinOps metrics.
+
+---
+
+## 6. Where to go next
+
+| | |
+| :--- | :--- |
+| What the system actually is, and what it measures | [`README.md`](../README.md) §1–§5 |
+| Configuration and the fail-closed production mode | [`../.env.example`](../.env.example), [`README.md`](../README.md) §2 |
+| What is verified right now, and what is still blocked | [`STATUS.md`](STATUS.md) |
+| Questions, expected behaviours, and known limitations | [`../SUPPORT.md`](../SUPPORT.md) |
+| Reporting a vulnerability | [`../SECURITY.md`](../SECURITY.md) |
+| Sending a change | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) |
+
+> Running a full evaluation? `bash scripts/verify.sh` executes all 12 gates from the repository root.
+> Gate 1 alone (Rust tests and clippy) is enough for a routine change.

@@ -207,6 +207,48 @@ components:
           minimum: 0
           example: 100.0
 
+    TenantQuotaRequest:
+      type: object
+      required:
+        - tenant_id
+        - daily_requests
+        - monthly_requests
+      properties:
+        tenant_id:
+          type: string
+          example: "tenant-free-42"
+        tier:
+          type: string
+          default: "free"
+          example: "free"
+        daily_requests:
+          type: integer
+          format: int64
+          minimum: 0
+          example: 50
+        monthly_requests:
+          type: integer
+          format: int64
+          minimum: 0
+          example: 1000
+
+    FreePoolRequest:
+      type: object
+      required:
+        - daily_requests
+        - monthly_requests
+      properties:
+        daily_requests:
+          type: integer
+          format: int64
+          minimum: 0
+          example: 5000
+        monthly_requests:
+          type: integer
+          format: int64
+          minimum: 0
+          example: 100000
+
     ShredTenantRequest:
       type: object
       required:
@@ -733,6 +775,44 @@ paths:
           description: Administrative privileges required
         '503':
           description: Durable spend ledger unavailable (fail-closed)
+
+  /v1/governance/tenant-quota:
+    post:
+      summary: Set Tenant Daily and Monthly Quota
+      description: Enrolls a tenant in daily/monthly request quotas. Enrollment is explicit and persists in PostgreSQL when it is the active backend, so every replica enforces the same counters.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantQuotaRequest'
+      responses:
+        '200':
+          description: Tenant quota updated
+        '400':
+          description: Invalid tenant identifier
+        '403':
+          description: Administrative privileges required
+        '503':
+          description: Durable quota store unavailable (fail-closed)
+
+  /v1/governance/free-pool:
+    post:
+      summary: Set Aggregate Free-Pool Ceiling
+      description: Sets the aggregate daily/monthly request ceiling shared by every quota-enrolled tenant. Persists in PostgreSQL when it is the active backend.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FreePoolRequest'
+      responses:
+        '200':
+          description: Free-pool ceiling updated
+        '403':
+          description: Administrative privileges required
+        '503':
+          description: Durable quota store unavailable (fail-closed)
 
   /v1/governance/shred:
     post:

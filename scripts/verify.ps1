@@ -5,6 +5,11 @@
 # ==============================================================================
 $ErrorActionPreference = "Stop"
 
+# Windows consoles default to cp1252, which cannot encode the check marks the
+# Python gates print. Force UTF-8 for every Python child process.
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
+
 $RootDir = Split-Path -Parent $PSScriptRoot
 Set-Location $RootDir
 
@@ -95,6 +100,8 @@ if ($LASTEXITCODE -ne 0) { throw "SBOM generation failed" }
 Write-Host "[12/12] Strict Documentation & Attestation CLI Verification..." -ForegroundColor Yellow
 & $PythonBin scripts/verify_doc_paths.py --strict
 if ($LASTEXITCODE -ne 0) { throw "Strict doc path verification failed" }
+& $PythonBin scripts/check_launch_docs.py
+if ($LASTEXITCODE -ne 0) { throw "Launch documentation link and claims gate failed" }
 cargo run -p sunborn-verify -- --help | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "sunborn-verify CLI execution failed" }
 

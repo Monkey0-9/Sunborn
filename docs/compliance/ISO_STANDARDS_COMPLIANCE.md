@@ -28,13 +28,13 @@
 
 ### 2.1 Organizational Controls (Section 5)
 - **Control 5.15 (Access Control)**: Gateway routes enforce strict role-based access control (RBAC). Admin routes (`/admin/*`, `/v1/crypto-shred/*`, `/v1/spend-ceilings/*`) require dual-admin quorum authorization.
-  - *Evidence*: [crates/sunborn-gateway/tests/quorum_authorization_test.rs](file:///C:/Sunborn/crates/sunborn-gateway/tests/quorum_authorization_test.rs).
+  - *Evidence*: [crates/sunborn-gateway/tests/quorum_authorization_test.rs](../../crates/sunborn-gateway/tests/quorum_authorization_test.rs).
 - **Control 5.23 (Information Security in Cloud Services)**: Multi-provider failover cascades (OpenAI, Anthropic, Gemini, Grok) with health-checked circuit breakers preventing cascade outages.
-  - *Evidence*: [crates/sunborn-gateway/src/origin/provider.rs](file:///C:/Sunborn/crates/sunborn-gateway/src/origin/provider.rs).
+  - *Evidence*: [crates/sunborn-gateway/src/origin/provider.rs](../../crates/sunborn-gateway/src/origin/provider.rs).
 
 ### 2.2 People & Operational Controls (Section 6 & 7)
 - **Control 7.14 (Secure Disposal / GDPR Article 17)**: Cryptographic shredding deletes tenant KMS data encryption keys (DEK), rendering all stored cache records and vector embeddings instantly unrecoverable in $O(1)$ time.
-  - *Evidence*: [crates/sunborn-gateway/tests/remediation_verification_test.rs::test_shredded_tenant_fail_closed_early_rejection](file:///C:/Sunborn/crates/sunborn-gateway/tests/remediation_verification_test.rs).
+  - *Evidence*: [crates/sunborn-gateway/tests/remediation_verification_test.rs::test_shredded_tenant_fail_closed_early_rejection](../../crates/sunborn-gateway/tests/remediation_verification_test.rs).
 
 ### 2.3 Technological Controls (Section 8)
 - **Control 8.24 (Use of Cryptography)**:
@@ -42,7 +42,7 @@
   - Attestation certificates: Ed25519 digital signatures verifying cache provenance and Merkle DAG inclusion proofs.
   - Timing-safe comparisons: `subtle::ConstantTimeEq` prevents timing side-channel attacks on API tokens and HMAC digests.
   - Memory zeroization: Sensitive keys and plaintexts implement `zeroize::ZeroizeOnDrop`.
-  - *Evidence*: [crates/sunborn-identity/src/crypto_shred.rs](file:///C:/Sunborn/crates/sunborn-identity/src/crypto_shred.rs), [apps/sunborn-verify/src/main.rs](file:///C:/Sunborn/apps/sunborn-verify/src/main.rs).
+  - *Evidence*: [crates/sunborn-identity/src/crypto_shred.rs](../../crates/sunborn-identity/src/crypto_shred.rs), [apps/sunborn-verify/src/main.rs](../../apps/sunborn-verify/src/main.rs).
 - **Control 8.25 (Secure Development Lifecycle)**:
   - Automated dependency vulnerability audits (`cargo audit`) with zero permitted advisories.
   - SAST analysis via Semgrep rules.
@@ -51,7 +51,7 @@
 - **Control 8.28 (Secure Coding & Memory Safety)**:
   - Native C SIMD kernels implement strictly bounded loops constrained by vector length $n$.
   - Pure-Rust reference parity assertions guarantee mathematical equality and memory bounds.
-  - *Evidence*: [crates/sunborn-semantic/c/sunborn_simd_accelerator.c](file:///C:/Sunborn/crates/sunborn-semantic/c/sunborn_simd_accelerator.c), [crates/sunborn-semantic/src/embedding.rs](file:///C:/Sunborn/crates/sunborn-semantic/src/embedding.rs).
+  - *Evidence*: [crates/sunborn-semantic/c/sunborn_simd_accelerator.c](../../crates/sunborn-semantic/c/sunborn_simd_accelerator.c), [crates/sunborn-semantic/src/embedding.rs](../../crates/sunborn-semantic/src/embedding.rs).
 
 ---
 

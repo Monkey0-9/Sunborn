@@ -7,6 +7,11 @@
 set -eu
 (set -o pipefail 2>/dev/null) && set -o pipefail || true
 
+# Windows consoles default to cp1252, which cannot encode the check marks the
+# Python gates print. Force UTF-8 for every Python child process.
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
@@ -95,6 +100,7 @@ echo "[11/12] Generating deterministic CycloneDX SBOM..."
 
 echo "[12/12] Strict Documentation & Attestation CLI Verification..."
 "${PYTHON_BIN}" scripts/verify_doc_paths.py --strict
+"${PYTHON_BIN}" scripts/check_launch_docs.py
 cargo run -p sunborn-verify -- --help > /dev/null
 
 echo ""

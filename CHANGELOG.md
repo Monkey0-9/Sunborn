@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Multi-relational Knowledge Graph & Blast-Radius Traversal**:
+  Integrated `GraphifyKnowledgeGraph` (`crates/sunborn-invalidation/src/graphify_graph.rs`) with typed entities (`graphify_model.rs`), microsecond reverse blast-radius traversal (`affected.rs`), asynchronous LPA community clustering (`clustering.rs`), bottleneck/cycle analytics (`graph_analytics.rs`), and token-budgeted subgraph query engine (`query.rs`) into `GraphMemoryCache`.
+- **Public Launch Package & Free-Tier Quota Architecture**:
+  Multi-tenant token-bucket rate limiting and daily burst quota allocation (`crates/sunborn-gateway/src/quota.rs`, migration 0008), governance policies, capacity models, and trust center documentation in `docs/launch/`.
 - **Cluster-wide FinOps enforcement**: durable `spend_reservations`,
   `spend_ledger_entries` and `spend_tenant_ceilings` tables (migration 0007);
   `PostgresDatabaseStore` now performs an advisory-locked check-and-reserve so
@@ -69,9 +73,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.0] - 2026-11-15
 
-### Major Production Milestone: World-Class Engineering Transformation (Quality 9.71/10)
+### Engineering transformation pass — historical, score withdrawn
 
-This release marks the formal graduation of Sunborn from a 5.2/10 functional prototype to an enterprise-grade production software platform rated **9.71/10 across all 40 engineering dimensions**, evaluated against Tier-1 standards enforced at Google, Microsoft, AWS, Apple, Meta, and Netflix.
+This entry originally claimed a move from a 5.2/10 prototype to **9.71/10 across 40 self-assessed
+engineering dimensions**, compared against standards attributed to several large technology companies.
+That score is withdrawn: it was a self-assessment, and no committed artifact ties it to a measurable
+property of the system. The comparison to other companies' internal standards is also withdrawn — nothing
+in this repository can substantiate it. The 2026-11-17 audit found P0/P1 defects in this work and set the
+current verdict to **CONDITIONAL GO — controlled pilot**; see [`docs/STATUS.md`](docs/STATUS.md) and
+[`RELEASE_NOTES.md`](RELEASE_NOTES.md). The entries below are kept as a record of what was built.
 
 #### Added
 - **Authoritative Invalidation Orchestrator (`crates/sunborn-invalidation/src/orchestrator.rs`)**:
@@ -94,6 +104,10 @@ This release marks the formal graduation of Sunborn from a 5.2/10 functional pro
 - **Scientific Validation Benchmark (`research/calibration/held_out_eval_dataset.json`)**:
   - Version 1.0.0 benchmark dataset with 12 stratified test pairs across Financial, Healthcare, Security, and General domains.
   - Achieves $100.0\%$ precision ($P=1.0$, 0 false positives) on hard negative inversions.
+  - **Superseded:** the dataset now holds 320 pre-registered pairs. The measured result is 24 true
+    positives, 0 false positives, 200 true negatives, 96 false negatives — precision 100% (95% Wilson lower
+    bound 86.2%), recall 20%. Do not quote the 12-pair precision figure; see
+    [`research/results/heldout_generalization_run.json`](research/results/heldout_generalization_run.json).
 - **Singular Database Migration Authority (`crates/sunborn-db/src/postgres.rs`)**:
   - Unified sequential migration runner tracking SHA-256 checksums in `_sunborn_migrations` (migrations 0001 through 0005).
 - **Dual-Admin Quorum Authorization (`crates/sunborn-gateway/src/middleware/auth.rs`)**:

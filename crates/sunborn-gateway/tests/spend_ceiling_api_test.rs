@@ -67,6 +67,81 @@ async fn admin_can_set_a_durable_spend_ceiling() {
 }
 
 #[tokio::test]
+async fn admin_can_enroll_a_tenant_quota_and_free_pool() {
+    let state = state_with_keys();
+    let app = create_router(state.clone());
+
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/governance/tenant-quota")
+                .header("content-type", "application/json")
+                .header("x-api-key", "admin-spend-key")
+                .body(Body::from(
+                    serde_json::to_vec(&serde_json::json!({
+                        "tenant_id": "tenant-quota",
+                        "tier": "free",
+                        "daily_requests": 2,
+                        "monthly_requests": 10
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    assert!(state.quota_ledger.reserve("tenant-quota").await.is_ok());
+    assert!(state.quota_ledger.reserve("tenant-quota").await.is_ok());
+    assert!(state.quota_ledger.reserve("tenant-quota").await.is_err());
+
+    let pool = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/governance/free-pool")
+                .header("content-type", "application/json")
+                .header("x-api-key", "admin-spend-key")
+                .body(Body::from(
+                    serde_json::to_vec(&serde_json::json!({
+                        "daily_requests": 100,
+                        "monthly_requests": 1000
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(pool.status(), StatusCode::OK);
+
+    let forbidden = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/governance/tenant-quota")
+                .header("content-type", "application/json")
+                .header("x-api-key", "user-spend-key")
+                .body(Body::from(
+                    serde_json::to_vec(&serde_json::json!({
+                        "tenant_id": "tenant-quota",
+                        "daily_requests": 100,
+                        "monthly_requests": 1000
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
 async fn non_admin_and_invalid_ceilings_are_rejected() {
     let state = state_with_keys();
     let app = create_router(state);

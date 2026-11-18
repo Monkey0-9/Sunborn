@@ -247,6 +247,16 @@ const ROUTES: &[Route] = &[
         path: "/v1/governance/spend-ceiling",
         access: Access::Admin,
     },
+    Route {
+        method: "POST",
+        path: "/v1/governance/tenant-quota",
+        access: Access::Admin,
+    },
+    Route {
+        method: "POST",
+        path: "/v1/governance/free-pool",
+        access: Access::Admin,
+    },
     // Speculation and routing.
     Route {
         method: "POST",

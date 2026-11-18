@@ -1,0 +1,9 @@
+# Python dependencies for the repository's verification pipeline and research harnesses.
+# Install with: python -m pip install -r requirements-dev.txt
+#
+# The gateway, the SDK, and the frontend do not depend on these; only the
+# scripts under scripts/ and benchmarks/ do.
+
+# Required by deploy/verify_live_stack.sh (gate 6/7) to parse Compose and
+# Kubernetes manifests.
+pyyaml>=6.0

@@ -83,6 +83,8 @@ pub struct AppState {
     pub spend_velocity_controller: Arc<sunborn_core::SpendVelocityController>,
     /// Enforces spend ceilings cluster-wide when the durable store is active.
     pub spend_ledger: Arc<crate::finops::SpendLedger>,
+    /// Enforces opt-in daily/monthly request quotas and the aggregate free pool.
+    pub quota_ledger: Arc<crate::quota::QuotaLedger>,
     pub key_provider_configuration_error: Option<String>,
     pub graph_memory_cache: Option<Arc<GraphMemoryCache>>,
     pub cluster_sync_engine: Option<Arc<sunborn_invalidation::DistributedGraphSyncEngine>>,
@@ -650,6 +652,11 @@ impl AppState {
                     None
                 },
             )),
+            quota_ledger: Arc::new(crate::quota::QuotaLedger::new(if is_postgres {
+                Some(postgres_db.clone())
+            } else {
+                None
+            })),
             postgres_db,
             execution_store,
             shadow_evaluator,
@@ -927,6 +934,10 @@ impl AppState {
             );
             self.postgres_db.verify_connection().await?;
             tracing::info!("PostgreSQL production readiness verified successfully.");
+
+            if let Err(error) = self.postgres_db.prune_quota_usage().await {
+                tracing::warn!(error = %error, "Failed to prune expired quota usage windows");
+            }
 
             tracing::info!("Hydrating persisted tenant encryption keys from PostgreSQL...");
             let persisted_keys = match self.postgres_db.fetch_all_wrapped_tdeks().await {

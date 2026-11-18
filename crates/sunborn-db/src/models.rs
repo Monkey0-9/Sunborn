@@ -11,6 +11,45 @@ pub struct TenantRecord {
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TenantQuotaLimits {
+    pub tenant_id: String,
+    pub tier: String,
+    pub daily_requests: u64,
+    pub monthly_requests: u64,
+}
+
+impl TenantQuotaLimits {
+    pub fn new(
+        tenant_id: impl Into<String>,
+        tier: impl Into<String>,
+        daily_requests: u64,
+        monthly_requests: u64,
+    ) -> Self {
+        Self {
+            tenant_id: tenant_id.into(),
+            tier: tier.into(),
+            daily_requests,
+            monthly_requests,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FreePoolLimits {
+    pub daily_requests: u64,
+    pub monthly_requests: u64,
+}
+
+impl FreePoolLimits {
+    pub fn new(daily_requests: u64, monthly_requests: u64) -> Self {
+        Self {
+            daily_requests,
+            monthly_requests,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DurableCacheRecord {
     pub key: String,

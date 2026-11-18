@@ -6,6 +6,11 @@
 set -eu
 (set -o pipefail 2>/dev/null) && set -o pipefail || true
 
+# The smoke test below prints check marks; without this, a cp1252 console raises
+# UnicodeEncodeError and the gate fails for a reason unrelated to the SDK.
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDK_DIR="${ROOT_DIR}/sdk/python"
 TEMP_VENV=".venv_smoke"

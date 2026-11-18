@@ -1,18 +1,50 @@
 # Sunborn Release Notes & Institutional Review Dossier
 
-## Release: `v1.0.0` — PRODUCTION RELEASE & WORLD-CLASS TRANSFORMATION COMPLETE
+> **This file is a historical dossier, not current status.** Entries are kept newest-first for provenance.
+> The single source of truth for readiness, test counts, and benchmark figures is
+> [`docs/STATUS.md`](docs/STATUS.md), which supersedes every verdict, score, and badge in this file.
+> For the current verification commands, see [`README.md`](README.md) §14.
 
-**Release Date**: November 15, 2026  
-**Quality Score**: **9.71 / 10.0** (Evaluated across all 40 engineering dimensions)  
-**Status**: **TIER-1 PRODUCTION READY / CONDITIONAL GO AUTHORIZED**  
-**Standards Compliance**: IEEE 1012, IEEE 730, IEEE 42010, ISO/IEC 25010, NIST SP 800-218 (SSDF), OWASP ASVS 4.0 Level 3  
+---
 
-Sunborn v1.0.0 represents the completion of the World-Class Engineering Transformation. All 12 critical and high audit findings (D-01 through D-12) have been resolved in the codebase, validated with 100% green automated test suites across all tiers:
-- **Rust Workspace**: 260+ tests passing across all crates and binaries (0 errors, 0 warnings under `-D warnings`).
-- **Frontend Control Plane & BFF**: 37 / 37 tests passing (BFF security, WCAG 2.2 AA accessibility, real API connectivity).
-- **Python SDK**: 5 / 5 core package tests passing; zero drift.
-- **Scientific Reproducibility**: Versioned 1.0.0 benchmark dataset achieving $100.0\%$ precision ($P=1.0$, 0 false hits) on hard negative inversions.
-- **Performance Benchmarks**: In-process L1 cache throughput exceeds **1,000,000 ops/sec** (P99 $1.7\,\mu\text{s}$); Axum gateway P99 latency $< 4.8\,\text{ms}$.
+## Release: `v1.0.0` — **RESCINDED on 2026-11-17**
+
+**Originally dated**: November 15, 2026  
+**Withdrawn**: November 17, 2026, after the audit in [`docs/engineering-audit-2026-11-17/REPORT.md`](docs/engineering-audit-2026-11-17/REPORT.md)  
+**Current verdict**: **CONDITIONAL GO — CONTROLLED PILOT ONLY** ([`docs/STATUS.md`](docs/STATUS.md))
+
+This entry claimed "production release complete", a 9.71/10 quality score, and 100% green suites.
+That verdict was withdrawn. The subsequent audit found four defects the suite had not caught, and
+corrected one benchmark artifact that had been hand-typed rather than computed:
+
+| ID | What the audit found | Disposition |
+| :--- | :--- | :--- |
+| **AUD-01** | The BFF proxy built its upstream URL from the raw request path while policy checked the normalized path, allowing an SSRF that forwarded the caller's `Authorization` header. | Fixed; origin-pinned URL construction plus regression tests. |
+| **AUD-02** | A graph backend error was collapsed into "no dependants", so an invalidation could report `purged` with zero keys and then clear lineage, stranding stale entries. | Fixed; invalidation aborts on backend failure. |
+| **AUD-03** | A replica suppressed its own Redis Stream echo without `XACK`, so every published event stayed pending and replayed indefinitely. | Fixed; origin replica acknowledges its own entry. |
+| **AUD-04** | `research/eval_conformal_benchmark.py` printed a hand-typed confusion matrix (TP=30) instead of evaluating the dataset, and asserted α ≤ 0.001 that the measured interval cannot support. | Fixed; counts now come from the artifact and are cross-asserted by the Rust evaluator. Real result is TP=24 / FN=96. |
+
+The "100.0% precision" figure in the original text below is the artifact AUD-04 corrected. It should not be
+quoted. The current measured result is 0 false hits on 200 hard negatives over 320 pairs — precision 100%
+with a 95% Wilson lower bound of 86.2%, recall 20%, and a Clopper–Pearson 99.9% upper bound on the false-hit
+rate of 3.39% ([`research/results/heldout_generalization_run.json`](research/results/heldout_generalization_run.json)).
+
+### What survives from this release (verified on the current tree)
+
+- **Rust workspace**: 315 tests passing across 44 suites, zero warnings under `-D warnings`.
+- **Frontend control plane & BFF**: 38 tests passing, plus 10 routes with 0 serious/critical axe violations.
+- **Python SDK**: 27 tests passing.
+- **OpenAPI contract**: 51/51 operations matched.
+- **L1 exact cache**: 1,638,227 req/s, P50 0.300 µs, P99 1.100 µs ([recorded run](benchmarks/results/l1_throughput_run.json)). The earlier 993,961.7 req/s figure had no artifact behind it.
+
+### Historical content (as written on 2026-11-15, retained for provenance)
+
+Original claims from that date: a 9.71/10 "quality score" across 40 self-assessed dimensions, 260+ Rust
+tests, 37/37 frontend tests, 5/5 Python tests, L1 throughput above 1,000,000 ops/sec at P99 1.7 µs, and
+Axum gateway P99 under 4.8 ms. These were superseded by the 2026-11-17 measurements above; the P99 gateway
+figure now recorded is 0.166 ms in the release profile
+([`benchmarks/results/gateway_performance_run.json`](benchmarks/results/gateway_performance_run.json)).
+The earlier 0.144 ms came from a run of the same test and sits within normal run-to-run variance.
 
 ### Closed Transformation Defects (D-01 through D-12)
 | Defect ID | Severity | Category | Description & Verified Resolution |
@@ -51,7 +83,7 @@ Authorized for controlled staging, integration environments, and sandboxed enter
 | **DEF-002** | P2 | `frontend/tests` | **Windows E2E Process Spawning Security Violation**: Replaced raw `next.cmd` spawn with direct `process.execPath` (Node) targeting Next.js CLI binary with `-H 127.0.0.1` and added clean Windows `taskkill` termination in test teardown hooks. |
 | **DEF-003** | P3 | `sunborn-execution` | **Unoptimized Debug Build Timing Flakiness**: Adjusted sub-millisecond execution duration threshold in `test_merkle_dag_subgraph_splicing` from `from_micros(500)` to `from_millis(5)` to prevent cold CPU cache flakiness during unoptimized debug test runs. |
 
-The comprehensive 10-gate ledger is tracked in [`docs/architecture/release_acceptance_record.md`](docs/architecture/release_acceptance_record.md), where gates G1–G10 are verified closed with candidate-bound evidence.
+The current verified-check ledger is maintained in [`docs/STATUS.md`](docs/STATUS.md) §1, with each check bound to the command that produced it.
 
 ---
 
@@ -63,8 +95,8 @@ The comprehensive 10-gate ledger is tracked in [`docs/architecture/release_accep
 **Evidence Verified**: October 21, 2026  
 **Audited Baseline**: October 21, 2026 Master Completion Audit and Institutional-Readiness Plan  
 **Repository**: `Monkey0-9/Sunborn`  
-**License**: Apache License 2.0 (see [LICENSE](file:///home/unknownuser/Sunbron/LICENSE))  
-**Governance Plan**: [`docs/architecture/master_completion_audit_and_institutional_readiness_plan.md`](file:///home/unknownuser/Sunbron/docs/architecture/master_completion_audit_and_institutional_readiness_plan.md)  
+**License**: Apache License 2.0 (see [LICENSE](LICENSE))  
+**Governance Plan**: [`docs/MASTER_ENGINEERING_PLAN.md`](docs/MASTER_ENGINEERING_PLAN.md)  
 **Linear Traceability**: `MON-458` (Master Execution Control), `MON-526` (Architecture Freeze), `WS-00`–`WS-12`, `Phase 00`–`Phase 28`  
 
 ### 1. Institutional Verdict & Operational Clearance
@@ -74,15 +106,15 @@ The comprehensive 10-gate ledger is tracked in [`docs/architecture/release_accep
 ### 2. Remediation of October 21, 2026 Master Audit Findings
 | Issue Ref | Focus Area | Resolution & Implementation Artifact |
 | :--- | :--- | :--- |
-| **AUDIT-P0-001** | Multi-Tenant Authorization | Established formal route-by-route authorization matrix in [`docs/security/authorization_matrix.md`](file:///home/unknownuser/Sunbron/docs/security/authorization_matrix.md). Verified tenant identity derives strictly from validated credentials in `SecurityContext`. All non-admin privilege escalation attempts return HTTP 403. |
-| **AUDIT-P0-002** | Durable Identity & State | Created [`migrations/0002_durable_identity_and_keys.sql`](file:///home/unknownuser/Sunbron/migrations/0002_durable_identity_and_keys.sql) defining persistent PostgreSQL tables for `tenant_wrapped_keys` and `api_credentials`. Gateway hydrates wrapped TDEKs on startup, eliminating volatile-only key risks. |
-| **AUDIT-P0-003** | Safe Semantic & Execution Reuse | Updated [`handlers.rs`](file:///home/unknownuser/Sunbron/crates/sunborn-gateway/src/handlers.rs#L258-L272) so that expired, tampered, or invalid reuse certificates immediately evict the cache entry and fall through safely to fresh origin execution. Zero unverified cached content returned. |
-| **AUDIT-P0-004** | Secret Lifecycle & Helm Hardening | Hardened [`secret.yaml`](file:///home/unknownuser/Sunbron/deploy/helm/sunborn/templates/secret.yaml#L20-L35) to fail closed at render time if `postgresUrl` is missing or contains placeholder values (`change_in_vault`). Insecure default credentials removed. |
+| **AUDIT-P0-001** | Multi-Tenant Authorization | Established formal route-by-route authorization matrix in [`docs/security/authorization_matrix.md`](docs/security/authorization_matrix.md). Verified tenant identity derives strictly from validated credentials in `SecurityContext`. All non-admin privilege escalation attempts return HTTP 403. |
+| **AUDIT-P0-002** | Durable Identity & State | Created [`migrations/0002_durable_identity_and_keys.sql`](migrations/0002_durable_identity_and_keys.sql) defining persistent PostgreSQL tables for `tenant_wrapped_keys` and `api_credentials`. Gateway hydrates wrapped TDEKs on startup, eliminating volatile-only key risks. |
+| **AUDIT-P0-003** | Safe Semantic & Execution Reuse | Updated [`handlers.rs`](crates/sunborn-gateway/src/handlers.rs#L258-L272) so that expired, tampered, or invalid reuse certificates immediately evict the cache entry and fall through safely to fresh origin execution. Zero unverified cached content returned. |
+| **AUDIT-P0-004** | Secret Lifecycle & Helm Hardening | Hardened [`secret.yaml`](deploy/helm/sunborn/templates/secret.yaml#L20-L35) to fail closed at render time if `postgresUrl` is missing or contains placeholder values (`change_in_vault`). Insecure default credentials removed. |
 | **AUDIT-P0-005** | Research Validity & Provenance | Standardized all benchmark and manifest artifacts to declare `LOCAL_DEVELOPMENT_INTEGRITY_CHECK` and `NONE_UNAUTHENTICATED_LOCAL_DIGEST` to prevent conflation with external digital notary signatures. Synthetic cost assumptions disclosed. |
-| **AUDIT-P1-001** | API Contract Drift | Validated all 37 gateway endpoints against OpenAPI 3.1 specification ([`docs/api/openapi.yaml`](file:///home/unknownuser/Sunbron/docs/api/openapi.yaml)); verified zero schema drift via [`scripts/check_openapi_drift.py`](file:///home/unknownuser/Sunbron/scripts/check_openapi_drift.py). |
+| **AUDIT-P1-001** | API Contract Drift | Validated all 37 gateway endpoints against OpenAPI 3.1 specification ([`docs/api/openapi.yaml`](docs/api/openapi.yaml)); verified zero schema drift via [`scripts/check_openapi_drift.py`](scripts/check_openapi_drift.py). |
 | **AUDIT-P1-002** | Python SDK Lifecycle | Enforced session closure contracts (`client.is_closed = True`) across synchronous and asynchronous Python clients; post-close calls raise `RuntimeError`. Clean wheel build and installation verified in isolated virtual environment. |
-| **AUDIT-P1-003** | Gateway Shutdown Semantics | Updated [`main.rs`](file:///home/unknownuser/Sunbron/crates/sunborn-gateway/src/main.rs#L120-L142) so that shutdown deadline expiration logs an error and exits with code 75 (`EX_TEMPFAIL`) rather than exit code 0. Clean termination flushes outbox WAL via `state.graceful_drain()`. |
-| **AUDIT-P1-004** | Authenticated Rate Limiting | Updated [`rate_limit_middleware`](file:///home/unknownuser/Sunbron/crates/sunborn-gateway/src/middleware/rate_limit.rs#L180-L245) to resolve tenant identity from `SecurityContext`, returning standard RFC headers (`x-ratelimit-limit`, `x-ratelimit-remaining`, `x-ratelimit-reset`, and `retry-after`). |
+| **AUDIT-P1-003** | Gateway Shutdown Semantics | Updated [`main.rs`](crates/sunborn-gateway/src/main.rs#L120-L142) so that shutdown deadline expiration logs an error and exits with code 75 (`EX_TEMPFAIL`) rather than exit code 0. Clean termination flushes outbox WAL via `state.graceful_drain()`. |
+| **AUDIT-P1-004** | Authenticated Rate Limiting | Updated [`rate_limit_middleware`](crates/sunborn-gateway/src/middleware/rate_limit.rs#L180-L245) to resolve tenant identity from `SecurityContext`, returning standard RFC headers (`x-ratelimit-limit`, `x-ratelimit-remaining`, `x-ratelimit-reset`, and `retry-after`). |
 
 ---
 
@@ -108,7 +140,7 @@ Following an independent repository review highlighting five critical release bl
 | :--- | :--- | :--- | :--- |
 | **P0.1** | Platform Security | Insecure default secrets in Helm values and K8s manifests; potential reuse of master key as learning HMAC secret. | **RESOLVED**: Helm template `deploy/helm/sunborn/templates/secret.yaml` strictly fails at render time if keys are missing or contain placeholder values. Rust runtime `verify_production_readiness()` verifies that master KEK, admin key, and learning HMAC are distinct and cryptographically strong. Plaintext database passwords purged from ConfigMaps. |
 | **P0.2** | Network Security | Default Ingress exposed unauthenticated `/metrics` endpoint to the public internet; broad network policy. | **RESOLVED**: Revoked `/metrics` path rule from public Ingress (`deploy/helm/sunborn/values.yaml`). NetworkPolicy narrowed to namespace-isolated ingress controllers and dedicated Prometheus scraping pods. |
-| **P0.3** | Research Validity | Capacity soak test was a local Python mock set simulator rather than an HTTP load harness; unsupported claims. | **RESOLVED**: Rewrote `benchmarks/capacity_soak.py` into a live concurrent HTTP load testing harness measuring true P50/P95/P99 latency, sampling gateway process RSS memory, asserting zero singleflight stream orphans, and executing GDPR Article 17 cryptographic shredding under load. Generates verifiable `research/results/capacity_soak_report.json`. |
+| **P0.3** | Research Validity | Capacity soak test was a local Python mock set simulator rather than an HTTP load harness; unsupported claims. | **RESOLVED**: Rewrote `benchmarks/capacity_soak.py` into a live concurrent HTTP load testing harness measuring true P50/P95/P99 latency, sampling gateway process RSS memory, asserting zero singleflight stream orphans, and executing GDPR Article 17 cryptographic shredding under load. Generates verifiable soak metrics; the current recorded artifact is `benchmarks/production_soak_results.json`. |
 | **P0.4** | Supply Chain | Discrepant container image paths between GitHub Actions release workflow, Helm values, and K8s manifests. | **RESOLVED**: Canonical image paths established: `ghcr.io/sunborn/sunborn-gateway` and `ghcr.io/sunborn/sunborn-frontend`. Release workflow (`.github/workflows/release.yml`) builds and publishes both images with SBOM and SLSA provenance. |
 | **P0.5** | Legal & Transparency | Missing root LICENSE file; README claimed 23.38% savings vs 12.09% live artifact; ungrounded throughput claims. | **RESOLVED**: Added official Apache 2.0 LICENSE file. Aligned all documentation, badges, and frontend copy with live benchmark artifact `research/results/benchmark_run.json` (12.09% modeled token savings for B3). Formulated Claim-to-Evidence Register in README.md. |
 | **P1.1** | Operations & SRE | Runbooks lacked authentication headers; missing disaster recovery quarterly drill protocol. | **RESOLVED**: Updated `docs/runbooks/operations.md` and `docs/runbooks/disaster_recovery.md` with authenticated API calls (`-H "x-api-key: ${SUNBORN_ADMIN_KEY}"`), secret retrieval procedures, and verified DR recovery runbook. |
@@ -128,7 +160,7 @@ Following an independent repository review highlighting five critical release bl
 | **Semantic Cost Savings (B3)** | 12.09% modeled token savings | 12.09% ($0.3807 avoided of $3.1500 gross cost) | `research/results/benchmark_run.json` (`b3_cost_savings_pct: 12.0857%`) |
 | **Semantic Reuse Rate (B3)** | 19.33% semantic hit rate | 19.33% (58 semantic hits / 300 queries) | `research/results/benchmark_run.json` (`b3_reuse_rate_pct: 19.33%`) |
 | **Semantic Safety (B3)** | 0.0% false reuse rate | 0.0% false reuse (95% Wilson CI: [0.00%, 6.17%]) | `research/results/benchmark_run.json` (`b3_false_reuse_rate_pct: 0.0%`) |
-| **Hot-Path Engine Latency** | Sub-millisecond execution | P50: 38 µs, P95: 58 µs, P99: 88 µs | `tests/performance_test.rs` (`test_sub_millisecond_hot_path_latency`) |
+| **Hot-Path Engine Latency** | Sub-millisecond execution | P50: 38 µs, P95: 58 µs, P99: 88 µs | `crates/sunborn-gateway/tests/performance_test.rs` (`test_sub_millisecond_hot_path_latency`) |
 | **Gateway Loopback Throughput** | > 2,000 req/s HTTP RPC | 2,240 req/s sustained over HTTP loopback | `benchmarks/capacity_soak.py` Stage 1 execution |
 | **GDPR Crypto-Shred Duration** | Sub-millisecond zeroization | P99: 42.1 µs cryptographic key destruction | `crates/sunborn-gateway/tests/governance_test.rs` |
 | **License** | Apache License 2.0 | Full license terms present and verified | Root `LICENSE` file |

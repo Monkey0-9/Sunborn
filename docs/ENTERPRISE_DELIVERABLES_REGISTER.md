@@ -57,7 +57,7 @@ Every check below is continuously enforced in GitHub Actions (`.github/workflows
 | Rust Workspace Compilation         | cargo check --workspace --all-targets  | Pass (0 errors, 0 warnings)           |
 | Rust Code Formatting               | cargo fmt --all -- --check             | Pass (0 formatting diffs)             |
 | Rust Strict Clippy Lints           | cargo clippy --all-targets -- -D warn  | Pass (0 warnings)                     |
-| Full Unit & Integration Tests      | cargo test --workspace --all-targets   | Pass (287 passed, 0 failed)           |
+| Full Unit & Integration Tests      | cargo test --workspace --all-targets   | Pass (297 passed, 0 failed)           |
 | Frontend Production Build          | npm run build --prefix frontend        | Pass (Next.js 15.5.29 clean bundle)   |
 | Frontend BFF Security Suite        | npm test --prefix frontend             | Pass (38 passed, 0 failed)            |
 | WCAG 2.2 AA Accessibility Audit    | npm run test:a11y --prefix frontend    | Pass (10 routes, 0 axe violations)    |

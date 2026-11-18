@@ -1,6 +1,6 @@
 use crate::models::{
     AuditRecord, DurableApiCredentialRecord, DurableCacheRecord, FinOpsLedgerRecord,
-    NewApiCredentialRecord, OutboxRecord, TenantRecord,
+    FreePoolLimits, NewApiCredentialRecord, OutboxRecord, TenantQuotaLimits, TenantRecord,
 };
 use crate::repository::{DatabaseStore, MemoryDatabaseStore};
 use async_trait::async_trait;
@@ -32,6 +32,7 @@ const MIGRATION_0004: &str = include_str!("../../../migrations/0004_durable_cach
 const MIGRATION_0005: &str = include_str!("../../../migrations/0005_persistent_epochs_and_dlq.sql");
 const MIGRATION_0006: &str = include_str!("../../../migrations/0006_durable_outbox_queue.sql");
 const MIGRATION_0007: &str = include_str!("../../../migrations/0007_distributed_spend_ledger.sql");
+const MIGRATION_0008: &str = include_str!("../../../migrations/0008_free_tier_quotas.sql");
 
 /// Outcome of a cluster-wide spend reservation attempt.
 #[derive(Debug, Clone, PartialEq)]
@@ -40,6 +41,25 @@ pub enum SpendReservationOutcome {
     Granted(Uuid),
     /// The tenant's rolling-window commitment would exceed its ceiling.
     Denied { committed: f64, ceiling: f64 },
+    /// The authoritative store could not be reached. Callers must fail closed.
+    StoreUnavailable,
+}
+
+/// Outcome of a cluster-wide daily/monthly quota reservation attempt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QuotaReservationOutcome {
+    /// The request fits every enrolled limit and was counted.
+    Granted { daily_used: u64, monthly_used: u64 },
+    /// The tenant is not enrolled in quota enforcement; admission is unchanged.
+    NotEnrolled,
+    /// A tenant or free-pool limit would be exceeded.
+    Denied {
+        scope: String,
+        window: String,
+        limit: u64,
+        used: u64,
+        retry_after_secs: u64,
+    },
     /// The authoritative store could not be reached. Callers must fail closed.
     StoreUnavailable,
 }
@@ -280,6 +300,7 @@ impl PostgresDatabaseStore {
             (5, "0005_persistent_epochs_and_dlq", MIGRATION_0005),
             (6, "0006_durable_outbox_queue", MIGRATION_0006),
             (7, "0007_distributed_spend_ledger", MIGRATION_0007),
+            (8, "0008_free_tier_quotas", MIGRATION_0008),
         ];
 
         for (version, name, sql) in migrations {
@@ -550,6 +571,343 @@ impl PostgresDatabaseStore {
                 .await
                 .is_ok();
         ok && tx.commit().await.is_ok()
+    }
+
+    /// Enrolls a tenant in daily/monthly quota enforcement.
+    ///
+    /// Enrollment is explicit: tenants without a row here are not quota-limited,
+    /// so existing deployments keep their current admission behavior.
+    pub async fn set_tenant_quota(&self, limits: &TenantQuotaLimits) -> Result<()> {
+        let pool = self.get_pool().await.ok_or_else(|| {
+            SunbornError::database("PostgreSQL connection pool unavailable for tenant quota")
+        })?;
+        sqlx::query(
+            "INSERT INTO tenant_quota_limits (tenant_id, tier, daily_requests, monthly_requests, updated_at)
+             VALUES ($1, $2, $3, $4, NOW())
+             ON CONFLICT (tenant_id) DO UPDATE
+             SET tier = EXCLUDED.tier,
+                 daily_requests = EXCLUDED.daily_requests,
+                 monthly_requests = EXCLUDED.monthly_requests,
+                 updated_at = NOW()",
+        )
+        .bind(&limits.tenant_id)
+        .bind(&limits.tier)
+        .bind(limits.daily_requests as i64)
+        .bind(limits.monthly_requests as i64)
+        .execute(&pool)
+        .await
+        .map_err(|e| SunbornError::database(e.to_string()))?;
+        sqlx::query("UPDATE tenants SET tier = $2 WHERE id = $1")
+            .bind(&limits.tenant_id)
+            .bind(&limits.tier)
+            .execute(&pool)
+            .await
+            .map_err(|e| SunbornError::database(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Sets the aggregate free-pool ceiling shared by every replica.
+    pub async fn set_free_pool_limits(&self, limits: &FreePoolLimits) -> Result<()> {
+        let pool = self.get_pool().await.ok_or_else(|| {
+            SunbornError::database("PostgreSQL connection pool unavailable for free pool")
+        })?;
+        sqlx::query(
+            "INSERT INTO free_pool_limits (pool_id, daily_requests, monthly_requests, updated_at)
+             VALUES (1, $1, $2, NOW())
+             ON CONFLICT (pool_id) DO UPDATE
+             SET daily_requests = EXCLUDED.daily_requests,
+                 monthly_requests = EXCLUDED.monthly_requests,
+                 updated_at = NOW()",
+        )
+        .bind(limits.daily_requests as i64)
+        .bind(limits.monthly_requests as i64)
+        .execute(&pool)
+        .await
+        .map_err(|e| SunbornError::database(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Atomically counts one request against the tenant's day/month windows and
+    /// the aggregate free pool.
+    ///
+    /// The transaction takes a per-tenant advisory lock followed by the free-pool
+    /// lock, so concurrent replicas cannot both observe room under a limit and
+    /// both consume it. Any denied dimension rolls back every increment in the
+    /// transaction, including the tenant counters.
+    pub async fn reserve_quota(&self, tenant_id: &str) -> QuotaReservationOutcome {
+        let Some(pool) = self.get_pool().await else {
+            return QuotaReservationOutcome::StoreUnavailable;
+        };
+        let mut tx = match pool.begin().await {
+            Ok(tx) => tx,
+            Err(err) => {
+                tracing::error!(error = %err, "Failed to begin quota reservation transaction");
+                return QuotaReservationOutcome::StoreUnavailable;
+            }
+        };
+
+        let tenant_lock = format!("quota:{tenant_id}");
+        if let Err(err) = sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind(&tenant_lock)
+            .execute(&mut *tx)
+            .await
+        {
+            tracing::error!(error = %err, "Failed to acquire tenant quota lock");
+            return QuotaReservationOutcome::StoreUnavailable;
+        }
+
+        let limits: Option<(i64, i64)> = match sqlx::query_as(
+            "SELECT daily_requests, monthly_requests FROM tenant_quota_limits WHERE tenant_id = $1",
+        )
+        .bind(tenant_id)
+        .fetch_optional(&mut *tx)
+        .await
+        {
+            Ok(limits) => limits,
+            Err(err) => {
+                tracing::error!(error = %err, "Failed to read tenant quota limits");
+                return QuotaReservationOutcome::StoreUnavailable;
+            }
+        };
+        let Some((daily_limit, monthly_limit)) = limits else {
+            let _ = tx.rollback().await;
+            return QuotaReservationOutcome::NotEnrolled;
+        };
+
+        let daily_used: Option<i64> = match sqlx::query_scalar(
+            "INSERT INTO tenant_quota_usage (tenant_id, window_kind, window_start, requests)
+             VALUES ($1, 'day', date_trunc('day', NOW()), 1)
+             ON CONFLICT (tenant_id, window_kind, window_start)
+             DO UPDATE SET requests = tenant_quota_usage.requests + 1
+             WHERE tenant_quota_usage.requests < $2
+             RETURNING requests",
+        )
+        .bind(tenant_id)
+        .bind(daily_limit)
+        .fetch_optional(&mut *tx)
+        .await
+        {
+            Ok(value) => value,
+            Err(err) => {
+                tracing::error!(error = %err, "Failed to reserve daily tenant quota");
+                return QuotaReservationOutcome::StoreUnavailable;
+            }
+        };
+        let Some(daily_used) = daily_used else {
+            let used: i64 = sqlx::query_scalar(
+                "SELECT COALESCE((SELECT requests FROM tenant_quota_usage
+                   WHERE tenant_id = $1 AND window_kind = 'day'
+                     AND window_start = date_trunc('day', NOW())), 0)",
+            )
+            .bind(tenant_id)
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap_or(daily_limit);
+            let retry_after_secs: i64 = sqlx::query_scalar(
+                "SELECT GREATEST(1, EXTRACT(EPOCH FROM
+                   (date_trunc('day', NOW()) + INTERVAL '1 day' - NOW()))::bigint)",
+            )
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap_or(86_400);
+            let _ = tx.rollback().await;
+            return QuotaReservationOutcome::Denied {
+                scope: "tenant".to_string(),
+                window: "day".to_string(),
+                limit: daily_limit.max(0) as u64,
+                used: used.max(0) as u64,
+                retry_after_secs: retry_after_secs.max(1) as u64,
+            };
+        };
+
+        let monthly_used: Option<i64> = match sqlx::query_scalar(
+            "INSERT INTO tenant_quota_usage (tenant_id, window_kind, window_start, requests)
+             VALUES ($1, 'month', date_trunc('month', NOW()), 1)
+             ON CONFLICT (tenant_id, window_kind, window_start)
+             DO UPDATE SET requests = tenant_quota_usage.requests + 1
+             WHERE tenant_quota_usage.requests < $2
+             RETURNING requests",
+        )
+        .bind(tenant_id)
+        .bind(monthly_limit)
+        .fetch_optional(&mut *tx)
+        .await
+        {
+            Ok(value) => value,
+            Err(err) => {
+                tracing::error!(error = %err, "Failed to reserve monthly tenant quota");
+                return QuotaReservationOutcome::StoreUnavailable;
+            }
+        };
+        let Some(monthly_used) = monthly_used else {
+            let used: i64 = sqlx::query_scalar(
+                "SELECT COALESCE((SELECT requests FROM tenant_quota_usage
+                   WHERE tenant_id = $1 AND window_kind = 'month'
+                     AND window_start = date_trunc('month', NOW())), 0)",
+            )
+            .bind(tenant_id)
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap_or(monthly_limit);
+            let retry_after_secs: i64 = sqlx::query_scalar(
+                "SELECT GREATEST(1, EXTRACT(EPOCH FROM
+                   (date_trunc('month', NOW()) + INTERVAL '1 month' - NOW()))::bigint)",
+            )
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap_or(2_592_000);
+            let _ = tx.rollback().await;
+            return QuotaReservationOutcome::Denied {
+                scope: "tenant".to_string(),
+                window: "month".to_string(),
+                limit: monthly_limit.max(0) as u64,
+                used: used.max(0) as u64,
+                retry_after_secs: retry_after_secs.max(1) as u64,
+            };
+        };
+
+        let pool_limits: Option<(i64, i64)> = match sqlx::query_as(
+            "SELECT daily_requests, monthly_requests FROM free_pool_limits WHERE pool_id = 1",
+        )
+        .fetch_optional(&mut *tx)
+        .await
+        {
+            Ok(limits) => limits,
+            Err(err) => {
+                tracing::error!(error = %err, "Failed to read free-pool limits");
+                return QuotaReservationOutcome::StoreUnavailable;
+            }
+        };
+
+        if let Some((pool_daily_limit, pool_monthly_limit)) = pool_limits {
+            if let Err(err) = sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+                .bind("quota:free_pool")
+                .execute(&mut *tx)
+                .await
+            {
+                tracing::error!(error = %err, "Failed to acquire free-pool quota lock");
+                return QuotaReservationOutcome::StoreUnavailable;
+            }
+
+            let pool_daily: Option<i64> = match sqlx::query_scalar(
+                "INSERT INTO free_pool_usage (window_kind, window_start, requests)
+                 VALUES ('day', date_trunc('day', NOW()), 1)
+                 ON CONFLICT (window_kind, window_start)
+                 DO UPDATE SET requests = free_pool_usage.requests + 1
+                 WHERE free_pool_usage.requests < $1
+                 RETURNING requests",
+            )
+            .bind(pool_daily_limit)
+            .fetch_optional(&mut *tx)
+            .await
+            {
+                Ok(value) => value,
+                Err(err) => {
+                    tracing::error!(error = %err, "Failed to reserve daily free-pool quota");
+                    return QuotaReservationOutcome::StoreUnavailable;
+                }
+            };
+            if pool_daily.is_none() {
+                let used: i64 = sqlx::query_scalar(
+                    "SELECT COALESCE((SELECT requests FROM free_pool_usage
+                       WHERE window_kind = 'day' AND window_start = date_trunc('day', NOW())), 0)",
+                )
+                .fetch_one(&mut *tx)
+                .await
+                .unwrap_or(pool_daily_limit);
+                let retry_after_secs: i64 = sqlx::query_scalar(
+                    "SELECT GREATEST(1, EXTRACT(EPOCH FROM
+                       (date_trunc('day', NOW()) + INTERVAL '1 day' - NOW()))::bigint)",
+                )
+                .fetch_one(&mut *tx)
+                .await
+                .unwrap_or(86_400);
+                let _ = tx.rollback().await;
+                return QuotaReservationOutcome::Denied {
+                    scope: "free_pool".to_string(),
+                    window: "day".to_string(),
+                    limit: pool_daily_limit.max(0) as u64,
+                    used: used.max(0) as u64,
+                    retry_after_secs: retry_after_secs.max(1) as u64,
+                };
+            }
+
+            let pool_monthly: Option<i64> = match sqlx::query_scalar(
+                "INSERT INTO free_pool_usage (window_kind, window_start, requests)
+                 VALUES ('month', date_trunc('month', NOW()), 1)
+                 ON CONFLICT (window_kind, window_start)
+                 DO UPDATE SET requests = free_pool_usage.requests + 1
+                 WHERE free_pool_usage.requests < $1
+                 RETURNING requests",
+            )
+            .bind(pool_monthly_limit)
+            .fetch_optional(&mut *tx)
+            .await
+            {
+                Ok(value) => value,
+                Err(err) => {
+                    tracing::error!(error = %err, "Failed to reserve monthly free-pool quota");
+                    return QuotaReservationOutcome::StoreUnavailable;
+                }
+            };
+            if pool_monthly.is_none() {
+                let used: i64 = sqlx::query_scalar(
+                    "SELECT COALESCE((SELECT requests FROM free_pool_usage
+                       WHERE window_kind = 'month' AND window_start = date_trunc('month', NOW())), 0)",
+                )
+                .fetch_one(&mut *tx)
+                .await
+                .unwrap_or(pool_monthly_limit);
+                let retry_after_secs: i64 = sqlx::query_scalar(
+                    "SELECT GREATEST(1, EXTRACT(EPOCH FROM
+                       (date_trunc('month', NOW()) + INTERVAL '1 month' - NOW()))::bigint)",
+                )
+                .fetch_one(&mut *tx)
+                .await
+                .unwrap_or(2_592_000);
+                let _ = tx.rollback().await;
+                return QuotaReservationOutcome::Denied {
+                    scope: "free_pool".to_string(),
+                    window: "month".to_string(),
+                    limit: pool_monthly_limit.max(0) as u64,
+                    used: used.max(0) as u64,
+                    retry_after_secs: retry_after_secs.max(1) as u64,
+                };
+            }
+        }
+
+        if let Err(err) = tx.commit().await {
+            tracing::error!(error = %err, "Failed to commit quota reservation");
+            return QuotaReservationOutcome::StoreUnavailable;
+        }
+        QuotaReservationOutcome::Granted {
+            daily_used: daily_used.max(0) as u64,
+            monthly_used: monthly_used.max(0) as u64,
+        }
+    }
+
+    /// Drops quota usage windows that cannot affect the current day or month.
+    /// Called once per process startup so the table does not grow without a
+    /// background job.
+    pub async fn prune_quota_usage(&self) -> Result<()> {
+        let pool = self.get_pool().await.ok_or_else(|| {
+            SunbornError::database("PostgreSQL connection pool unavailable for quota pruning")
+        })?;
+        sqlx::query(
+            "DELETE FROM tenant_quota_usage
+             WHERE window_start < date_trunc('month', NOW()) - INTERVAL '12 months'",
+        )
+        .execute(&pool)
+        .await
+        .map_err(|e| SunbornError::database(e.to_string()))?;
+        sqlx::query(
+            "DELETE FROM free_pool_usage
+             WHERE window_start < date_trunc('month', NOW()) - INTERVAL '12 months'",
+        )
+        .execute(&pool)
+        .await
+        .map_err(|e| SunbornError::database(e.to_string()))?;
+        Ok(())
     }
 
     /// Loads all persistent knowledge source epochs from PostgreSQL.
@@ -1502,6 +1860,16 @@ impl DatabaseStore for PostgresDatabaseStore {
                 .execute(&pool)
                 .await;
 
+            // 5b. Delete tenant quota limits and usage windows
+            let _ = sqlx::query("DELETE FROM tenant_quota_usage WHERE tenant_id = $1")
+                .bind(tenant_id)
+                .execute(&pool)
+                .await;
+            let _ = sqlx::query("DELETE FROM tenant_quota_limits WHERE tenant_id = $1")
+                .bind(tenant_id)
+                .execute(&pool)
+                .await;
+
             // 6. Delete tenant outbox events
             let _ = sqlx::query("DELETE FROM outbox_events WHERE tenant_id = $1")
                 .bind(tenant_id)
@@ -1595,6 +1963,21 @@ impl DatabaseStore for PostgresDatabaseStore {
                         ))
                     })?;
             pg_count += creds_row.0 as usize;
+
+            // Count quota limits and usage windows. A failed quota delete must
+            // surface as a residual rather than a clean erasure report.
+            let quota_row: (i64,) = sqlx::query_as(
+                "SELECT
+                   (SELECT COUNT(*) FROM tenant_quota_limits WHERE tenant_id = $1)
+                 + (SELECT COUNT(*) FROM tenant_quota_usage WHERE tenant_id = $1)",
+            )
+            .bind(tenant_id)
+            .fetch_one(&pool)
+            .await
+            .map_err(|err| {
+                SunbornError::database(format!("PostgreSQL count tenant quota rows failed: {err}"))
+            })?;
+            pg_count += quota_row.0 as usize;
         } else if self.strict_durability {
             return Err(sunborn_core::SunbornError::database(
                 "PostgreSQL connection pool unavailable; fail-closed durability enforced",

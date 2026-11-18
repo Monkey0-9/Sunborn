@@ -49,6 +49,22 @@ jobs:
       - name: Run Full Unit & Integration Test Suite
         run: cargo test --all-targets --all-features
 
+  documentation-verification:
+    name: Documentation Link & Claims Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+
+      - name: Verify documentation paths, links, and claims
+        run: |
+          python3 scripts/verify_doc_paths.py --strict
+          python3 scripts/check_launch_docs.py
+
   frontend-verification:
     name: Frontend Quality Gate
     runs-on: ubuntu-latest
@@ -157,8 +173,8 @@ jobs:
         uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3
         with:
           version: latest
-      - name: Install PyYAML
-        run: uv pip install --system pyyaml
+      - name: Install Python dev dependencies
+        run: uv pip install --system -r requirements-dev.txt
       - name: Verify OpenAPI 3.1 Specification Drift
         run: python3 scripts/check_openapi_drift.py
       - name: Verify Python SDK Package & Clean Installation
@@ -305,3 +321,29 @@ jobs:
           DIST_MODE=replay bash scripts/test_distributed_invalidation.sh
           DIST_MODE=finops bash scripts/test_distributed_invalidation.sh
           DIST_MODE=crash bash scripts/test_distributed_invalidation.sh
+
+  windows-console-regression:
+    name: Windows Console & Encoding Gate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dev dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      # These gates print non-ASCII progress marks from inline Python. On a
+      # legacy Windows code page that aborts with UnicodeEncodeError, which is
+      # a harness failure that reads like a product failure. The scripts pin
+      # UTF-8 themselves; this job keeps them honest.
+      - name: Run console-sensitive gates under the default Windows code page
+        shell: bash
+        run: |
+          bash scripts/test_python_sdk.sh
+          python scripts/check_openapi_drift.py
+          bash deploy/verify_live_stack.sh
+          python scripts/verify_doc_paths.py --strict

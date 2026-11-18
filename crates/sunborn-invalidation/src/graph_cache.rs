@@ -8,8 +8,12 @@
 //! source or document hash immediately purges all directly and transitively dependent
 //! cache entries from memory in $O(k)$ time without polling or background batch delay.
 
+use crate::affected::{compute_affected, AffectedReport};
 use crate::bitmap_lineage::CompressedLineageGraph;
 use crate::graph::DependencyGraph;
+use crate::graphify_graph::GraphifyKnowledgeGraph;
+use crate::graphify_model::GraphifyNodeType;
+use crate::query::{explain_node, NodeExplanation};
 use async_trait::async_trait;
 use roaring::RoaringTreemap;
 use std::collections::{HashMap, HashSet};
@@ -38,12 +42,14 @@ pub struct GraphCacheStats {
     pub total_doc_associations: usize,
 }
 
-/// Graph-based memory cache linking in-memory key-value caching with causal lineage graphs.
+/// Graph-based memory cache linking in-memory key-value caching with causal lineage graphs
+/// and Graphify multi-relational knowledge graphs.
 #[derive(Clone)]
 pub struct GraphMemoryCache {
     cache: Arc<dyn ExactCacheStore>,
     dependency_graph: Arc<DependencyGraph>,
     lineage_graph: Arc<CompressedLineageGraph>,
+    graphify_graph: Arc<GraphifyKnowledgeGraph>,
     record_to_keys: Arc<RwLock<HashMap<u64, HashSet<String>>>>,
 }
 
@@ -60,6 +66,7 @@ impl GraphMemoryCache {
             cache: Arc::new(MemoryExactCache::new()),
             dependency_graph: Arc::new(DependencyGraph::new()),
             lineage_graph: Arc::new(CompressedLineageGraph::new()),
+            graphify_graph: Arc::new(GraphifyKnowledgeGraph::new()),
             record_to_keys: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -74,8 +81,15 @@ impl GraphMemoryCache {
             cache,
             dependency_graph,
             lineage_graph,
+            graphify_graph: Arc::new(GraphifyKnowledgeGraph::new()),
             record_to_keys: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Configures an explicit Graphify multi-relational knowledge graph.
+    pub fn with_graphify_graph(mut self, graphify_graph: Arc<GraphifyKnowledgeGraph>) -> Self {
+        self.graphify_graph = graphify_graph;
+        self
     }
 
     /// Access the underlying ExactCacheStore.
@@ -91,6 +105,46 @@ impl GraphMemoryCache {
     /// Access the underlying CompressedLineageGraph.
     pub fn lineage_graph(&self) -> &Arc<CompressedLineageGraph> {
         &self.lineage_graph
+    }
+
+    /// Access the underlying Graphify multi-relational knowledge graph.
+    pub fn graphify_graph(&self) -> &Arc<GraphifyKnowledgeGraph> {
+        &self.graphify_graph
+    }
+
+    /// Real-Time Causal Invalidation using Graphify multi-hop blast-radius traversal:
+    /// Traverses dependency relations from the mutated assets, identifies all affected
+    /// downstream components and cache entries, deletes affected cache entries from L1 memory,
+    /// and returns the complete causal AffectedReport.
+    pub async fn invalidate_with_graphify_blast_radius(
+        &self,
+        mutated_assets: &[&str],
+    ) -> Result<AffectedReport> {
+        let report = compute_affected(&self.graphify_graph, mutated_assets, None);
+        for key in &report.affected_cache_keys {
+            let _ = self.cache.delete(key).await;
+        }
+        Ok(report)
+    }
+
+    /// Purges all cache entries belonging to a specific functional community.
+    pub async fn invalidate_community(&self, community_id: u32) -> Result<usize> {
+        let mut purged = 0;
+        for node in self.graphify_graph.all_nodes() {
+            if node.community_id == Some(community_id) {
+                let is_cache = node.node_type == GraphifyNodeType::CacheEntry
+                    || node.id.starts_with("cache::");
+                if is_cache && self.cache.delete(&node.id).await.unwrap_or(false) {
+                    purged += 1;
+                }
+            }
+        }
+        Ok(purged)
+    }
+
+    /// Generates an explanation report of a cache entry's upstream dependency lineage.
+    pub fn explain_cache_lineage(&self, cache_key: &str) -> Option<NodeExplanation> {
+        explain_node(&self.graphify_graph, cache_key)
     }
 
     /// Delete exact-cache keys supplied by a peer invalidation event. This is

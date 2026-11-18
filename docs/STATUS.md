@@ -3,7 +3,7 @@
 **Effective:** 2026-11-17
 **Baseline:** `ca7736f` plus the remediation described in §2.1
 **Release decision:** **CONDITIONAL GO — CONTROLLED PILOT ONLY.** All in-tree checks
-listed in §1 pass on this tree (287 Rust tests, 38 frontend tests), and the three
+listed in §1 pass on this tree (315 Rust tests, 38 frontend tests, 27 Python tests), and the three
 P0/P1 defects found in the 2026-11-17 audit are fixed with regression tests. Production
 release remains gated on the environment-dependent items in §3: a live multi-replica
 Docker/Redis run of the invalidation harness, and an external penetration test.
@@ -17,14 +17,15 @@ Those documents are retained as immutable history, not as current status.
 
 ## 1. What is verified now
 
-Every command below was executed in this working tree on 2026-11-16 (Windows /
-Git Bash). Results are copied from the actual runs.
+Every command below was executed in this working tree on 2026-11-16 and re-run on
+2026-11-18 where the result changed (Windows / Git Bash). Results are copied from
+the actual runs.
 
 | Check | Command | Result |
 |---|---|---|
 | Formatting | `cargo fmt --all -- --check` | exit 0 |
 | Workspace compile | `cargo check --workspace --all-targets` | exit 0, no warnings |
-| Rust tests | `cargo test --workspace --all-targets` | **287 passed, 0 failed** |
+| Rust tests | `cargo test --workspace --all-targets` | **315 passed, 0 failed** (44 suites; re-run 2026-11-18) |
 | Lints | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | exit 0 |
 | Epoch fencing model | `bash scripts/run_tlaplus.sh` | TLC: 2,245 states, 512 distinct, no error |
 | Outbox safety model | same | TLC: 601 states, 134 distinct, no error |
@@ -185,11 +186,21 @@ corrected to the endpoints and return shapes the code actually implements.
 - **Zero-Copy Vector Search Memory Optimization**: Refactored `MemoryVectorStore::search` in `crates/sunborn-semantic/src/vector_store.rs` to buffer references and score using `total_cmp`, cloning only top-$K$ winners for a **500x memory allocation reduction**.
 - **Graph-Aware Volatility Discounting**: Extended FinOps GDSF caching in `crates/sunborn-cache/src/gdsf.rs` with $H_{\text{graph}}(p) = L + F(p) \cdot \frac{\text{Cost}}{\text{Size}} \cdot \frac{1}{1 + \beta \cdot \text{Volatility} \cdot \sqrt{\text{FanOut}}}$.
 - **Panic-Safe Singleflight Streamer**: Encapsulated in-flight stream tasks in a RAII `SingleflightCleanupGuard` in `crates/sunborn-gateway/src/origin/singleflight.rs`.
-- **Sub-Microsecond L1 Cache Latency**: Benchmarked at **993,961.7 req/sec (~1.0M req/sec)** with P50 latency of **0.900 µs** and P99 of **1.500 µs** in `benches/throughput_test.rs`.
+- **Sub-Microsecond L1 Cache Latency**: Re-measured on 2026-11-18 at **1,638,227 req/sec** with P50 of **0.300 µs** and P99 of **1.100 µs**, recorded in [`benchmarks/results/l1_throughput_run.json`](../benchmarks/results/l1_throughput_run.json). This is a single-machine, in-process tier measurement. The previously published 993,961.7 req/sec / 0.900 µs / 1.500 µs had no recorded run behind it and is superseded.
 - **Python SDK Modernization**: Added C SIMD FFI (`accel.py`), zero-copy JSON parsing (`orjson`/`msgspec` fallback to `json`), and persistent HTTP keep-alive connection pooling in `sdk/python/sunborn/`. Verified via `scripts/test_python_sdk.sh` and 27 unit tests.
 - **Native Rust OpenAPI Verification**: Added `--openapi` contract parity verification directly in native compiled Rust CLI `apps/sunborn-verify`.
 - **ISO Standards Conformance**: Documented in `docs/compliance/ISO_STANDARDS_COMPLIANCE.md` covering **ISO/IEC 27001:2022**, **ISO/IEC 27002:2022**, and **ISO/IEC/IEEE 29119:2022**.
 - Structured metrics published to `benchmarks/production_soak_results.json`.
+
+### Multi-Relational Knowledge Graph Caching & Blast-Radius Traversal (2026-11-18)
+- **Typed Entity & Relation Model** (`crates/sunborn-invalidation/src/graphify_model.rs`): 10 node types (`File`, `Function`, `Class`, `Module`, `Document`, `Section`, `Table`, `PromptTemplate`, `CacheEntry`, `Model`) and 15 directional relations (`Calls`, `IndirectCall`, `References`, `Imports`, `ImportsFrom`, `DynamicImport`, `ReExports`, `Defines`, `Inherits`, `Extends`, `Implements`, `Uses`, `ReadsFrom`, `WritesTo`, `DependsOn`) with `Extracted` and `Inferred` confidence tiers.
+- **Concurrent Lock-Free Directed Graph** (`crates/sunborn-invalidation/src/graphify_graph.rs`): Bidirectional indexing (`outgoing_edges` and `incoming_edges`), 64-bit content hash inverted index, and monotonic node ID allocation for zero-overhead Roaring Treemap bitset operations.
+- **Microsecond Reverse Blast-Radius Traversal** (`crates/sunborn-invalidation/src/affected.rs`): Multi-hop BFS reverse traversal over dependency relations with cycle prevention (`visited` set) and depth bounding (`max_depth`), emitting structured `AffectedReport` and granular `AffectedHit` items.
+- **Asynchronous Community Clustering** (`crates/sunborn-invalidation/src/clustering.rs`): Deterministic Label Propagation Algorithm (LPA) partitioning the graph into functional communities for bulk partition invalidation (`invalidate_community`).
+- **Topological Graph Analytics** (`crates/sunborn-invalidation/src/graph_analytics.rs`): High-degree bottleneck ("god node") detection computing in-degree, out-degree, and $\sqrt{\text{FanOut}}$ for FinOps GDSF volatility discounting, plus deterministic canonicalized cycle detection.
+- **Lineage Explainability & Subgraph Extraction** (`crates/sunborn-invalidation/src/query.rs`): Contextual shortest path discovery (`find_shortest_path`), token-budgeted subgraph extraction (`extract_subgraph`), and human/agent-readable lineage summaries (`explain_node`).
+- **Embedded Caching Integration** (`crates/sunborn-invalidation/src/graph_cache.rs`): Direct embedding in `GraphMemoryCache`, exposing `invalidate_with_graphify_blast_radius`, `invalidate_community`, and `explain_cache_lineage`.
+- **Full Verification Suite**: 3 dedicated integration tests in `crates/sunborn-invalidation/tests/graphify_caching_test.rs` and 48/48 crate tests passing cleanly.
 
 ### Documentation reconciliation (was: competing status documents)
 - This file is the single current-status authority.
@@ -207,7 +218,7 @@ The remaining environment-dependent requirements are:
 |---|---|---|
 | Third-party commercial security attestation | All in-tree adversarial tests (18/18) and router authorization parity tests (50/50) are verified; formal threat model published. | Signed external audit engagement letter from commercial third-party pen-test firm. |
 | Docker engine for live multi-container acceptance | The distributed invalidation test harness (`scripts/test_distributed_invalidation.sh`) has 6 modes (`exact`, `semantic`, `replay`, `outbox`, `finops`, `crash`). | Running Docker daemon or CI Linux runner with container privileges. |
-| Production cluster multi-region deployment | Gateway latency is verified at 14,202.9 req/s (P99 0.144 ms) and multi-worker soak passed with 0 errors. | Production Kubernetes cluster with multi-region Dragonfly/Postgres replicas. |
+| Production cluster multi-region deployment | Gateway throughput is measured on one machine at 13,241.1 req/s sequential (P99 0.166 ms) and 11,116.0 req/s with 16 concurrent workers (P99 2.398 ms), 0 failed requests. | Production Kubernetes cluster with multi-region Dragonfly/Postgres replicas. |
 
 Hiring scale, brand positioning, and competitive claims relative to other AI
 companies are business questions. Nothing in this repository can substantiate
@@ -222,7 +233,9 @@ recorded on 2026-11-15/16 before this pass:
 
 - `DIST_MODE=exact`, `semantic`, `replay`, `outbox`: PASS.
 - Release gateway latency: 14,202.9 req/s, P99 0.144 ms
-  (`cargo test --release -p sunborn-gateway --test performance_test`).
+  (`cargo test --release -p sunborn-gateway --test performance_test`). Re-measured on
+  2026-11-18 with the same command: 13,241.1 req/s, P99 0.166 ms — recorded in
+  [`benchmarks/results/gateway_performance_run.json`](../benchmarks/results/gateway_performance_run.json).
 - Frontend: 37/37 (`npm test --prefix frontend`).
 - Python SDK: 26/26.
 
@@ -248,3 +261,14 @@ DIST_MODE=outbox   bash scripts/test_distributed_invalidation.sh
 DIST_MODE=finops   bash scripts/test_distributed_invalidation.sh
 DIST_MODE=crash    bash scripts/test_distributed_invalidation.sh
 ```
+
+---
+
+## 6. Project policies
+
+- **Starting out**: [`README.md`](../README.md) for what the system is, [`QUICKSTART.md`](QUICKSTART.md) to run it.
+- **Buying or reviewing**: [`EXECUTIVE_BRIEF.md`](EXECUTIVE_BRIEF.md) — one page, every figure linked to its artifact, including what is not established.
+- **Reporting a vulnerability**: [`SECURITY.md`](../SECURITY.md) — privately, never in a public issue.
+- **Contributing**: [`CONTRIBUTING.md`](../CONTRIBUTING.md) explains the evidence rules a change must meet.
+- **Getting help**: [`SUPPORT.md`](../SUPPORT.md) maps questions to the document that answers them.
+- **Conduct**: [`CODE_OF_CONDUCT.md`](../CODE_OF_CONDUCT.md).

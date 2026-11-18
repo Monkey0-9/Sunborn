@@ -18,7 +18,7 @@ version = "1.0.0"
 edition = "2021"
 authors = ["Sunborn Team"]
 license = "Apache-2.0"
-repository = "https://github.com/sunborn-ai/sunborn"
+repository = "https://github.com/Monkey0-9/Sunborn"
 rust-version = "1.80"
 
 [workspace.dependencies]

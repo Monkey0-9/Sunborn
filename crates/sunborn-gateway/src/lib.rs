@@ -23,6 +23,7 @@ pub mod handlers;
 pub mod learning;
 pub mod middleware;
 pub mod origin;
+pub mod quota;
 pub mod routing;
 pub mod shadow;
 pub mod state;
@@ -122,6 +123,11 @@ pub fn create_router(state: AppState) -> Router {
             "/v1/governance/spend-ceiling",
             post(handlers::set_spend_ceiling),
         )
+        .route(
+            "/v1/governance/tenant-quota",
+            post(handlers::set_tenant_quota),
+        )
+        .route("/v1/governance/free-pool", post(handlers::set_free_pool))
         .route(
             "/v1/governance/attest",
             post(handlers::generate_merkle_attestation),

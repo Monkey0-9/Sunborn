@@ -43,9 +43,9 @@ pub mod repository;
 pub mod write_behind;
 
 pub use models::{
-    AuditRecord, DurableApiCredentialRecord, DurableCacheRecord, NewApiCredentialRecord,
-    OutboxRecord, TenantRecord,
+    AuditRecord, DurableApiCredentialRecord, DurableCacheRecord, FreePoolLimits,
+    NewApiCredentialRecord, OutboxRecord, TenantQuotaLimits, TenantRecord,
 };
-pub use postgres::{PostgresDatabaseStore, SpendReservationOutcome};
+pub use postgres::{PostgresDatabaseStore, QuotaReservationOutcome, SpendReservationOutcome};
 pub use repository::{DatabaseStore, MemoryDatabaseStore};
 pub use write_behind::{WriteBehindFlusher, WriteBehindTask};

@@ -33,7 +33,7 @@ Sunborn fully satisfies all three ACM artifact excellence badges:
 
 1. **Artifacts Available**:
    * Complete open-source implementation hosted at [https://github.com/Monkey0-9/Sunborn](https://github.com/Monkey0-9/Sunborn) under the Apache-2.0 License.
-   * Authoritative OpenAPI 3.1 specification at [`docs/api/openapi.yaml`](file:///C:/Sunborn/docs/api/openapi.yaml).
+   * Authoritative OpenAPI 3.1 specification at [`docs/api/openapi.yaml`](../docs/api/openapi.yaml).
    * Dual IEEE (`research/paper/sunborn_ieee.tex`) and ACM (`research/paper/sunborn_acm.tex`) LaTeX manuscripts provided.
 
 2. **Artifacts Evaluated — Functional**:
@@ -42,7 +42,7 @@ Sunborn fully satisfies all three ACM artifact excellence badges:
    * Complete frontend verification: strict TypeScript compilation (`tsc --noEmit`), Playwright E2E browser tests, Next.js 15 production build (15/15 static pages).
 
 3. **Results Reproduced**:
-   * Bundled reproduction suite [`research/reproduce.sh`](file:///C:/Sunborn/research/reproduce.sh) executes headless without network dependencies.
+   * Bundled reproduction suite [`research/reproduce.sh`](../research/reproduce.sh) executes headless without network dependencies.
    * Executes 124 benchmark queries across baselines B0, B1, B2, and CompleteSunborn (B3).
    * Verified empirical output: **0.0% false-hit rate, 100.0% precision, 12.09% token savings** on held-out dataset.
    * Cryptographic attestation certificate (`research/results/reproduction_certificate.json`) verified in constant time.
@@ -57,6 +57,6 @@ Sunborn fully satisfies all three ACM artifact excellence badges:
 ## 3. Publication Manuscripts
 
 The repository includes publication manuscripts in both leading engineering formats:
-1. **IEEE Conference Format**: [`research/paper/sunborn_ieee.tex`](file:///C:/Sunborn/research/paper/sunborn_ieee.tex) (Two-column `IEEEtran` standard with formal theorems and two-table latency distinction).
-2. **ACM Conference Format**: [`research/paper/sunborn_acm.tex`](file:///C:/Sunborn/research/paper/sunborn_acm.tex) (`acmart` sigconf format with ACM CCS taxonomy and ACM Artifact Appendix).
-3. **Machine-Readable Citation**: [`CITATION.cff`](file:///C:/Sunborn/CITATION.cff) (Citation File Format 1.2.0).
+1. **IEEE Conference Format**: [`research/paper/sunborn_ieee.tex`](../research/paper/sunborn_ieee.tex) (Two-column `IEEEtran` standard with formal theorems and two-table latency distinction).
+2. **ACM Conference Format**: [`research/paper/sunborn_acm.tex`](../research/paper/sunborn_acm.tex) (`acmart` sigconf format with ACM CCS taxonomy and ACM Artifact Appendix).
+3. **Machine-Readable Citation**: [`CITATION.cff`](../CITATION.cff) (Citation File Format 1.2.0).

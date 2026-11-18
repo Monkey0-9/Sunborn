@@ -4,7 +4,7 @@
 <!-- Provide a clear, executive-level explanation of what changes this PR introduces. Reference Linear Issue ID (e.g., `MON-XXX`, `BE-XXX`). -->
 - **Linear Issue**: `FIX/FEAT: `
 - **Component(s) Affected**: `crates/`, `frontend/`, `deploy/`, `migrations/`
-- **Engineering Level**: L5 (Senior) / L6 (Staff/Principal)
+- **Gates run**: which of the 12 in [`CONTRIBUTING.md`](../CONTRIBUTING.md) you ran, and which you could not
 
 ---
 

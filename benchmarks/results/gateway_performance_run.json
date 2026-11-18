@@ -1,0 +1,36 @@
+{
+  "benchmark_name": "Sunborn Gateway Overhead & P99 Latency",
+  "producer": "crates/sunborn-gateway/tests/performance_test.rs",
+  "command": "cargo test --release -p sunborn-gateway --test performance_test -- --nocapture",
+  "timestamp": "2026-11-18",
+  "environment": {
+    "os": "Windows 11",
+    "profile": "release",
+    "rustc": "1.96.0 (ac68faa20 2026-05-25)",
+    "cpu": "Intel64 Family 6 Model 183 Stepping 1",
+    "logical_cores": 20
+  },
+  "table_i_l1_cache_get": {
+    "description": "10,000 sequential cache.get() calls on the L1 memory tier. No routing, no auth, no serialization, no network.",
+    "iterations": 10000,
+    "throughput_rps": 2543687.8,
+    "latency_p50_us": 0,
+    "latency_p95_us": 0,
+    "latency_p99_us": 1,
+    "caveat": "The harness measures with a 1 µs timer, so a reported P50 of 0 means 'below one microsecond', not zero cost."
+  },
+  "table_ii_gateway_stack": {
+    "description": "5,000 sequential requests through the full Axum stack: API-key auth, routing, JCS canonicalization, exact-cache admission. In-process via tower::ServiceExt::oneshot, so no TCP or TLS.",
+    "total_requests": 5000,
+    "elapsed_ms": 377.61,
+    "throughput_rps": 13241.1,
+    "latency_p50_ms": 0.070,
+    "latency_p95_ms": 0.099,
+    "latency_p99_ms": 0.166
+  },
+  "notes": [
+    "This is the source of the 14,202.9 req/s / P50 0.068 ms / P99 0.144 ms figures previously attributed in the docs to the multi-worker soak test. Those figures were produced here, by this test, on a slightly different run (this run measures 13,241.1 req/s at the same P50, about 7% lower). The soak test produces different, higher-latency numbers because it drives 16 concurrent workers instead of a sequential loop.",
+    "Both tables are single-machine, in-process measurements. A real deployment adds a network hop, TLS termination, and often a proxy, all of which raise latency.",
+    "Re-run the command above; absolute values depend on the machine. The ratio between the L1 tier and the full stack is the useful quantity."
+  ]
+}

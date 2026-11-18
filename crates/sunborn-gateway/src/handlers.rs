@@ -1,5 +1,6 @@
 /* trunk-ignore-all(rustfmt) */
 use crate::middleware::auth::SecurityContext;
+use crate::quota::QuotaError;
 use crate::state::AppState;
 use axum::{
     extract::{Path, State},
@@ -29,6 +30,7 @@ static SEMANTIC_HITS: AtomicU64 = AtomicU64::new(0);
 static CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
 static RATE_LIMITED_TOTAL: AtomicU64 = AtomicU64::new(0);
 static SPEND_VELOCITY_REJECTIONS_TOTAL: AtomicU64 = AtomicU64::new(0);
+static QUOTA_REJECTIONS_TOTAL: AtomicU64 = AtomicU64::new(0);
 static REQUEST_DURATION_MS_SUM: AtomicU64 = AtomicU64::new(0);
 
 /// Measures safety evidence by comparing the certificate's bound reference
@@ -155,6 +157,7 @@ pub async fn metrics() -> impl IntoResponse {
     let misses = CACHE_MISSES.load(Ordering::Relaxed);
     let rate_limited = RATE_LIMITED_TOTAL.load(Ordering::Relaxed);
     let spend_rejected = SPEND_VELOCITY_REJECTIONS_TOTAL.load(Ordering::Relaxed);
+    let quota_rejected = QUOTA_REJECTIONS_TOTAL.load(Ordering::Relaxed);
     let duration_ms = REQUEST_DURATION_MS_SUM.load(Ordering::Relaxed);
 
     let output = format!(
@@ -174,13 +177,23 @@ pub async fn metrics() -> impl IntoResponse {
          # HELP sunborn_spend_velocity_exceeded_total Total requests rejected due to spend velocity budget limits\n\
          # TYPE sunborn_spend_velocity_exceeded_total counter\n\
          sunborn_spend_velocity_exceeded_total{{scope=\"process_local\"}} {}\n\
-         # HELP sunborn_request_duration_seconds_total Total request processing duration in seconds\n\
+         # HELP sunborn_quota_exceeded_total Total requests rejected by daily/monthly or free-pool quotas\n\
+         # TYPE sunborn_quota_exceeded_total counter\n\
+         sunborn_quota_exceeded_total{{scope=\"process_local\"}} {}\n\
+         # HELP sunborn_request_duration_seconds_total Total request processing duration in seconds\n
          # TYPE sunborn_request_duration_seconds_total counter\n\
          sunborn_request_duration_seconds_total{{scope=\"process_local\"}} {:.6}\n\
          # HELP sunborn_telemetry_source Telemetry origin scope indicator\n\
          # TYPE sunborn_telemetry_source gauge\n\
          sunborn_telemetry_source{{cluster=\"gateway-primary\",source=\"process_local_worker\"}} 1\n",
-        requests, exact, semantic, misses, rate_limited, spend_rejected, (duration_ms as f64) / 1000.0
+        requests,
+        exact,
+        semantic,
+        misses,
+        rate_limited,
+        spend_rejected,
+        quota_rejected,
+        (duration_ms as f64) / 1000.0
     );
 
     (
@@ -271,6 +284,33 @@ pub async fn execute_request_inner(
 
     // 2. Validate payload boundaries and constraints
     req.validate().map_err(AppError::from)?;
+
+    // Count the request against the tenant's daily/monthly quota and the
+    // aggregate free pool before any origin spend is reserved. Cache hits still
+    // count as requests; only origin spend is released on a hit.
+    if let Err(err) = state.quota_ledger.reserve(&req.tenant_id.0).await {
+        match err {
+            QuotaError::Exceeded {
+                scope,
+                window,
+                limit,
+                used,
+                retry_after_secs,
+            } => {
+                QUOTA_REJECTIONS_TOTAL.fetch_add(1, Ordering::Relaxed);
+                RATE_LIMITED_TOTAL.fetch_add(1, Ordering::Relaxed);
+                return Err(SunbornError::rate_limit(format!(
+                    "{} quota exceeded for tenant '{}': {} of {} requests used in the current {}; retry after {}s",
+                    scope, req.tenant_id.0, used, limit, window, retry_after_secs
+                ))
+                .into());
+            }
+            QuotaError::Unavailable(detail) => {
+                tracing::error!(tenant = %req.tenant_id.0, error = %detail, "Quota store unavailable; failing closed");
+                return Err(SunbornError::cache_unavailable(detail).into());
+            }
+        }
+    }
 
     // Snapshot fine-grained lineage watermark lease for transactional write-behind fencing
     let lineage_keys: Vec<String> = req
@@ -1469,6 +1509,113 @@ pub async fn set_spend_ceiling(
 }
 
 #[derive(Deserialize)]
+pub struct TenantQuotaRequest {
+    pub tenant_id: String,
+    pub tier: Option<String>,
+    pub daily_requests: u64,
+    pub monthly_requests: u64,
+}
+
+/// Operator control for daily/monthly tenant quotas. Enrollment is explicit;
+/// a tenant without a quota row keeps its existing admission behavior.
+pub async fn set_tenant_quota(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    Json(payload): Json<TenantQuotaRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    sec_ctx
+        .require_admin()
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
+    if payload.tenant_id.trim().is_empty() {
+        return Err(SunbornError::invalid_payload("tenant_id is required").into());
+    }
+    if !quota_values_fit_database(payload.daily_requests)
+        || !quota_values_fit_database(payload.monthly_requests)
+    {
+        return Err(SunbornError::invalid_payload(
+            "daily_requests and monthly_requests must fit a signed 64-bit counter",
+        )
+        .into());
+    }
+
+    let limits = sunborn_db::TenantQuotaLimits::new(
+        payload.tenant_id.clone(),
+        payload.tier.unwrap_or_else(|| "free".to_string()),
+        payload.daily_requests,
+        payload.monthly_requests,
+    );
+    state
+        .quota_ledger
+        .set_tenant_limits(limits)
+        .await
+        .map_err(quota_control_error)?;
+
+    Ok(Json(json!({
+        "status": "updated",
+        "tenant_id": payload.tenant_id,
+        "daily_requests": payload.daily_requests,
+        "monthly_requests": payload.monthly_requests,
+        "enforcement_scope": state.quota_ledger.enforcement_scope(),
+    })))
+}
+
+#[derive(Deserialize)]
+pub struct FreePoolRequest {
+    pub daily_requests: u64,
+    pub monthly_requests: u64,
+}
+
+/// Operator control for the aggregate free-pool ceiling.
+pub async fn set_free_pool(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    Json(payload): Json<FreePoolRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    sec_ctx
+        .require_admin()
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
+    if !quota_values_fit_database(payload.daily_requests)
+        || !quota_values_fit_database(payload.monthly_requests)
+    {
+        return Err(SunbornError::invalid_payload(
+            "daily_requests and monthly_requests must fit a signed 64-bit counter",
+        )
+        .into());
+    }
+
+    state
+        .quota_ledger
+        .set_free_pool_limits(sunborn_db::FreePoolLimits::new(
+            payload.daily_requests,
+            payload.monthly_requests,
+        ))
+        .await
+        .map_err(quota_control_error)?;
+
+    Ok(Json(json!({
+        "status": "updated",
+        "daily_requests": payload.daily_requests,
+        "monthly_requests": payload.monthly_requests,
+        "enforcement_scope": state.quota_ledger.enforcement_scope(),
+    })))
+}
+
+fn quota_values_fit_database(value: u64) -> bool {
+    value <= i64::MAX as u64
+}
+
+fn quota_control_error(err: QuotaError) -> AppError {
+    match err {
+        QuotaError::Unavailable(detail) => AppError::from(SunbornError::cache_unavailable(detail)),
+        QuotaError::Exceeded { .. } => AppError::from(SunbornError::invalid_payload(
+            "quota control cannot be applied while a limit is exceeded",
+        )),
+    }
+}
+
+#[derive(Deserialize)]
 pub struct InvalidationRequest {
     pub source_id: Uuid,
     pub tenant_id: String,
@@ -2139,6 +2286,7 @@ pub async fn delete_tenant(
         .map_err(AppError::from)?;
     let learning_deleted = state.learning_store.purge_tenant(&tenant);
     let _credentials_revoked = state.api_key_registry.revoke_tenant_keys(&tenant);
+    state.quota_ledger.remove_tenant(&tenant_id).await;
 
     // 1. Independent Read-After-Delete Verification Pass
     let (verified_erasure, residuals) =
@@ -2506,6 +2654,7 @@ pub async fn crypto_shred_tenant(
         .map_err(AppError::from)?;
     let learning_deleted = state.learning_store.purge_tenant(&tenant);
     let _credentials_revoked = state.api_key_registry.revoke_tenant_keys(&tenant);
+    state.quota_ledger.remove_tenant(&payload.tenant_id).await;
 
     // Independent Read-After-Delete Verification Pass
     let (verified_erasure, residuals) =

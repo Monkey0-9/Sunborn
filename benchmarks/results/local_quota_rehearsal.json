@@ -1,0 +1,115 @@
+{
+  "report": "Local free-tier quota rehearsal",
+  "status": "local rehearsal only; NOT B1 evidence",
+  "date": "2026-11-18",
+  "environment": {
+    "os": "Windows 11",
+    "gateway_binary": "target/debug/sunborn-gateway.exe (debug profile)",
+    "replicas": 2,
+    "ports": [
+      18080,
+      18081,
+      18082
+    ],
+    "postgres": "PostgreSQL 16.2 on x86_64-pc-mingw64, compiled by gcc.exe (x86_64-posix-seh-rev2, Built by MinGW-W64 project) 12.2.0, 64-bit",
+    "postgres_note": "Bundled pgserver instance under target/pgdata_sunborn_rehearsal; data directory removed after the run",
+    "transport": "loopback HTTP, no TLS, no ingress"
+  },
+  "cases": [
+    {
+      "name": "per-tenant daily limit",
+      "tenant": "tenant-alpha",
+      "limit": {
+        "daily_requests": 2,
+        "monthly_requests": 10
+      },
+      "results": [
+        {
+          "request": 1,
+          "status": 200,
+          "path": "origin_execute"
+        },
+        {
+          "request": 2,
+          "status": 200,
+          "path": "exact_cache_hit"
+        },
+        {
+          "request": 3,
+          "status": 429,
+          "detail": "tenant quota exceeded: 2 of 2 requests used in the current day"
+        }
+      ],
+      "durable_counters": {
+        "day": 2,
+        "month": 2
+      }
+    },
+    {
+      "name": "shared counter across replicas",
+      "tenant": "tenant-alpha",
+      "limit": {
+        "daily_requests": 4,
+        "monthly_requests": 10
+      },
+      "results": [
+        {
+          "replica": "A",
+          "status": 200
+        },
+        {
+          "replica": "B",
+          "status": 200
+        },
+        {
+          "replica": "A",
+          "status": 429,
+          "detail": "4 of 4 requests used in the current day"
+        }
+      ]
+    },
+    {
+      "name": "aggregate free pool with rollback",
+      "tenant": "tenant-beta",
+      "tenant_limit": {
+        "daily_requests": 10,
+        "monthly_requests": 10
+      },
+      "pool_limit": {
+        "daily_requests": 1,
+        "monthly_requests": 10
+      },
+      "results": [
+        {
+          "request": 1,
+          "status": 200
+        },
+        {
+          "request": 2,
+          "status": 429,
+          "detail": "free_pool quota exceeded: 1 of 1 requests used in the current day"
+        },
+        {
+          "pool_raised_to": 10,
+          "request": 3,
+          "status": 200
+        }
+      ],
+      "durable_counters": {
+        "tenant_day": 2,
+        "tenant_month": 2,
+        "pool_day": 2,
+        "pool_month": 2
+      },
+      "rollback": "The denied request did not increment the tenant or pool counters."
+    }
+  ],
+  "not_covered": [
+    "B1 projection of 2x peak",
+    "60-minute sustained load",
+    "production-sized cache, vector, and lineage data",
+    "TLS termination and ingress",
+    "one-replica loss and dependency restart",
+    "racing concurrent requests at the limit boundary"
+  ]
+}

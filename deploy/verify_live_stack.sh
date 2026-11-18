@@ -7,13 +7,30 @@
 set -eu
 (set -o pipefail 2>/dev/null) && set -o pipefail || true
 
+# The inline Python checks below print check marks; a cp1252 Windows console
+# cannot encode them and would abort the gate with a UnicodeEncodeError.
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${ROOT_DIR}"
 
-PYTHON_BIN="python"
-if command -v python3 >/dev/null 2>&1 && python3 -c "import sys" 2>/dev/null; then
-    PYTHON_BIN="python3"
+# Select an interpreter that can actually import PyYAML. On Windows "python3" is
+# often a shim for a different installation than "python", so testing for the
+# dependency matters more than the name.
+PYTHON_BIN=""
+for candidate in python3 python python.exe python3.exe; do
+    if command -v "${candidate}" >/dev/null 2>&1 && "${candidate}" -c "import yaml" >/dev/null 2>&1; then
+        PYTHON_BIN="${candidate}"
+        break
+    fi
+done
+
+if [ -z "${PYTHON_BIN}" ]; then
+    echo "  x PyYAML is required to parse the Compose and manifest files." >&2
+    echo "    Install it with: python -m pip install -r requirements-dev.txt" >&2
+    exit 1
 fi
 
 echo "=== Sunborn Platform: Live Stack Pre-Flight Verification ==="

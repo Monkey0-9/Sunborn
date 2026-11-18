@@ -1,41 +1,53 @@
 {
-  "benchmark_name": "Sunborn Multi-Worker Concurrent Soak & Latency Distribution",
-  "timestamp": "2026-11-16T16:22:00Z",
+  "benchmark_name": "Sunborn Multi-Worker Concurrent Gateway Burst & Latency Distribution",
+  "producer": "crates/sunborn-gateway/tests/concurrent_multiworker_soak_test.rs",
+  "commands": {
+    "release": "cargo test -p sunborn-gateway --release --test concurrent_multiworker_soak_test -- --nocapture",
+    "debug": "cargo test -p sunborn-gateway --test concurrent_multiworker_soak_test -- --nocapture"
+  },
+  "timestamps": {
+    "release": "2026-11-18",
+    "debug": "2026-11-18"
+  },
   "environment": {
-    "os": "Windows",
-    "runtime": "Tokio Async Multi-Threaded",
-    "concurrency_workers": 16
+    "os": "Windows 11",
+    "runtime": "Tokio multi-threaded",
+    "rustc": "1.96.0 (ac68faa20 2026-05-25)",
+    "cpu": "Intel64 Family 6 Model 183 Stepping 1",
+    "logical_cores": 20
   },
   "workload": {
     "total_requests": 10000,
-    "request_type": "POST /v1/requests (Authenticated Multi-Tier Exact Cache Hot Path)",
-    "tenant_isolation": "Verified",
-    "failed_requests": 0,
-    "error_rate": 0.0
+    "concurrency_workers": 16,
+    "path": "POST /v1/requests",
+    "configuration": "semantic cache disabled; exact-cache hot path after a single warmup request",
+    "transport": "in-process tower::ServiceExt::oneshot — no TCP, no TLS, no network hop",
+    "failed_requests": 0
   },
-  "unoptimized_debug_metrics": {
-    "total_elapsed_sec": 72.497,
-    "throughput_rps": 137.9,
-    "latency_p50_ms": 115.112,
-    "latency_p90_ms": 120.386,
-    "latency_p95_ms": 123.120,
-    "latency_p99_ms": 129.815,
-    "latency_p999_ms": 140.154,
-    "latency_max_ms": 151.171
+  "release_profile": {
+    "total_elapsed_sec": 0.900,
+    "throughput_rps": 11116.0,
+    "latency_p50_ms": 1.368,
+    "latency_p90_ms": 1.720,
+    "latency_p95_ms": 1.900,
+    "latency_p99_ms": 2.398,
+    "latency_p999_ms": 3.308,
+    "latency_max_ms": 3.669
   },
-  "release_profile_metrics": {
-    "throughput_rps": 14202.9,
-    "latency_p50_ms": 0.068,
-    "latency_p90_ms": 0.105,
-    "latency_p95_ms": 0.118,
-    "latency_p99_ms": 0.144,
-    "l1_memory_cache_throughput_rps": 871253.2,
-    "l1_memory_latency_p99_us": 2.1
+  "debug_profile": {
+    "total_elapsed_sec": 74.316,
+    "throughput_rps": 134.6,
+    "latency_p50_ms": 117.189,
+    "latency_p90_ms": 123.595,
+    "latency_p95_ms": 126.825,
+    "latency_p99_ms": 138.063,
+    "latency_p999_ms": 145.569,
+    "latency_max_ms": 147.793
   },
-  "stability_assessment": {
-    "memory_leak_detected": false,
-    "channel_leak_detected": false,
-    "concurrency_deadlock_detected": false,
-    "verdict": "PRODUCTION_SCALE_VERIFIED"
-  }
+  "notes": [
+    "Re-measured on 2026-11-18. A previous revision of this file carried 14,202.9 req/s with P50 0.068 ms and P99 0.144 ms as its 'release profile'. Those figures do not come from this test: they match crates/sunborn-gateway/tests/performance_test.rs, which drives 5,000 sequential requests and now records 13,241.1 req/s at P99 0.166 ms (see benchmarks/results/gateway_performance_run.json). Filing them here made an unreproducible claim out of a real measurement. This file now holds only what this test produces.",
+    "The debug numbers are what `cargo test` runs by default, which is the configuration the verification pipeline and CI use. Release is roughly 80x faster on this workload; expect the gap.",
+    "This is a burst, not endurance: 10,000 requests complete in under one second in release. It bounds the hot path's steady-state throughput. It does NOT demonstrate multi-hour stability or memory behaviour under sustained load.",
+    "Latency is measured in-process around the router. Adding a real network hop, TLS termination, or a proxy will raise these figures."
+  ]
 }
