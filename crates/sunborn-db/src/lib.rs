@@ -46,6 +46,8 @@ pub use models::{
     AuditRecord, DurableApiCredentialRecord, DurableCacheRecord, FreePoolLimits,
     NewApiCredentialRecord, OutboxRecord, TenantQuotaLimits, TenantRecord,
 };
-pub use postgres::{PostgresDatabaseStore, QuotaReservationOutcome, SpendReservationOutcome};
+pub use postgres::{
+    PostgresDatabaseStore, QuotaReservationOutcome, RateLimitOutcome, SpendReservationOutcome,
+};
 pub use repository::{DatabaseStore, MemoryDatabaseStore};
 pub use write_behind::{WriteBehindFlusher, WriteBehindTask};

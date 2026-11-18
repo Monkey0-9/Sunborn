@@ -1,11 +1,9 @@
 use axum::{
-    extract::Request,
-    http::{HeaderMap, StatusCode},
+    extract::{Request, State},
+    http::{header::HeaderValue, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
-    Json,
 };
-use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
@@ -178,69 +176,88 @@ pub fn get_login_rate_limiter() -> &'static LoginRateLimiter {
     LOGIN_LIMITER.get_or_init(LoginRateLimiter::new)
 }
 
-pub async fn rate_limit_middleware(headers: HeaderMap, req: Request, next: Next) -> Response {
-    // 1. Enforce tenant identity from authenticated SecurityContext over raw caller headers
-    let tenant = if let Some(sec_ctx) = req
+fn set_rate_headers(
+    response: &mut Response,
+    limit: u64,
+    remaining: u64,
+    reset_secs: u64,
+    retry_after_secs: Option<u64>,
+) {
+    let headers = response.headers_mut();
+    if let Ok(value) = HeaderValue::from_str(&limit.to_string()) {
+        headers.insert("x-ratelimit-limit", value);
+    }
+    if let Ok(value) = HeaderValue::from_str(&remaining.to_string()) {
+        headers.insert("x-ratelimit-remaining", value);
+    }
+    if let Ok(value) = HeaderValue::from_str(&reset_secs.to_string()) {
+        headers.insert("x-ratelimit-reset", value);
+    }
+    if let Some(retry_after_secs) = retry_after_secs {
+        if let Ok(value) = HeaderValue::from_str(&retry_after_secs.to_string()) {
+            headers.insert("retry-after", value);
+        }
+    }
+}
+
+/// Enforces the cluster-wide, per-tenant RPS bucket for quota-enrolled tenants.
+///
+/// This layer must run inside the authentication layer so the tenant comes from
+/// the verified credential, never from a caller header. Tenants without a quota
+/// row are passed through unchanged.
+pub async fn rate_limit_middleware(
+    State(state): State<crate::state::AppState>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let tenant = match req
         .extensions()
         .get::<crate::middleware::auth::SecurityContext>()
     {
-        sec_ctx.tenant_id.0.clone()
-    } else {
-        headers
-            .get("x-tenant-id")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("default-tenant")
-            .to_string()
+        Some(sec_ctx) => sec_ctx.tenant_id.0.clone(),
+        None => return next.run(req).await,
     };
 
-    // Standard rate limiter instance per process / cluster
-    static LIMITER: std::sync::OnceLock<RateLimiter> = std::sync::OnceLock::new();
-    let limiter = LIMITER.get_or_init(|| {
-        let rps = std::env::var("SUNBORN_RATE_LIMIT_RPS")
-            .ok()
-            .and_then(|v| v.parse::<f64>().ok())
-            .unwrap_or(100.0);
-        RateLimiter::new(rps, rps)
-    });
-
-    let status = limiter.check_status(&tenant).await;
-    if status.allowed {
-        let mut response = next.run(req).await;
-        let resp_headers = response.headers_mut();
-        if let Ok(limit_val) = status.limit.to_string().parse() {
-            resp_headers.insert("x-ratelimit-limit", limit_val);
+    match state.quota_ledger.reserve_rate(&tenant).await {
+        Ok(None) => next.run(req).await,
+        Ok(Some(status)) => {
+            let mut response = next.run(req).await;
+            set_rate_headers(
+                &mut response,
+                status.limit,
+                status.remaining,
+                status.reset_secs,
+                None,
+            );
+            response
         }
-        if let Ok(rem_val) = status.remaining.to_string().parse() {
-            resp_headers.insert("x-ratelimit-remaining", rem_val);
-        }
-        if let Ok(reset_val) = status.reset_secs.to_string().parse() {
-            resp_headers.insert("x-ratelimit-reset", reset_val);
-        }
-        response
-    } else {
-        let mut resp = (
-            StatusCode::TOO_MANY_REQUESTS,
-            Json(json!({
-                "type": "https://sunborn.ai/errors/rate-limit-exceeded",
-                "title": "Too Many Requests",
-                "status": 429,
-                "detail": format!("Rate limit exceeded for tenant '{}'. Please retry later.", tenant)
-            })),
-        )
+        Err(crate::quota::RateLimitError::Exceeded {
+            limit,
+            retry_after_secs,
+        }) => {
+            let mut response = crate::handlers::AppError::from(sunborn_core::SunbornError::rate_limit(format!(
+                "Cluster-wide rate limit of {} requests/second exceeded for tenant '{}'; retry after {}s",
+                limit, tenant, retry_after_secs
+            )))
             .into_response();
-        let resp_headers = resp.headers_mut();
-        if let Ok(retry_val) = status.reset_secs.max(1).to_string().parse() {
-            resp_headers.insert("retry-after", retry_val);
+            *response.status_mut() = StatusCode::TOO_MANY_REQUESTS;
+            set_rate_headers(
+                &mut response,
+                limit,
+                0,
+                retry_after_secs,
+                Some(retry_after_secs),
+            );
+            response
         }
-        if let Ok(limit_val) = status.limit.to_string().parse() {
-            resp_headers.insert("x-ratelimit-limit", limit_val);
+        Err(crate::quota::RateLimitError::Unavailable(detail)) => {
+            tracing::error!(tenant = %tenant, error = %detail, "Cluster rate-limit store unavailable; failing closed");
+            let mut response = crate::handlers::AppError::from(
+                sunborn_core::SunbornError::cache_unavailable(detail),
+            )
+            .into_response();
+            *response.status_mut() = StatusCode::SERVICE_UNAVAILABLE;
+            response
         }
-        if let Ok(rem_val) = 0.to_string().parse() {
-            resp_headers.insert("x-ratelimit-remaining", rem_val);
-        }
-        if let Ok(reset_val) = status.reset_secs.max(1).to_string().parse() {
-            resp_headers.insert("x-ratelimit-reset", reset_val);
-        }
-        resp
     }
 }

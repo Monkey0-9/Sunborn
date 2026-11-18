@@ -17,9 +17,10 @@ and refuses to serve it when the reuse cannot be proven safe.*
 [![Status](https://img.shields.io/badge/Status-Conditional%20GO%20%C2%B7%20Controlled%20pilot-yellow.svg)](docs/STATUS.md)
 
 **[Start in 60 seconds](#2-start-in-60-seconds)** ·
+**[Client Showcase](scripts/client_showcase.py)** ·
+**[Enterprise Architecture Dossier](docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md)** ·
 **[What is measured](#4-measured-results)** ·
 **[What is not claimed](#5-what-this-does-not-claim)** ·
-**[Architecture](#6-architecture)** ·
 **[Status (SSOT)](docs/STATUS.md)** ·
 **[Verification](#14-verification-pipeline)**
 
@@ -63,6 +64,12 @@ Request ──▶ Canonicalize ──▶ Auth / FinOps ──▶ Exact cache ─
 ---
 
 ## 2. Start in 60 seconds
+
+**Enterprise evaluation suite** — zero setup, self-contained interactive verification of all 6 architectural pillars:
+
+```bash
+python scripts/client_showcase.py --self-test
+```
 
 **Full stack** — gateway, control plane, PostgreSQL, DragonflyDB, Qdrant:
 
@@ -122,6 +129,8 @@ each artifact; the ratios between configurations travel better than the absolute
 | **Test surface** | 315 Rust + 38 frontend + 27 Python tests · 10 routes with 0 serious/critical axe violations · 208+ verified tab stops | [`docs/STATUS.md`](docs/STATUS.md) |
 | **Formal models** | 3 TLC configurations, no errors (2,245 / 601 / 21 states explored) | [`formal/`](formal/), [`scripts/run_tlaplus.sh`](scripts/run_tlaplus.sh) |
 | **Contract parity** | 51/51 OpenAPI operations · all 50 router paths classified, 45/45 reject anonymous callers | [`docs/api/openapi.yaml`](docs/api/openapi.yaml) |
+| **Enterprise evaluation** | All 6 pillars verified (exact cache, AST guardrails, causal graph, FinOps, Merkle DAG, health) | [`scripts/client_showcase.py`](scripts/client_showcase.py) |
+| **Systems architecture** | Defense-in-depth, active-active multi-region, formal TLA+ bounds, SOC 2 / ISO 27001 mapping | [`docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md`](docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md) |
 | **Supply chain** | CycloneDX v1.5 SBOM, 369 components, zero known high/critical CVEs | [`sbom.cyclonedx.json`](sbom.cyclonedx.json) |
 
 Reproduce all of it:

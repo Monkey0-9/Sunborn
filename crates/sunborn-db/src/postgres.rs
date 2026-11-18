@@ -4,6 +4,7 @@ use crate::models::{
 };
 use crate::repository::{DatabaseStore, MemoryDatabaseStore};
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -33,6 +34,7 @@ const MIGRATION_0005: &str = include_str!("../../../migrations/0005_persistent_e
 const MIGRATION_0006: &str = include_str!("../../../migrations/0006_durable_outbox_queue.sql");
 const MIGRATION_0007: &str = include_str!("../../../migrations/0007_distributed_spend_ledger.sql");
 const MIGRATION_0008: &str = include_str!("../../../migrations/0008_free_tier_quotas.sql");
+const MIGRATION_0009: &str = include_str!("../../../migrations/0009_cluster_rate_limits.sql");
 
 /// Outcome of a cluster-wide spend reservation attempt.
 #[derive(Debug, Clone, PartialEq)]
@@ -60,6 +62,23 @@ pub enum QuotaReservationOutcome {
         used: u64,
         retry_after_secs: u64,
     },
+    /// The authoritative store could not be reached. Callers must fail closed.
+    StoreUnavailable,
+}
+
+/// Outcome of a cluster-wide per-tenant token-bucket reservation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RateLimitOutcome {
+    /// The request consumed one token.
+    Allowed {
+        limit: u64,
+        remaining: u64,
+        reset_secs: u64,
+    },
+    /// The bucket is empty.
+    Denied { limit: u64, retry_after_secs: u64 },
+    /// The tenant has no quota row, so the RPS bucket does not apply.
+    NotEnrolled,
     /// The authoritative store could not be reached. Callers must fail closed.
     StoreUnavailable,
 }
@@ -301,6 +320,7 @@ impl PostgresDatabaseStore {
             (6, "0006_durable_outbox_queue", MIGRATION_0006),
             (7, "0007_distributed_spend_ledger", MIGRATION_0007),
             (8, "0008_free_tier_quotas", MIGRATION_0008),
+            (9, "0009_cluster_rate_limits", MIGRATION_0009),
         ];
 
         for (version, name, sql) in migrations {
@@ -886,6 +906,134 @@ impl PostgresDatabaseStore {
         }
     }
 
+    /// Atomically consumes one token from the tenant's cluster-wide RPS bucket.
+    ///
+    /// Only quota-enrolled tenants participate, so enabling this limiter does not
+    /// change admission for existing tenants. The row lock serializes concurrent
+    /// reservations for the same tenant across every replica.
+    pub async fn reserve_rate_limit(&self, tenant_id: &str, rps: f64) -> RateLimitOutcome {
+        if rps <= 0.0 {
+            return RateLimitOutcome::Allowed {
+                limit: 0,
+                remaining: 0,
+                reset_secs: 0,
+            };
+        }
+        let Some(pool) = self.get_pool().await else {
+            return RateLimitOutcome::StoreUnavailable;
+        };
+        let mut tx = match pool.begin().await {
+            Ok(tx) => tx,
+            Err(err) => {
+                tracing::error!(error = %err, "Failed to begin rate-limit transaction");
+                return RateLimitOutcome::StoreUnavailable;
+            }
+        };
+
+        let enrolled: Option<(i32,)> =
+            match sqlx::query_as("SELECT 1 FROM tenant_quota_limits WHERE tenant_id = $1")
+                .bind(tenant_id)
+                .fetch_optional(&mut *tx)
+                .await
+            {
+                Ok(row) => row,
+                Err(err) => {
+                    tracing::error!(error = %err, "Failed to read rate-limit enrollment");
+                    return RateLimitOutcome::StoreUnavailable;
+                }
+            };
+        if enrolled.is_none() {
+            let _ = tx.rollback().await;
+            return RateLimitOutcome::NotEnrolled;
+        }
+
+        // Seed a full bucket on first use. On conflict this is a no-op, and the
+        // following SELECT ... FOR UPDATE waits for any in-flight reservation.
+        if let Err(err) = sqlx::query(
+            "INSERT INTO tenant_rate_limit_buckets (tenant_id, tokens, last_refill)
+             VALUES ($1, $2, clock_timestamp())
+             ON CONFLICT (tenant_id) DO NOTHING",
+        )
+        .bind(tenant_id)
+        .bind(rps.max(1.0))
+        .execute(&mut *tx)
+        .await
+        {
+            tracing::error!(error = %err, "Failed to seed rate-limit bucket");
+            return RateLimitOutcome::StoreUnavailable;
+        }
+
+        let bucket: Option<(f64, DateTime<Utc>, DateTime<Utc>)> = match sqlx::query_as(
+            "SELECT tokens, last_refill, clock_timestamp() AS now
+             FROM tenant_rate_limit_buckets
+             WHERE tenant_id = $1
+             FOR UPDATE",
+        )
+        .bind(tenant_id)
+        .fetch_optional(&mut *tx)
+        .await
+        {
+            Ok(row) => row,
+            Err(err) => {
+                tracing::error!(error = %err, "Failed to lock rate-limit bucket");
+                return RateLimitOutcome::StoreUnavailable;
+            }
+        };
+        let Some((stored_tokens, last_refill, now)) = bucket else {
+            let _ = tx.rollback().await;
+            return RateLimitOutcome::StoreUnavailable;
+        };
+
+        let capacity = rps.max(1.0);
+        let elapsed = (now - last_refill).num_milliseconds().max(0) as f64 / 1000.0;
+        let tokens = (stored_tokens + elapsed * rps).min(capacity);
+        let limit = capacity.round() as u64;
+
+        let (tokens, outcome) = if tokens >= 1.0 {
+            let tokens = tokens - 1.0;
+            let remaining = tokens.floor() as u64;
+            let reset_secs = ((capacity - tokens) / rps).ceil().max(0.0) as u64;
+            (
+                tokens,
+                RateLimitOutcome::Allowed {
+                    limit,
+                    remaining,
+                    reset_secs,
+                },
+            )
+        } else {
+            let retry_after_secs = ((1.0 - tokens) / rps).ceil().max(1.0) as u64;
+            (
+                tokens,
+                RateLimitOutcome::Denied {
+                    limit,
+                    retry_after_secs,
+                },
+            )
+        };
+
+        if let Err(err) = sqlx::query(
+            "UPDATE tenant_rate_limit_buckets
+             SET tokens = $2, last_refill = $3
+             WHERE tenant_id = $1",
+        )
+        .bind(tenant_id)
+        .bind(tokens)
+        .bind(now)
+        .execute(&mut *tx)
+        .await
+        {
+            tracing::error!(error = %err, "Failed to update rate-limit bucket");
+            return RateLimitOutcome::StoreUnavailable;
+        }
+
+        if let Err(err) = tx.commit().await {
+            tracing::error!(error = %err, "Failed to commit rate-limit reservation");
+            return RateLimitOutcome::StoreUnavailable;
+        }
+        outcome
+    }
+
     /// Drops quota usage windows that cannot affect the current day or month.
     /// Called once per process startup so the table does not grow without a
     /// background job.
@@ -903,6 +1051,14 @@ impl PostgresDatabaseStore {
         sqlx::query(
             "DELETE FROM free_pool_usage
              WHERE window_start < date_trunc('month', NOW()) - INTERVAL '12 months'",
+        )
+        .execute(&pool)
+        .await
+        .map_err(|e| SunbornError::database(e.to_string()))?;
+        // An idle bucket refills to full on next use, so removing it is safe.
+        sqlx::query(
+            "DELETE FROM tenant_rate_limit_buckets
+             WHERE last_refill < NOW() - INTERVAL '1 day'",
         )
         .execute(&pool)
         .await
@@ -1869,6 +2025,10 @@ impl DatabaseStore for PostgresDatabaseStore {
                 .bind(tenant_id)
                 .execute(&pool)
                 .await;
+            let _ = sqlx::query("DELETE FROM tenant_rate_limit_buckets WHERE tenant_id = $1")
+                .bind(tenant_id)
+                .execute(&pool)
+                .await;
 
             // 6. Delete tenant outbox events
             let _ = sqlx::query("DELETE FROM outbox_events WHERE tenant_id = $1")
@@ -1969,7 +2129,8 @@ impl DatabaseStore for PostgresDatabaseStore {
             let quota_row: (i64,) = sqlx::query_as(
                 "SELECT
                    (SELECT COUNT(*) FROM tenant_quota_limits WHERE tenant_id = $1)
-                 + (SELECT COUNT(*) FROM tenant_quota_usage WHERE tenant_id = $1)",
+                 + (SELECT COUNT(*) FROM tenant_quota_usage WHERE tenant_id = $1)
+                 + (SELECT COUNT(*) FROM tenant_rate_limit_buckets WHERE tenant_id = $1)",
             )
             .bind(tenant_id)
             .fetch_one(&pool)

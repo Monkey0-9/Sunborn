@@ -1,7 +1,7 @@
 {
   "metadata": {
     "title": "Sunborn Graph-Based Dependency Caching & Storage Representation Benchmark",
-    "timestamp_utc": "2026-11-18T15:37:12Z",
+    "timestamp_utc": "2026-11-18T16:05:57Z",
     "harness_version": "1.0.0"
   },
   "storage_evaluation": {
@@ -15,23 +15,23 @@
       "adjacency_list": {
         "memory_mb": 5.69,
         "bytes_per_edge": 16.91,
-        "single_source_latency_us": 0.09,
-        "multi_50_source_latency_us": 112.68,
-        "init_time_ms": 9.71
+        "single_source_latency_us": 0.1,
+        "multi_50_source_latency_us": 110.18,
+        "init_time_ms": 11.91
       },
       "compressed_sparse_row_csr": {
         "memory_mb": 2.73,
         "bytes_per_edge": 8.11,
-        "single_source_latency_us": 0.74,
-        "multi_50_source_latency_us": 120.27,
-        "init_time_ms": 78.46
+        "single_source_latency_us": 0.8,
+        "multi_50_source_latency_us": 121.98,
+        "init_time_ms": 98.54
       },
       "roaring_bitmap_simd": {
         "memory_mb": 0.24,
         "bytes_per_edge": 0.7,
-        "single_source_latency_us": 0.11,
-        "multi_50_source_latency_us": 148.04,
-        "init_time_ms": 27.65
+        "single_source_latency_us": 0.13,
+        "multi_50_source_latency_us": 148.57,
+        "init_time_ms": 31.48
       },
       "neo4j_cypher_database": {
         "memory_mb": 475.58,

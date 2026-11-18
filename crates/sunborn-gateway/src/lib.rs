@@ -69,6 +69,8 @@ pub fn create_router(state: AppState) -> Router {
             HeaderName::from_static("x-request-id"),
         ]);
 
+    let rate_limit_state = state.clone();
+
     Router::new()
         .route("/health", get(handlers::health))
         .route("/ready", get(handlers::ready))
@@ -185,6 +187,10 @@ pub fn create_router(state: AppState) -> Router {
             "/v1/learning/rollback",
             post(handlers::rollback_learning_policy),
         )
+        .layer(axum::middleware::from_fn_with_state(
+            rate_limit_state,
+            middleware::rate_limit::rate_limit_middleware,
+        ))
         .layer(axum::middleware::from_fn(middleware::auth::auth_middleware))
         .layer(axum::middleware::from_fn(
             middleware::trace::request_id_middleware,

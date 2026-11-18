@@ -38,12 +38,12 @@ limitation that matters for a free tier.
 | Tenant identity | Request tenant is taken from the verified credential, not from a caller header | [`crates/sunborn-gateway/src/middleware/auth.rs`](../../crates/sunborn-gateway/src/middleware/auth.rs) | `tenants.tier` is stored, but tier and tenant status are not admission gates |
 | API-key lifecycle | SHA-256 hashed keys, expiry, per-key revocation, tenant-wide revocation | [`crates/sunborn-gateway/src/middleware/auth.rs`](../../crates/sunborn-gateway/src/middleware/auth.rs), [`migrations/0002_durable_identity_and_keys.sql`](../../migrations/0002_durable_identity_and_keys.sql) | Key creation is an operator action, not self-serve |
 | Model allowlist | Per-credential `allowed_models`; `*` means all; checked before dispatch | `SecurityContext::allows_model`, [`crates/sunborn-gateway/src/handlers.rs`](../../crates/sunborn-gateway/src/handlers.rs) | The list is per key, not per tier; a tier default must be applied at provisioning |
-| Per-tenant rate limit | Token bucket keyed by authenticated tenant; `SUNBORN_RATE_LIMIT_RPS` default 100; standard `x-ratelimit-*` headers and `Retry-After` | [`crates/sunborn-gateway/src/middleware/rate_limit.rs`](../../crates/sunborn-gateway/src/middleware/rate_limit.rs) | **The bucket is process-local.** With N replicas the effective ceiling is roughly N times the configured rate. It cannot express a monthly or daily cap |
+| Per-tenant rate limit | Token bucket keyed by authenticated tenant; `SUNBORN_RATE_LIMIT_RPS` default 100, `0` disables; standard `x-ratelimit-*` headers and `Retry-After` | [`crates/sunborn-gateway/src/middleware/rate_limit.rs`](../../crates/sunborn-gateway/src/middleware/rate_limit.rs), [`crates/sunborn-gateway/src/quota.rs`](../../crates/sunborn-gateway/src/quota.rs) | Applies only to quota-enrolled tenants. The bucket is cluster-wide when PostgreSQL is active; the in-memory fallback is process-local. It cannot express a monthly or daily cap |
 | Login rate limit | 5-attempt bucket refilling at 1/s, keyed per client; kill switch `SUNBORN_FEATURE_LOGIN_RATE_LIMIT` | [`crates/sunborn-gateway/src/middleware/rate_limit.rs`](../../crates/sunborn-gateway/src/middleware/rate_limit.rs) | Protects the login path only; it is not a tenant quota |
 | Spend reservation | Check-and-reserve before origin dispatch; released on a cache hit; settled with actual cost | [`crates/sunborn-gateway/src/finops.rs`](../../crates/sunborn-gateway/src/finops.rs), [`crates/sunborn-gateway/src/handlers.rs`](../../crates/sunborn-gateway/src/handlers.rs) | Estimated from prompt word count and a fixed 500-token completion assumption |
 | Durable spend ledger | Cluster-wide enforcement with `pg_advisory_xact_lock(hashtextextended(tenant_id, 0))`; reservations and settlements are unique | [`crates/sunborn-db/src/postgres.rs`](../../crates/sunborn-db/src/postgres.rs), [`migrations/0007_distributed_spend_ledger.sql`](../../migrations/0007_distributed_spend_ledger.sql) | Requires PostgreSQL; the in-memory backend is process-local |
 | Spend ceiling | Rolling-window ceiling per tenant, default `$100` per 60 s via `SUNBORN_MAX_SPEND_PER_WINDOW_USD`; durable override through `POST /v1/governance/spend-ceiling` (admin only) | [`crates/sunborn-core/src/finops.rs`](../../crates/sunborn-core/src/finops.rs), [`crates/sunborn-gateway/src/handlers.rs`](../../crates/sunborn-gateway/src/handlers.rs) | A velocity ceiling, not a monthly spend budget; the free pool is a request ceiling, not a spend ceiling |
-| Request quotas | Opt-in daily/monthly counters per tenant and an aggregate free-pool counter; PostgreSQL transactions with per-tenant and pool advisory locks; in-memory fallback for single-replica development; admin controls at `POST /v1/governance/tenant-quota` and `POST /v1/governance/free-pool` | [`crates/sunborn-gateway/src/quota.rs`](../../crates/sunborn-gateway/src/quota.rs), [`crates/sunborn-db/src/postgres.rs`](../../crates/sunborn-db/src/postgres.rs), [`migrations/0008_free_tier_quotas.sql`](../../migrations/0008_free_tier_quotas.sql) | Enrollment is explicit and operator-driven; there are no tier defaults, and the RPS bucket is still process-local |
+| Request quotas | Opt-in daily/monthly counters per tenant and an aggregate free-pool counter; PostgreSQL transactions with per-tenant and pool advisory locks; in-memory fallback for single-replica development; admin controls at `POST /v1/governance/tenant-quota` and `POST /v1/governance/free-pool` | [`crates/sunborn-gateway/src/quota.rs`](../../crates/sunborn-gateway/src/quota.rs), [`crates/sunborn-db/src/postgres.rs`](../../crates/sunborn-db/src/postgres.rs), [`migrations/0008_free_tier_quotas.sql`](../../migrations/0008_free_tier_quotas.sql) | Enrollment is explicit and operator-driven; there are no tier defaults, and the RPS bucket is cluster-wide only when PostgreSQL is active |
 | Fail-closed spend | Ledger unreachable returns `503`; ceiling exceeded returns `429` | [`crates/sunborn-gateway/src/finops.rs`](../../crates/sunborn-gateway/src/finops.rs), [`crates/sunborn-gateway/src/handlers.rs`](../../crates/sunborn-gateway/src/handlers.rs) | Correct by design, and it means a ledger outage is a free-tier outage |
 | Request-size bound | 4 MiB body limit | [`crates/sunborn-gateway/src/lib.rs`](../../crates/sunborn-gateway/src/lib.rs) | Bounds one request, not a tenant's daily volume |
 | Cache-first path | Exact hit, then guarded semantic path; abstention routes upstream | [`crates/sunborn-gateway/src/handlers.rs`](../../crates/sunborn-gateway/src/handlers.rs) | Free-tier economics depend on recall, which is measured at 20% on the held-out set |
@@ -53,7 +53,8 @@ Two facts follow from this table and should be stated before any launch material
 
 - **Quota enforcement exists but is opt-in.** A tenant is counted only after an
   operator writes a quota row and, for the aggregate ceiling, a free-pool row. There
-  are still no tier defaults, no token counters, and no cluster-wide RPS bucket.
+  are still no tier defaults and no token counters. The RPS bucket is cluster-wide
+  for enrolled tenants when PostgreSQL is active.
 - **The spend estimate is an estimate.** Admission reserves a cost derived from prompt
   length and a fixed 500-token completion assumption; settlement records the actual
   cost. The proposed free-tier completion cap is 1,000 tokens, so the reservation must
@@ -71,7 +72,7 @@ aggregate pool now exist; the remaining pieces are entry work for private beta.
 | Addition | Why it is required | Status | Needed before |
 |---|---|---|---|
 | Tenant `tier` and quota record | One authoritative place for class, limits, and reset window | Implemented in migration 0008 and the admin quota endpoint; tier defaults are not applied automatically. A replica that has seen a tenant as unenrolled re-checks after at most 60 seconds. | Beta entry |
-| Shared rate limiter | A per-process bucket multiplies by replica count; free-tier RPS must be cluster-wide | Not implemented; the RPS bucket remains per process | Beta entry |
+| Shared rate limiter | A per-process bucket multiplies by replica count; free-tier RPS must be cluster-wide | Implemented in migration 0009 and the rate-limit middleware for quota-enrolled tenants. The in-memory fallback remains process-local. | Beta entry |
 | Daily and monthly request counters | A velocity ceiling cannot express "1,000 requests per month" | Implemented and unit-tested; multi-replica concurrency evidence pending | B2 |
 | Enforced prompt/completion caps | `max_tokens` is currently client-supplied and forwarded; a free tier must clamp it | Not implemented | B2 |
 | Global free-pool counter | Per-tenant ceilings bound each tenant, not the aggregate; the pool needs its own ceiling | Implemented as an opt-in request counter; spend reconciliation pending | B2 |
@@ -147,7 +148,7 @@ not run today; steps marked **(if enrolled)** run only for tenants with a quota 
 1. Authenticate key                  -> 401 invalid, expired, or revoked key
 2. Resolve tenant and tier           -> 403 suspended or class not entitled (planned)
 3. Check model allowlist             -> 403 model not permitted for this credential
-4. Check rate limit                  -> 429 with Retry-After (process-local today)
+4. Check rate limit                  -> 429 with Retry-After (cluster-wide if enrolled and PostgreSQL is active)
 5. Check daily/monthly counters      -> 429 with the reset window (if enrolled)
 6. Reserve estimated spend           -> 429 ceiling exceeded, or 503 ledger unavailable
 7. Exact cache lookup                -> hit: release reservation, return
@@ -293,7 +294,7 @@ changes correctness behavior. If it does, the design is wrong.
 | Work | Evidence it is done | Owner |
 |---|---|---|
 | Tier/quota schema and migration | Migration applies on startup; forward/back test against a live database | Data + Backend |
-| Shared rate limiter | Two-replica test showing the configured limit is cluster-wide, not doubled | Backend + SRE |
+| Shared rate limiter | Implemented; two-replica rehearsal showing the configured limit is cluster-wide, not doubled | Backend + SRE |
 | Daily/monthly counters | Implemented; two-replica concurrency test showing no over-admission under racing replicas | Backend |
 | Enforced token caps | Request test showing a clamped completion and a rejected oversized prompt | Backend |
 | Global pool counter | Implemented; ledger export reconciling aggregate usage to the pool ceiling for a full cycle (B2) | FinOps + SRE |

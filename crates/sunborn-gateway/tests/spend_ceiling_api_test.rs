@@ -141,6 +141,64 @@ async fn admin_can_enroll_a_tenant_quota_and_free_pool() {
     assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn concurrent_requests_never_exceed_the_enrolled_quota() {
+    let state = state_with_keys();
+    state
+        .quota_ledger
+        .set_tenant_limits(sunborn_db::TenantQuotaLimits::new(
+            "tenant-regular",
+            "free",
+            5,
+            100,
+        ))
+        .await
+        .expect("enroll tenant");
+    let app = create_router(state.clone());
+
+    let mut handles = Vec::new();
+    for _ in 0..30 {
+        let app = app.clone();
+        handles.push(tokio::spawn(async move {
+            app.oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/requests")
+                    .header("content-type", "application/json")
+                    .header("x-api-key", "user-spend-key")
+                    .body(Body::from(
+                        serde_json::to_vec(&serde_json::json!({
+                            "tenant_id": "",
+                            "application_id": "",
+                            "model": "gpt-4o",
+                            "prompt": "What is the capital of France?"
+                        }))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+            .status()
+        }));
+    }
+
+    let mut admitted = 0;
+    let mut rejected = 0;
+    for handle in handles {
+        match handle.await.expect("request task joins") {
+            StatusCode::OK => admitted += 1,
+            StatusCode::TOO_MANY_REQUESTS => rejected += 1,
+            other => panic!("unexpected status under quota race: {other}"),
+        }
+    }
+    assert_eq!(admitted, 5, "exactly the daily limit must be admitted");
+    assert_eq!(
+        rejected, 25,
+        "every request past the boundary must be rejected"
+    );
+}
+
 #[tokio::test]
 async fn non_admin_and_invalid_ceilings_are_rejected() {
     let state = state_with_keys();
