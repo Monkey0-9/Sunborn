@@ -238,9 +238,13 @@ The rehearsal observed:
 - a shared 4/day limit returning `200` from replica A, `200` from replica B, then `429`
   from replica A;
 - a 1/day free pool returning `200`, then `429`, then `200` after the pool was raised,
-  with tenant and pool counters both at 2, showing the denied request rolled back.
+  with tenant and pool counters both at 2, showing the denied request rolled back;
+- a 2 rps cluster-wide bucket returning `200` from replica A with one token left,
+  `200` from replica B with zero left, then `429` from both before a 0.6 s refill.
+  Only the three admitted requests reached the quota counter.
 
-This is **not B1 evidence**. It does not include the 2× projection, a 60-minute run,
+A separate 30-request race test at a 5/day boundary admitted exactly 5 and rejected
+25. This is **not B1 evidence**. It does not include the 2× projection, a 60-minute run,
 production-sized data, TLS/ingress, fault injection, or racing requests at the limit
 boundary. Those remain open.
 

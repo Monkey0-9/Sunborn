@@ -102,6 +102,41 @@
         "pool_month": 2
       },
       "rollback": "The denied request did not increment the tenant or pool counters."
+    },
+    {
+      "name": "cluster-wide RPS across replicas",
+      "tenant": "tenant-alpha",
+      "limit_rps": 2,
+      "results": [
+        {
+          "replica": "A",
+          "status": 200,
+          "remaining": 1
+        },
+        {
+          "replica": "B",
+          "status": 200,
+          "remaining": 0
+        },
+        {
+          "replica": "A",
+          "status": 429,
+          "retry_after_secs": 1
+        },
+        {
+          "replica": "B",
+          "status": 429,
+          "retry_after_secs": 1
+        },
+        {
+          "replica": "A",
+          "after_seconds": 0.6,
+          "status": 200,
+          "remaining": 0
+        }
+      ],
+      "quota_usage": 3,
+      "note": "Only the three admitted requests reached the quota counter; the two 429s did not."
     }
   ],
   "not_covered": [

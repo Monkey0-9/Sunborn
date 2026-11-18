@@ -36,14 +36,14 @@ re-run 2026-11-18 where the result changed.
 
 - [x] `cargo fmt --all -- --check` exits 0.
 - [x] `cargo check --workspace --all-targets` exits 0 with no warnings.
-- [x] `cargo test --workspace --all-targets`: 297 passed, 0 failed, 42 suites.
+- [x] `cargo test --workspace --all-targets -- --test-threads=1`: 328 passed, 0 failed, 44 suites.
 - [x] `cargo clippy --workspace --all-targets --all-features -- -D warnings` exits 0.
 - [x] Frontend production build succeeds.
 - [x] Frontend tests: 38 passed, 0 failed.
 - [x] WCAG 2.2 AA axe sweep: 10 routes, 0 serious or critical violations.
 - [x] Keyboard and focus audit: 10 routes, 208+ tab stops, visible focus ring.
 - [x] Python SDK packaging and clean install: 27 tests pass.
-- [x] OpenAPI 3.1 drift: 51/51 operations match.
+- [x] OpenAPI 3.1 drift: 53/53 operations match.
 - [x] Route authorization parity: all 50 router paths classified; 45/45 reject
       anonymous callers; 22/22 admin routes reject non-admin keys.
 - [x] TLA+ model checking: 3 configurations, no errors.
@@ -91,14 +91,18 @@ Entry gate: N1–N4 complete and a new verdict recorded.
 ### 2.1 Free-tier mechanics
 
 - [ ] Tenant `tier` and quota schema migrated and forward/back tested.
-- [ ] Cluster-wide rate limiter replaces the per-process bucket for free tenants.
+- [x] Cluster-wide rate limiter replaces the per-process bucket for free tenants.
+      Local two-replica check: 2 rps admitted two requests across replicas, then rejected
+      both replicas; see `benchmarks/results/local_quota_rehearsal.json`.
 - [ ] Daily and monthly request counters enforce atomically under concurrent replicas.
-- [ ] Prompt-size and completion-token caps are enforced, not client-supplied.
+- [x] Prompt-size and completion-token caps are enforced, not client-supplied.
+      `limits::tests` and `oversized_prompt_is_rejected_before_origin_dispatch`.
 - [ ] Global free-pool counter exists and is checked at settlement.
 - [ ] Tier defaults apply at provisioning: model allowlist, retention, support level.
 - [ ] Invitation cap and verified-identity requirement are enforced.
-- [ ] Kill switches tested: revoke keys, suspend tenant, empty allowlist, lower
+- [x] Kill switches tested: revoke keys, suspend tenant, empty allowlist, lower
       ceiling, disable free signup.
+      Verified in `crates/sunborn-gateway/tests/kill_switch_test.rs`.
 - [ ] Upgrade path exercised on a test tenant without data migration.
 
 Design reference: [`02_FREE_TIER_ARCHITECTURE.md`](02_FREE_TIER_ARCHITECTURE.md).
@@ -152,8 +156,9 @@ a full billing cycle are still required.
 
 ### 2.5 Operability and support
 
-- [ ] Runbooks published for quota exhaustion, upstream provider outage, cache-store
+- [x] Runbooks published for quota exhaustion, upstream provider outage, cache-store
       outage, vector-store outage, ledger outage, and invalidation backlog.
+      See [`docs/runbooks/incident_playbooks.md`](../runbooks/incident_playbooks.md).
 - [ ] Status page live, with a named update cadence during incidents.
 - [ ] On-call rotation and escalation path recorded.
 - [ ] Support queue instrumented; B5 metrics defined before the beta starts.

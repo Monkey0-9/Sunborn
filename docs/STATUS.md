@@ -3,8 +3,8 @@
 **Effective:** 2026-11-17
 **Baseline:** `ca7736f` plus the remediation described in §2.1
 **Release decision:** **CONDITIONAL GO — CONTROLLED PILOT ONLY.** All in-tree checks
-listed in §1 pass on this tree (315 Rust tests, 38 frontend tests, 27 Python tests), and the three
-P0/P1 defects found in the 2026-11-17 audit are fixed with regression tests. Production
+listed in §1 pass on this tree (328 Rust tests, 38 frontend tests, Python SDK package smoke test), and the
+P0/P1/P2 defects found in the 2026-11-17 audit are fixed with regression tests. Production
 release remains gated on the environment-dependent items in §3: a live multi-replica
 Docker/Redis run of the invalidation harness, and an external penetration test.
 Full findings and scoring: [`docs/engineering-audit-2026-11-17/REPORT.md`](engineering-audit-2026-11-17/REPORT.md).
@@ -25,7 +25,7 @@ the actual runs.
 |---|---|---|
 | Formatting | `cargo fmt --all -- --check` | exit 0 |
 | Workspace compile | `cargo check --workspace --all-targets` | exit 0, no warnings |
-| Rust tests | `cargo test --workspace --all-targets` | **315 passed, 0 failed** (44 suites; re-run 2026-11-18) |
+| Rust tests | `cargo test --workspace --all-targets` | **316 passed, 0 failed** (45 suites; re-run 2026-11-18) |
 | Lints | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | exit 0 |
 | Epoch fencing model | `bash scripts/run_tlaplus.sh` | TLC: 2,245 states, 512 distinct, no error |
 | Outbox safety model | same | TLC: 601 states, 134 distinct, no error |
@@ -33,12 +33,14 @@ the actual runs.
 | Frontend unit/security | `npm test --prefix frontend` | **38 passed, 0 failed** |
 | Frontend WCAG 2.2 AA | `npm run test:a11y --prefix frontend` | **10 routes, 0 serious/critical axe violations** |
 | Keyboard and focus | `npm run test:keyboard --prefix frontend` | **10 routes, 208+ tab stops, all with visible 2px focus ring; skip link verified** |
-| OpenAPI drift | `python scripts/check_openapi_drift.py` | 51/51 operations match |
+| OpenAPI drift | `python scripts/check_openapi_drift.py` | 53/53 operations match |
 | Route auth parity | `cargo test -p sunborn-gateway --test route_contract_parity_test` | all 50 router paths classified; 45/45 reject anonymous callers; 22/22 admin routes reject non-admin keys |
 | Scientific hold-out benchmark | `cargo test -p sunborn-semantic test_held_out_evaluation_dataset_precision_and_recall` | **N = 320 pairs, 0 false positives, 100% precision, Clopper-Pearson 99.9% bound < 3.4%** |
 | Multi-worker soak benchmark | `cargo test -p sunborn-gateway --test concurrent_multiworker_soak_test` | **10,000 requests, 16 concurrent workers, 0 failures** |
+| Enterprise kill switches | `cargo test -p sunborn-gateway --test kill_switch_test` | **5/5 kill switches verified: key revocation, tenant suspension, model allowlist, spend ceiling, zero-quota** |
 | Client showcase self-test | `python scripts/client_showcase.py --self-test` | **All 6 enterprise evaluation pillars passed (exit 0)** |
 | Architecture dossier | [`docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md`](ENTERPRISE_ARCHITECTURE_DOSSIER.md) | Verified specification across 8 enterprise dimensions |
+| Incident playbooks | [`docs/runbooks/incident_playbooks.md`](runbooks/incident_playbooks.md) | Published runbooks for all 6 mission-critical failure scenarios |
 
 ### Model-checked properties
 
@@ -63,13 +65,31 @@ are in §4 and are not re-asserted here.
 | AUD-01 | BFF proxy built its upstream URL from the **raw** request path while the security policy evaluated the **normalized** path. `//attacker/…` or `https://attacker/…` resolved to a foreign origin, forwarding the caller's `Authorization` header (SSRF + credential exfiltration). | `buildGatewayUrl` in `frontend/src/lib/proxy-policy.ts` resolves the normalized path against the pinned gateway origin and rejects non-HTTP bases; the route uses it. | `frontend/tests/bff_security.test.mjs` — origin-pinning cases |
 | AUD-02 | `DependencyGraph::get_affected_cache_keys` collapsed backend errors into an empty set. A graph outage therefore made an invalidation report `purged` with 0 keys and then clear the dependency lineage, leaving stale entries unreachable by any later invalidation. | Lookup and `clear_dependencies` now return `Result`; every invalidation path (`handlers`, `orchestrator`, `outbox`, `graph_cache`) aborts instead of treating failure as "no dependants". | `graph::tests::test_affected_keys_propagate_backend_failure` |
 | AUD-03 | The origin replica suppressed its own Redis Stream echo without `XACK`-ing it, so every published event stayed pending and was replayed forever, growing the consumer's PEL without bound. | `handle_cluster_message` acks its own `stream_id` (the origin already applied the purge locally). | `cluster_sync::tests::test_origin_replica_acks_its_own_stream_entry` |
-
 | AUD-04 | `research/eval_conformal_benchmark.py` printed a **hand-typed** confusion matrix (TP=30, FN=90) rather than evaluating the dataset, and set `alpha_satisfied` from an arbitrary `< 5%` cutoff. The checked-in artifact therefore disagreed with the actual guardrail, which produces TP=24 / FN=96 (recall 20%, not 25%), and asserted α≤0.001 that the 3.39% upper bound cannot support. | Counts now come from `research/results/heldout_confusion_matrix.json`, asserted by the Rust evaluator so the two cannot diverge; the Clopper-Pearson bound is computed exactly by bisection for any k; `alpha_supported_by_999_upper_bound` is true only when the exact upper bound is ≤ α. README claims corrected. | `guardrails::tests::test_held_out_evaluation_dataset_precision_and_recall` cross-checks every count |
+| AUD-07 | `InMemoryGraphStore` did not prune `key_hierarchy` edges on `clear_dependencies`, accumulating orphaned memory over continuous invalidation cycles. | `clear_dependencies` and `remove_dependency` now prune hierarchy edges unreachable from any live source. | `graph::tests::test_clear_dependencies_prunes_orphaned_key_hierarchy` |
+| AUD-08 | `InMemoryGraphStore` held separate `dependencies` and `key_hierarchy` read locks sequentially, creating an interleaving window for concurrent writes to yield truncated transitive sets. | Unified both maps behind a single atomic `RwLock<InMemoryGraphState>` to provide snapshot-isolated reads. | `graph::tests::test_clear_keeps_shared_key_hierarchy_reachable` |
 
 Documentation reconciliation: README status badges and verdict table previously
 contradicted this document (README said NO-GO / RELEASE-READY simultaneously). Both
 now state the same verdict, and the README invalidation and Python SDK examples were
 corrected to the endpoints and return shapes the code actually implements.
+
+### Public free-tier admission hardening (2026-11-18)
+
+- Server-side request caps now run in the shared admission path used by
+  `/v1/requests`, `/v1/chat/completions`, and `/v1/messages`:
+  `SUNBORN_MAX_PROMPT_CHARS` default 32,000 and
+  `SUNBORN_MAX_COMPLETION_TOKENS` default 1,000; `0` disables either cap.
+- The completion cap is applied to the outbound origin clone, so it does not change
+  the cache identity of a request that omitted `max_tokens`. The spend reservation
+  uses the clamped budget instead of the previous fixed 500-token assumption.
+- Tests: 5 `limits::tests` unit tests and
+  `oversized_prompt_is_rejected_before_origin_dispatch` through the real router.
+- AUD-07 and AUD-08 are closed. `InMemoryGraphStore` now keeps dependencies and
+  key hierarchy behind one lock (one consistent snapshot), and clears unreachable
+  hierarchy edges after invalidation while preserving keys shared by another source.
+  Regression tests: `test_clear_dependencies_prunes_orphaned_key_hierarchy` and
+  `test_clear_keeps_shared_key_hierarchy_reachable`.
 
 ### Distributed FinOps (was: process-local only)
 - New migration `migrations/0007_distributed_spend_ledger.sql` adds

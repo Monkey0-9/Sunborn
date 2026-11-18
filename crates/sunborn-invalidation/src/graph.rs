@@ -67,18 +67,58 @@ pub trait KnowledgeGraphStore: Send + Sync {
 }
 
 /// In-memory hash-based knowledge graph implementation for high-speed local development and testing.
+///
+/// Both maps live behind one lock so a reader observes a single consistent
+/// snapshot. Two independent locks allowed a concurrent key-edge write between
+/// the dependency read and the hierarchy read, which could truncate a
+/// transitive invalidation set for that call.
 #[derive(Clone, Default)]
 pub struct InMemoryGraphStore {
-    dependencies: Arc<RwLock<HashMap<Uuid, HashSet<String>>>>,
-    key_hierarchy: Arc<RwLock<HashMap<String, HashSet<String>>>>,
+    state: Arc<RwLock<InMemoryGraphState>>,
+}
+
+#[derive(Default)]
+struct InMemoryGraphState {
+    dependencies: HashMap<Uuid, HashSet<String>>,
+    key_hierarchy: HashMap<String, HashSet<String>>,
 }
 
 impl InMemoryGraphStore {
     pub fn new() -> Self {
         Self {
-            dependencies: Arc::new(RwLock::new(HashMap::new())),
-            key_hierarchy: Arc::new(RwLock::new(HashMap::new())),
+            state: Arc::new(RwLock::new(InMemoryGraphState::default())),
         }
+    }
+
+    /// Remove hierarchy edges that no live source dependency can reach.
+    ///
+    /// Called while holding the write lock after a source is cleared. A shared
+    /// key remains reachable through its other source, so pruning is safe.
+    fn prune_unreachable_hierarchy(state: &mut InMemoryGraphState) {
+        let mut reachable: HashSet<String> = state
+            .dependencies
+            .values()
+            .flat_map(|keys| keys.iter().cloned())
+            .collect();
+        let mut frontier: Vec<String> = reachable.iter().cloned().collect();
+        while let Some(parent) = frontier.pop() {
+            if let Some(children) = state.key_hierarchy.get(&parent) {
+                for child in children {
+                    if reachable.insert(child.clone()) {
+                        frontier.push(child.clone());
+                    }
+                }
+            }
+        }
+        state.key_hierarchy.retain(|parent, children| {
+            children.retain(|child| reachable.contains(child));
+            reachable.contains(parent) && !children.is_empty()
+        });
+    }
+
+    #[cfg(test)]
+    async fn hierarchy_len(&self) -> usize {
+        self.state.read().await.key_hierarchy.len()
     }
 }
 
@@ -89,16 +129,19 @@ impl KnowledgeGraphStore for InMemoryGraphStore {
     }
 
     async fn record_dependency(&self, source_id: Uuid, cache_key: &str) -> Result<()> {
-        let mut deps = self.dependencies.write().await;
-        deps.entry(source_id)
+        let mut state = self.state.write().await;
+        state
+            .dependencies
+            .entry(source_id)
             .or_default()
             .insert(cache_key.to_string());
         Ok(())
     }
 
     async fn record_key_dependency(&self, child_key: &str, parent_key: &str) -> Result<()> {
-        let mut hierarchy = self.key_hierarchy.write().await;
-        hierarchy
+        let mut state = self.state.write().await;
+        state
+            .key_hierarchy
             .entry(parent_key.to_string())
             .or_default()
             .insert(child_key.to_string());
@@ -106,21 +149,20 @@ impl KnowledgeGraphStore for InMemoryGraphStore {
     }
 
     async fn get_affected_cache_keys(&self, source_id: &Uuid) -> Result<Vec<String>> {
-        let deps = self.dependencies.read().await;
+        let state = self.state.read().await;
         let mut affected = HashSet::new();
 
-        if let Some(direct) = deps.get(source_id) {
+        if let Some(direct) = state.dependencies.get(source_id) {
             for key in direct {
                 affected.insert(key.clone());
             }
         }
 
-        let hierarchy = self.key_hierarchy.read().await;
         let mut frontier: Vec<String> = affected.iter().cloned().collect();
         for _ in 0..10 {
             let mut next_frontier = Vec::new();
             for item in frontier {
-                if let Some(children) = hierarchy.get(&item) {
+                if let Some(children) = state.key_hierarchy.get(&item) {
                     for child in children {
                         if affected.insert(child.clone()) {
                             next_frontier.push(child.clone());
@@ -138,19 +180,21 @@ impl KnowledgeGraphStore for InMemoryGraphStore {
     }
 
     async fn remove_dependency(&self, source_id: &Uuid, cache_key: &str) -> Result<()> {
-        let mut deps = self.dependencies.write().await;
-        if let Some(set) = deps.get_mut(source_id) {
+        let mut state = self.state.write().await;
+        if let Some(set) = state.dependencies.get_mut(source_id) {
             set.remove(cache_key);
             if set.is_empty() {
-                deps.remove(source_id);
+                state.dependencies.remove(source_id);
             }
         }
+        Self::prune_unreachable_hierarchy(&mut state);
         Ok(())
     }
 
     async fn clear_dependencies(&self, source_id: &Uuid) -> Result<()> {
-        let mut deps = self.dependencies.write().await;
-        deps.remove(source_id);
+        let mut state = self.state.write().await;
+        state.dependencies.remove(source_id);
+        Self::prune_unreachable_hierarchy(&mut state);
         Ok(())
     }
 
@@ -172,8 +216,9 @@ impl KnowledgeGraphStore for InMemoryGraphStore {
     }
 
     async fn get_upstream_sources(&self, cache_key: &str) -> Result<Vec<Uuid>> {
-        let deps = self.dependencies.read().await;
-        let sources = deps
+        let state = self.state.read().await;
+        let sources = state
+            .dependencies
             .iter()
             .filter_map(|(src, keys)| {
                 if keys.contains(cache_key) {
@@ -187,9 +232,9 @@ impl KnowledgeGraphStore for InMemoryGraphStore {
     }
 
     async fn get_graph_stats(&self) -> Result<(usize, usize)> {
-        let deps = self.dependencies.read().await;
-        let sources = deps.len();
-        let edges = deps.values().map(|s| s.len()).sum();
+        let state = self.state.read().await;
+        let sources = state.dependencies.len();
+        let edges = state.dependencies.values().map(|s| s.len()).sum();
         Ok((sources, edges))
     }
 }
@@ -689,6 +734,57 @@ mod tests {
         assert!(affected.contains(&child_key1.to_string()));
         assert!(affected.contains(&child_key2.to_string()));
         assert!(affected.contains(&grandchild_key.to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_clear_dependencies_prunes_orphaned_key_hierarchy() {
+        let store = InMemoryGraphStore::new();
+        let source = Uuid::new_v4();
+        store
+            .record_dependency(source, "report:root")
+            .await
+            .unwrap();
+        store
+            .record_key_dependency("report:child", "report:root")
+            .await
+            .unwrap();
+        assert_eq!(store.hierarchy_len().await, 1);
+
+        store.clear_dependencies(&source).await.unwrap();
+        assert_eq!(
+            store.hierarchy_len().await,
+            0,
+            "orphaned key edges must not accumulate after invalidation"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_clear_keeps_shared_key_hierarchy_reachable() {
+        let store = InMemoryGraphStore::new();
+        let source_a = Uuid::new_v4();
+        let source_b = Uuid::new_v4();
+        for source in [source_a, source_b] {
+            store
+                .record_dependency(source, "report:root")
+                .await
+                .unwrap();
+        }
+        store
+            .record_key_dependency("report:child", "report:root")
+            .await
+            .unwrap();
+
+        store.clear_dependencies(&source_a).await.unwrap();
+        assert_eq!(
+            store.hierarchy_len().await,
+            1,
+            "a key still reachable from another source must keep its edges"
+        );
+        let affected = store.get_affected_cache_keys(&source_b).await.unwrap();
+        assert!(affected.contains(&"report:child".to_string()));
+
+        store.clear_dependencies(&source_b).await.unwrap();
+        assert_eq!(store.hierarchy_len().await, 0);
     }
 
     #[tokio::test]

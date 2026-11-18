@@ -21,6 +21,7 @@ pub mod autonomic;
 pub mod finops;
 pub mod handlers;
 pub mod learning;
+pub mod limits;
 pub mod middleware;
 pub mod origin;
 pub mod quota;

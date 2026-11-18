@@ -4,8 +4,9 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use serde_json::Value;
+use std::sync::Arc;
 use sunborn_core::AppConfig;
-use sunborn_gateway::{create_router, AppState};
+use sunborn_gateway::{create_router, limits::RequestLimits, AppState};
 use tower::ServiceExt;
 
 fn state_with_keys() -> AppState {
@@ -196,6 +197,45 @@ async fn concurrent_requests_never_exceed_the_enrolled_quota() {
     assert_eq!(
         rejected, 25,
         "every request past the boundary must be rejected"
+    );
+}
+
+#[tokio::test]
+async fn oversized_prompt_is_rejected_before_origin_dispatch() {
+    let mut state = state_with_keys();
+    state.request_limits = Arc::new(RequestLimits::new(100, 50));
+    let app = create_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/requests")
+                .header("content-type", "application/json")
+                .header("x-api-key", "user-spend-key")
+                .body(Body::from(
+                    serde_json::to_vec(&serde_json::json!({
+                        "tenant_id": "",
+                        "application_id": "",
+                        "model": "gpt-4o",
+                        "prompt": "x".repeat(200)
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert!(
+        json["detail"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("maximum prompt size"),
+        "unexpected detail: {json}"
     );
 }
 

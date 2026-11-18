@@ -85,6 +85,8 @@ pub struct AppState {
     pub spend_ledger: Arc<crate::finops::SpendLedger>,
     /// Enforces opt-in daily/monthly request quotas and the aggregate free pool.
     pub quota_ledger: Arc<crate::quota::QuotaLedger>,
+    /// Server-side prompt-size and completion-token caps.
+    pub request_limits: Arc<crate::limits::RequestLimits>,
     pub key_provider_configuration_error: Option<String>,
     pub graph_memory_cache: Option<Arc<GraphMemoryCache>>,
     pub cluster_sync_engine: Option<Arc<sunborn_invalidation::DistributedGraphSyncEngine>>,
@@ -657,6 +659,7 @@ impl AppState {
             } else {
                 None
             })),
+            request_limits: Arc::new(crate::limits::RequestLimits::from_env()),
             postgres_db,
             execution_store,
             shadow_evaluator,

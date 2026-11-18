@@ -36,6 +36,7 @@ async fn test_graph_caching_request_admission_and_rtc_invalidation() {
         "gpt-4o",
         "What are the Q3 2026 revenue projections for division Alpha?",
     );
+    req_env.max_tokens = Some(1000);
     req_env.dependency_snapshots = vec![
         SourceVersionSnapshot {
             source_id: src_1,

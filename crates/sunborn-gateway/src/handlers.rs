@@ -282,8 +282,23 @@ pub async fn execute_request_inner(
         .into());
     }
 
-    // 2. Validate payload boundaries and constraints
+    // Zero-trust tenant suspension kill switch: reject immediately if tenant is suspended
+    if let Ok(Some(tenant_rec)) = state.db.get_tenant(&req.tenant_id.0).await {
+        if tenant_rec.status.eq_ignore_ascii_case("suspended") {
+            return Err(SunbornError::forbidden(format!(
+                "Tenant '{}' is suspended; operational access is decommissioned",
+                req.tenant_id.0
+            ))
+            .into());
+        }
+    }
+
+    // 2. Validate payload boundaries and enforce server-side size/token caps
     req.validate().map_err(AppError::from)?;
+    state
+        .request_limits
+        .enforce(&mut req)
+        .map_err(AppError::from)?;
 
     // Count the request against the tenant's daily/monthly quota and the
     // aggregate free pool before any origin spend is reserved. Cache hits still
@@ -323,7 +338,7 @@ pub async fn execute_request_inner(
     // Enforce tenant spend velocity ceiling via atomic pre-authorization reservation (K-007)
     let pricing = ModelPricing::for_model(&req.model);
     let estimated_prompt_tokens = req.prompt.split_whitespace().count() as u32;
-    let estimated_completion_tokens = 500u32;
+    let estimated_completion_tokens = state.request_limits.estimated_completion_tokens(&req);
     let estimated_cost = FinOpsEngine::calculate_token_cost_avoided(
         &pricing,
         estimated_prompt_tokens,
@@ -763,7 +778,9 @@ pub async fn execute_request_inner(
         "Cache MISS -> Forwarding to origin provider"
     );
 
-    let origin_result = match state.origin_provider.execute(&req).await {
+    let mut origin_req = req.clone();
+    state.request_limits.apply_completion_cap(&mut origin_req);
+    let origin_result = match state.origin_provider.execute(&origin_req).await {
         Ok(res) => res,
         Err(err) => {
             state
