@@ -124,10 +124,27 @@ Visit [http://localhost:3000](http://localhost:3000) to inspect cache entries, t
 
 ---
 
-## 6. Where to go next
+## 6. Enterprise Client Walkthrough & Demonstration
+
+To evaluate the complete 6-pillar enterprise guarantees in an isolated sandbox or against a live gateway:
+
+```bash
+# Execute the self-contained 6-pillar client evaluation suite
+python scripts/client_showcase.py --self-test
+
+# Run the Python SDK client tour in dry-run mode
+python sdk/python/examples/enterprise_client_tour.py --dry-run
+```
+
+For client integrations in TypeScript / Node.js, see [`sdk/typescript/client_example.ts`](../sdk/typescript/client_example.ts).
+
+---
+
+## 7. Where to go next
 
 | | |
 | :--- | :--- |
+| Enterprise Systems Architecture & Resilience Dossier | [`ENTERPRISE_ARCHITECTURE_DOSSIER.md`](ENTERPRISE_ARCHITECTURE_DOSSIER.md) |
 | What the system actually is, and what it measures | [`README.md`](../README.md) §1–§5 |
 | Configuration and the fail-closed production mode | [`../.env.example`](../.env.example), [`README.md`](../README.md) §2 |
 | What is verified right now, and what is still blocked | [`STATUS.md`](STATUS.md) |
