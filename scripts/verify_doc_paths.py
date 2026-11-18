@@ -41,6 +41,16 @@ REMEDIATION_DELETED_ITEMS = {
     "scripts/audit_licenses.py",
 }
 
+# Ephemeral build, package, and git-ignored targets not tracked in repository
+EPHEMERAL_BUILD_TARGETS = {
+    "frontend/.next",
+    "frontend/node_modules",
+    "frontend/tsconfig.tsbuildinfo",
+    "sdk/python/build",
+    "sdk/python/dist",
+    "sdk/python/sunborn.egg-info",
+}
+
 
 def verify(strict: bool) -> int:
     checked = set()
@@ -53,8 +63,14 @@ def verify(strict: bool) -> int:
             clean = path.rstrip("/")
             if "*" in clean or "<" in clean:
                 continue
-            # Ignore ephemeral python package build targets
-            if clean in ("sdk/python/build", "sdk/python/dist", "sdk/python/sunborn.egg-info"):
+            # Ignore ephemeral python package and frontend build targets
+            if (
+                clean in EPHEMERAL_BUILD_TARGETS
+                or clean.startswith("frontend/.next/")
+                or clean.startswith("frontend/node_modules/")
+                or clean.startswith("sdk/python/dist/")
+                or clean.startswith("sdk/python/build/")
+            ):
                 continue
             # Ignore historical deleted artifacts cited in audit remediation records
             if clean in REMEDIATION_DELETED_ITEMS:

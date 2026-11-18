@@ -15,10 +15,26 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDK_DIR="${ROOT_DIR}/sdk/python"
 TEMP_VENV=".venv_smoke"
 
-UV_BIN="uv"
-if ! command -v uv >/dev/null 2>&1; then
-    if command -v uv.exe >/dev/null 2>&1; then
-        UV_BIN="uv.exe"
+UV_CMD=()
+if command -v uv >/dev/null 2>&1; then
+    UV_CMD=(uv)
+elif command -v uv.exe >/dev/null 2>&1; then
+    UV_CMD=(uv.exe)
+elif python -m uv --version >/dev/null 2>&1; then
+    UV_CMD=(python -m uv)
+elif python3 -m uv --version >/dev/null 2>&1; then
+    UV_CMD=(python3 -m uv)
+else
+    echo "  ℹ uv not detected on PATH; attempting to install uv via pip..."
+    if command -v python >/dev/null 2>&1; then
+        python -m pip install uv
+        UV_CMD=(python -m uv)
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 -m pip install uv
+        UV_CMD=(python3 -m uv)
+    else
+        echo "Error: Neither uv nor python found on PATH" >&2
+        exit 1
     fi
 fi
 
@@ -30,17 +46,17 @@ trap cleanup EXIT
 echo "=== [1/4] Building Sunborn Python SDK Package (sdist + wheel) ==="
 cd "${SDK_DIR}"
 rm -rf dist build *.egg-info "${TEMP_VENV}"
-"${UV_BIN}" build
+"${UV_CMD[@]}" build
 
 WHEEL_FILE="$(ls -1 dist/*.whl | head -n 1)"
 echo "  ✓ Successfully built wheel: ${WHEEL_FILE}"
 
 echo "=== [2/4] Creating Clean Isolated Environment ==="
-"${UV_BIN}" venv "${TEMP_VENV}"
+"${UV_CMD[@]}" venv "${TEMP_VENV}"
 echo "  ✓ Isolated venv initialized at ${TEMP_VENV}"
 
 echo "=== [3/4] Installing Wheel into Isolated Environment ==="
-(cd "${TEMP_VENV}" && "${UV_BIN}" pip install "../${WHEEL_FILE}")
+(cd "${TEMP_VENV}" && "${UV_CMD[@]}" pip install "../${WHEEL_FILE}")
 echo "  ✓ Installed package cleanly from wheel"
 
 echo "=== [4/4] Executing Clean-Environment Smoke Test ==="
