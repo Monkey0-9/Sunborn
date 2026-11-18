@@ -37,6 +37,8 @@ the actual runs.
 | Route auth parity | `cargo test -p sunborn-gateway --test route_contract_parity_test` | all 50 router paths classified; 45/45 reject anonymous callers; 22/22 admin routes reject non-admin keys |
 | Scientific hold-out benchmark | `cargo test -p sunborn-semantic test_held_out_evaluation_dataset_precision_and_recall` | **N = 320 pairs, 0 false positives, 100% precision, Clopper-Pearson 99.9% bound < 3.4%** |
 | Multi-worker soak benchmark | `cargo test -p sunborn-gateway --test concurrent_multiworker_soak_test` | **10,000 requests, 16 concurrent workers, 0 failures** |
+| Client showcase self-test | `python scripts/client_showcase.py --self-test` | **All 6 enterprise evaluation pillars passed (exit 0)** |
+| Architecture dossier | [`docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md`](ENTERPRISE_ARCHITECTURE_DOSSIER.md) | Verified specification across 8 enterprise dimensions |
 
 ### Model-checked properties
 
