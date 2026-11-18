@@ -25,7 +25,7 @@ the actual runs.
 |---|---|---|
 | Formatting | `cargo fmt --all -- --check` | exit 0 |
 | Workspace compile | `cargo check --workspace --all-targets` | exit 0, no warnings |
-| Rust tests | `cargo test --workspace --all-targets` | **316 passed, 0 failed** (45 suites; re-run 2026-11-18) |
+| Rust tests | `cargo test --workspace --all-targets -- --test-threads=1` | **328 passed, 0 failed** (44 suites; re-run 2026-11-18) |
 | Lints | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | exit 0 |
 | Epoch fencing model | `bash scripts/run_tlaplus.sh` | TLC: 2,245 states, 512 distinct, no error |
 | Outbox safety model | same | TLC: 601 states, 134 distinct, no error |

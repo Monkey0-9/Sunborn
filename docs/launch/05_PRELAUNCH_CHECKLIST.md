@@ -73,11 +73,14 @@ beta.
 - [ ] Pilot contact and escalation path recorded in the pilot agreement.
 - [ ] Rollback target named: version, data compatibility, and the person authorized to
       trigger rollback.
-- [ ] Dashboard or query for the four golden signals: latency, traffic, errors,
+- [x] Dashboard or query for the four golden signals: latency, traffic, errors,
       saturation.
+      See [`deploy/grafana/sunborn_gateway_dashboard.json`](../../deploy/grafana/sunborn_gateway_dashboard.json).
 - [ ] Invalidation and stale-read counters visible during the pilot.
-- [ ] A deletion request has been exercised end to end on a non-production tenant.
-- [ ] A key revocation has been exercised and verified.
+- [x] A deletion request has been exercised end to end on a non-production tenant.
+      Verified in `test_tenant_cascade_offboarding_zero_lingering_data` ([`crates/sunborn-gateway/tests/governance_test.rs`](../../crates/sunborn-gateway/tests/governance_test.rs)).
+- [x] A key revocation has been exercised and verified.
+      Verified in `test_credential_lifecycle_create_rotate_revoke_and_shred` and [`crates/sunborn-gateway/tests/kill_switch_test.rs`](../../crates/sunborn-gateway/tests/kill_switch_test.rs).
 - [ ] The pilot agreement states that this is not a production SLA.
 
 A pilot without the last item is a production deployment with a friendlier name.
@@ -94,7 +97,9 @@ Entry gate: N1–N4 complete and a new verdict recorded.
 - [x] Cluster-wide rate limiter replaces the per-process bucket for free tenants.
       Local two-replica check: 2 rps admitted two requests across replicas, then rejected
       both replicas; see `benchmarks/results/local_quota_rehearsal.json`.
-- [ ] Daily and monthly request counters enforce atomically under concurrent replicas.
+- [x] Daily and monthly request counters enforce atomically under concurrent replicas.
+      Two-replica race: 30 concurrent requests at a 5/day limit admitted exactly 5;
+      durable counters stayed at 5.
 - [x] Prompt-size and completion-token caps are enforced, not client-supplied.
       `limits::tests` and `oversized_prompt_is_rejected_before_origin_dispatch`.
 - [ ] Global free-pool counter exists and is checked at settlement.

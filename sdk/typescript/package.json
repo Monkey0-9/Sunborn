@@ -1,0 +1,27 @@
+{
+  "name": "@sunborn/sdk",
+  "version": "1.0.0",
+  "description": "Enterprise TypeScript SDK for the Sunborn Deterministic AI Inference & Invalidation Platform",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "keywords": [
+    "sunborn",
+    "ai-gateway",
+    "inference-cache",
+    "zero-trust",
+    "deterministic-ai"
+  ],
+  "author": "Sunborn Systems Engineering",
+  "license": "Apache-2.0"
+}

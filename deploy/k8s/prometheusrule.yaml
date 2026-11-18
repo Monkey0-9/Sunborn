@@ -1,0 +1,77 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: sunborn-gateway-alerts
+  namespace: sunborn-system
+  labels:
+    app.kubernetes.io/name: sunborn-gateway
+    role: alert-rules
+spec:
+  groups:
+    - name: sunborn-gateway.rules
+      rules:
+        - alert: SunbornTenantQuotaExhaustionCritical
+          expr: rate(sunborn_quota_rejections_total[5m]) > 0.5
+          for: 2m
+          labels:
+            severity: warning
+            tier: gateway
+          annotations:
+            summary: "High quota rejection rate observed on Sunborn gateway"
+            description: "Quota rejections exceeded 0.5/s over 2m. Review tenant quota allocations or global free pool ceilings."
+            runbook_url: "https://github.com/Monkey0-9/Sunborn/blob/main/docs/runbooks/incident_playbooks.md#playbook-1-free-tier-quota--global-pool-exhaustion"
+
+        - alert: SunbornUpstreamOriginLatencySpike
+          expr: histogram_quantile(0.95, sum(rate(sunborn_request_duration_seconds_bucket[5m])) by (le)) > 2.5
+          for: 3m
+          labels:
+            severity: warning
+            tier: gateway
+          annotations:
+            summary: "Upstream origin P95 latency exceeded 2.5s"
+            description: "Upstream LLM provider latency is degrading client request processing."
+            runbook_url: "https://github.com/Monkey0-9/Sunborn/blob/main/docs/runbooks/incident_playbooks.md#playbook-2-upstream-llm-provider-outage--severe-throttling"
+
+        - alert: SunbornCacheStoreCircuitBreakerOpen
+          expr: sunborn_cache_circuit_breaker_status == 1
+          for: 30s
+          labels:
+            severity: critical
+            tier: cache
+          annotations:
+            summary: "Sunborn cache store circuit breaker is OPEN"
+            description: "Distributed cache cluster (DragonflyDB/Redis) is unreachable; gateway has failed-through to origin."
+            runbook_url: "https://github.com/Monkey0-9/Sunborn/blob/main/docs/runbooks/incident_playbooks.md#playbook-3-distributed-cache-store-outage-dragonflydb--redis"
+
+        - alert: SunbornQdrantClusterUnreachable
+          expr: rate(sunborn_vector_search_errors_total[5m]) > 0.1
+          for: 2m
+          labels:
+            severity: warning
+            tier: vector
+          annotations:
+            summary: "Semantic retrieval errors detected on Qdrant vector cluster"
+            description: "Qdrant cluster queries are failing; semantic path is abstaining to origin."
+            runbook_url: "https://github.com/Monkey0-9/Sunborn/blob/main/docs/runbooks/incident_playbooks.md#playbook-4-vector-store-qdrant-outage--exact-path-fallback"
+
+        - alert: SunbornPostgresConnectionPoolExhausted
+          expr: rate(sunborn_spend_ledger_errors_total[5m]) > 0.05
+          for: 1m
+          labels:
+            severity: critical
+            tier: database
+          annotations:
+            summary: "Spend ledger reservation failure; failing closed"
+            description: "PostgreSQL advisory lock or transaction pool error prevented spend pre-authorization."
+            runbook_url: "https://github.com/Monkey0-9/Sunborn/blob/main/docs/runbooks/incident_playbooks.md#playbook-5-distributed-spend-ledger-outage--advisory-lock-contention"
+
+        - alert: SunbornInvalidationDLQCountHigh
+          expr: sunborn_invalidation_dlq > 0
+          for: 5m
+          labels:
+            severity: warning
+            tier: invalidation
+          annotations:
+            summary: "Dead-letter queue accumulation in causal invalidation outbox"
+            description: "Document invalidation events failed downstream delivery and were routed to DLQ."
+            runbook_url: "https://github.com/Monkey0-9/Sunborn/blob/main/docs/runbooks/incident_playbooks.md#playbook-6-invalidation-outbox-stream-backlog--dlq-accumulation"

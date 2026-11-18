@@ -205,3 +205,12 @@ serviceMonitor:
   enabled: true
   interval: 15s
   scrapeTimeout: 10s
+
+prometheusRule:
+  enabled: true
+  labels:
+    role: alert-rules
+  severity:
+    critical: critical
+    warning: warning
+

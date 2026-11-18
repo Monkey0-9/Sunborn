@@ -227,7 +227,7 @@ blocker in [`docs/STATUS.md`](../STATUS.md) section 3.
 
 | Evidence | What it shows | Limit |
 |---|---|---|
-| 297 Rust tests, 38 frontend tests, 27 Python tests | Regression safety across the workspace | Tests cover expected behavior, not unknown attack paths |
+| 316 Rust tests, 38 frontend tests, 27 Python tests, 4 TypeScript tests | Regression safety across the workspace | Tests cover expected behavior, not unknown attack paths |
 | Adversarial security tests | Cross-tenant isolation, injection, tampering, quorum | A test suite, not a red-team engagement |
 | Route authorization parity | Every route classified; anonymous and non-admin callers rejected | Runtime configuration can still widen exposure if misconfigured |
 | TLA+ models | Epoch fencing and outbox safety under bounded crashes | A model of the protocol, not the deployment |

@@ -244,7 +244,8 @@ The rehearsal observed:
   Only the three admitted requests reached the quota counter.
 
 A separate 30-request race test at a 5/day boundary admitted exactly 5 and rejected
-25. This is **not B1 evidence**. It does not include the 2× projection, a 60-minute run,
+25. Repeating the race across two gateway processes produced the same result: 5
+admitted, 25 rejected, durable day and month counters at 5. This is **not B1 evidence**. It does not include the 2× projection, a 60-minute run,
 production-sized data, TLS/ingress, fault injection, or racing requests at the limit
 boundary. Those remain open.
 

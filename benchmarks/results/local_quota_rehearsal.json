@@ -137,6 +137,24 @@
       ],
       "quota_usage": 3,
       "note": "Only the three admitted requests reached the quota counter; the two 429s did not."
+    },
+    {
+      "name": "racing quota reservations across replicas",
+      "tenant": "tenant-alpha",
+      "limit": {
+        "daily_requests": 5,
+        "monthly_requests": 100
+      },
+      "results": {
+        "concurrent_requests": 30,
+        "admitted": 5,
+        "rejected": 25
+      },
+      "durable_counters": {
+        "day": 5,
+        "month": 5
+      },
+      "note": "30 concurrent requests were split across two gateway processes; exactly five were admitted."
     }
   ],
   "not_covered": [

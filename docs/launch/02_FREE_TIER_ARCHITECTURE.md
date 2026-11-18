@@ -74,7 +74,7 @@ aggregate pool now exist; the remaining pieces are entry work for private beta.
 |---|---|---|---|
 | Tenant `tier` and quota record | One authoritative place for class, limits, and reset window | Implemented in migration 0008 and the admin quota endpoint; tier defaults are not applied automatically. A replica that has seen a tenant as unenrolled re-checks after at most 60 seconds. | Beta entry |
 | Shared rate limiter | A per-process bucket multiplies by replica count; free-tier RPS must be cluster-wide | Implemented in migration 0009 and the rate-limit middleware for quota-enrolled tenants. The in-memory fallback remains process-local. | Beta entry |
-| Daily and monthly request counters | A velocity ceiling cannot express "1,000 requests per month" | Implemented and unit-tested; multi-replica concurrency evidence pending | B2 |
+| Daily and monthly request counters | A velocity ceiling cannot express "1,000 requests per month" | Implemented; a two-replica race admitted exactly 5 of 30 requests at a 5/day limit. Local evidence, not a full B2 cycle. | B2 |
 | Enforced prompt/completion caps | A free tier must clamp client-supplied completion length and bound prompt size | Implemented in the shared admission path for all three protocols; defaults are 32,000 prompt characters and 1,000 completion tokens. Global, not yet per-tier. | B2 |
 | Global free-pool counter | Per-tenant ceilings bound each tenant, not the aggregate; the pool needs its own ceiling | Implemented as an opt-in request counter; spend reconciliation pending | B2 |
 | Tier defaults at provisioning | Model allowlist, retention, and support level must be applied consistently, not per key by hand | Partial; the quota endpoint writes the record, but allowlist and retention stay manual | B2 |
@@ -296,7 +296,7 @@ changes correctness behavior. If it does, the design is wrong.
 |---|---|---|
 | Tier/quota schema and migration | Migration applies on startup; forward/back test against a live database | Data + Backend |
 | Shared rate limiter | Implemented; two-replica rehearsal showing the configured limit is cluster-wide, not doubled | Backend + SRE |
-| Daily/monthly counters | Implemented; two-replica concurrency test showing no over-admission under racing replicas | Backend |
+| Daily/monthly counters | Implemented; local two-replica race admitted exactly 5 of 30 requests at a 5/day limit, with durable counters at 5 | Backend |
 | Enforced token caps | Request test showing a clamped completion and a rejected oversized prompt | Backend |
 | Global pool counter | Implemented; ledger export reconciling aggregate usage to the pool ceiling for a full cycle (B2) | FinOps + SRE |
 | Abuse review queue | Red-team report with closed findings (B3) | Security |
