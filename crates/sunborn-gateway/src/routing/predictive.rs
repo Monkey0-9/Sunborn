@@ -75,7 +75,11 @@ impl PredictivePrefetchEngine {
             }
         }
 
-        predictions.sort_by(|a, b| b.confidence_score.partial_cmp(&a.confidence_score).unwrap());
+        predictions.sort_by(|a, b| {
+            b.confidence_score
+                .partial_cmp(&a.confidence_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         predictions
     }
 }

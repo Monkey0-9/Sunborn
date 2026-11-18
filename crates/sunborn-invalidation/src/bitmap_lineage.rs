@@ -94,6 +94,15 @@ impl CompressedLineageGraph {
     pub fn contains_document(&self, doc_hash: u64) -> bool {
         self.doc_to_records.contains_key(&doc_hash)
     }
+
+    /// Returns true if a record_id is actively associated with the given document hash in the compressed bitmap.
+    pub fn contains_link(&self, doc_hash: u64, record_id: u64) -> bool {
+        if let Some(bitmap) = self.doc_to_records.get(&doc_hash) {
+            bitmap.contains(record_id)
+        } else {
+            false
+        }
+    }
 }
 
 #[cfg(test)]

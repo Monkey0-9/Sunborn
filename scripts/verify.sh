@@ -38,7 +38,9 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 PYTHON_BIN="python"
-if command -v python3 >/dev/null 2>&1 && python3 -c "import sys" 2>/dev/null; then
+if command -v python >/dev/null 2>&1 && python -c "import yaml" 2>/dev/null; then
+    PYTHON_BIN="python"
+elif command -v python3 >/dev/null 2>&1 && python3 -c "import sys" 2>/dev/null; then
     PYTHON_BIN="python3"
 elif command -v python >/dev/null 2>&1 && python -c "import sys" 2>/dev/null; then
     PYTHON_BIN="python"

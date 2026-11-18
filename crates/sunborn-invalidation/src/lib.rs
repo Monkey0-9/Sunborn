@@ -15,6 +15,7 @@
 //! ```
 
 pub mod bitmap_lineage;
+pub mod c_accelerator;
 pub mod cluster_sync;
 pub mod epoch;
 pub mod graph;
@@ -24,6 +25,9 @@ pub mod outbox;
 pub mod watermark;
 
 pub use bitmap_lineage::CompressedLineageGraph;
+pub use c_accelerator::{
+    c_bitset_intersection_popcount, c_bitset_popcount, c_bitset_union_popcount, c_fast_hash_64,
+};
 pub use cluster_sync::{
     create_cluster_transport, ClusterBroadcastTransport, ClusterInvalidationMessage,
     DistributedGraphSyncEngine, InMemoryClusterTransport, RedisClusterTransport,

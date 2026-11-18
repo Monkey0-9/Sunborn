@@ -1,9 +1,72 @@
 use async_trait::async_trait;
 use sunborn_core::Result;
 
+extern "C" {
+    fn sunborn_c_cosine_similarity(a: *const f32, b: *const f32, n: usize) -> f32;
+    fn sunborn_c_vector_dot_product(a: *const f32, b: *const f32, n: usize) -> f32;
+    fn sunborn_c_vector_l2_norm(a: *const f32, n: usize) -> f32;
+    fn sunborn_c_vector_euclidean_distance(a: *const f32, b: *const f32, n: usize) -> f32;
+}
+
 pub type Vector = Vec<f32>;
 
+/// Computes high-performance vectorized cosine similarity between two float vectors using
+/// the native C SIMD acceleration kernel.
+/// Guarantees strict mathematical symmetry and falls back safely if vectors are empty or mismatched.
 pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() || a.is_empty() {
+        return 0.0;
+    }
+    unsafe { sunborn_c_cosine_similarity(a.as_ptr(), b.as_ptr(), a.len()) }
+}
+
+/// Computes high-performance vectorized dot product using the native C SIMD kernel.
+pub fn vector_dot_product(a: &[f32], b: &[f32]) -> f32 {
+    let n = a.len().min(b.len());
+    if n == 0 {
+        return 0.0;
+    }
+    unsafe { sunborn_c_vector_dot_product(a.as_ptr(), b.as_ptr(), n) }
+}
+
+/// Computes high-performance vectorized L2 Euclidean norm (vector magnitude) using native C SIMD.
+pub fn vector_l2_norm(a: &[f32]) -> f32 {
+    if a.is_empty() {
+        return 0.0;
+    }
+    unsafe { sunborn_c_vector_l2_norm(a.as_ptr(), a.len()) }
+}
+
+/// Computes high-performance vectorized Euclidean distance between two vectors using native C SIMD.
+pub fn vector_euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
+    let n = a.len().min(b.len());
+    if n == 0 {
+        return 0.0;
+    }
+    unsafe { sunborn_c_vector_euclidean_distance(a.as_ptr(), b.as_ptr(), n) }
+}
+
+/// Pure Rust reference implementation of dot product for parity testing and fallback.
+pub fn vector_dot_product_reference(a: &[f32], b: &[f32]) -> f32 {
+    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
+}
+
+/// Pure Rust reference implementation of L2 norm for parity testing and fallback.
+pub fn vector_l2_norm_reference(a: &[f32]) -> f32 {
+    a.iter().map(|x| x * x).sum::<f32>().sqrt()
+}
+
+/// Pure Rust reference implementation of Euclidean distance for parity testing and fallback.
+pub fn vector_euclidean_distance_reference(a: &[f32], b: &[f32]) -> f32 {
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y) * (x - y))
+        .sum::<f32>()
+        .sqrt()
+}
+
+/// Pure Rust reference implementation maintained for validation, conformance, and fallback testing.
+pub fn cosine_similarity_reference(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() || a.is_empty() {
         return 0.0;
     }
@@ -289,6 +352,26 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn test_c_simd_accelerator_matches_reference() {
+        let v1: Vec<f32> = (0..512).map(|i| (i as f32).sin()).collect();
+        let v2: Vec<f32> = (0..512).map(|i| (i as f32).cos()).collect();
+
+        let c_sim = cosine_similarity(&v1, &v2);
+        let rust_sim = cosine_similarity_reference(&v1, &v2);
+
+        assert!(
+            (c_sim - rust_sim).abs() < 1e-5,
+            "C SIMD kernel must match Rust reference: C={}, Rust={}",
+            c_sim,
+            rust_sim
+        );
+
+        // Mismatched length and empty vector tests
+        assert_eq!(cosine_similarity(&[], &[]), 0.0);
+        assert_eq!(cosine_similarity(&v1[..10], &v2[..20]), 0.0);
+    }
+
+    #[tokio::test]
     async fn test_cosine_similarity_identical() {
         let provider = DeterministicEmbeddingProvider::new();
         let v1 = provider
@@ -329,5 +412,50 @@ mod tests {
             sim_close,
             sim_far
         );
+    }
+
+    #[tokio::test]
+    async fn test_c_simd_dot_norm_distance_matches_reference() {
+        let provider = DeterministicEmbeddingProvider::new();
+        let v1 = provider
+            .embed("First vector for dot and norm validation")
+            .await
+            .unwrap();
+        let v2 = provider
+            .embed("Second vector for dot and norm validation")
+            .await
+            .unwrap();
+
+        let dot_c = vector_dot_product(&v1, &v2);
+        let dot_ref = vector_dot_product_reference(&v1, &v2);
+        assert!(
+            (dot_c - dot_ref).abs() < 1e-4,
+            "Dot product mismatch: {} vs {}",
+            dot_c,
+            dot_ref
+        );
+
+        let norm_c = vector_l2_norm(&v1);
+        let norm_ref = vector_l2_norm_reference(&v1);
+        assert!(
+            (norm_c - norm_ref).abs() < 1e-4,
+            "L2 norm mismatch: {} vs {}",
+            norm_c,
+            norm_ref
+        );
+
+        let dist_c = vector_euclidean_distance(&v1, &v2);
+        let dist_ref = vector_euclidean_distance_reference(&v1, &v2);
+        assert!(
+            (dist_c - dist_ref).abs() < 1e-4,
+            "Euclidean distance mismatch: {} vs {}",
+            dist_c,
+            dist_ref
+        );
+
+        // Edge cases
+        assert_eq!(vector_dot_product(&[], &[]), 0.0);
+        assert_eq!(vector_l2_norm(&[]), 0.0);
+        assert_eq!(vector_euclidean_distance(&[], &[]), 0.0);
     }
 }

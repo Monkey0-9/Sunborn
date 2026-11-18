@@ -76,6 +76,25 @@ class TestSunbornPackage(unittest.TestCase):
         self.assertEqual(digest1, digest2)
         self.assertEqual(len(digest1), 64)
 
+    def test_c_simd_accel_functions(self):
+        from sunborn import fast_cosine_similarity, fast_dot_product, fast_l2_norm, fast_euclidean_distance, is_c_accelerator_available
+
+        v1 = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+        v2 = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+        v3 = [8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0]
+
+        # Identical vectors cosine similarity must be 1.0
+        self.assertAlmostEqual(fast_cosine_similarity(v1, v2), 1.0, places=4)
+        self.assertAlmostEqual(fast_l2_norm([3.0, 4.0]), 5.0, places=4)
+        self.assertAlmostEqual(fast_dot_product([2.0, 3.0], [4.0, 5.0]), 23.0, places=4)
+        self.assertAlmostEqual(fast_euclidean_distance([1.0, 1.0], [4.0, 5.0]), 5.0, places=4)
+
+        # Empty vectors
+        self.assertEqual(fast_cosine_similarity([], []), 0.0)
+        self.assertEqual(fast_l2_norm([]), 0.0)
+        self.assertEqual(fast_dot_product([], []), 0.0)
+        self.assertEqual(fast_euclidean_distance([], []), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

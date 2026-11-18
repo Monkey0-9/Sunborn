@@ -36,8 +36,10 @@ fi
 run() {
     local module="$1" config="$2" label="$3"
     echo "=== model-checking ${label} (${config}) ==="
+    mkdir -p "${ROOT_DIR}/target/tlc-states/${module}-${config}"
     java -XX:+UseParallelGC -cp "${JAR}" tlc2.TLC \
-        -metadir "${ROOT_DIR}/target/tlc-states" \
+        -cleanup \
+        -metadir "${ROOT_DIR}/target/tlc-states/${module}-${config}" \
         -config "${config}" -deadlock "${module}" 2>&1 | tail -12
     echo
 }

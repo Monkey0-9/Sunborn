@@ -102,18 +102,30 @@ impl ExactCacheStore for MemoryExactCache {
                 .get("latency_ms")
                 .and_then(|v| v.as_u64())
                 .unwrap_or(200);
+            let fan_out = entry
+                .metadata
+                .get("fan_out")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as u32;
+            let volatility_score = entry
+                .metadata
+                .get("volatility_score")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
             let expires_at_ms = entry
                 .expires_at
                 .map(|exp| exp.timestamp_millis().max(0) as u64)
                 .unwrap_or(u64::MAX);
 
-            gdsf.insert(
+            gdsf.insert_with_graph_lineage(
                 entry.key.clone(),
                 entry,
                 size_bytes,
                 cost,
                 latency,
                 expires_at_ms,
+                fan_out,
+                volatility_score,
             );
             return Ok(());
         }

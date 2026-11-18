@@ -23,7 +23,9 @@ Push-Location $FormalDir
 try {
     function Run-TLC($module, $config, $label) {
         Write-Host "=== Model-Checking $label ($config) ===" -ForegroundColor Yellow
-        $output = & java -XX:+UseParallelGC -cp tla2tools.jar tlc2.TLC -metadir $MetaDir -config $config -deadlock $module 2>&1
+        $SpecMetaDir = Join-Path $MetaDir "$module-$config"
+        if (!(Test-Path $SpecMetaDir)) { New-Item -ItemType Directory -Path $SpecMetaDir -Force | Out-Null }
+        $output = & java -XX:+UseParallelGC -cp tla2tools.jar tlc2.TLC -cleanup -metadir $SpecMetaDir -config $config -deadlock $module 2>&1
         $exitCode = $LASTEXITCODE
         $output | Select-Object -Last 12 | ForEach-Object { Write-Host $_ }
         if ($exitCode -ne 0) {

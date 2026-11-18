@@ -10,13 +10,80 @@ fn print_usage() {
         r#"Sunborn Attestation Independent Verifier (CLI)
 Usage:
     sunborn-verify --certificate <file_or_json> --public-key <hex_or_file>
+    sunborn-verify --openapi
 
 Options:
     -c, --certificate    Path to certificate JSON file or raw JSON string
     -k, --public-key     32-byte Ed25519 public key (64-char hex string or path to raw key)
+    --openapi            Verify OpenAPI specification contract parity with gateway routes
     -h, --help           Display this help message
 "#
     );
+}
+
+pub fn verify_openapi_contract(repo_root: &std::path::Path) -> Result<usize, String> {
+    let openapi_path = repo_root.join("docs").join("api").join("openapi.yaml");
+    let lib_path = repo_root
+        .join("crates")
+        .join("sunborn-gateway")
+        .join("src")
+        .join("lib.rs");
+
+    if !openapi_path.exists() {
+        return Err(format!(
+            "Missing canonical OpenAPI spec at {}",
+            openapi_path.display()
+        ));
+    }
+    if !lib_path.exists() {
+        return Err(format!(
+            "Missing gateway source lib.rs at {}",
+            lib_path.display()
+        ));
+    }
+
+    let openapi_content = fs::read_to_string(&openapi_path)
+        .map_err(|e| format!("Failed to read openapi.yaml: {e}"))?;
+    let lib_content =
+        fs::read_to_string(&lib_path).map_err(|e| format!("Failed to read lib.rs: {e}"))?;
+
+    // Extract gateway route paths from .route("...", ...)
+    let mut gateway_routes = std::collections::HashSet::new();
+    for line in lib_content.lines() {
+        if let Some(pos) = line.find(".route(") {
+            let rest = &line[pos + 7..];
+            if let Some(quote_start) = rest.find('"') {
+                if let Some(quote_end) = rest[quote_start + 1..].find('"') {
+                    let route = &rest[quote_start + 1..quote_start + 1 + quote_end];
+                    gateway_routes.insert(route.to_string());
+                }
+            }
+        }
+    }
+
+    if gateway_routes.is_empty() {
+        return Err("Could not extract any routes from gateway lib.rs".to_string());
+    }
+
+    // Verify presence of each gateway route in openapi.yaml
+    let mut matched_routes = 0;
+    for route in &gateway_routes {
+        // Strip path parameters for matching or check exact path
+        let route_prefix = if let Some(idx) = route.find('{') {
+            &route[..idx]
+        } else {
+            route.as_str()
+        };
+
+        if !openapi_content.contains(route_prefix) {
+            return Err(format!(
+                "Gateway route '{route}' is missing from openapi.yaml"
+            ));
+        }
+        matched_routes += 1;
+    }
+
+    Ok(matched_routes)
 }
 
 fn main() {
@@ -24,6 +91,19 @@ fn main() {
     if args.iter().any(|a| a == "-h" || a == "--help") {
         print_usage();
         return;
+    }
+    if args.iter().any(|a| a == "--openapi" || a == "openapi") {
+        let repo_root = std::env::current_dir().unwrap_or_default();
+        match verify_openapi_contract(&repo_root) {
+            Ok(count) => {
+                println!("OK: Native Rust verification passed: {count} gateway routes verified against OpenAPI contract.");
+                return;
+            }
+            Err(e) => {
+                eprintln!("ERROR: OpenAPI verification failed: {e}");
+                process::exit(1);
+            }
+        }
     }
     if args.len() < 3 {
         print_usage();
@@ -251,5 +331,18 @@ mod tests {
         tampered_merkle_cert.merkle_root =
             "0000000000000000000000000000000000000000000000000000000000000000".to_string();
         assert!(audit_certificate(&tampered_merkle_cert, &verifying_key).is_err());
+    }
+
+    #[test]
+    fn test_native_openapi_verification() {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let res = verify_openapi_contract(repo_root);
+        assert!(
+            res.is_ok(),
+            "OpenAPI contract verification failed: {:?}",
+            res
+        );
+        assert!(res.unwrap() > 20, "Should have verified all gateway routes");
     }
 }

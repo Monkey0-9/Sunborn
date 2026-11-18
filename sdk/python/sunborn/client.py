@@ -16,6 +16,37 @@ from typing import Any
 from .exceptions import SunbornConnectionError, raise_for_status
 from .models import FallbackPolicy, compute_context_digest
 
+# Zero-copy fast JSON parser auto-detection (orjson -> msgspec -> stdlib json)
+try:
+    import orjson
+
+    def _fast_dumps(payload: Any) -> bytes:
+        return orjson.dumps(payload)
+
+    def _fast_loads(content: str | bytes) -> Any:
+        return orjson.loads(content)
+
+except ImportError:
+    try:
+        import msgspec
+
+        _encoder = msgspec.json.Encoder()
+        _decoder = msgspec.json.Decoder()
+
+        def _fast_dumps(payload: Any) -> bytes:
+            return _encoder.encode(payload)
+
+        def _fast_loads(content: str | bytes) -> Any:
+            return _decoder.decode(content)
+
+    except ImportError:
+
+        def _fast_dumps(payload: Any) -> bytes:
+            return json.dumps(payload, default=str).encode("utf-8")
+
+        def _fast_loads(content: str | bytes) -> Any:
+            return json.loads(content)
+
 
 class SunbornClient:
     """Enterprise Python client to interact with Sunborn Semantic AI Gateway."""
@@ -47,6 +78,7 @@ class SunbornClient:
         self.max_retries = max(0, max_retries)
         self.backoff_factor = backoff_factor
         self._closed = False
+        self._opener = urllib.request.build_opener()
 
     def __enter__(self) -> "SunbornClient":
         return self
@@ -57,6 +89,11 @@ class SunbornClient:
     def close(self) -> None:
         """Closes any underlying client connections and cleans up resources."""
         self._closed = True
+        if hasattr(self._opener, "close"):
+            try:
+                self._opener.close()
+            except Exception:
+                pass
 
     @property
     def is_closed(self) -> bool:
@@ -69,9 +106,10 @@ class SunbornClient:
         if self._closed:
             raise RuntimeError("Cannot execute requests on a closed SunbornClient session.")
         url = f"{self.base_url}/{path.lstrip('/')}"
-        data = json.dumps(payload, default=str).encode("utf-8")
+        data = _fast_dumps(payload)
         headers = {
             "Content-Type": "application/json",
+            "Connection": "keep-alive",
             "x-api-key": self.api_key,
             "x-tenant-id": self.tenant_id,
             "x-application-id": self.application_id,
@@ -90,12 +128,12 @@ class SunbornClient:
             try:
                 with urllib.request.urlopen(req, timeout=self.timeout) as response:
                     content = response.read().decode("utf-8")
-                    return json.loads(content) if content else {}
+                    return _fast_loads(content) if content else {}
             except urllib.error.HTTPError as e:
                 error_body = e.read().decode("utf-8") if getattr(e, "fp", None) else str(e)
                 details = None
                 try:
-                    details = json.loads(error_body)
+                    details = _fast_loads(error_body)
                 except Exception:
                     pass
 
@@ -123,6 +161,7 @@ class SunbornClient:
         url = f"{self.base_url}/{path.lstrip('/')}"
         headers = {
             "Content-Type": "application/json",
+            "Connection": "keep-alive",
             "x-api-key": self.api_key,
             "x-tenant-id": self.tenant_id,
             "x-application-id": self.application_id,
@@ -140,12 +179,12 @@ class SunbornClient:
             try:
                 with urllib.request.urlopen(req, timeout=self.timeout) as response:
                     content = response.read().decode("utf-8")
-                    return json.loads(content) if content else {}
+                    return _fast_loads(content) if content else {}
             except urllib.error.HTTPError as e:
                 error_body = e.read().decode("utf-8") if getattr(e, "fp", None) else str(e)
                 details = None
                 try:
-                    details = json.loads(error_body)
+                    details = _fast_loads(error_body)
                 except Exception:
                     pass
 

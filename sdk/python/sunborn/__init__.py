@@ -2,6 +2,13 @@
 Sunborn Enterprise AI Gateway & Execution Reuse Python SDK.
 """
 
+from .accel import (
+    fast_cosine_similarity,
+    fast_dot_product,
+    fast_euclidean_distance,
+    fast_l2_norm,
+    is_c_accelerator_available,
+)
 from .async_client import AsyncSunbornClient
 from .client import SunbornAgentClient, SunbornClient, get_default_client, sunborn_tool
 from .exceptions import (
@@ -61,4 +68,9 @@ __all__ = [
     "BadRequestError",
     "SunbornServerError",
     "ServerError",
+    "fast_cosine_similarity",
+    "fast_dot_product",
+    "fast_l2_norm",
+    "fast_euclidean_distance",
+    "is_c_accelerator_available",
 ]

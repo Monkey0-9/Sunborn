@@ -1,6 +1,6 @@
 PYTHON ?= python3
 ifeq ($(OS),Windows_NT)
-  PYTHON := python
+PYTHON := python
 endif
 
 .PHONY: all build test check fmt lint run clean help docker-up docker-down test-frontend build-frontend test-sdk lint-helm verify-stack reproduce verify-all

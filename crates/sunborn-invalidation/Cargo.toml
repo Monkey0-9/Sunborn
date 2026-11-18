@@ -29,3 +29,7 @@ redis.workspace = true
 sha2.workspace = true
 futures-util = "0.3"
 
+[build-dependencies]
+cc = "1.1"
+
+

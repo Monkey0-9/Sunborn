@@ -66,6 +66,11 @@ sbom.cyclonedx.json
 research/results/capacity_soak_report.json
 research/results/baseline_backup/
 
+# Compiled dynamic libraries
+*.dll
+*.so
+*.dylib
+
 # Screenshots (keep intentional docs images under docs/assets/)
 *.png
 !docs/assets/**

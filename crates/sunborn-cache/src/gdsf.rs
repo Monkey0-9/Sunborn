@@ -15,6 +15,8 @@ pub struct CachedObject<V> {
     pub origin_cost_micro_usd: u64,
     pub origin_latency_ms: u64,
     pub frequency: u64,
+    pub fan_out: u32,
+    pub volatility_score: f64,
     pub priority_key_bits: u64, // IEEE-754 f64 bits for deterministic total ordering
     pub expires_at_ms: u64,
 }
@@ -60,18 +62,30 @@ impl<V: Clone> FinOpsGdsfCache<V> {
         }
     }
 
+    /// Computes Greedy-Dual-Size-Frequency (GDSF) priority score with graph-aware volatility discounting:
+    /// H_graph(p) = L + F(p) * (EconomicUtility / Size) * (1 / (1 + beta * Volatility * sqrt(FanOut)))
     #[inline]
-    fn compute_priority(
+    pub fn compute_priority(
         &self,
         freq: u64,
         cost_micro_usd: u64,
         latency_ms: u64,
         size_bytes: usize,
+        fan_out: u32,
+        volatility_score: f64,
     ) -> u64 {
         let size = (size_bytes.max(1)) as f64;
         let economic_utility =
             (cost_micro_usd as f64) + self.latency_weight_gamma * (latency_ms as f64);
-        let score = self.inflation_clock + (freq as f64) * (economic_utility.max(1.0) / size);
+        let beta = 15.0; // Empirical graph calibration constant
+        let volatility = volatility_score.clamp(0.0, 1.0);
+        let volatility_discount = if volatility > 0.0 && fan_out > 0 {
+            1.0 / (1.0 + beta * volatility * (fan_out as f64).sqrt())
+        } else {
+            1.0
+        };
+        let score = self.inflation_clock
+            + (freq as f64) * (economic_utility.max(1.0) / size) * volatility_discount;
         score.to_bits()
     }
 
@@ -94,9 +108,11 @@ impl<V: Clone> FinOpsGdsfCache<V> {
         let cost = obj.origin_cost_micro_usd;
         let lat = obj.origin_latency_ms;
         let size = obj.size_bytes;
+        let fan_out = obj.fan_out;
+        let vol = obj.volatility_score;
         let val = obj.value.clone();
 
-        let new_priority = self.compute_priority(new_freq, cost, lat, size);
+        let new_priority = self.compute_priority(new_freq, cost, lat, size, fan_out, vol);
         if let Some(entry) = self.entries.get_mut(key) {
             entry.priority_key_bits = new_priority;
         }
@@ -107,6 +123,7 @@ impl<V: Clone> FinOpsGdsfCache<V> {
         Some(val)
     }
 
+    /// Inserts an item with default graph lineage (fan_out = 0, volatility = 0.0).
     pub fn insert(
         &mut self,
         key: String,
@@ -115,6 +132,33 @@ impl<V: Clone> FinOpsGdsfCache<V> {
         origin_cost_micro_usd: u64,
         origin_latency_ms: u64,
         expires_at_ms: u64,
+    ) -> bool {
+        self.insert_with_graph_lineage(
+            key,
+            value,
+            size_bytes,
+            origin_cost_micro_usd,
+            origin_latency_ms,
+            expires_at_ms,
+            0,
+            0.0,
+        )
+    }
+
+    /// Inserts an item into cache with fine-grained knowledge graph lineage parameters:
+    /// - `fan_out`: count of upstream knowledge entities/documents dependent on this entry
+    /// - `volatility_score`: upstream mutation frequency score in range [0.0, 1.0]
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_with_graph_lineage(
+        &mut self,
+        key: String,
+        value: V,
+        size_bytes: usize,
+        origin_cost_micro_usd: u64,
+        origin_latency_ms: u64,
+        expires_at_ms: u64,
+        fan_out: u32,
+        volatility_score: f64,
     ) -> bool {
         if size_bytes > self.max_bytes {
             return false; // Single item exceeds entire cache byte budget; reject admission
@@ -134,8 +178,14 @@ impl<V: Clone> FinOpsGdsfCache<V> {
         }
 
         let key_arc: Arc<str> = Arc::from(key.as_str());
-        let priority_bits =
-            self.compute_priority(1, origin_cost_micro_usd, origin_latency_ms, size_bytes);
+        let priority_bits = self.compute_priority(
+            1,
+            origin_cost_micro_usd,
+            origin_latency_ms,
+            size_bytes,
+            fan_out,
+            volatility_score,
+        );
         self.priority_tree.insert(PriorityEntry {
             priority_bits,
             key: Arc::clone(&key_arc),
@@ -149,6 +199,8 @@ impl<V: Clone> FinOpsGdsfCache<V> {
                 origin_cost_micro_usd,
                 origin_latency_ms,
                 frequency: 1,
+                fan_out,
+                volatility_score,
                 priority_key_bits: priority_bits,
                 expires_at_ms,
             },
@@ -289,5 +341,54 @@ mod tests {
         // Access at or past expiry -> removed and None
         assert_eq!(cache.get("temp", 1000), None);
         assert_eq!(cache.current_bytes(), 0);
+    }
+
+    #[test]
+    fn test_finops_gdsf_graph_aware_volatility_discounting() {
+        // Cache capacity: 1500 bytes
+        let mut cache: FinOpsGdsfCache<String> = FinOpsGdsfCache::new(1500, 1.0);
+
+        // Entry A: Stable document (fan_out = 1, volatility = 0.0) -> No discount
+        cache.insert_with_graph_lineage(
+            "stable_doc".to_string(),
+            "stable_content".to_string(),
+            600,
+            10_000,
+            100,
+            1_000_000,
+            1,
+            0.0,
+        );
+
+        // Entry B: Highly volatile multi-dependency document (fan_out = 16, volatility = 0.8)
+        // Highly volatile items receive a steep volatility discount: 1 / (1 + 15 * 0.8 * 4) = 1 / 49
+        cache.insert_with_graph_lineage(
+            "volatile_doc".to_string(),
+            "volatile_content".to_string(),
+            600,
+            10_000,
+            100,
+            1_000_000,
+            16,
+            0.8,
+        );
+
+        assert_eq!(cache.current_bytes(), 1200);
+
+        // Entry C: New incoming document -> forces eviction
+        cache.insert(
+            "incoming_doc".to_string(),
+            "incoming_content".to_string(),
+            500,
+            5_000,
+            50,
+            1_000_000,
+        );
+
+        // Because volatile_doc had its score heavily discounted due to graph volatility risk,
+        // it must be evicted first, protecting the stable_doc!
+        assert!(cache.get("stable_doc", 100).is_some());
+        assert!(cache.get("volatile_doc", 100).is_none());
+        assert!(cache.get("incoming_doc", 100).is_some());
     }
 }

@@ -34,7 +34,12 @@ npm test --prefix frontend
 if ($LASTEXITCODE -ne 0) { throw "npm test failed" }
 
 $PythonBin = "python"
-if (Get-Command python3 -ErrorAction SilentlyContinue) {
+if (Get-Command python -ErrorAction SilentlyContinue) {
+    try {
+        & python -c "import yaml" 2>$null
+        if ($LASTEXITCODE -eq 0) { $PythonBin = "python" }
+    } catch {}
+} elseif (Get-Command python3 -ErrorAction SilentlyContinue) {
     try {
         & python3 -c "import sys" 2>$null
         if ($LASTEXITCODE -eq 0) { $PythonBin = "python3" }

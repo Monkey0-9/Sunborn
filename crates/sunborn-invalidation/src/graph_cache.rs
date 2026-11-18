@@ -117,6 +117,29 @@ impl GraphMemoryCache {
         record_id: u64,
     ) -> Result<()> {
         let key = entry.key.clone();
+        let mut entry = entry;
+
+        // Enrich entry metadata with causal lineage tracking attributes for graph-aware eviction & freshness checks
+        let fan_out = (source_ids.len() + doc_hashes.len()) as u64;
+        let source_ids_json: Vec<serde_json::Value> = source_ids
+            .iter()
+            .map(|id| serde_json::Value::String(id.to_string()))
+            .collect();
+        let doc_hashes_json: Vec<serde_json::Value> = doc_hashes
+            .iter()
+            .map(|h| serde_json::Value::Number((*h).into()))
+            .collect();
+
+        if let serde_json::Value::Object(ref mut map) = entry.metadata {
+            map.entry("record_id".to_string())
+                .or_insert_with(|| serde_json::Value::Number(record_id.into()));
+            map.entry("doc_hashes".to_string())
+                .or_insert_with(|| serde_json::Value::Array(doc_hashes_json));
+            map.entry("source_ids".to_string())
+                .or_insert_with(|| serde_json::Value::Array(source_ids_json));
+            map.entry("fan_out".to_string())
+                .or_insert_with(|| serde_json::Value::Number(fan_out.into()));
+        }
 
         // Phase 1: Record multi-source dependencies in the knowledge graph
         let mut recorded_sources = Vec::new();
@@ -305,7 +328,53 @@ impl GraphMemoryCache {
 #[async_trait]
 impl ExactCacheStore for GraphMemoryCache {
     async fn get(&self, key: &str) -> Result<Option<CacheEntry>> {
-        self.cache.get(key).await
+        let entry = match self.cache.get(key).await? {
+            Some(e) => e,
+            None => return Ok(None),
+        };
+
+        // Causal freshness validation:
+        // 1. Check document lineage freshness if record_id and doc_hashes are tracked
+        if let Some(record_id) = entry.metadata.get("record_id").and_then(|v| v.as_u64()) {
+            if let Some(hashes) = entry.metadata.get("doc_hashes").and_then(|v| v.as_array()) {
+                for h in hashes {
+                    if let Some(doc_hash) = h.as_u64() {
+                        if !self.lineage_graph.contains_link(doc_hash, record_id) {
+                            tracing::warn!(
+                                key = %key,
+                                doc_hash,
+                                record_id,
+                                "Stale cache read intercepted by causal graph freshness guard; evicting entry"
+                            );
+                            let _ = self.cache.delete(key).await;
+                            return Ok(None);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Check knowledge source freshness if source_ids are tracked
+        if let Some(sources) = entry.metadata.get("source_ids").and_then(|v| v.as_array()) {
+            let upstream = self.dependency_graph.get_upstream_sources(key).await;
+            for s in sources {
+                if let Some(uuid_str) = s.as_str() {
+                    if let Ok(src_uuid) = Uuid::parse_str(uuid_str) {
+                        if !upstream.contains(&src_uuid) {
+                            tracing::warn!(
+                                key = %key,
+                                source_id = %src_uuid,
+                                "Upstream source edge missing or pruned; causal guard evicting stale entry"
+                            );
+                            let _ = self.cache.delete(key).await;
+                            return Ok(None);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(Some(entry))
     }
 
     async fn set(&self, entry: CacheEntry) -> Result<()> {
@@ -472,5 +541,39 @@ mod tests {
         assert_eq!(purged.len(), 2);
         assert!(!cache.exists(parent_key).await.unwrap());
         assert!(!cache.exists(child_key).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_causal_freshness_validation_on_get() {
+        let cache = GraphMemoryCache::new_default();
+        let src = Uuid::new_v4();
+        let doc_hash = 999_888;
+        let record_id = 77;
+        let key = "cache:causal:test";
+
+        let entry = CacheEntry::new(key, "fresh content", Some(3600));
+        cache
+            .set_with_lineage(entry, &[src], &[doc_hash], record_id)
+            .await
+            .unwrap();
+
+        // 1. Initial read succeeds and is causally fresh
+        let fetched = cache.get(key).await.unwrap();
+        assert!(fetched.is_some());
+        assert_eq!(fetched.unwrap().content, "fresh content");
+
+        // 2. Simulate upstream document mutation invalidating document in lineage graph
+        let affected = cache.lineage_graph().invalidate_document(doc_hash);
+        assert!(affected.contains(record_id));
+
+        // 3. Next get(key) should be intercepted by the causal guard, evict the stale item, and return None
+        let stale_read = cache.get(key).await.unwrap();
+        assert!(
+            stale_read.is_none(),
+            "Causal guard must prevent stale read and return None"
+        );
+
+        // 4. Verify item is also purged from underlying cache store
+        assert!(!cache.cache().exists(key).await.unwrap());
     }
 }
