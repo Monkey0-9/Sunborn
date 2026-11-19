@@ -504,7 +504,7 @@ reclaims the event exactly once.
 
 | | |
 | :--- | :--- |
-| **Release verdict** | GO — ENTERPRISE READY & PUBLIC SCALE (Verified across 21 System Quality Attributes) |
+| **Release verdict** | HOLD — STAGE 0 CONTROLLED PILOT REMEDIATION (All 21 Enterprise Quality Attributes verified; Gates N1–N2 open for containerized staging) |
 | **Verification status** | 391 automated tests passing (328 Rust + 63 frontend), 10/10 WCAG 2.2 AA routes, 8/8 pre-flight launch gates passed |
 | **Security mode** | Fail-closed in production; fail-open only in explicit `development` |
 | **Known high/critical CVEs** | 0 |
