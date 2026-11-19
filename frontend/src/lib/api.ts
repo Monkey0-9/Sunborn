@@ -4,7 +4,10 @@
  * and zero browser secret exposure.
  */
 
-export { simulationEngine } from "./simulation-engine";
+export { simulationEngine } from "./simulation-engine.ts";
+import { simulationEngine } from "./simulation-engine.ts";
+import { setIsSimulated } from "./cluster-store.ts";
+
 export const API_BASE_URL =
   typeof window !== "undefined"
     ? "/api/proxy"
@@ -97,91 +100,147 @@ async function request<T>(
   }
 }
 
+async function withFallback<T>(
+  action: () => Promise<T>,
+  fallback: () => Promise<T>
+): Promise<T> {
+  try {
+    const res = await action();
+    setIsSimulated(false);
+    return res;
+  } catch (err: any) {
+    if (err instanceof SunbornApiError && err.status === 0) {
+      setIsSimulated(true);
+      return await fallback();
+    }
+    throw err;
+  }
+}
+
 export const sunbornApi = {
   // Chat completions
-  chatCompletions: (body: any, apiKey?: string) =>
-    request<any>(
-      "v1/chat/completions",
-      {
-        method: "POST",
-        body: JSON.stringify(body),
-      },
-      apiKey
+  chatCompletions: (body: any, apiKey?: string, preset?: "exact" | "semantic" | "negation" | "dag") =>
+    withFallback(
+      () =>
+        request<any>(
+          "v1/chat/completions",
+          {
+            method: "POST",
+            body: JSON.stringify(body),
+          },
+          apiKey
+        ),
+      () => simulationEngine.chatCompletions(body, preset)
     ),
 
   // Governance: Cryptographic shredding
   shredTenant: (tenantId: string) =>
-    request<{
-      tenant_id: string;
-      status: string;
-      shred_latency_nanos?: number;
-      deleted_db_entries?: number;
-      deleted_exact_cache?: number;
-      deleted_vectors?: number;
-      deleted_execution_tools?: number;
-      deleted_learning_events?: number;
-      verified_multi_store_erasure?: boolean;
-    }>("v1/governance/shred", {
-      method: "POST",
-      body: JSON.stringify({ tenant_id: tenantId }),
-    }),
+    withFallback(
+      () =>
+        request<{
+          tenant_id: string;
+          status: string;
+          shred_latency_nanos?: number;
+          deleted_db_entries?: number;
+          deleted_exact_cache?: number;
+          deleted_vectors?: number;
+          deleted_execution_tools?: number;
+          deleted_learning_events?: number;
+          verified_multi_store_erasure?: boolean;
+        }>("v1/governance/shred", {
+          method: "POST",
+          body: JSON.stringify({ tenant_id: tenantId }),
+        }),
+      () => simulationEngine.shredTenant(tenantId)
+    ),
 
   // Governance: Durable state rebuild from PostgreSQL
   triggerRebuild: (tenantId: string) =>
-    request<{
-      status: string;
-      rehydrated_caches?: number;
-      rehydrated_vectors?: number;
-      elapsed_ms?: number;
-    }>("v1/rebuild", {
-      method: "POST",
-      body: JSON.stringify({ tenant_id: tenantId }),
-    }),
+    withFallback(
+      () =>
+        request<{
+          status: string;
+          rehydrated_caches?: number;
+          rehydrated_vectors?: number;
+          elapsed_ms?: number;
+        }>("v1/rebuild", {
+          method: "POST",
+          body: JSON.stringify({ tenant_id: tenantId }),
+        }),
+      () => simulationEngine.triggerRebuild(tenantId) as any
+    ),
 
   // Invalidation: Transactional outbox invalidation cascade
   triggerInvalidation: (sourceId: string, tenantId = "tenant-enterprise-fintech", versionTag = "v2.5.0") =>
-    request<{
-      status: string;
-      source_id: string;
-      evicted_cache_count?: number;
-    }>("v1/invalidation", {
-      method: "POST",
-      body: JSON.stringify({
-        source_id: sourceId,
-        tenant_id: tenantId,
-        version_tag: versionTag,
-      }),
-    }),
+    withFallback(
+      () =>
+        request<{
+          status: string;
+          source_id: string;
+          evicted_cache_count?: number;
+        }>("v1/invalidation", {
+          method: "POST",
+          body: JSON.stringify({
+            source_id: sourceId,
+            tenant_id: tenantId,
+            version_tag: versionTag,
+          }),
+        }),
+      () => simulationEngine.triggerInvalidation(sourceId, tenantId, versionTag) as any
+    ),
 
   // Chaos & Circuit Breaker
   tripCircuit: () =>
-    request<any>("v1/chaos/trip", { method: "POST" }),
+    withFallback(
+      () => request<any>("v1/chaos/trip", { method: "POST" }),
+      () => simulationEngine.tripCircuit()
+    ),
   resetCircuit: () =>
-    request<any>("v1/chaos/reset", { method: "POST" }),
+    withFallback(
+      () => request<any>("v1/chaos/reset", { method: "POST" }),
+      () => simulationEngine.resetCircuit()
+    ),
   getChaosStatus: () =>
-    request<any>("v1/chaos/status", { method: "GET" }),
+    withFallback(
+      () => request<any>("v1/chaos/status", { method: "GET" }),
+      () => simulationEngine.getChaosStatus()
+    ),
 
   // Multi-Region Cluster Status
   getClusterStatus: () =>
-    request<{
-      node_id: string;
-      region: string;
-      cluster_state: string;
-      vector_clock: Record<string, number>;
-      anti_entropy_protocol: string;
-      consensus_mode: string;
-    }>("v1/cluster/status", { method: "GET" }),
+    withFallback(
+      () =>
+        request<{
+          node_id: string;
+          region: string;
+          cluster_state: string;
+          vector_clock: Record<string, number>;
+          anti_entropy_protocol: string;
+          consensus_mode: string;
+        }>("v1/cluster/status", { method: "GET" }),
+      () => simulationEngine.getClusterStatus() as any
+    ),
+
+  getClusterSyncStatus: () =>
+    withFallback(
+      () => request<any>("v1/cluster/sync/status", { method: "GET" }),
+      () => simulationEngine.getClusterSyncStatus()
+    ),
 
   // Learning Controller
   getLearningPolicies: () =>
-    request<{
-      tenant_id: string;
-      active_policy: any;
-      canary_policy: any;
-      tenant_feedback_events: number;
-      total_feedback_events: number;
-      audit_trail: any[];
-    }>("v1/learning/policies", { method: "GET" }),
+    withFallback(
+      () =>
+        request<{
+          tenant_id: string;
+          active_policy: any;
+          canary_policy: any;
+          tenant_feedback_events: number;
+          total_feedback_events: number;
+          audit_trail: any[];
+        }>("v1/learning/policies", { method: "GET" }),
+      () => simulationEngine.getLearningPolicies() as any
+    ),
 
   submitLearningFeedback: (event: any) =>
     request<{ status: string; timestamp: string }>("v1/learning/feedback", {
@@ -230,46 +289,58 @@ export const sunbornApi = {
 
   // Security
   evaluateSecurity: (prompt: string, model?: string) =>
-    request<{
-      threatDetected: boolean;
-      ruleMatched: string;
-      action: string;
-      conformalScore: number;
-      tenantId: string;
-      timestamp: string;
-    }>("v1/security/evaluate", {
-      method: "POST",
-      body: JSON.stringify({ prompt, model }),
-    }),
+    withFallback(
+      () =>
+        request<{
+          threatDetected: boolean;
+          ruleMatched: string;
+          action: string;
+          conformalScore: number;
+          tenantId: string;
+          timestamp: string;
+        }>("v1/security/evaluate", {
+          method: "POST",
+          body: JSON.stringify({ prompt, model }),
+        }),
+      () => simulationEngine.evaluateSecurity(prompt, model) as any
+    ),
 
   getSecurityAudit: () =>
-    request<{
-      tenant_id: string;
-      events: Array<{
-        id: string;
-        event: string;
-        origin: string;
-        detail: string;
-        status: string;
-        time: string;
-      }>;
-    }>("v1/security/audit", { method: "GET" }),
+    withFallback(
+      () =>
+        request<{
+          tenant_id: string;
+          events: Array<{
+            id: string;
+            event: string;
+            origin: string;
+            detail: string;
+            status: string;
+            time: string;
+          }>;
+        }>("v1/security/audit", { method: "GET" }),
+      () => simulationEngine.getSecurityAudit() as any
+    ),
 
   // Governance: Cryptographic Merkle DAG Attestation & Verification
   generateMerkleAttestation: (leafHashes: string[]) =>
-    request<{
-      status: string;
-      root_hash: string;
-      leaf_count: number;
-      proofs: Array<{
-        leaf_hash: string;
-        root_hash: string;
-        path: Array<{ sibling_hash: string; is_right: boolean }>;
-      }>;
-    }>("v1/governance/attest", {
-      method: "POST",
-      body: JSON.stringify({ leaf_hashes: leafHashes }),
-    }),
+    withFallback(
+      () =>
+        request<{
+          status: string;
+          root_hash: string;
+          leaf_count: number;
+          proofs: Array<{
+            leaf_hash: string;
+            root_hash: string;
+            path: Array<{ sibling_hash: string; is_right: boolean }>;
+          }>;
+        }>("v1/governance/attest", {
+          method: "POST",
+          body: JSON.stringify({ leaf_hashes: leafHashes }),
+        }),
+      () => simulationEngine.generateMerkleAttestation(leafHashes) as any
+    ),
 
   verifyMerkleProof: (payload: {
     proof?: {
@@ -294,7 +365,10 @@ export const sunbornApi = {
 
   // FinOps & Metrics
   getFinOpsReport: () =>
-    request<any>("v1/finops/report", { method: "GET" }),
+    withFallback(
+      () => request<any>("v1/finops/report", { method: "GET" }),
+      () => simulationEngine.getFinopsReport()
+    ),
 
   // Predictive Routing & Speculative Prefetching
   predictSpeculative: (currentAction: string, recordTransitionTo?: string) =>

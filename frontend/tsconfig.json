@@ -26,6 +26,7 @@
         "./src/*"
       ]
     },
+    "allowImportingTsExtensions": true,
     "target": "ES2017"
   },
   "include": [
