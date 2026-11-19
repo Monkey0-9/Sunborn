@@ -109,7 +109,15 @@ async function withFallback<T>(
     setIsSimulated(false);
     return res;
   } catch (err: any) {
-    if (err instanceof SunbornApiError && err.status === 0) {
+    if (
+      err instanceof SunbornApiError &&
+      (err.status === 0 ||
+        err.status === 401 ||
+        err.status === 403 ||
+        err.status === 502 ||
+        err.status === 503 ||
+        err.status === 504)
+    ) {
       setIsSimulated(true);
       return await fallback();
     }

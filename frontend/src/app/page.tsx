@@ -513,20 +513,32 @@ export default function OverviewPage() {
         </div>
       </section>
 
-      {/* Planet-Scale Multi-Region Stress Modeler */}
-      <PlanetScaleStressSimulator />
-
-      {/* Modular Cockpit Section 1: Interactive Prompt Ingress Probe */}
-      <PromptProbePlayground />
-
-      {/* Modular Cockpit Section 2: Cryptographic Merkle DAG Pipeline */}
-      <LiveDAGVisualizer />
-
-      {/* Modular Cockpit Section 3: Multi-Region Cluster Topology & Vector Clock Mesh */}
-      <ClusterMeshStatus />
-
-      {/* Modular Cockpit Section 4: Universal Multi-Framework Client Integration */}
-      <FrameworkIntegrations />
+      {/* Dynamic View Ordering based on Active Persona Mode */}
+      {persona === "developer" ? (
+        <>
+          {/* Developer Sandbox Priority View */}
+          <PromptProbePlayground
+            initialPreset={activePreset}
+            onPresetChange={handleSelectPreset}
+          />
+          <LiveDAGVisualizer />
+          <FrameworkIntegrations />
+          <ClusterMeshStatus />
+          <PlanetScaleStressSimulator />
+        </>
+      ) : (
+        <>
+          {/* Executive Cockpit Priority View */}
+          <ClusterMeshStatus />
+          <PlanetScaleStressSimulator />
+          <PromptProbePlayground
+            initialPreset={activePreset}
+            onPresetChange={handleSelectPreset}
+          />
+          <LiveDAGVisualizer />
+          <FrameworkIntegrations />
+        </>
+      )}
 
       {/* Real-Time Live Activity Stream */}
       <section className="space-y-4">

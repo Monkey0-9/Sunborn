@@ -7,7 +7,19 @@ import { getClusterState, setCircuitBreaker } from "./cluster-store.ts";
  */
 export const simulationEngine = {
   chatCompletions: async (body: any, preset: "exact" | "semantic" | "negation" | "dag" = "exact") => {
-    const isHit = preset !== "negation";
+    let effectivePreset = preset;
+    const content = String(body?.messages?.[body?.messages?.length - 1]?.content || "").toLowerCase();
+    if (preset === "exact") {
+      if (content.includes("bypass") || content.includes("negat") || content.includes("prohibit") || content.includes("mechanisms to bypass")) {
+        effectivePreset = "negation";
+      } else if (content.includes("dag") || content.includes("workflow") || content.includes("rebalance") || content.includes("portfolio")) {
+        effectivePreset = "dag";
+      } else if (content.includes("semantic") || content.includes("describe") || content.includes("similar") || content.includes("distributed caches")) {
+        effectivePreset = "semantic";
+      }
+    }
+
+    const isHit = effectivePreset !== "negation";
     const promptTokens = 48;
     const completionTokens = isHit ? 96 : 142;
     const avoidedTokens = isHit ? promptTokens + completionTokens : 0;
@@ -18,17 +30,17 @@ export const simulationEngine = {
     let conformalScore = 1.0;
     let latencyUs = 420; // 0.42 microseconds
 
-    if (preset === "semantic") {
+    if (effectivePreset === "semantic") {
       tier = "Tier 2: Conformal Semantic Retrieval (Qdrant HNSW)";
       action = "SafeSemanticHit";
       conformalScore = 0.948;
       latencyUs = 12400; // 12.4 ms
-    } else if (preset === "negation") {
+    } else if (effectivePreset === "negation") {
       tier = "Tier 4: Origin Generation (Semantic Inversion Guardrail Triggered)";
       action = "BypassVectorCache";
       conformalScore = 0.0;
       latencyUs = 184000; // 184 ms upstream
-    } else if (preset === "dag") {
+    } else if (effectivePreset === "dag") {
       tier = "Tier 3: Agent DAG Subgraph Reuse (Merkle Attested)";
       action = "PureToolDAGReused";
       conformalScore = 0.999;

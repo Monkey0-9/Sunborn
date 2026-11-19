@@ -16,8 +16,16 @@ export interface QueryTraceResult {
   action: string;
 }
 
-export function PromptProbePlayground() {
-  const [activePreset, setActivePreset] = useState<"exact" | "semantic" | "negation" | "dag">("exact");
+export interface PromptProbePlaygroundProps {
+  initialPreset?: "exact" | "semantic" | "negation" | "dag";
+  onPresetChange?: (preset: "exact" | "semantic" | "negation" | "dag") => void;
+}
+
+export function PromptProbePlayground({
+  initialPreset = "exact",
+  onPresetChange,
+}: PromptProbePlaygroundProps = {}) {
+  const [activePreset, setActivePreset] = useState<"exact" | "semantic" | "negation" | "dag">(initialPreset);
   const [promptText, setPromptText] = useState(
     "What are the architectural guarantees of Sunborn's non-accelerator authority?"
   );
@@ -36,6 +44,7 @@ export function PromptProbePlayground() {
 
   const handleSelectPreset = (preset: "exact" | "semantic" | "negation" | "dag") => {
     setActivePreset(preset);
+    onPresetChange?.(preset);
     if (preset === "exact") {
       setPromptText("What are the architectural guarantees of Sunborn's non-accelerator authority?");
     } else if (preset === "semantic") {

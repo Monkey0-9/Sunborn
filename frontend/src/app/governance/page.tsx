@@ -21,6 +21,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { extractVectorClockEpoch } from "@/lib/utils";
+import { useClusterStore, setCircuitBreaker } from "@/lib/cluster-store";
 import { sunbornApi } from "@/lib/api";
 
 export default function GovernancePage() {
@@ -45,7 +46,7 @@ export default function GovernancePage() {
   } | null>(null);
   const [isRebuilding, setIsRebuilding] = useState(false);
 
-  const [circuitState, setCircuitState] = useState<"CLOSED" | "OPEN" | "HALF_OPEN">("CLOSED");
+  const { circuitBreaker: circuitState } = useClusterStore();
   const [isTrippingCircuit, setIsTrippingCircuit] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -151,10 +152,10 @@ export default function GovernancePage() {
     try {
       if (circuitState === "CLOSED") {
         await sunbornApi.tripCircuit();
-        setCircuitState("OPEN");
+        setCircuitBreaker("OPEN");
       } else {
         await sunbornApi.resetCircuit();
-        setCircuitState("CLOSED");
+        setCircuitBreaker("CLOSED");
       }
     } catch (err: any) {
       setActionError(`Circuit breaker action failed: ${err.message}`);

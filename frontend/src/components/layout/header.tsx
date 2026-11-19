@@ -35,7 +35,7 @@ import { useClusterStore, setPersona, setByokApiKey } from "@/lib/cluster-store"
 export function Header() {
   const pathname = usePathname();
   const clusterState = useClusterStore();
-  const { persona, byokApiKey } = clusterState;
+  const { persona, byokApiKey, isSimulated, circuitBreaker } = clusterState;
   const [showByokModal, setShowByokModal] = useState<boolean>(false);
   const [tempKey, setTempKey] = useState<string>("");
   const [gatewayStatus, setGatewayStatus] = useState<"live" | "offline">("offline");
@@ -193,13 +193,23 @@ export function Header() {
                 <span
                   className={cn(
                     "font-bold",
-                    gatewayStatus === "live" ? "text-emerald-400" : "text-amber-400"
+                    circuitBreaker === "OPEN"
+                      ? "text-rose-400"
+                      : gatewayStatus === "live"
+                      ? "text-emerald-400"
+                      : isSimulated
+                      ? "text-amber-400"
+                      : "text-slate-400"
                   )}
                 >
-                  {gatewayStatus === "live"
+                  {circuitBreaker === "OPEN"
+                    ? "CIRCUIT OPEN"
+                    : gatewayStatus === "live"
                     ? pingMs !== null
                       ? `8080 (${pingMs}ms)`
                       : "ACTIVE"
+                    : isSimulated
+                    ? "SIMULATION"
                     : "STANDBY"}
                 </span>
                 <span className="text-[10px] px-1 py-0.2 rounded bg-white/5 text-cyan-400 font-semibold group-hover:bg-cyan-500/20">

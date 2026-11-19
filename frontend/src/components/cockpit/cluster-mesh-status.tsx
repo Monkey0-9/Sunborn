@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { Globe, Radio, Shield, Server } from "lucide-react";
 import { sunbornApi } from "@/lib/api";
 import { extractVectorClockEpoch } from "@/lib/utils";
+import { useClusterStore } from "@/lib/cluster-store";
 
 interface ClusterRegionNode {
   id: string;
@@ -15,8 +16,9 @@ interface ClusterRegionNode {
 }
 
 export function ClusterMeshStatus() {
-  const [epochNumber, setEpochNumber] = useState<number>(42);
-  const [clusterState, setClusterState] = useState<string>("AUTONOMIC_ACTIVE");
+  const { circuitBreaker, vectorEpoch: storeEpoch, isSimulated } = useClusterStore();
+  const [epochNumber, setEpochNumber] = useState<number>(storeEpoch || 4192);
+  const [clusterState, setClusterState] = useState<string>("HEALTHY_SYNCHRONIZED");
 
   useEffect(() => {
     let isMounted = true;
@@ -38,6 +40,8 @@ export function ClusterMeshStatus() {
       isMounted = false;
     };
   }, []);
+
+  const activeState = circuitBreaker === "OPEN" ? "DEGRADED_CIRCUIT_OPEN" : clusterState;
 
   const nodes: ClusterRegionNode[] = [
     {
@@ -90,10 +94,26 @@ export function ClusterMeshStatus() {
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs font-mono">
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-            <Radio className="w-3 h-3 animate-pulse text-emerald-400" aria-hidden="true" />
-            {clusterState}
+          <span
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${
+              circuitBreaker === "OPEN"
+                ? "bg-rose-500/10 text-rose-300 border-rose-500/30"
+                : "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
+            }`}
+          >
+            <Radio
+              className={`w-3 h-3 animate-pulse ${
+                circuitBreaker === "OPEN" ? "text-rose-400" : "text-emerald-400"
+              }`}
+              aria-hidden="true"
+            />
+            {activeState}
           </span>
+          {isSimulated && (
+            <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-semibold">
+              SIMULATION
+            </span>
+          )}
           <span className="px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-white/10">
             Epoch #{epochNumber}
           </span>
