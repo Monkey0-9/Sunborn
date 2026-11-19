@@ -62,8 +62,10 @@ echo "[1/12] Running Rust Workspace Tests & Clippy..."
 echo "[2/12] Building Frontend Production Bundle..."
 "${NPM_BIN}" run build --prefix frontend
 
-echo "[3/12] Running Frontend Test Suite..."
+echo "[3/12] Running Frontend & TypeScript SDK Test Suite..."
 "${NPM_BIN}" test --prefix frontend
+"${NPM_BIN}" run build --prefix sdk/typescript
+"${NPM_BIN}" test --prefix sdk/typescript
 
 echo "[4/12] Running Python SDK Packaging & Clean Installation Verification..."
 bash scripts/test_python_sdk.sh

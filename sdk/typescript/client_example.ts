@@ -7,8 +7,12 @@
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
-  content: str;
+  content: string;
 }
+
+declare const process: any;
+declare const require: any;
+declare const module: any;
 
 export interface ChatCompletionRequest {
   model: string;

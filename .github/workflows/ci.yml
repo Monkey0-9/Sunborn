@@ -123,6 +123,11 @@ jobs:
           STRICT_E2E: "true"
         run: npm run test:keyboard
 
+      - name: Verify TypeScript SDK Build & Tests
+        run: |
+          npm run build --prefix sdk/typescript
+          npm test --prefix sdk/typescript
+
   research-reproducibility:
     name: IEEE/ACM Scientific Reproducibility Gate
     runs-on: ubuntu-latest

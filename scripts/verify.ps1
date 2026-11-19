@@ -34,9 +34,13 @@ Write-Host "[2/12] Building Frontend Production Bundle..." -ForegroundColor Yell
 npm run build --prefix frontend
 if ($LASTEXITCODE -ne 0) { throw "npm run build failed" }
 
-Write-Host "[3/12] Running Frontend Test Suite..." -ForegroundColor Yellow
+Write-Host "[3/12] Running Frontend & TypeScript SDK Test Suite..." -ForegroundColor Yellow
 npm test --prefix frontend
 if ($LASTEXITCODE -ne 0) { throw "npm test failed" }
+npm run build --prefix sdk/typescript
+if ($LASTEXITCODE -ne 0) { throw "TypeScript SDK build failed" }
+npm test --prefix sdk/typescript
+if ($LASTEXITCODE -ne 0) { throw "TypeScript SDK test failed" }
 
 $PythonBin = "python"
 if (Get-Command python -ErrorAction SilentlyContinue) {
