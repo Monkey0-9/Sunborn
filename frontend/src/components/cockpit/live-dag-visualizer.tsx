@@ -1,0 +1,141 @@
+"use client";
+
+import React, { useState } from "react";
+import { GitBranch, ShieldCheck, CheckCircle2, Lock, Cpu, Database } from "lucide-react";
+
+interface DAGNode {
+  id: string;
+  label: string;
+  role: string;
+  latencyBound: string;
+  status: "active" | "verified" | "bypassed";
+  detail: string;
+}
+
+export function LiveDAGVisualizer() {
+  const [selectedNodeId, setSelectedNodeId] = useState<string>("canonicalizer");
+
+  const nodes: DAGNode[] = [
+    {
+      id: "ingress",
+      label: "HTTP Ingress",
+      role: "Protocol Ingestion",
+      latencyBound: "< 0.05 ms",
+      status: "verified",
+      detail: "Terminates OpenAI / Anthropic / Gemini wire protocols; extracts authorization headers and client tenant identity.",
+    },
+    {
+      id: "canonicalizer",
+      label: "RFC 8785 Canonicalizer",
+      role: "Deterministic Digest",
+      latencyBound: "< 0.10 µs",
+      status: "active",
+      detail: "Normalizes Unicode NFC, removes nondeterministic JSON whitespace, and executes cryptographic SHA-256 digest creation.",
+    },
+    {
+      id: "l1_exact",
+      label: "L1 Lock-Free Memory",
+      role: "Sub-Microsecond Tier",
+      latencyBound: "0.30 µs P50",
+      status: "verified",
+      detail: "Concurrent Radix and W-TinyLFU cache lookup serving exact hits at 1.64M req/sec.",
+    },
+    {
+      id: "guardrails",
+      label: "AST Polarity Guardrails",
+      role: "Structural Anti-Hallucination",
+      latencyBound: "< 0.20 ms",
+      status: "verified",
+      detail: "Evaluates numeric shifts, antonyms, and negation inversions, guaranteeing 0 false positives across hard traps.",
+    },
+    {
+      id: "semantic_hnsw",
+      label: "Qdrant HNSW & Conformal",
+      role: "Semantic Risk Control",
+      latencyBound: "< 1.50 ms",
+      status: "verified",
+      detail: "C SIMD vector similarity search coupled with non-exchangeable conformal prediction bounding semantic risk.",
+    },
+    {
+      id: "merkle_proof",
+      label: "Merkle Attestation",
+      role: "Cryptographic Certificate",
+      latencyBound: "< 0.08 ms",
+      status: "verified",
+      detail: "Issues Ed25519-signed reuse certificates with Merkle tree inclusion proofs binding inputs, outputs, and docs.",
+    },
+  ];
+
+  const selectedNode = nodes.find((n) => n.id === selectedNodeId) || nodes[1];
+
+  return (
+    <section
+      aria-label="Execution Pipeline and Merkle DAG Inspector"
+      className="p-5 rounded-xl bg-slate-900/60 border border-white/10 backdrop-blur-md"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-base font-semibold text-white flex items-center gap-2">
+            <GitBranch className="w-4 h-4 text-violet-400" aria-hidden="true" />
+            Execution Pipeline & Merkle DAG
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Deterministic execution flow with cryptographic verification at every boundary.
+          </p>
+        </div>
+        <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/20">
+          Ed25519 Attested
+        </span>
+      </div>
+
+      {/* SVG Pipeline Representation */}
+      <div className="p-4 rounded-lg bg-slate-950/80 border border-white/10 overflow-x-auto">
+        <div className="flex items-center justify-between min-w-[580px] gap-2 py-2">
+          {nodes.map((node, index) => {
+            const isSelected = node.id === selectedNodeId;
+            return (
+              <React.Fragment key={node.id}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedNodeId(node.id)}
+                  aria-pressed={isSelected}
+                  className={`flex flex-col items-center p-2 rounded-lg border transition-all text-center focus:outline-none focus:ring-2 focus:ring-violet-400 ${
+                    isSelected
+                      ? "bg-violet-500/20 border-violet-400 text-white shadow-lg shadow-violet-500/10"
+                      : "bg-slate-900/80 border-white/10 text-slate-400 hover:text-slate-200 hover:border-white/20"
+                  }`}
+                >
+                  <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+                    Step 0{index + 1}
+                  </span>
+                  <span className="text-xs font-semibold mt-0.5">{node.label}</span>
+                  <span className="text-[9px] font-mono text-cyan-400 mt-1">{node.latencyBound}</span>
+                </button>
+                {index < nodes.length - 1 && (
+                  <div className="text-slate-600 font-mono text-xs px-1 select-none" aria-hidden="true">
+                    ──▶
+                  </div>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Node Detail Inspector */}
+      <div className="mt-4 p-3.5 rounded-lg bg-slate-950/60 border border-white/10 text-xs">
+        <div className="flex items-center justify-between border-b border-white/5 pb-2">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <span className="font-semibold text-white">{selectedNode.label}</span>
+            <span className="text-slate-400 font-mono">({selectedNode.role})</span>
+          </div>
+          <span className="text-cyan-400 font-mono font-medium">{selectedNode.latencyBound}</span>
+        </div>
+        <p className="mt-2 text-slate-300 font-sans leading-relaxed text-[12px]">
+          {selectedNode.detail}
+        </p>
+      </div>
+    </section>
+  );
+}
