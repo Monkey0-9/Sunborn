@@ -577,8 +577,6 @@ export const sunbornApi = {
       body: JSON.stringify(payload),
     }),
 
-  getClusterSyncStatus: () =>
-    request<any>("v1/cluster/sync/status", { method: "GET" }),
 
   getAutonomicIncidents: () =>
     request<any>("v1/autonomic/incidents", { method: "GET" }),
