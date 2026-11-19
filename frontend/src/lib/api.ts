@@ -4,6 +4,7 @@
  * and zero browser secret exposure.
  */
 
+export { simulationEngine } from "./simulation-engine";
 export const API_BASE_URL =
   typeof window !== "undefined"
     ? "/api/proxy"
