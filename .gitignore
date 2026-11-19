@@ -76,4 +76,5 @@ research/results/baseline_backup/
 !docs/assets/**
 
 .playwright-mcp/
+.superpowers/
 
