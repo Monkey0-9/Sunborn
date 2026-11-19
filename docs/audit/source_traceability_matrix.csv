@@ -188,12 +188,12 @@ crates/sunborn-invalidation/tests/outbox_replay_test.rs,sunborn-invalidation,123
 crates/sunborn-semantic/Cargo.toml,sunborn-semantic,28,CONFIG,crates/sunborn-semantic/src/guardrails.rs,TIER_2_STANDARD
 crates/sunborn-semantic/README.md,sunborn-semantic,16,AUTHORITATIVE_DOC,crates/sunborn-semantic/src/guardrails.rs,TIER_2_STANDARD
 crates/sunborn-semantic/build.rs,sunborn-semantic,44,VERIFIED_PRODUCTION,crates/sunborn-semantic/src/guardrails.rs,TIER_2_STANDARD
-crates/sunborn-semantic/c/sunborn_simd_accelerator.c,sunborn-semantic,239,VERIFIED_PRODUCTION,crates/sunborn-semantic/src/guardrails.rs,TIER_2_STANDARD
-crates/sunborn-semantic/c/sunborn_simd_accelerator.h,sunborn-semantic,49,VERIFIED_PRODUCTION,crates/sunborn-semantic/src/guardrails.rs,TIER_2_STANDARD
+crates/sunborn-semantic/c/sunborn_simd_accelerator.c,sunborn-semantic,269,VERIFIED_PRODUCTION,crates/sunborn-semantic/src/guardrails.rs,TIER_2_STANDARD
+crates/sunborn-semantic/c/sunborn_simd_accelerator.h,sunborn-semantic,54,VERIFIED_PRODUCTION,crates/sunborn-semantic/src/guardrails.rs,TIER_2_STANDARD
 crates/sunborn-semantic/src/conformal.rs,sunborn-semantic,574,VERIFIED_PRODUCTION,crates/sunborn-semantic/src/guardrails.rs,TIER_2_STANDARD
 crates/sunborn-semantic/src/context_digest.rs,sunborn-semantic,158,VERIFIED_PRODUCTION,crates/sunborn-semantic/src/guardrails.rs,TIER_2_STANDARD
 crates/sunborn-semantic/src/decision.rs,sunborn-semantic,741,VERIFIED_PRODUCTION,crates/sunborn-semantic/src/guardrails.rs,TIER_2_STANDARD
-crates/sunborn-semantic/src/embedding.rs,sunborn-semantic,461,VERIFIED_PRODUCTION,crates/sunborn-semantic/src/guardrails.rs,TIER_2_STANDARD
+crates/sunborn-semantic/src/embedding.rs,sunborn-semantic,474,VERIFIED_PRODUCTION,crates/sunborn-semantic/src/guardrails.rs,TIER_2_STANDARD
 crates/sunborn-semantic/src/guardrails.rs,sunborn-semantic,1078,VERIFIED_PRODUCTION,crates/sunborn-semantic/src/guardrails.rs,TIER_2_STANDARD
 crates/sunborn-semantic/src/lib.rs,sunborn-semantic,46,VERIFIED_PRODUCTION,crates/sunborn-semantic/src/guardrails.rs,TIER_2_STANDARD
 crates/sunborn-semantic/src/microbatch.rs,sunborn-semantic,146,VERIFIED_PRODUCTION,crates/sunborn-semantic/src/guardrails.rs,TIER_2_STANDARD
@@ -246,7 +246,8 @@ docs/QUICKSTART.md,documentation,156,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3
 docs/STATUS.md,documentation,307,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/adr/ADR-001-architecture-baseline.md,documentation,29,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/api/openapi.yaml,documentation,1549,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
-docs/audit/source_traceability_matrix.csv,documentation,514,VERIFIED_PRODUCTION,scripts/verify.ps1,TIER_3_SUPPORT
+docs/audit/2026-11-19_MASTER_REMEDIATION_REGISTER.md,documentation,62,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
+docs/audit/source_traceability_matrix.csv,documentation,517,VERIFIED_PRODUCTION,scripts/verify.ps1,TIER_3_SUPPORT
 docs/compliance/ISO_STANDARDS_COMPLIANCE.md,documentation,89,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/engineering-audit-2026-11-17/REPORT.md,documentation,214,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/engineering-transformation/01_README.md,documentation,73,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
@@ -360,6 +361,7 @@ docs/release/RELEASE_READINESS.md,documentation,36,AUTHORITATIVE_DOC,scripts/ver
 docs/runbooks/disaster_recovery.md,documentation,140,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/runbooks/incident_playbooks.md,documentation,277,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/runbooks/operations.md,documentation,171,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
+docs/runbooks/pilot_operator_onboarding.md,documentation,263,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/runbooks/troubleshooting.md,documentation,100,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md,documentation,161,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/security/authorization_matrix.md,documentation,76,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_1_CRITICAL
@@ -489,7 +491,7 @@ scripts/test_python_sdk.sh,tooling,88,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/verify.ps1,tooling,115,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/verify.sh,tooling,111,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/verify_doc_paths.py,tooling,104,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
-scripts/verify_public_launch.py,tooling,144,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
+scripts/verify_public_launch.py,tooling,147,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/watch_ci.py,tooling,23,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 sdk/python/README.md,sdk-python,126,AUTHORITATIVE_DOC,sdk/python/test_sunborn_agent.py,TIER_3_SUPPORT
 sdk/python/examples/enterprise_client_tour.py,sdk-python,117,VERIFIED_PRODUCTION,sdk/python/test_sunborn_agent.py,TIER_3_SUPPORT
