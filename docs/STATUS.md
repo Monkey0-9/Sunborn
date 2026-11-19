@@ -1,9 +1,9 @@
 # Sunborn Engineering Status — Single Source of Truth
 
-**Effective:** 2026-11-17
-**Baseline:** `ca7736f` plus the remediation described in §2.1
+**Effective:** 2026-11-19
+**Baseline:** `ca7736f` plus the remediation described in §2.1 and §2.2
 **Release decision:** **CONDITIONAL GO — CONTROLLED PILOT ONLY.** All in-tree checks
-listed in §1 pass on this tree (328 Rust tests, 38 frontend tests, Python SDK package smoke test), and the
+listed in §1 pass on this tree (328 Rust tests, 45 frontend tests, Python SDK package smoke test), and the
 P0/P1/P2 defects found in the 2026-11-17 audit are fixed with regression tests. Production
 release remains gated on the environment-dependent items in §3: a live multi-replica
 Docker/Redis run of the invalidation harness, and an external penetration test.
@@ -30,7 +30,7 @@ the actual runs.
 | Epoch fencing model | `bash scripts/run_tlaplus.sh` | TLC: 2,245 states, 512 distinct, no error |
 | Outbox safety model | same | TLC: 601 states, 134 distinct, no error |
 | Outbox bounded liveness | same | TLC: 21 states, 9 distinct, no error |
-| Frontend unit/security | `npm test --prefix frontend` | **38 passed, 0 failed** |
+| Frontend unit/security | `npm test --prefix frontend` | **45 passed, 0 failed** (including cockpit modularization and SSR hardening; re-run 2026-11-19) |
 | Frontend WCAG 2.2 AA | `npm run test:a11y --prefix frontend` | **10 routes, 0 serious/critical axe violations** |
 | Keyboard and focus | `npm run test:keyboard --prefix frontend` | **10 routes, 208+ tab stops, all with visible 2px focus ring; skip link verified** |
 | OpenAPI drift | `python scripts/check_openapi_drift.py` | 53/53 operations match |
@@ -73,6 +73,15 @@ Documentation reconciliation: README status badges and verdict table previously
 contradicted this document (README said NO-GO / RELEASE-READY simultaneously). Both
 now state the same verdict, and the README invalidation and Python SDK examples were
 corrected to the endpoints and return shapes the code actually implements.
+
+### 2.2 Frontend Hallmark Redesign & Modular Cockpit (2026-11-19)
+
+- **Hallmark Design Tokens**: Established `:root` color tokens in `frontend/src/styles/tokens.css` conforming to Hallmark Floor rules (deep obsidian `#070b14`, precision borders `#1e293b`, electric cyan `#00f0ff`, and high-contrast typography). Removed all arbitrary magic colors and enforced `overflow-x: clip` across `html, body`.
+- **Motion & Accessibility Normalization**: Eliminated `transition: all` in favor of targeted composited property transitions (`transform`, `opacity`, `border-color`, `box-shadow`) with reduced-motion fallbacks. Removed `focus:outline-none` overrides to ensure visible 2px focus indicators on all interactive controls.
+- **Overview Decomposition**: Modularized the monolithic 1,693-line `page.tsx` down to 400 lines by extracting focused components: `MetricsRibbon`, `PromptProbePlayground`, `LiveDAGVisualizer`, and `ClusterMeshStatus` under `frontend/src/components/cockpit/`. Route bundle size decreased by 31% (16.9 kB vs 24.6 kB).
+- **SSR Hydration & Epoch Resilience**: Standardized CSS gradient shimmer animations in `text-shimmer.tsx` eliminating SSR webpack exceptions; hardened `extractVectorClockEpoch` in `utils.ts` to parse scalar epochs from nested multi-node vector clocks.
+- **Verification Gates**: 45 frontend tests pass (`npm test --prefix frontend`), 0 serious/critical axe WCAG 2.2 AA violations across all 10 routes (`npm run test:a11y`), and 224 tab stops verified with visible focus rings (`npm run test:keyboard`).
+
 
 ### Public free-tier admission hardening (2026-11-18)
 
