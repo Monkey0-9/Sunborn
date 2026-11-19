@@ -8,8 +8,8 @@
 and refuses to serve it when the reuse cannot be proven safe.*
 
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-blue.svg?logo=rust&logoColor=white)](Cargo.toml)
-[![Rust tests](https://img.shields.io/badge/Rust%20tests-315%20passing-brightgreen.svg)](docs/STATUS.md)
-[![Frontend tests](https://img.shields.io/badge/Frontend%20tests-38%20passing-brightgreen.svg)](docs/STATUS.md)
+[![Rust tests](https://img.shields.io/badge/Rust%20tests-328%20passing-brightgreen.svg)](docs/STATUS.md)
+[![Frontend tests](https://img.shields.io/badge/Frontend%20tests-45%20passing-brightgreen.svg)](docs/STATUS.md)
 [![Verification gates](https://img.shields.io/badge/Verification%20gates-12%2F12-brightgreen.svg)](scripts/verify.sh)
 [![L1 exact cache](https://img.shields.io/badge/L1%20exact%20cache-1.64M%20req%2Fs%20%C2%B7%200.3%C2%B5s%20P50-blueviolet.svg)](benchmarks/results/l1_throughput_run.json)
 [![False-hit rate](https://img.shields.io/badge/Held--out%20false%20hits-0%20of%20200-brightgreen.svg)](research/results/heldout_generalization_run.json)

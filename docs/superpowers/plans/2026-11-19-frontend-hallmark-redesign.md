@@ -38,17 +38,17 @@
 - Consumes: Tailwind CSS base layer
 - Produces: CSS custom properties (`--color-bg-base`, `--color-panel`, `--color-accent-cyan`, `--color-text-primary`, `--font-sans`, `--font-mono`)
 
-- [ ] **Step 1: Create `frontend/src/styles/tokens.css` with Hallmark tokens**
+- [x] **Step 1: Create `frontend/src/styles/tokens.css` with Hallmark tokens**
 Declare `:root` tokens conforming to Hallmark Rule 1: obsidian background (`#090d16`), dark slate panel (`#111827`), high-contrast borders (`#1e293b`), vibrant technical cyan (`#06b6d4`), and high-contrast text (`#f8fafc`).
 
-- [ ] **Step 2: Import `tokens.css` into `frontend/src/app/globals.css`**
+- [x] **Step 2: Import `tokens.css` into `frontend/src/app/globals.css`**
 Add `@import "../styles/tokens.css";` at the top of `globals.css` immediately after directives. Enforce `overflow-x: clip` on `html, body`.
 
-- [ ] **Step 3: Verify Tailwind configuration and build**
+- [x] **Step 3: Verify Tailwind configuration and build**
 Run: `npm run build --prefix frontend`  
 Expected: Next.js production build exits 0 with 0 errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 ```bash
 git add frontend/src/styles/tokens.css frontend/src/app/globals.css frontend/tailwind.config.ts
 git commit -m "feat(frontend): introduce Hallmark design tokens and root theme variables"
@@ -69,14 +69,14 @@ git commit -m "feat(frontend): introduce Hallmark design tokens and root theme v
 - Consumes: `sunbornApi` from `@/lib/api`, formatting utilities from `@/lib/utils`
 - Produces: Clean, reusable, self-contained UI components with strict TypeScript types
 
-- [ ] **Step 1: Implement `metrics-ribbon.tsx`**
+- [x] **Step 1: Implement `metrics-ribbon.tsx`**
 Executive summary strip displaying 4 core live metrics:
   - Cache Hit Ratio (%)
   - L1 Latency P50 (µs)
   - Cumulative Avoided Spend ($ USD)
   - Active Cluster Mesh Replicas
 
-- [ ] **Step 2: Implement `prompt-probe-playground.tsx`**
+- [x] **Step 2: Implement `prompt-probe-playground.tsx`**
 Interactive query runner supporting 4 enterprise test presets:
   - Exact Match (Sub-microsecond L1 lookup)
   - Semantic Retrieval (Qdrant HNSW conformal gate)
@@ -84,20 +84,20 @@ Interactive query runner supporting 4 enterprise test presets:
   - Multi-Step Agent Tool DAG
 Provides real-time latency, avoided token count, and confidence score displays.
 
-- [ ] **Step 3: Implement `live-dag-visualizer.tsx`**
+- [x] **Step 3: Implement `live-dag-visualizer.tsx`**
 Clean, accessible SVG-based execution DAG visualizer rendering node dependencies, execution latencies, and Merkle root attestations without external canvas bloat.
 
-- [ ] **Step 4: Implement `cluster-mesh-status.tsx`**
+- [x] **Step 4: Implement `cluster-mesh-status.tsx`**
 Multi-region topology status component showing node states, vector clock epochs, and consensus health.
 
-- [ ] **Step 5: Write component verification test `frontend/tests/cockpit_components.test.mjs`**
+- [x] **Step 5: Write component verification test `frontend/tests/cockpit_components.test.mjs`**
 Verify that all 4 cockpit components exist and export default or named functions with valid TypeScript declarations.
 
-- [ ] **Step 6: Run component tests**
+- [x] **Step 6: Run component tests**
 Run: `node --test frontend/tests/cockpit_components.test.mjs`  
 Expected: PASS with 0 errors.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 ```bash
 git add frontend/src/components/cockpit/ frontend/tests/cockpit_components.test.mjs
 git commit -m "feat(frontend): decompose cockpit into modular accessible visual components"
@@ -115,7 +115,7 @@ git commit -m "feat(frontend): decompose cockpit into modular accessible visual 
 - Consumes: Cockpit components from `@/components/cockpit/*`, `Header` from `@/components/layout/header`
 - Produces: Streamlined, accessible, high-performance home dashboard (< 400 lines)
 
-- [ ] **Step 1: Re-architect `frontend/src/app/page.tsx`**
+- [x] **Step 1: Re-architect `frontend/src/app/page.tsx`**
 Assemble the modular cockpit components into an executive layout:
   - Hallmark-compliant hero: concise headline (< 7 words), single-sentence value prop, two primary actions ("Probe Semantic Cache", "View DAG Execution").
   - Metrics Ribbon pinned above the fold.
@@ -123,11 +123,11 @@ Assemble the modular cockpit components into an executive layout:
   - Live activity stream feed with instant feedback.
   - Resilient error boundary handling offline gateway fallbacks seamlessly.
 
-- [ ] **Step 2: Run build and E2E browser tests**
+- [x] **Step 2: Run build and E2E browser tests**
 Run: `npm run build --prefix frontend && npm test --prefix frontend`  
 Expected: All 44 tests pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```bash
 git add frontend/src/app/page.tsx
 git commit -m "feat(frontend): overhaul overview page with Hallmark executive cockpit"
@@ -151,21 +151,21 @@ git commit -m "feat(frontend): overhaul overview page with Hallmark executive co
 - Consumes: Hallmark design tokens, shared card and button primitives
 - Produces: Cohesive styling, accessible focus rings, and explicit form associations across all sub-consoles
 
-- [ ] **Step 1: Update card containers and typography in secondary views**
+- [x] **Step 1: Update card containers and typography in secondary views**
 Ensure all views reference Hallmark tokens (`--color-panel`, `--color-border`), remove nested card containers, and apply consistent heading scales.
 
-- [ ] **Step 2: Enforce focus visibility and ARIA attributes**
+- [x] **Step 2: Enforce focus visibility and ARIA attributes**
 Verify every form input, select, and button has explicit `aria-label` or `<label>` and 2px `:focus-visible` ring.
 
-- [ ] **Step 3: Run WCAG 2.2 AA axe sweep across all 10 routes**
+- [x] **Step 3: Run WCAG 2.2 AA axe sweep across all 10 routes**
 Run: `npm run test:a11y --prefix frontend`  
 Expected: 10/10 routes checked, 0 violations.
 
-- [ ] **Step 4: Run Keyboard navigation audit**
+- [x] **Step 4: Run Keyboard navigation audit**
 Run: `npm run test:keyboard --prefix frontend`  
 Expected: 200+ tab stops verified with visible indicators and zero traps.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```bash
 git add frontend/src/app/
 git commit -m "feat(frontend): polish secondary views to meet Hallmark and WCAG 2.2 standards"
@@ -179,22 +179,22 @@ git commit -m "feat(frontend): polish secondary views to meet Hallmark and WCAG 
 - Test: All workspace test suites and verification scripts
 - Modify: `docs/STATUS.md`
 
-- [ ] **Step 1: Run comprehensive backend verification**
+- [x] **Step 1: Run comprehensive backend verification**
 Run: `cargo check --workspace --all-targets && cargo clippy --workspace --all-targets --all-features -- -D warnings`  
 Expected: Clean exit 0 with 0 warnings.
 
-- [ ] **Step 2: Run full Rust test suite**
+- [x] **Step 2: Run full Rust test suite**
 Run: `cargo test --workspace --all-targets`  
 Expected: 328+ tests pass, 0 fail.
 
-- [ ] **Step 3: Run public launch readiness verification**
+- [x] **Step 3: Run public launch readiness verification**
 Run: `python scripts/verify_public_launch.py`  
 Expected: 7/7 audit gates pass.
 
-- [ ] **Step 4: Update `docs/STATUS.md` with verified pass status**
+- [x] **Step 4: Update `docs/STATUS.md` with verified pass status**
 Record the completed frontend overhaul, test outcomes, and readiness verdict.
 
-- [ ] **Step 5: Final commit**
+- [x] **Step 5: Final commit**
 ```bash
 git add docs/STATUS.md
 git commit -m "docs: certify frontend Hallmark redesign and enterprise public launch readiness"

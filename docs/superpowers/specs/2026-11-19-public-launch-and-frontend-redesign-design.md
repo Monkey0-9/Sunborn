@@ -2,7 +2,7 @@
 
 **Document Identifier:** `2026-11-19-public-launch-and-frontend-redesign-design`  
 **Date:** 2026-11-19  
-**Status:** Under Review (Builder Check Phase)  
+**Status:** Approved by Leadership / Proceeding to Plan  
 **Target Systems:** Sunborn Rust Gateway (`crates/sunborn-gateway`, `crates/sunborn-core`, `crates/sunborn-semantic`), Next.js 15 Frontend Cockpit (`frontend/`), TypeScript & Python SDKs, Infrastructure & Verification Pipelines.
 
 ---
@@ -18,14 +18,19 @@ To launch publicly to millions of developers and present convincingly before boa
 ## 2. Goals, Non-Goals, and Anti-Goals
 
 ### Goals
-- **Dual-Mode Experience**: Deliver both (1) an **Executive Mission Control** for SREs and enterprise leaders displaying live cluster metrics, vector clock synchronization, FinOps token savings, and cryptographic proofs; and (2) an **Interactive Developer Sandbox** where public developers can test prompt execution, AST negation barriers, L1 exact cache hits (<0.9 µs), and wire format compatibility live.
-- **Fail-Safe Client Wiring**: Provide 100% typed, end-to-end wiring across all 10 frontend views and 50+ backend endpoints through the Next.js BFF proxy (`/api/proxy/[...path]`). When the backend cluster is unreachable or running without live LLM provider keys, the UI must seamlessly fall back to an authentic, deterministic local simulation mode with clear visual indicators, preventing unhandled 500 errors or broken views.
-- **21 Enterprise Quality Attributes**: Systematically harden and verify every one of the 21 architectural dimensions specified by leadership.
-- **Flawless Verification**: Maintain passing status across all 328+ Rust tests, 44+ frontend unit tests, 100% WCAG 2.2 AA conformance (0 axe violations), 100% keyboard focus order, and OpenAPI 3.1 schema drift checks.
+- **Dual-Mode Experience with Global Header Toggle (Decision 2A)**:
+  - **Executive Cockpit Mode**: High-density view tailored for Board Members, CTOs, CISOs, and SREs showcasing live multi-region cluster health, vector clock synchronization, FinOps token savings, cryptographic governance (GDPR crypto-shredding, Merkle proofs), and system kill-switches.
+  - **Developer Sandbox Mode**: Interactive, developer-centric studio allowing external engineers to immediately test prompt canonicalization, sub-microsecond L1 exact hits, conformal semantic retrieval, AST negation barriers, and multi-provider wire format translation.
+- **Fail-Safe Public Execution & Simulation (Decision 1A)**:
+  - Unauthenticated public visitors execute against an authentic, deterministic **Client-Side Simulation Engine** with zero hosting spend, zero DDoS risk, and instant mathematical evaluation.
+  - Optional BYOK (Bring-Your-Own-Key) modal allows developers with an API key to switch effortlessly into live cluster execution mode.
+  - Clear visual indicator badges distinguish live cluster execution from deterministic simulation.
+- **21 Enterprise Quality Attributes**: Systematically verify and document every one of the 21 architectural dimensions specified by leadership.
+- **Zero-Breakage Verification**: Maintain passing status across all 328+ Rust tests, 44+ frontend unit tests, 100% WCAG 2.2 AA conformance (0 axe violations), 100% keyboard focus order, and OpenAPI 3.1 schema drift checks.
 
 ### Non-Goals
 - Replacing the core Rust AST parser or rewriting SIMD AVX2/NEON vector kernels.
-- Adding arbitrary unrelated SaaS features (e.g., complex multi-tier billing billing credit card processing gateways like Stripe Connect).
+- Adding arbitrary unrelated SaaS features (e.g., credit card payment gateway integrations).
 - Creating unneeded external cloud dependencies for basic local evaluation.
 
 ### Anti-Goals
@@ -50,7 +55,7 @@ To launch publicly to millions of developers and present convincingly before boa
 ## 4. Approaches Considered
 
 ### Approach 1: Dual-Mode Enterprise Cockpit & Interactive Developer Sandbox (Selected)
-- **Architecture**: A cohesive, high-density Next.js cockpit featuring an Executive Mission Control mode (for board members and platform architects) and an Interactive Developer Sandbox (for public developers). Backed by typed BFF proxying with automatic graceful fallback to deterministic simulated telemetry when backend nodes are cold.
+- **Architecture**: A cohesive, high-density Next.js cockpit featuring an Executive Mission Control mode (for board members and platform architects) and an Interactive Developer Sandbox (for public developers) with a global header persona toggle. Backed by typed BFF proxying with automatic graceful fallback to deterministic simulated telemetry when backend nodes are cold.
 - **Pros**: Delivers immediate hands-on value to public developers while giving board members the governance, compliance, and financial proof they require. Zero risk of embarrassing broken states.
 - **Cons**: Requires careful coordination between live API streams and offline fallback schemas.
 
@@ -102,6 +107,10 @@ To launch publicly to millions of developers and present convincingly before boa
 - **Theme & Palette**: Dark slate background (`#020617`, `#0f172a`), deep indigo/violet primary accents (`#6366f1`, `#8b5cf6`), emerald status indicators (`#10b981`), amber warnings (`#f59e0b`), and rose security alerts (`#f43f5e`).
 - **Typography**: Clean monospace font for hashes, metrics, and vector epochs; crisp sans-serif (`Inter` or system-ui) for labels and analytical prose.
 - **Motion & Polish**: Subtle GPU-accelerated shimmer on live status badges, smooth tab transitions, zero layout shifts (CLS < 0.01).
+- **Header Global Persona Switcher**:
+  - `[ 🏢 Executive Cockpit ]` ⟷ `[ 💻 Developer Sandbox ]`
+  - In Executive Cockpit: Prioritizes cluster mesh status, vector clocks, multi-tenant quotas, compliance audit logs, and FinOps ledger.
+  - In Developer Sandbox: Prioritizes interactive prompt testing, DAG visualization, AST guardrails, and token savings breakdown.
 
 ### 6.2 View Specifications & Endpoint Wiring
 
@@ -141,20 +150,21 @@ To launch publicly to millions of developers and present convincingly before boa
    - Ed25519 public key distribution, hardware security module (HSM) attestation proofs, and offline verification instructions.
 
 10. **Authentication & Session (`/login`)**:
-    - Secure session handling via HttpOnly cookies and explicit bearer tokens, strict CSRF validation, zero client secrets.
+    - Secure session handling via HttpOnly cookies and explicit bearer tokens, BYOK key entry modal, strict CSRF validation, zero client secrets.
 
 ### 6.3 Resilient Offline/Cold-Start Simulation Strategy
 - Every interactive component utilizes `sunbornApi`.
 - If `sunbornApi` encounters a network failure or 503 (e.g., gateway running standalone without Redis or external OpenAI keys), the API client safely activates **Deterministic Simulation Fallback**:
   - The UI displays an amber badge: `Simulation Mode · Gateway Offline or Local Standalone`.
   - All interactive controls (prompts, shredding, policy rollouts, chaos injection) return mathematically valid, authentic mock responses with true-to-spec latency calculations.
+  - Shared in-memory cluster state allows cross-route coordination (e.g. tripping circuit breaker on `/` updates the health status across all routes).
   - The user never experiences an ugly red error crash, blank page, or unhandled rejection.
 
 ---
 
 ## 7. What is Left to the Builder
 
-- Exact component structuring and refactoring in `frontend/src/` ensuring all clean code standards and accessibility constraints are preserved.
+- Internal component file structuring and refactoring in `frontend/src/` ensuring all clean code standards and accessibility constraints are preserved.
 - Fine-tuning CSS animations to ensure zero CPU throttling on low-spec client machines.
 - Unifying common mock generators in a shared `frontend/src/lib/simulation-engine.ts` module to eliminate duplicated fixture code across pages.
 - Adding comprehensive end-to-end integration tests verifying both live gateway and simulation fallback workflows.

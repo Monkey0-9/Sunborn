@@ -32,7 +32,7 @@ the actual runs.
 | Outbox bounded liveness | same | TLC: 21 states, 9 distinct, no error |
 | Frontend unit/security | `npm test --prefix frontend` | **45 passed, 0 failed** (including cockpit modularization and SSR hardening; re-run 2026-11-19) |
 | Frontend WCAG 2.2 AA | `npm run test:a11y --prefix frontend` | **10 routes, 0 serious/critical axe violations** |
-| Keyboard and focus | `npm run test:keyboard --prefix frontend` | **10 routes, 208+ tab stops, all with visible 2px focus ring; skip link verified** |
+| Keyboard and focus | `npm run test:keyboard --prefix frontend` | **10 routes, 222 tab stops, all with visible 2px focus ring; skip link verified** |
 | OpenAPI drift | `python scripts/check_openapi_drift.py` | 53/53 operations match |
 | Route auth parity | `cargo test -p sunborn-gateway --test route_contract_parity_test` | all 50 router paths classified; 45/45 reject anonymous callers; 22/22 admin routes reject non-admin keys |
 | Scientific hold-out benchmark | `cargo test -p sunborn-semantic test_held_out_evaluation_dataset_precision_and_recall` | **N = 320 pairs, 0 false positives, 100% precision, Clopper-Pearson 99.9% bound < 3.4%** |
