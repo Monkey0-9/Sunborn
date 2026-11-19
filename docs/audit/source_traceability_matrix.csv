@@ -455,7 +455,7 @@ requirements-dev.txt,root,9,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 research/ARTIFACT-APPENDIX.md,research,102,AUTHORITATIVE_DOC,research/tests/test_verifier_negative.py,TIER_3_SUPPORT
 research/README.md,research,63,AUTHORITATIVE_DOC,research/tests/test_verifier_negative.py,TIER_3_SUPPORT
 research/benchmark_credentials.py,research,26,VERIFIED_PRODUCTION,research/tests/test_verifier_negative.py,TIER_3_SUPPORT
-research/calibration/expand_dataset.py,research,61,VERIFIED_PRODUCTION,research/tests/test_verifier_negative.py,TIER_3_SUPPORT
+research/calibration/expand_dataset.py,research,566,VERIFIED_PRODUCTION,research/tests/test_verifier_negative.py,TIER_3_SUPPORT
 research/calibration/held_out_eval_dataset.json,research,2916,CONFIG,research/tests/test_verifier_negative.py,TIER_3_SUPPORT
 research/calibration/production_calibration_v1.json,research,48,CONFIG,research/tests/test_verifier_negative.py,TIER_3_SUPPORT
 research/eval_conformal_benchmark.py,research,181,VERIFIED_PRODUCTION,research/tests/test_verifier_negative.py,TIER_3_SUPPORT
