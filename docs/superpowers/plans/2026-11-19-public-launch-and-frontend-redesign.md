@@ -37,7 +37,7 @@
 **Interfaces:**
 - Produces: `useClusterStore()`, `getClusterState()`, `setPersona(mode: 'executive' | 'developer')`, `setCircuitBreaker(state: 'CLOSED' | 'OPEN')`, `setByokApiKey(key: string | null)`, `extractVectorClockEpoch(vc: unknown): number`
 
-- [ ] **Step 1: Write failing unit test for `cluster-store.ts`**
+- [x] **Step 1: Write failing unit test for `cluster-store.ts`**
 
 ```javascript
 // frontend/tests/cluster_store.test.mjs
@@ -63,21 +63,21 @@ test("cluster-store manages persona, circuit breaker, and BYOK credentials react
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --test frontend/tests/cluster_store.test.mjs`  
 Expected: FAIL (module not found)
 
-- [ ] **Step 3: Implement `frontend/src/lib/cluster-store.ts`**
+- [x] **Step 3: Implement `frontend/src/lib/cluster-store.ts`**
 
 Implement a lightweight, framework-independent reactive store with pub/sub listener support and a custom React hook `useClusterStore()` for seamless component re-rendering.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --test frontend/tests/cluster_store.test.mjs`  
 Expected: PASS
 
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 5: Commit Task 1**
 
 ```bash
 git add frontend/src/lib/cluster-store.ts frontend/tests/cluster_store.test.mjs
@@ -97,7 +97,7 @@ git commit -m "feat(frontend): implement reactive cluster store and persona stat
 - Produces: `simulationEngine`: comprehensive deterministic mock generators for `chatCompletions`, `clusterStatus`, `shredTenant`, `rebuildTenant`, `triggerInvalidation`, `securityEvaluate`, `merkleAttestation`, `learningPolicies`, and `finopsReport`.
 - Updates `sunbornApi` in `frontend/src/lib/api.ts` to transparently catch network/connection failures and return valid simulated responses stamped with `_simulated: true`.
 
-- [ ] **Step 1: Write failing unit test for `simulation-engine.ts`**
+- [x] **Step 1: Write failing unit test for `simulation-engine.ts`**
 
 ```javascript
 // frontend/tests/simulation_engine.test.mjs
@@ -124,21 +124,21 @@ test("simulationEngine generates valid cryptographic shredding receipts", async 
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --test frontend/tests/simulation_engine.test.mjs`  
 Expected: FAIL (module not found)
 
-- [ ] **Step 3: Implement `frontend/src/lib/simulation-engine.ts` and update `frontend/src/lib/api.ts`**
+- [x] **Step 3: Implement `frontend/src/lib/simulation-engine.ts` and update `frontend/src/lib/api.ts`**
 
 Implement realistic mathematical mock responses, realistic simulated microsecond latencies, and fallback wrappers in `sunbornApi` so that when `fetch` fails with network/offline errors, it gracefully returns simulated data rather than throwing an unhandled exception.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --test frontend/tests/simulation_engine.test.mjs`  
 Expected: PASS
 
-- [ ] **Step 5: Commit Task 2**
+- [x] **Step 5: Commit Task 2**
 
 ```bash
 git add frontend/src/lib/simulation-engine.ts frontend/src/lib/api.ts frontend/tests/simulation_engine.test.mjs
@@ -157,7 +157,7 @@ git commit -m "feat(frontend): build deterministic simulation fallback engine wi
 - Consumes: `useClusterStore` from `frontend/src/lib/cluster-store.ts`
 - Produces: Header navigation with interactive Persona Switcher (`[ 🏢 Executive Cockpit ]` ⟷ `[ 💻 Developer Sandbox ]`), BYOK API Key modal dialog, and live/simulation status badge indicator.
 
-- [ ] **Step 1: Write failing test for header component structure and accessibility**
+- [x] **Step 1: Write failing test for header component structure and accessibility**
 
 ```javascript
 // frontend/tests/header_dual_mode.test.mjs
@@ -174,26 +174,26 @@ test("header source contains dual-mode persona switcher and BYOK trigger", () =>
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --test frontend/tests/header_dual_mode.test.mjs`  
 Expected: FAIL
 
-- [ ] **Step 3: Update `frontend/src/components/layout/header.tsx`**
+- [x] **Step 3: Update `frontend/src/components/layout/header.tsx`**
 
 Integrate persona switcher, BYOK key modal with secure local session storage, cluster health badge, and preserve all WCAG 2.2 AA ARIA attributes and 208+ tab stops.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --test frontend/tests/header_dual_mode.test.mjs`  
 Expected: PASS
 
-- [ ] **Step 5: Run existing keyboard focus and accessibility audits**
+- [x] **Step 5: Run existing keyboard focus and accessibility audits**
 
 Run: `npm run test:keyboard --prefix frontend` and `npm run test:a11y --prefix frontend`  
 Expected: PASS (0 axe violations, complete keyboard tab stops)
 
-- [ ] **Step 6: Commit Task 3**
+- [x] **Step 6: Commit Task 3**
 
 ```bash
 git add frontend/src/components/layout/header.tsx frontend/tests/header_dual_mode.test.mjs
@@ -212,7 +212,7 @@ git commit -m "feat(frontend): redesign header with dual-mode persona switcher a
 - Consumes: `useClusterStore`, `sunbornApi`
 - Produces: Dynamic Dashboard page adapting between Executive SRE view (cluster topology, FinOps, vector clocks) and Developer Sandbox view (interactive prompt sandbox, AST negation barriers, L1 cache inspector).
 
-- [ ] **Step 1: Write failing test for overview page persona adaptation**
+- [x] **Step 1: Write failing test for overview page persona adaptation**
 
 ```javascript
 // frontend/tests/overview_dual_mode.test.mjs
@@ -229,26 +229,26 @@ test("overview page contains persona-adaptive layout and interactive sandbox wir
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --test frontend/tests/overview_dual_mode.test.mjs`  
 Expected: FAIL
 
-- [ ] **Step 3: Redesign `frontend/src/app/page.tsx`**
+- [x] **Step 3: Redesign `frontend/src/app/page.tsx`**
 
 Implement smooth persona switching, interactive prompt simulation with true-to-spec latency calculations, cluster mesh synchronization trigger, and chaos circuit breaker controls.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --test frontend/tests/overview_dual_mode.test.mjs`  
 Expected: PASS
 
-- [ ] **Step 5: Verify build and accessibility**
+- [x] **Step 5: Verify build and accessibility**
 
 Run: `npm test --prefix frontend` and `npm run build --prefix frontend`  
 Expected: PASS
 
-- [ ] **Step 6: Commit Task 4**
+- [x] **Step 6: Commit Task 4**
 
 ```bash
 git add frontend/src/app/page.tsx frontend/tests/overview_dual_mode.test.mjs
@@ -274,7 +274,7 @@ git commit -m "feat(frontend): redesign overview page with adaptive persona view
 **Interfaces:**
 - Connects every action button (GDPR shredding, state rebuild, cache eviction, canary rollout, policy promotion, Merkle attestation) to `sunbornApi` with simulation fallback and clear user notification banners.
 
-- [ ] **Step 1: Write integration test validating all routes export valid default components and consume `sunbornApi`**
+- [x] **Step 1: Write integration test validating all routes export valid default components and consume `sunbornApi`**
 
 ```javascript
 // frontend/tests/all_routes_wiring.test.mjs
@@ -304,20 +304,20 @@ test("all child routes contain sunbornApi integration and resilient error handli
 });
 ```
 
-- [ ] **Step 2: Run test to verify it passes or catches gaps**
+- [x] **Step 2: Run test to verify it passes or catches gaps**
 
 Run: `node --test frontend/tests/all_routes_wiring.test.mjs`
 
-- [ ] **Step 3: Update and polish all child routes**
+- [x] **Step 3: Update and polish all child routes**
 
 Ensure every view uses `extractVectorClockEpoch` safely, handles offline states gracefully, displays simulation badges when offline, and provides immediate feedback upon user interaction.
 
-- [ ] **Step 4: Run full test suite and accessibility checks**
+- [x] **Step 4: Run full test suite and accessibility checks**
 
 Run: `npm test --prefix frontend`, `npm run test:a11y --prefix frontend`, and `npm run test:keyboard --prefix frontend`  
 Expected: All passing with 0 axe violations.
 
-- [ ] **Step 5: Commit Task 5**
+- [x] **Step 5: Commit Task 5**
 
 ```bash
 git add frontend/src/app/ frontend/tests/all_routes_wiring.test.mjs
@@ -333,11 +333,11 @@ git commit -m "feat(frontend): wire all child routes with resilient fallback and
 - Clean: remove untracked ephemeral files (`.playwright-mcp/`, `scripts/watch_ci.py`), verify `.gitignore`
 - Format & Lint: Run `cargo fmt`, `cargo clippy`, `cargo test`, `npm run lint`, `npm test`
 
-- [ ] **Step 1: Author `docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`**
+- [x] **Step 1: Author `docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`**
 
 Provide comprehensive, audit-grade verification entries for each of the 21 leadership attributes, complete with architectural evidence, exact test commands, and formal verification proofs.
 
-- [ ] **Step 2: Clean untracked files and format codebase**
+- [x] **Step 2: Clean untracked files and format codebase**
 
 ```bash
 cargo fmt --all
@@ -345,12 +345,12 @@ cargo clippy --workspace --all-targets -- -D warnings
 npm run lint --prefix frontend
 ```
 
-- [ ] **Step 3: Run full Rust workspace test suite and verification gate**
+- [x] **Step 3: Run full Rust workspace test suite and verification gate**
 
 Run: `cargo test --workspace --all-targets` and `npm test --prefix frontend`  
 Expected: All tests pass.
 
-- [ ] **Step 4: Commit Task 6**
+- [x] **Step 4: Commit Task 6**
 
 ```bash
 git add docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md .gitignore Cargo.lock
