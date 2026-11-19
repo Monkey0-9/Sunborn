@@ -24,14 +24,20 @@ import {
   ShieldCheck,
   Sliders,
   ChevronDown,
+  Key as KeyIcon,
 } from "lucide-react";
 import { cn, extractVectorClockEpoch } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { CommandMenu } from "@/components/ui/command-menu";
 import { API_BASE_URL } from "@/lib/api";
+import { useClusterStore, setPersona, setByokApiKey } from "@/lib/cluster-store";
 
 export function Header() {
   const pathname = usePathname();
+  const clusterState = useClusterStore();
+  const { persona, byokApiKey } = clusterState;
+  const [showByokModal, setShowByokModal] = useState<boolean>(false);
+  const [tempKey, setTempKey] = useState<string>("");
   const [gatewayStatus, setGatewayStatus] = useState<"live" | "offline">("offline");
   const [pingMs, setPingMs] = useState<number | null>(null);
   const [epoch, setEpoch] = useState<number>(1);
@@ -242,6 +248,58 @@ export function Header() {
 
           {/* Right Controls */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Persona Switcher */}
+            <div
+              role="group"
+              aria-label="Console View Mode"
+              className="hidden md:flex items-center p-0.5 rounded-lg bg-slate-950/80 border border-white/10 text-xs font-mono"
+            >
+              <button
+                type="button"
+                onClick={() => setPersona("executive")}
+                className={cn(
+                  "px-2.5 py-1 rounded text-[11px] font-medium transition-colors",
+                  persona === "executive"
+                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-semibold"
+                    : "text-slate-400 hover:text-slate-200"
+                )}
+                aria-pressed={persona === "executive"}
+                aria-label="Switch to Executive Cockpit view"
+              >
+                Executive Cockpit
+              </button>
+              <button
+                type="button"
+                onClick={() => setPersona("developer")}
+                className={cn(
+                  "px-2.5 py-1 rounded text-[11px] font-medium transition-colors",
+                  persona === "developer"
+                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-semibold"
+                    : "text-slate-400 hover:text-slate-200"
+                )}
+                aria-pressed={persona === "developer"}
+                aria-label="Switch to Developer Sandbox view"
+              >
+                Developer Sandbox
+              </button>
+            </div>
+
+            {/* BYOK API Key Trigger */}
+            <button
+              type="button"
+              onClick={() => setShowByokModal(true)}
+              className={cn(
+                "hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-mono transition-colors",
+                byokApiKey
+                  ? "bg-cyan-950/60 border-cyan-500/40 text-cyan-300"
+                  : "bg-slate-900/80 border-white/10 text-slate-400 hover:text-white"
+              )}
+              aria-label="Configure BYOK API Key"
+            >
+              <KeyIcon className="w-3.5 h-3.5 text-cyan-400" aria-hidden="true" />
+              <span>{byokApiKey ? "BYOK ACTIVE" : "BYOK"}</span>
+            </button>
+
             {/* Global Command Menu */}
             <CommandMenu />
 
@@ -475,6 +533,79 @@ export function Header() {
                 className="px-4 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white transition-colors font-semibold"
               >
                 Close HUD
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BYOK Session Key Modal */}
+      {showByokModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="byok-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+        >
+          <div className="relative w-full max-w-md rounded-2xl bg-slate-950 border border-white/10 p-6 space-y-4 shadow-2xl font-sans">
+            <div className="flex items-center justify-between">
+              <h2 id="byok-modal-title" className="text-base font-bold text-white flex items-center gap-2">
+                <KeyIcon className="w-4 h-4 text-cyan-400" aria-hidden="true" />
+                BYOK (Bring Your Own Key) Session
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowByokModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white"
+                aria-label="Close BYOK dialog"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Attach an active Sunborn API key to client requests for authenticated multi-tenant routing. Session keys remain strictly in-memory.
+            </p>
+
+            <div className="space-y-1.5 font-mono text-xs">
+              <label htmlFor="byok-input" className="text-slate-300 font-semibold">
+                GATEWAY API KEY
+              </label>
+              <input
+                id="byok-input"
+                type="password"
+                value={tempKey}
+                onChange={(e) => setTempKey(e.target.value)}
+                placeholder="sb_live_..."
+                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              {byokApiKey && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setByokApiKey(null);
+                    setTempKey("");
+                    setShowByokModal(false);
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-rose-500/30 text-rose-300 hover:bg-rose-950/40 text-xs font-mono"
+                >
+                  Clear Key
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  if (tempKey.trim()) {
+                    setByokApiKey(tempKey.trim());
+                  }
+                  setShowByokModal(false);
+                }}
+                className="px-4 py-1.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30 text-xs font-mono font-semibold"
+              >
+                Save Key
               </button>
             </div>
           </div>
