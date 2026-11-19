@@ -272,42 +272,42 @@ export default function LearningControllerPage() {
                 <div className="p-3 rounded-lg bg-slate-900 border border-white/10 space-y-0.5">
                   <span className="text-[10px] text-slate-400">MIN SIMILARITY (&tau;)</span>
                   <div className="text-lg font-bold text-cyan-300">
-                    {activePolicy?.weights.min_similarity_threshold.toFixed(2) ?? "0.88"}
+                    {activePolicy?.weights?.min_similarity_threshold?.toFixed(2) ?? "0.88"}
                   </div>
                   <span className="text-[10px] text-slate-400">&ge; 0.75 floor invariant</span>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-900 border border-white/10 space-y-0.5">
                   <span className="text-[10px] text-slate-400">MAX CONFORMAL RISK</span>
                   <div className="text-lg font-bold text-amber-300">
-                    {activePolicy?.weights.max_risk_threshold.toFixed(2) ?? "0.25"}
+                    {activePolicy?.weights?.max_risk_threshold?.toFixed(2) ?? "0.25"}
                   </div>
                   <span className="text-[10px] text-slate-400">&le; 0.25 ceiling</span>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-900 border border-white/10 space-y-0.5">
                   <span className="text-[10px] text-slate-400">CONFORMAL ALPHA (&alpha;)</span>
                   <div className="text-lg font-bold text-emerald-300">
-                    {activePolicy?.weights.conformal_alpha.toFixed(2) ?? "0.01"}
+                    {activePolicy?.weights?.conformal_alpha?.toFixed(2) ?? "0.01"}
                   </div>
                   <span className="text-[10px] text-slate-400">99% coverage guarantee</span>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-900 border border-white/10 space-y-0.5">
                   <span className="text-[10px] text-slate-400">PREFETCH CONFIDENCE</span>
                   <div className="text-lg font-bold text-white">
-                    {activePolicy?.weights.prefetch_confidence_threshold.toFixed(2) ?? "0.60"}
+                    {activePolicy?.weights?.prefetch_confidence_threshold?.toFixed(2) ?? "0.60"}
                   </div>
                   <span className="text-[10px] text-slate-400">Markov trigger</span>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-900 border border-white/10 space-y-0.5">
                   <span className="text-[10px] text-slate-400">STALENESS WEIGHT</span>
                   <div className="text-lg font-bold text-slate-300">
-                    {activePolicy?.weights.eviction_staleness_weight.toFixed(2) ?? "0.40"}
+                    {activePolicy?.weights?.eviction_staleness_weight?.toFixed(2) ?? "0.40"}
                   </div>
                   <span className="text-[10px] text-slate-400">W-TinyLFU ratio</span>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-900 border border-white/10 space-y-0.5">
                   <span className="text-[10px] text-slate-400">COST WEIGHT</span>
                   <div className="text-lg font-bold text-slate-300">
-                    {activePolicy?.weights.eviction_cost_weight.toFixed(2) ?? "0.60"}
+                    {activePolicy?.weights?.eviction_cost_weight?.toFixed(2) ?? "0.60"}
                   </div>
                   <span className="text-[10px] text-slate-400">FinOps priority</span>
                 </div>
@@ -395,9 +395,9 @@ export default function LearningControllerPage() {
                     <Badge variant="warning">{canaryPolicy.percentage}% TRAFFIC</Badge>
                   </div>
                   <div className="text-[11px] text-slate-300 space-y-1">
-                    <div>• Candidate ID: <strong className="text-white">{canaryPolicy.policy.policy_id}</strong></div>
-                    <div>• Min Similarity: <strong className="text-cyan-300">{canaryPolicy.policy.weights.min_similarity_threshold}</strong></div>
-                    <div>• Held-Out Error Rate: <strong className="text-emerald-300">{canaryPolicy.policy.evaluation_report.held_out_false_hit_rate}%</strong></div>
+                    <div>• Candidate ID: <strong className="text-white">{canaryPolicy.policy?.policy_id || "candidate"}</strong></div>
+                    <div>• Min Similarity: <strong className="text-cyan-300">{canaryPolicy.policy?.weights?.min_similarity_threshold ?? "0.90"}</strong></div>
+                    <div>• Held-Out Error Rate: <strong className="text-emerald-300">{canaryPolicy.policy?.evaluation_report?.held_out_false_hit_rate ?? 0}%</strong></div>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-2 pt-1">
                     <button

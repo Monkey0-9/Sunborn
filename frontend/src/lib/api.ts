@@ -109,17 +109,21 @@ async function withFallback<T>(
     setIsSimulated(false);
     return res;
   } catch (err: any) {
-    if (
-      err instanceof SunbornApiError &&
-      (err.status === 0 ||
-        err.status === 401 ||
-        err.status === 403 ||
-        err.status === 502 ||
-        err.status === 503 ||
-        err.status === 504)
-    ) {
-      setIsSimulated(true);
-      return await fallback();
+    if (err instanceof SunbornApiError) {
+      // 1. Gateway offline / connection refused (status 0) or Next.js BFF connection error (status 502)
+      const isConnectionOffline =
+        err.status === 0 ||
+        (err.status === 502 && err.details?.error === "GATEWAY_CONNECTION_FAILED");
+
+      // 2. Anonymous public visitor accessing endpoint in demo mode without credentials
+      const isAnonymousPublicDemo =
+        err.status === 401 &&
+        (!getActiveApiKey() || err.details?.error === "AUTHENTICATION_REQUIRED");
+
+      if (isConnectionOffline || isAnonymousPublicDemo) {
+        setIsSimulated(true);
+        return await fallback();
+      }
     }
     throw err;
   }
