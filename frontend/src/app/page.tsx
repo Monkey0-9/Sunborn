@@ -31,6 +31,7 @@ import { PlanetScaleStressSimulator } from "@/components/simulator/stress-simula
 import { PromptProbePlayground } from "@/components/cockpit/prompt-probe-playground";
 import { LiveDAGVisualizer } from "@/components/cockpit/live-dag-visualizer";
 import { ClusterMeshStatus } from "@/components/cockpit/cluster-mesh-status";
+import { FrameworkIntegrations } from "@/components/cockpit/framework-integrations";
 
 interface GatewayMetrics {
   totalRequests: number;
@@ -505,6 +506,9 @@ export default function OverviewPage() {
 
       {/* Modular Cockpit Section 3: Multi-Region Cluster Topology & Vector Clock Mesh */}
       <ClusterMeshStatus />
+
+      {/* Modular Cockpit Section 4: Universal Multi-Framework Client Integration */}
+      <FrameworkIntegrations />
 
       {/* Real-Time Live Activity Stream */}
       <section className="space-y-4">

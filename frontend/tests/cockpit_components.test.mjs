@@ -8,12 +8,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const cockpitDir = path.join(__dirname, '..', 'src', 'components', 'cockpit');
 
-test('Cockpit Modular Components: All 4 components exist and define clean exports', () => {
+test('Cockpit Modular Components: All 5 components exist and define clean exports', () => {
   const components = [
     'metrics-ribbon.tsx',
     'prompt-probe-playground.tsx',
     'live-dag-visualizer.tsx',
     'cluster-mesh-status.tsx',
+    'framework-integrations.tsx',
   ];
 
   for (const comp of components) {

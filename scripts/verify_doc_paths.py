@@ -27,6 +27,9 @@ def collect_markdown_files():
         files.append(readme)
     docs_dir = os.path.join(ROOT_DIR, "docs")
     for dirpath, _, filenames in os.walk(docs_dir):
+        # Exclude ephemeral AI planning scratchspecs in docs/superpowers/
+        if "superpowers" in dirpath.split(os.sep):
+            continue
         for name in filenames:
             # 43_MISSING_IMPLEMENTATIONS.md explicitly catalogs non-existent legacy references
             if name.endswith(".md") and name != "43_MISSING_IMPLEMENTATIONS.md":
