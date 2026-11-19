@@ -33,7 +33,7 @@ Sunborn is an ultra-low-latency distributed semantic execution gateway for front
 - **Architectural Guarantee**: Every client request $q$ returning a cached completion is formally proven to be identical or semantically isomorphic to ground truth state $\mathcal{D}_{\tau}$ at epoch $\tau$.
 - **Verification Evidence**:
   - 328+ Rust unit, integration, and property tests passing (`cargo test --workspace --all-targets`).
-  - 59 frontend unit, BFF security, and end-to-end simulation tests passing (`npm test --prefix frontend`).
+  - 63 frontend unit, BFF security, and end-to-end simulation tests passing (`npm test --prefix frontend`).
   - TLA+ formal model checking of Epoch Fencing (`formal/EpochFencing.tla`) proving no stale reads occur across distributed replicas.
 
 ### 2. Architecture

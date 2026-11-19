@@ -7,6 +7,16 @@
 #include <arm_neon.h>
 #endif
 
+int sunborn_c_has_hardware_simd(void) {
+#if defined(__AVX2__)
+    return 1;
+#elif defined(__ARM_NEON) || defined(__ARM_NEON__)
+    return 1;
+#else
+    return 0;
+#endif
+}
+
 void sunborn_c_vector_dot_and_norms(
     const float *a,
     const float *b,
@@ -187,6 +197,15 @@ float sunborn_c_vector_l2_norm(const float *a, size_t n) {
     }
     sum = vgetq_lane_f32(vsum, 0) + vgetq_lane_f32(vsum, 1) +
           vgetq_lane_f32(vsum, 2) + vgetq_lane_f32(vsum, 3);
+#else
+    float sum0 = 0.0f, sum1 = 0.0f;
+    for (; i + 7 < n; i += 8) {
+        float a0 = a[i+0], a1 = a[i+1], a2 = a[i+2], a3 = a[i+3];
+        float a4 = a[i+4], a5 = a[i+5], a6 = a[i+6], a7 = a[i+7];
+        sum0 += a0 * a0 + a2 * a2 + a4 * a4 + a6 * a6;
+        sum1 += a1 * a1 + a3 * a3 + a5 * a5 + a7 * a7;
+    }
+    sum = sum0 + sum1;
 #endif
 
     for (; i < n; ++i) {
@@ -228,6 +247,17 @@ float sunborn_c_vector_euclidean_distance(const float *a, const float *b, size_t
     }
     sum = vgetq_lane_f32(vsum, 0) + vgetq_lane_f32(vsum, 1) +
           vgetq_lane_f32(vsum, 2) + vgetq_lane_f32(vsum, 3);
+#else
+    float sum0 = 0.0f, sum1 = 0.0f;
+    for (; i + 7 < n; i += 8) {
+        float d0 = a[i+0] - b[i+0], d1 = a[i+1] - b[i+1];
+        float d2 = a[i+2] - b[i+2], d3 = a[i+3] - b[i+3];
+        float d4 = a[i+4] - b[i+4], d5 = a[i+5] - b[i+5];
+        float d6 = a[i+6] - b[i+6], d7 = a[i+7] - b[i+7];
+        sum0 += d0 * d0 + d2 * d2 + d4 * d4 + d6 * d6;
+        sum1 += d1 * d1 + d3 * d3 + d5 * d5 + d7 * d7;
+    }
+    sum = sum0 + sum1;
 #endif
 
     for (; i < n; ++i) {

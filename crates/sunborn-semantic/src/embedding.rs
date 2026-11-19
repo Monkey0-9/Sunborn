@@ -6,9 +6,15 @@ extern "C" {
     fn sunborn_c_vector_dot_product(a: *const f32, b: *const f32, n: usize) -> f32;
     fn sunborn_c_vector_l2_norm(a: *const f32, n: usize) -> f32;
     fn sunborn_c_vector_euclidean_distance(a: *const f32, b: *const f32, n: usize) -> f32;
+    fn sunborn_c_has_hardware_simd() -> i32;
 }
 
 pub type Vector = Vec<f32>;
+
+/// Returns true if the native C accelerator is operating with hardware vector SIMD (AVX2 / ARM NEON).
+pub fn has_hardware_simd() -> bool {
+    unsafe { sunborn_c_has_hardware_simd() != 0 }
+}
 
 /// Computes high-performance vectorized cosine similarity between two float vectors using
 /// the native C SIMD acceleration kernel.
@@ -457,5 +463,12 @@ mod tests {
         assert_eq!(vector_dot_product(&[], &[]), 0.0);
         assert_eq!(vector_l2_norm(&[]), 0.0);
         assert_eq!(vector_euclidean_distance(&[], &[]), 0.0);
+    }
+
+    #[test]
+    fn test_simd_hardware_detection() {
+        let is_simd = has_hardware_simd();
+        // Function must evaluate safely without CPU exception or crash
+        let _ = is_simd;
     }
 }

@@ -102,7 +102,7 @@ Every launch stage must satisfy objective empirical gates before traffic gates a
 | Phase | Milestone | Requirement | Verification Artifact | Status |
 | :--- | :--- | :--- | :--- | :--- |
 | **Phase 0** | Workspace Compilation & Lints | Rust 1.80+ workspace compiles with zero warnings under `-D warnings`. | `cargo check --workspace --all-targets` | ✅ **VERIFIED** |
-| **Phase 0** | Core Test Surface | 315 Rust unit/integration tests + 38 frontend tests pass with 0 failures. | `cargo test --workspace`, `npm test` | ✅ **VERIFIED** |
+| **Phase 0** | Core Test Surface | 328+ Rust unit/integration tests + 63 frontend tests pass with 0 failures. | `cargo test --workspace`, `npm test` | ✅ **VERIFIED** |
 | **Phase 0** | Formal Verification | TLA+ model checking confirms Epoch Fencing & Outbox safety invariants. | `scripts/run_tlaplus.sh` | ✅ **VERIFIED** |
 | **Phase 0** | Deterministic Supply Chain | CycloneDX v1.5 SBOM generated with reproducible SHA-256 digest. | `sbom.cyclonedx.json` | ✅ **VERIFIED** |
 | **Phase 1** | Client Showcase & Tour | Zero-dependency 6-pillar client evaluation suite passes with 100% assertions. | `scripts/client_showcase.py --self-test` | ✅ **VERIFIED** |

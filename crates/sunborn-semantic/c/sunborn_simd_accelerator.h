@@ -42,6 +42,11 @@ float sunborn_c_vector_l2_norm(const float *a, size_t n);
  */
 float sunborn_c_vector_euclidean_distance(const float *a, const float *b, size_t n);
 
+/**
+ * Returns 1 if compiled with hardware vector SIMD (AVX2 or ARM NEON), 0 for scalar fallback.
+ */
+int sunborn_c_has_hardware_simd(void);
+
 #ifdef __cplusplus
 }
 #endif

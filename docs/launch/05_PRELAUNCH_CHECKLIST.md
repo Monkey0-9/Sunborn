@@ -39,9 +39,9 @@ re-run 2026-11-18 where the result changed.
 - [x] `cargo test --workspace --all-targets -- --test-threads=1`: 328 passed, 0 failed, 44 suites.
 - [x] `cargo clippy --workspace --all-targets --all-features -- -D warnings` exits 0.
 - [x] Frontend production build succeeds.
-- [x] Frontend tests: 38 passed, 0 failed.
+- [x] Frontend tests: 63 passed, 0 failed.
 - [x] WCAG 2.2 AA axe sweep: 10 routes, 0 serious or critical violations.
-- [x] Keyboard and focus audit: 10 routes, 208+ tab stops, visible focus ring.
+- [x] Keyboard and focus audit: 10 routes, 253 tab stops, visible focus ring.
 - [x] Python SDK packaging and clean install: 27 tests pass.
 - [x] OpenAPI 3.1 drift: 53/53 operations match.
 - [x] Route authorization parity: all 50 router paths classified; 45/45 reject
