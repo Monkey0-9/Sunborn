@@ -198,7 +198,7 @@ export function PromptProbePlayground() {
               rows={2}
               value={promptText}
               onChange={(e) => setPromptText(e.target.value)}
-              className="w-full px-3 py-2 text-sm text-white bg-slate-950/80 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 font-mono resize-none"
+              className="w-full px-3 py-2 text-sm text-white bg-slate-950/80 border border-white/10 rounded-lg focus:border-cyan-400 font-mono resize-none"
               placeholder="Enter prompt or select preset above..."
             />
           </div>
