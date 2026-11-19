@@ -1,32 +1,34 @@
 import { useSyncExternalStore } from "react";
 
 export type PersonaMode = "executive" | "developer";
-export type CircuitBreakerStatus = "CLOSED" | "OPEN";
+export type CircuitBreakerState = "CLOSED" | "OPEN";
 
 export interface ClusterState {
   persona: PersonaMode;
-  circuitBreaker: CircuitBreakerStatus;
+  circuitBreaker: CircuitBreakerState;
   byokApiKey: string | null;
-  activeReplicas: number;
-  globalEpoch: number;
-  simulationActive: boolean;
+  vectorEpoch: number;
+  isSimulated: boolean;
 }
 
-let currentState: ClusterState = {
+const DEFAULT_STATE: ClusterState = {
   persona: "executive",
   circuitBreaker: "CLOSED",
   byokApiKey: null,
-  activeReplicas: 6,
-  globalEpoch: 42,
-  simulationActive: false,
+  vectorEpoch: 4192,
+  isSimulated: false,
 };
 
-type Listener = () => void;
-const listeners = new Set<Listener>();
+let currentState: ClusterState = { ...DEFAULT_STATE };
+const listeners = new Set<(state: ClusterState) => void>();
 
-function notify() {
+function notify(): void {
   for (const listener of listeners) {
-    listener();
+    try {
+      listener(currentState);
+    } catch {
+      // Ignore listener error to protect store stability
+    }
   }
 }
 
@@ -34,35 +36,48 @@ export function getClusterState(): ClusterState {
   return currentState;
 }
 
-export function setPersona(persona: PersonaMode): void {
-  if (currentState.persona !== persona) {
-    currentState = { ...currentState, persona };
+export function resetClusterState(): void {
+  currentState = { ...DEFAULT_STATE };
+  notify();
+}
+
+export function setPersona(mode: PersonaMode): void {
+  if (currentState.persona !== mode) {
+    currentState = { ...currentState, persona: mode };
     notify();
   }
 }
 
-export function setCircuitBreaker(circuitBreaker: CircuitBreakerStatus): void {
-  if (currentState.circuitBreaker !== circuitBreaker) {
-    currentState = { ...currentState, circuitBreaker };
+export function setCircuitBreaker(state: CircuitBreakerState): void {
+  if (currentState.circuitBreaker !== state) {
+    currentState = { ...currentState, circuitBreaker: state };
     notify();
   }
 }
 
-export function setByokApiKey(byokApiKey: string | null): void {
-  if (currentState.byokApiKey !== byokApiKey) {
-    currentState = { ...currentState, byokApiKey };
+export function setByokApiKey(key: string | null): void {
+  const sanitized = key && key.trim().length > 0 ? key.trim() : null;
+  if (currentState.byokApiKey !== sanitized) {
+    currentState = { ...currentState, byokApiKey: sanitized };
     notify();
   }
 }
 
-export function setSimulationActive(simulationActive: boolean): void {
-  if (currentState.simulationActive !== simulationActive) {
-    currentState = { ...currentState, simulationActive };
+export function setVectorEpoch(epoch: number): void {
+  if (currentState.vectorEpoch !== epoch) {
+    currentState = { ...currentState, vectorEpoch: epoch };
     notify();
   }
 }
 
-export function subscribeToCluster(listener: Listener): () => void {
+export function setIsSimulated(sim: boolean): void {
+  if (currentState.isSimulated !== sim) {
+    currentState = { ...currentState, isSimulated: sim };
+    notify();
+  }
+}
+
+export function subscribeClusterState(listener: (state: ClusterState) => void): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -70,12 +85,40 @@ export function subscribeToCluster(listener: Listener): () => void {
 }
 
 /**
- * React Hook for tear-free, SSR-safe reactive cluster state.
+ * React 19 hook providing reactive, zero-tearing access to global cluster & persona state.
  */
 export function useClusterStore(): ClusterState {
   return useSyncExternalStore(
-    subscribeToCluster,
+    subscribeClusterState,
     getClusterState,
     getClusterState
   );
+}
+
+/**
+ * Safely extracts a numeric monotonic epoch from arbitrary vector clock representations.
+ */
+export function extractVectorClockEpoch(vc: unknown, fallback: number = 1): number {
+  if (typeof vc === "number" && !Number.isNaN(vc)) {
+    return vc;
+  }
+  if (!vc || typeof vc !== "object") {
+    return fallback;
+  }
+  const obj = vc as Record<string, unknown>;
+  if (typeof obj.epoch === "number" && !Number.isNaN(obj.epoch)) {
+    return obj.epoch;
+  }
+  const targetMap =
+    obj.clocks && typeof obj.clocks === "object"
+      ? (obj.clocks as Record<string, unknown>)
+      : obj;
+
+  const numericValues = Object.values(targetMap).filter(
+    (v): v is number => typeof v === "number" && !Number.isNaN(v)
+  );
+  if (numericValues.length > 0) {
+    return Math.max(...numericValues);
+  }
+  return fallback;
 }
