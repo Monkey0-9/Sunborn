@@ -143,6 +143,14 @@ pub async fn ready(State(state): State<AppState>) -> impl IntoResponse {
             },
             "invalidation_bus": {
                 "status": if cache_ok && vector_ok { "ready" } else { "degraded" }
+            },
+            "execution_cache": {
+                "status": "ready",
+                "storage_tier": "process-local-ephemeral"
+            },
+            "learning_store": {
+                "status": "ready",
+                "storage_tier": "process-local-ephemeral"
             }
         }
     });
@@ -799,10 +807,18 @@ pub async fn execute_request_inner(
         origin_result.completion_tokens,
     );
     // Settle the atomic reservation with actual origin cost
-    state
+    if let Err(err) = state
         .spend_ledger
         .settle(&req.tenant_id.0, reservation_id, actual_cost)
-        .await;
+        .await
+    {
+        tracing::error!(
+            tenant = %req.tenant_id.0,
+            reservation = %reservation_id,
+            error = ?err,
+            "CRITICAL: Failed to settle spend reservation in ledger; retaining pending reservation for reconciliation"
+        );
+    }
 
     let origin_ledger = sunborn_db::models::FinOpsLedgerRecord {
         tenant_id: req.tenant_id.0.clone(),
@@ -3476,6 +3492,7 @@ pub async fn get_learning_policies(
 
     Json(json!({
         "tenant_id": sec_ctx.tenant_id.0,
+        "storage_tier": "process-local-ephemeral",
         "active_policy": active,
         "canary_policy": canary.as_ref().map(|(p, pct)| json!({ "policy": p, "percentage": pct })),
         "tenant_feedback_events": tenant_events_count,

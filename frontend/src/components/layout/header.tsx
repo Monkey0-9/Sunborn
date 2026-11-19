@@ -141,6 +141,12 @@ export function Header() {
 
   return (
     <header role="banner" className="sticky top-0 z-50 w-full border-b border-white/[0.08] bg-[#020617]/85 backdrop-blur-3xl shadow-glass transition-all">
+      {isSimulated && (
+        <aside aria-label="Simulation Mode Alert" className="w-full bg-amber-500/15 border-b border-amber-500/30 text-amber-300 px-4 py-1.5 text-xs font-mono flex items-center justify-center gap-2">
+          <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span>SIMULATION MODE ACTIVE — Gateway offline or unauthenticated; actions are local sandbox demonstrations and do not mutate live production state.</span>
+        </aside>
+      )}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Left Brand Emblem */}

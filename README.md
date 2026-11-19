@@ -15,7 +15,7 @@ and refuses to serve it when the reuse cannot be proven safe.*
 [![False-hit rate](https://img.shields.io/badge/Held--out%20false%20hits-0%20of%20200-brightgreen.svg)](research/results/heldout_generalization_run.json)
 [![WCAG 2.2 AA](https://img.shields.io/badge/Accessibility-WCAG%202.2%20AA%20Verified-brightgreen.svg)](docs/STATUS.md)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-Verified%20GO%20%C2%B7%20Enterprise%20Ready-brightgreen.svg)](docs/STATUS.md)
+[![Status](https://img.shields.io/badge/Status-HOLD%20%C2%B7%20Audit%20Remediation-yellow.svg)](docs/STATUS.md)
 
 **[Start in 60 seconds](#2-start-in-60-seconds)** ·
 **[21 Quality Attributes Dossier](docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md)** ·

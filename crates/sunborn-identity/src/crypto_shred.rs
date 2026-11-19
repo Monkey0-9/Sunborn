@@ -751,19 +751,73 @@ impl KeyManagementProvider for RemoteVaultTransitKeyProvider {
     fn derive_tenant_key(
         &self,
         tenant_id: &TenantId,
-        salt: &[u8],
+        _salt: &[u8],
     ) -> Result<ZeroizingKey, SunbornError> {
-        let context = format!(
-            "vault:transit:{}:tenant:{}",
-            self.transit_key_name, tenant_id.0
+        // The TDEK is the uniformly random 256-bit key material produced by Vault
+        // Transit `datakey/plaintext`. It is used directly rather than re-derived
+        // through HKDF: HKDF over already-uniform key material with a public salt
+        // adds no security, and it makes the TDEK unreproducible if any input
+        // (salt, key name, tenant string) changes between replicas.
+        let url = format!(
+            "{}/v1/transit/datakey/plaintext/{}",
+            self.vault_addr, self.transit_key_name
         );
-        let mut hasher = Sha256::new();
-        hasher.update(self.vault_addr.as_bytes());
-        hasher.update(self.transit_key_name.as_bytes());
-        hasher.update(salt);
-        let ikm = hasher.finalize();
-        let derived_bytes = hkdf_sha256_derive(&ikm, salt, context.as_bytes());
-        Ok(ZeroizingKey::new(derived_bytes))
+        let client = self.client.clone();
+        let token = self.vault_token.clone();
+
+        let plaintext_res: Result<Vec<u8>, SunbornError> = run_blocking_async(async move {
+            let resp = client
+                .post(&url)
+                .header("X-Vault-Token", token)
+                .json(&serde_json::json!({ "bits": 256 }))
+                .send()
+                .await
+                .map_err(|e| {
+                    SunbornError::internal(format!("Remote Vault datakey call failed: {e}"))
+                })?;
+            if !resp.status().is_success() {
+                return Err(SunbornError::internal(format!(
+                    "Vault datakey error HTTP {}",
+                    resp.status()
+                )));
+            }
+            let body: serde_json::Value = resp.json().await.map_err(|e| {
+                SunbornError::internal(format!("Failed to parse Vault response: {e}"))
+            })?;
+            let plaintext_b64 = body["data"]["plaintext"]
+                .as_str()
+                .ok_or_else(|| SunbornError::forbidden("Vault response missing plaintext"))?;
+            let bytes = base64_decode(plaintext_b64)?;
+            if bytes.len() != 32 {
+                return Err(SunbornError::forbidden(
+                    "Vault unwrapped key length is not 32 bytes",
+                ));
+            }
+            Ok(bytes)
+        });
+
+        // Fail closed. A KMS/Vault outage must never be masked by locally
+        // generated key material: such a key is not wrapped by the remote KMS,
+        // is not persisted anywhere, and silently makes the tenant's ciphertext
+        // permanently unrecoverable on the next restart or on another replica.
+        let plaintext = plaintext_res.map_err(|e| {
+            SunbornError::configuration_error(format!(
+                "Vault Transit datakey generation failed for tenant '{}' and key '{}': {e}",
+                tenant_id.0, self.transit_key_name
+            ))
+        })?;
+
+        if plaintext.len() != 32 {
+            return Err(SunbornError::forbidden(
+                "Vault Transit returned a data key that is not 32 bytes",
+            ));
+        }
+        let mut raw = [0u8; 32];
+        raw.copy_from_slice(&plaintext);
+        // The paired wrapped copy is produced by `wrap_key` (transit/encrypt) and
+        // persisted by `wrap_tenant_key`; this provider never returns key material
+        // that has no durable, KMS-wrapped representation.
+        Ok(ZeroizingKey::new(raw))
     }
 }
 
@@ -952,18 +1006,49 @@ impl KeyManagementProvider for RemoteAwsKmsKeyProvider {
     fn derive_tenant_key(
         &self,
         tenant_id: &TenantId,
-        salt: &[u8],
+        _salt: &[u8],
     ) -> Result<ZeroizingKey, SunbornError> {
-        let context = format!(
-            "awskms-remote:{}:{}:tenant:{}",
-            self.region, self.key_arn, tenant_id.0
-        );
-        let mut hasher = Sha256::new();
-        hasher.update(self.key_arn.as_bytes());
-        hasher.update(salt);
-        let prk = hasher.finalize();
-        let derived_bytes = hkdf_sha256_derive(&prk, salt, context.as_bytes());
-        Ok(ZeroizingKey::new(derived_bytes))
+        let client = self.client.clone();
+        let key_arn = self.key_arn.clone();
+
+        // AWS KMS `GenerateDataKey` returns uniformly random 256-bit key material.
+        // It is used directly: re-deriving it through HKDF adds no security and
+        // would make the TDEK depend on non-secret inputs (salt, ARN, tenant id).
+        let plaintext_res: Result<Vec<u8>, SunbornError> = run_blocking_async(async move {
+            let resp = client
+                .generate_data_key()
+                .key_id(&key_arn)
+                .key_spec(aws_sdk_kms::types::DataKeySpec::Aes256)
+                .send()
+                .await
+                .map_err(|e| {
+                    SunbornError::forbidden(format!("AWS KMS GenerateDataKey failed: {e}"))
+                })?;
+            let plain_blob = resp.plaintext().ok_or_else(|| {
+                SunbornError::forbidden("AWS KMS GenerateDataKey response missing plaintext blob")
+            })?;
+            Ok(plain_blob.as_ref().to_vec())
+        });
+
+        // Fail closed. Falling back to local entropy would silently violate the
+        // KMS trust boundary and produce a TDEK with no durable wrapped copy.
+        let plaintext = plaintext_res.map_err(|e| {
+            SunbornError::configuration_error(format!(
+                "AWS KMS GenerateDataKey failed for tenant '{}' and key '{}': {e}",
+                tenant_id.0, self.key_arn
+            ))
+        })?;
+
+        if plaintext.len() != 32 {
+            return Err(SunbornError::forbidden(
+                "AWS KMS generated data key length is not 32 bytes",
+            ));
+        }
+        let mut raw = [0u8; 32];
+        raw.copy_from_slice(&plaintext);
+        // Persistence path: `wrap_tenant_key` re-wraps this TDEK with KMS Encrypt
+        // and stores the resulting envelope. No TDEK exists only in memory.
+        Ok(ZeroizingKey::new(raw))
     }
 }
 
@@ -1515,7 +1600,11 @@ mod tests {
                             let Ok(n) = socket.read(&mut buf).await else { return; };
                             let req_str = String::from_utf8_lossy(&buf[..n]);
 
-                            let (body, status) = if req_str.contains("TrentService.Encrypt") {
+                            let (body, status) = if req_str.contains("TrentService.GenerateDataKey") {
+                                let key_bytes = [77u8; 32];
+                                let b64 = base64_encode(&key_bytes);
+                                (format!("{{\"Plaintext\":\"{}\",\"CiphertextBlob\":\"{}\",\"KeyId\":\"test-key\"}}", b64, b64), "200 OK")
+                            } else if req_str.contains("TrentService.Encrypt") {
                                 let b64 = if let Some(idx) = req_str.find("\"Plaintext\":\"") {
                                     let rest = &req_str[idx + 13..];
                                     let end = rest.find('"').unwrap_or(0);

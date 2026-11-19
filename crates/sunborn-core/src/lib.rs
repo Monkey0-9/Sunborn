@@ -29,7 +29,7 @@ pub use certificate::{
 pub use cluster::{CausalityRelation, ClusterSyncDigest, VectorClock};
 pub use config::{allow_test_fixtures, is_production_mode, AppConfig};
 pub use error::{ErrorCode, Result, SunbornError};
-pub use finops::{FinOpsEngine, ModelPricing, SpendVelocityController};
+pub use finops::{FinOpsEngine, MicroUnits, ModelPricing, SpendVelocityController};
 pub use model::{
     ApplicationId, CachePath, CorrectnessTier, DecisionAction, DecisionRecord, RequestEnvelope,
     RequestId, ResponseEnvelope, TenantId, ToolDefinition,

@@ -63,6 +63,8 @@ pub struct AppState {
     pub db: Arc<dyn sunborn_db::DatabaseStore>,
     pub memory_db: Arc<MemoryDatabaseStore>,
     pub postgres_db: Arc<sunborn_db::PostgresDatabaseStore>,
+    /// Execution cache store. NOTE: Storage tier is `process-local-ephemeral`.
+    /// Execution sub-graph traces do NOT persist across gateway restarts or sync across cluster replicas.
     pub execution_store: Arc<MemoryExecutionCacheStore>,
     pub shadow_evaluator: Arc<ShadowEvaluator>,
     pub radix_router: Arc<KvCacheRouter>,
@@ -73,6 +75,8 @@ pub struct AppState {
     pub origin_provider: Arc<dyn LlmOriginProvider>,
     pub api_key_registry: Arc<ApiKeyRegistry>,
     pub selected_embedder: Arc<dyn sunborn_semantic::EmbeddingProvider>,
+    /// Tenant learning store. NOTE: Storage tier is `process-local-ephemeral`.
+    /// Trajectory feedback and policy adjustments are local to this node until exported or promoted.
     pub learning_store: Arc<crate::learning::TenantLearningStore>,
     pub learning_controller: Arc<crate::learning::PolicyPromotionController>,
     pub learning_hmac_secret: Vec<u8>,

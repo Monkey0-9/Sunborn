@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """
-Sunborn Platform: Public Launch Readiness & Scale Verification Engine.
+Sunborn Platform: Public Launch Readiness & Scale Verification Engine.Runs seven in-tree documentation, contract and client-interface checks.
 
-Performs a comprehensive, multi-subsystem pre-flight audit to certify that
-the repository, runtime artifacts, documentation, and client interfaces meet
-enterprise public-launch standards for millions of concurrent users.
+SCOPE LIMIT — these checks are necessary but NOT sufficient for a public
+launch, and this script is not a release authority. It does not run load,
+fault-injection, penetration, capacity or disaster-recovery tests, it does not
+verify the OpenAPI contract at runtime, and it makes no claim about the number
+of concurrent users the system can support. A passing run means "the in-tree
+docs, contract and client samples are internally consistent", nothing more.
 
-Verification Gates:
+In-Tree Verification Gates:
   1. Documentation & Relative Link Integrity (zero missing source paths)
   2. Launch Documentation & Claim Verification (zero unqualified claims)
   3. OpenAPI 3.1 Contract Parity & Specification Drift
   4. Enterprise Client Demonstration Suite (all 6 pillars verified)
   5. Python SDK Enterprise Integration Quickstart (dry-run self-test)
-  6. Grafana Telemetry Dashboard Schema Validity
-  7. CycloneDX v1.5 Software Bill of Materials (SBOM) Generation
-  8. Native Rust CLI Attestation Parity
+  6. Deterministic CycloneDX v1.5 Software Bill of Materials (SBOM) Generation
+  7. Grafana Telemetry Dashboard Schema Validity
 
 Usage:
   python scripts/verify_public_launch.py [--strict] [--json]
@@ -83,7 +85,7 @@ def main():
     if not args.json:
         print(f"\n{Style.BOLD}{Style.CYAN}================================================================================{Style.RESET}")
         print(f"{Style.BOLD}{Style.WHITE}     S U N B O R N   P U B L I C   L A U N C H   V E R I F I C A T I O N{Style.RESET}")
-        print(f"{Style.GRAY}  Pre-Flight Readiness Certification Engine for Millions-of-Users Scale{Style.RESET}")
+        print(f"{Style.GRAY}  In-Tree Documentation, Contract & Client Consistency Checks{Style.RESET}")
         print(f"{Style.BOLD}{Style.CYAN}================================================================================{Style.RESET}\n")
 
     py_bin = sys.executable
@@ -118,16 +120,21 @@ def main():
 
     if args.json:
         print(json.dumps({
-            "verdict": "CERTIFIED_FOR_PUBLIC_SCALE" if all_passed else "REJECTED",
+            "verdict": (
+                "IN_TREE_CHECKS_PASSED" if all_passed else "IN_TREE_CHECKS_FAILED"
+            ),
+            "release_authority": False,
+            "note": "Not a launch approval. See docs/STATUS.md for the authoritative release decision and open gates.",
             "duration_seconds": round(total_duration, 3),
             "stages": results,
         }, indent=2))
     else:
         print(f"\n{Style.BOLD}{Style.CYAN}--------------------------------------------------------------------------------{Style.RESET}")
         if all_passed:
-            print(f"{Style.BOLD}{Style.GREEN}  PUBLIC LAUNCH READINESS VERIFIED: ALL {len(stages)}/{len(stages)} AUDIT GATES PASSED ({total_duration:.2f}s){Style.RESET}")
+            print(f"{Style.BOLD}{Style.GREEN}  IN-TREE CHECKS PASSED: {len(stages)}/{len(stages)} ({total_duration:.2f}s){Style.RESET}")
+            print(f"{Style.GRAY}  Not a launch approval. Load, security, fault-injection and capacity gates are not run here.{Style.RESET}")
         else:
-            print(f"{Style.BOLD}{Style.RED}  LAUNCH GATES FAILED IN ONE OR MORE CRITICAL CHECKS ({total_duration:.2f}s){Style.RESET}")
+            print(f"{Style.BOLD}{Style.RED}  IN-TREE CHECKS FAILED ({total_duration:.2f}s){Style.RESET}")
         print(f"{Style.BOLD}{Style.CYAN}================================================================================{Style.RESET}\n")
 
     sys.exit(0 if all_passed else 1)

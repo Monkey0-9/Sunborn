@@ -2,9 +2,11 @@
 
 **Effective:** 2026-11-19
 **Baseline:** `ca7736f` plus the remediation described in §2.1 and §2.2
-**Release decision:** **GO — PUBLIC SCALE & ENTERPRISE READY.** All in-tree checks
+**Release decision:** **HOLD — STAGE 0 CONTROLLED PILOT REMEDIATION.** All in-tree checks
 listed in §1 pass on this tree (328 Rust tests, 63 frontend tests, Python SDK package smoke test, 7/7 pre-flight launch verification gates), and all
 P0/P1/P2 defects found in the 2026-11-17 audit are fixed with regression tests. All 21 enterprise system quality attributes are empirically documented and verified in `docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`.
+Authoritative gates N1 (multi-node distributed invalidation harness) and N2 (external penetration test)
+remain OPEN pending execution in containerized staging.
 Full findings and scoring: [`docs/engineering-audit-2026-11-17/REPORT.md`](engineering-audit-2026-11-17/REPORT.md).
 
 This document supersedes any readiness, score, or badge claim in

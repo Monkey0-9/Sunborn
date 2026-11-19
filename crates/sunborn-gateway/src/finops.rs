@@ -93,24 +93,31 @@ impl SpendLedger {
     }
 
     /// Commits actual cost against a reservation and returns window spend.
-    pub async fn settle(&self, tenant_id: &str, reservation_id: Uuid, actual_cost: f64) -> f64 {
+    pub async fn settle(
+        &self,
+        tenant_id: &str,
+        reservation_id: Uuid,
+        actual_cost: f64,
+    ) -> std::result::Result<f64, SpendLedgerError> {
         let Some(durable) = &self.durable else {
-            return self
+            return Ok(self
                 .local
-                .settle_spend(tenant_id, reservation_id, actual_cost);
+                .settle_spend(tenant_id, reservation_id, actual_cost));
         };
         match durable
             .settle_spend(tenant_id, reservation_id, actual_cost, self.window())
             .await
         {
-            Some(total) => total,
+            Some(total) => Ok(total),
             None => {
                 tracing::error!(
                     tenant = %tenant_id,
                     reservation = %reservation_id,
-                    "Failed to settle distributed spend reservation; it will expire unclaimed"
+                    "Failed to settle distributed spend reservation; database error or pool unavailable"
                 );
-                0.0
+                Err(SpendLedgerError::Unavailable(
+                    "distributed spend ledger settlement failed; reservation retained for reconciliation".to_string(),
+                ))
             }
         }
     }
@@ -205,7 +212,7 @@ mod tests {
             }
         );
 
-        assert_eq!(ledger.settle("t1", id, 3.5).await, 3.5);
+        assert_eq!(ledger.settle("t1", id, 3.5).await.expect("settlement"), 3.5);
         assert_eq!(ledger.current_spend("t1").await, 3.5);
 
         let id2 = ledger.reserve("t1", 6.0).await.expect("reservation");

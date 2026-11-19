@@ -971,3 +971,167 @@ async fn test_adversarial_non_admin_privilege_escalation_denial_real_http_stack(
 
     server_handle.abort();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_adversarial_metadata_forgery_cryptographic_isolation() {
+    use std::sync::atomic::{AtomicU8, Ordering};
+    use std::sync::Arc;
+    use sunborn_identity::{
+        base64_encode, hkdf_sha256_derive, KeyManagementProvider, RemoteAwsKmsKeyProvider,
+        TenantCryptoRegistry, ZeroizingKey,
+    };
+
+    let tenant = TenantId::new("tenant-target");
+    let salt = b"deterministic-public-salt-999";
+    let key_arn = "arn:aws:kms:us-east-1:123456789012:key/target-key";
+
+    // 1. Verify fail-closed behavior when remote KMS is unreachable:
+    // It must NEVER fall back to local predictable entropy or silent degradation.
+    let unreachable_provider = RemoteAwsKmsKeyProvider::with_endpoint(
+        key_arn,
+        "us-east-1",
+        Some("http://127.0.0.1:1".to_string()),
+    );
+    assert!(
+        unreachable_provider
+            .derive_tenant_key(&tenant, salt)
+            .is_err(),
+        "Remote KMS must fail closed when unreachable"
+    );
+
+    // 2. Spawn a mock KMS responder providing distinct random data keys
+    static KEY_GEN_CTR: AtomicU8 = AtomicU8::new(10);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (tx, mut rx) = tokio::sync::oneshot::channel::<()>();
+
+    tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                _ = &mut rx => break,
+                accept_res = listener.accept() => {
+                    let Ok((mut socket, _)) = accept_res else { break; };
+                    tokio::spawn(async move {
+                        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                        let mut buf = [0u8; 8192];
+                        let Ok(n) = socket.read(&mut buf).await else { return; };
+                        let req_str = String::from_utf8_lossy(&buf[..n]);
+
+                        let (body, status) = if req_str.contains("TrentService.GenerateDataKey") {
+                            let ctr = KEY_GEN_CTR.fetch_add(1, Ordering::Relaxed);
+                            let key_bytes = [ctr; 32];
+                            let b64 = base64_encode(&key_bytes);
+                            (format!("{{\"Plaintext\":\"{}\",\"CiphertextBlob\":\"{}\",\"KeyId\":\"test-key\"}}", b64, b64), "200 OK")
+                        } else if req_str.contains("TrentService.Encrypt") {
+                            let b64 = if let Some(idx) = req_str.find("\"Plaintext\":\"") {
+                                let rest = &req_str[idx + 13..];
+                                let end = rest.find('"').unwrap_or(0);
+                                &rest[..end]
+                            } else {
+                                ""
+                            };
+                            (format!("{{\"CiphertextBlob\":\"{}\",\"KeyId\":\"test-key\"}}", b64), "200 OK")
+                        } else if req_str.contains("TrentService.Decrypt") {
+                            let b64 = if let Some(idx) = req_str.find("\"CiphertextBlob\":\"") {
+                                let rest = &req_str[idx + 18..];
+                                let end = rest.find('"').unwrap_or(0);
+                                &rest[..end]
+                            } else {
+                                ""
+                            };
+                            (format!("{{\"Plaintext\":\"{}\",\"KeyId\":\"test-key\"}}", b64), "200 OK")
+                        } else {
+                            ("{\"message\":\"not found\"}".to_string(), "404 Not Found")
+                        };
+
+                        let resp = format!(
+                            "HTTP/1.1 {}\r\nContent-Type: application/x-amz-json-1.1\r\nContent-Length: {}\r\n\r\n{}",
+                            status, body.len(), body
+                        );
+                        let _ = socket.write_all(resp.as_bytes()).await;
+                    });
+                }
+            }
+        }
+    });
+
+    let endpoint = format!("http://{}", addr);
+    std::env::set_var("AWS_ACCESS_KEY_ID", "test-key-id");
+    std::env::set_var("AWS_SECRET_ACCESS_KEY", "test-secret-key");
+    let provider = RemoteAwsKmsKeyProvider::with_endpoint(key_arn, "us-east-1", Some(endpoint));
+
+    // 3. Attacker attempts to derive tenant key from public metadata alone (the old flawed derivation)
+    let context = format!("awskms-remote:us-east-1:{}:tenant:{}", key_arn, tenant.0);
+    let forged_key_bytes = hkdf_sha256_derive(key_arn.as_bytes(), salt, context.as_bytes());
+
+    let real_key_1 = provider.derive_tenant_key(&tenant, salt).unwrap();
+    let real_key_2 = provider.derive_tenant_key(&tenant, salt).unwrap();
+
+    // The real key MUST NOT equal the forged key derived from public ARN metadata
+    assert_ne!(
+        real_key_1.as_bytes(),
+        &forged_key_bytes,
+        "Attacker with public KMS ARN and salt must NOT be able to forge tenant key"
+    );
+
+    // Two successive tenant key derivations must use fresh KMS entropy
+    assert_ne!(
+        real_key_1.as_bytes(),
+        real_key_2.as_bytes(),
+        "Tenant key generation must use fresh entropy, preventing deterministic replay"
+    );
+
+    // 4. Cryptographic isolation against decryption using forged key
+    let registry = Arc::new(TenantCryptoRegistry::with_provider(Arc::new(provider)));
+    registry
+        .derive_and_provision_tenant(tenant.clone(), salt)
+        .unwrap();
+
+    let plaintext = b"Confidential tenant enterprise prompt payload";
+    let envelope = registry.encrypt(&tenant, plaintext, "req-1").unwrap();
+
+    // Verify registry can decrypt its own ciphertext
+    let decrypted = registry.decrypt(&envelope, "req-1").unwrap();
+    assert_eq!(decrypted, plaintext);
+
+    // Now simulate an attacker creating a registry initialized with the forged key
+    struct ForgedKeyProvider {
+        forged_key: [u8; 32],
+    }
+    impl KeyManagementProvider for ForgedKeyProvider {
+        fn provider_name(&self) -> &str {
+            "forged-metadata-attacker"
+        }
+        fn wrap_key(&self, key: &ZeroizingKey) -> Result<Vec<u8>, sunborn_core::SunbornError> {
+            Ok(key.as_bytes().to_vec())
+        }
+        fn unwrap_key(&self, wrapped: &[u8]) -> Result<ZeroizingKey, sunborn_core::SunbornError> {
+            let mut raw = [0u8; 32];
+            raw.copy_from_slice(wrapped);
+            Ok(ZeroizingKey::new(raw))
+        }
+        fn derive_tenant_key(
+            &self,
+            _tenant_id: &TenantId,
+            _salt: &[u8],
+        ) -> Result<ZeroizingKey, sunborn_core::SunbornError> {
+            Ok(ZeroizingKey::new(self.forged_key))
+        }
+    }
+
+    let attacker_registry = TenantCryptoRegistry::with_provider(Arc::new(ForgedKeyProvider {
+        forged_key: forged_key_bytes,
+    }));
+    attacker_registry
+        .derive_and_provision_tenant(tenant.clone(), salt)
+        .unwrap();
+
+    // Attacker attempts to decrypt the tenant's real ciphertext with their forged key -> must fail AEAD authentication
+    let attack_res = attacker_registry.decrypt(&envelope, "req-1");
+    assert!(
+        attack_res.is_err(),
+        "Attacker with forged key derived from public metadata must fail AEAD tag verification"
+    );
+
+    let _ = tx.send(());
+}

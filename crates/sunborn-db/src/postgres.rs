@@ -35,6 +35,8 @@ const MIGRATION_0006: &str = include_str!("../../../migrations/0006_durable_outb
 const MIGRATION_0007: &str = include_str!("../../../migrations/0007_distributed_spend_ledger.sql");
 const MIGRATION_0008: &str = include_str!("../../../migrations/0008_free_tier_quotas.sql");
 const MIGRATION_0009: &str = include_str!("../../../migrations/0009_cluster_rate_limits.sql");
+const MIGRATION_0010: &str =
+    include_str!("../../../migrations/0010_financial_precision_micro_units.sql");
 
 /// Outcome of a cluster-wide spend reservation attempt.
 #[derive(Debug, Clone, PartialEq)]
@@ -321,6 +323,7 @@ impl PostgresDatabaseStore {
             (7, "0007_distributed_spend_ledger", MIGRATION_0007),
             (8, "0008_free_tier_quotas", MIGRATION_0008),
             (9, "0009_cluster_rate_limits", MIGRATION_0009),
+            (10, "0010_financial_precision_micro_units", MIGRATION_0010),
         ];
 
         for (version, name, sql) in migrations {
@@ -329,7 +332,18 @@ impl PostgresDatabaseStore {
                 .fetch_optional(pool)
                 .await?;
 
-            if row.is_none() {
+            if let Some(existing) = row {
+                let recorded_checksum: String = existing.try_get("checksum")?;
+                use sha2::Digest;
+                let expected_checksum = hex::encode(sha2::Sha256::digest(sql.as_bytes()));
+                if recorded_checksum != expected_checksum {
+                    return Err(sqlx::Error::Configuration(format!(
+                        "FATAL: Database migration checksum mismatch on version {version} ({name})! \
+                         Stored checksum: {recorded_checksum}, Current migration source checksum: {expected_checksum}. \
+                         Authoritative database schema drift detected; startup aborted."
+                    ).into()));
+                }
+            } else {
                 tracing::info!(
                     version = *version,
                     name = *name,
@@ -357,14 +371,16 @@ impl PostgresDatabaseStore {
         let pool = self.get_pool().await.ok_or_else(|| {
             SunbornError::database("PostgreSQL connection pool unavailable for spend ceiling")
         })?;
+        let ceiling_micro = (ceiling_usd * 1_000_000.0).round() as i64;
         sqlx::query(
-            "INSERT INTO spend_tenant_ceilings (tenant_id, ceiling_usd, updated_at)
-             VALUES ($1, $2, NOW())
+            "INSERT INTO spend_tenant_ceilings (tenant_id, ceiling_usd, ceiling_micro_units, updated_at)
+             VALUES ($1, $2, $3, NOW())
              ON CONFLICT (tenant_id) DO UPDATE
-             SET ceiling_usd = EXCLUDED.ceiling_usd, updated_at = NOW()",
+             SET ceiling_usd = EXCLUDED.ceiling_usd, ceiling_micro_units = EXCLUDED.ceiling_micro_units, updated_at = NOW()",
         )
         .bind(tenant_id)
         .bind(ceiling_usd)
+        .bind(ceiling_micro)
         .execute(&pool)
         .await
         .map_err(|e| SunbornError::database(e.to_string()))?;
@@ -455,13 +471,15 @@ impl PostgresDatabaseStore {
         }
 
         let reservation_id = Uuid::new_v4();
+        let amount_micro = (estimated_cost * 1_000_000.0).round() as i64;
         let insert = sqlx::query(
-            "INSERT INTO spend_reservations (reservation_id, tenant_id, amount_usd, reserved_at)
-             VALUES ($1, $2, $3, NOW())",
+            "INSERT INTO spend_reservations (reservation_id, tenant_id, amount_usd, amount_micro_units, reserved_at)
+             VALUES ($1, $2, $3, $4, NOW())",
         )
         .bind(reservation_id)
         .bind(tenant_id)
         .bind(estimated_cost)
+        .bind(amount_micro)
         .execute(&mut *tx)
         .await;
 
@@ -510,14 +528,16 @@ impl PostgresDatabaseStore {
             .execute(&mut *tx)
             .await
             .ok()?;
+        let amount_micro = (valid_cost * 1_000_000.0).round() as i64;
         sqlx::query(
-            "INSERT INTO spend_ledger_entries (tenant_id, reservation_id, amount_usd, recorded_at)
-             VALUES ($1, $2, $3, NOW())
+            "INSERT INTO spend_ledger_entries (tenant_id, reservation_id, amount_usd, amount_micro_units, recorded_at)
+             VALUES ($1, $2, $3, $4, NOW())
              ON CONFLICT (reservation_id) DO NOTHING",
         )
         .bind(tenant_id)
         .bind(reservation_id)
         .bind(valid_cost)
+        .bind(amount_micro)
         .execute(&mut *tx)
         .await
         .ok()?;

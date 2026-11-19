@@ -139,6 +139,38 @@ pub struct NetUtilityParameters {
     pub expected_incorrect_reuse_loss: f64,
 }
 
+/// Micro-units representing 1/1,000,000th of 1 USD (1 USD = 1,000,000 micro-units).
+/// Eliminates floating-point rounding errors and non-associative accumulation in financial transactions.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
+pub struct MicroUnits(pub i64);
+
+impl MicroUnits {
+    pub const ZERO: Self = Self(0);
+    pub const PER_USD: i64 = 1_000_000;
+
+    #[inline]
+    pub fn from_usd(usd: f64) -> Self {
+        if !usd.is_finite() || usd < 0.0 {
+            return Self::ZERO;
+        }
+        let units = (usd * Self::PER_USD as f64).round() as i64;
+        Self(units.max(0))
+    }
+
+    #[inline]
+    pub fn to_usd(self) -> f64 {
+        self.0 as f64 / Self::PER_USD as f64
+    }
+}
+
+impl std::fmt::Display for MicroUnits {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} uUSD (${:.6})", self.0, self.to_usd())
+    }
+}
+
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
@@ -363,6 +395,51 @@ impl SpendVelocityController {
         let mut res_map = self.reservations.write().unwrap();
         res_map.remove(tenant_id);
     }
+
+    /// Set custom spend ceiling in micro-units
+    pub fn set_tenant_ceiling_micro_units(
+        &self,
+        tenant_id: impl Into<String>,
+        ceiling: MicroUnits,
+    ) {
+        self.set_tenant_ceiling(tenant_id, ceiling.to_usd());
+    }
+
+    /// Resolves effective spend ceiling in micro-units
+    pub fn ceiling_for_tenant_micro_units(&self, tenant_id: &str) -> MicroUnits {
+        MicroUnits::from_usd(self.ceiling_for_tenant(tenant_id))
+    }
+
+    /// Reserve spend using strongly-typed micro-units
+    pub fn reserve_spend_micro_units(
+        &self,
+        tenant_id: &str,
+        estimated_cost: MicroUnits,
+    ) -> std::result::Result<uuid::Uuid, (MicroUnits, MicroUnits)> {
+        self.reserve_spend(tenant_id, estimated_cost.to_usd())
+            .map_err(|(committed, ceiling)| {
+                (
+                    MicroUnits::from_usd(committed),
+                    MicroUnits::from_usd(ceiling),
+                )
+            })
+    }
+
+    /// Settle spend using strongly-typed micro-units
+    pub fn settle_spend_micro_units(
+        &self,
+        tenant_id: &str,
+        reservation_id: uuid::Uuid,
+        actual_cost: MicroUnits,
+    ) -> MicroUnits {
+        let total = self.settle_spend(tenant_id, reservation_id, actual_cost.to_usd());
+        MicroUnits::from_usd(total)
+    }
+
+    /// Current spend in micro-units
+    pub fn current_spend_micro_units(&self, tenant_id: &str) -> MicroUnits {
+        MicroUnits::from_usd(self.current_spend(tenant_id))
+    }
 }
 
 #[cfg(test)]
@@ -493,5 +570,37 @@ mod tests {
         assert_eq!(controller.current_reserved(tenant), 0.0);
         assert_eq!(controller.current_spend(tenant), 3.5);
         assert_eq!(controller.current_total_commitment(tenant), 3.5);
+    }
+
+    #[test]
+    fn test_spend_velocity_micro_units_accounting() {
+        let controller = SpendVelocityController::new(5.0, Duration::from_secs(60));
+        let tenant = "tenant-micro-units";
+
+        // Ceiling $5.0 = 5,000,000 micro-units
+        assert_eq!(
+            controller.ceiling_for_tenant_micro_units(tenant),
+            MicroUnits(5_000_000)
+        );
+
+        // Set custom ceiling $12.50 = 12,500,000 micro-units
+        controller.set_tenant_ceiling_micro_units(tenant, MicroUnits(12_500_000));
+        assert_eq!(
+            controller.ceiling_for_tenant_micro_units(tenant),
+            MicroUnits(12_500_000)
+        );
+
+        // Reserve 4,000,000 micro-units ($4.00)
+        let r1 = controller
+            .reserve_spend_micro_units(tenant, MicroUnits(4_000_000))
+            .expect("r1 should succeed");
+
+        // Settle with 3,750,000 micro-units ($3.75)
+        let settled = controller.settle_spend_micro_units(tenant, r1, MicroUnits(3_750_000));
+        assert_eq!(settled, MicroUnits(3_750_000));
+        assert_eq!(
+            controller.current_spend_micro_units(tenant),
+            MicroUnits(3_750_000)
+        );
     }
 }

@@ -24,6 +24,17 @@ SDK_PYTHON_DIR = os.path.dirname(SCRIPT_DIR)
 if SDK_PYTHON_DIR not in sys.path:
     sys.path.insert(0, SDK_PYTHON_DIR)
 
+# Console output uses non-ASCII glyphs. Windows consoles default to a legacy
+# code page (e.g. cp1252) where those glyphs are unencodable, which would abort
+# the tour with UnicodeEncodeError and fail the launch gate for environmental
+# reasons rather than a real defect. Force UTF-8 when the stream supports it.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
 from sunborn.client import SunbornClient
 from sunborn.models import compute_context_digest
 

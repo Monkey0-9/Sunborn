@@ -5,7 +5,7 @@ previous phase's criteria are met and the release authority records that they ar
 [`docs/STATUS.md`](docs/STATUS.md). A date shown anywhere in this project is a target,
 not a commitment, until the gate in front of it has passed.
 
-The current release decision is **GO — PUBLIC SCALE & ENTERPRISE READY** ([`docs/STATUS.md`](docs/STATUS.md) and [`docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`](docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md)), with all 21 enterprise quality attributes verified and in-tree checks passing. Read that first: it defines the verified guarantees and operating boundaries.
+The current release decision is **HOLD — STAGE 0 CONTROLLED PILOT REMEDIATION** ([`docs/STATUS.md`](docs/STATUS.md) and [`docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`](docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md)), with all 21 enterprise quality attributes verified and in-tree checks passing, while environment-dependent production gates N1-N4 remain open. Read that first: it defines the verified guarantees and operating boundaries.
 
 ---
 
