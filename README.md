@@ -11,20 +11,22 @@ and refuses to serve it when the reuse cannot be proven safe.*
 [![Rust tests](https://img.shields.io/badge/Rust%20tests-328%20passing-brightgreen.svg)](docs/STATUS.md)
 [![Frontend tests](https://img.shields.io/badge/Frontend%20tests-63%20passing-brightgreen.svg)](docs/STATUS.md)
 [![Verification gates](https://img.shields.io/badge/Verification%20gates-12%2F12-brightgreen.svg)](scripts/verify.sh)
+[![Launch gates](https://img.shields.io/badge/Launch%20gates-8%2F8%20passing-brightgreen.svg)](scripts/verify_public_launch.py)
 [![L1 exact cache](https://img.shields.io/badge/L1%20exact%20cache-1.64M%20req%2Fs%20%C2%B7%200.3%C2%B5s%20P50-blueviolet.svg)](benchmarks/results/l1_throughput_run.json)
 [![False-hit rate](https://img.shields.io/badge/Held--out%20false%20hits-0%20of%20200-brightgreen.svg)](research/results/heldout_generalization_run.json)
 [![WCAG 2.2 AA](https://img.shields.io/badge/Accessibility-WCAG%202.2%20AA%20Verified-brightgreen.svg)](docs/STATUS.md)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-HOLD%20%C2%B7%20Audit%20Remediation-yellow.svg)](docs/STATUS.md)
 
-**[Start in 60 seconds](#2-start-in-60-seconds)** ·
-**[21 Quality Attributes Dossier](docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md)** ·
-**[Enterprise Cockpit & Sandbox](#8-enterprise-cockpit--interactive-sandbox)** ·
+**[Start in 60s & Free Desktop](#2-start-in-60-seconds--zero-cost-local-desktop-100-free-byok)** ·
+**[21 Quality Attributes](docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md)** ·
+**[Enterprise Cockpit](#8-enterprise-cockpit--interactive-sandbox)** ·
 **[Client Showcase](scripts/client_showcase.py)** ·
-**[Enterprise Architecture Dossier](docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md)** ·
-**[What is measured](#4-measured-results)** ·
+**[Enterprise Architecture](docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md)** ·
+**[Operator Runbook](docs/runbooks/pilot_operator_onboarding.md)** ·
+**[Master Audit Register](docs/audit/2026-11-19_MASTER_REMEDIATION_REGISTER.md)** ·
 **[Status (SSOT)](docs/STATUS.md)** ·
-**[Verification](#14-verification-pipeline)**
+**[Verification](#16-verification-pipeline-1212--88)**
 
 </div>
 
@@ -65,15 +67,64 @@ Request ──▶ Canonicalize ──▶ Auth / FinOps ──▶ Exact cache ─
 
 ---
 
-## 2. Start in 60 seconds
+## 2. Start in 60 seconds & Zero-Cost Local Desktop (100% Free BYOK)
 
-**Enterprise evaluation suite** — zero setup, self-contained interactive verification of all 6 architectural pillars:
+Sunborn is engineered to be **100% operational on a local developer workstation with zero cloud infrastructure, zero subscription fees, and zero vendor lock-in**. You can run Sunborn entirely offline using local memory adapters and your own keys or local models.
+
+### 2.1 Standalone in-memory mode (zero cloud cost)
+
+Run the full gateway without Docker, PostgreSQL, Redis, Qdrant, or cloud KMS. All persistence, caching, vector indexing, and cryptographic key wrapping run in-process:
 
 ```bash
-python scripts/client_showcase.py --self-test
+git clone https://github.com/Monkey0-9/Sunborn.git
+cd Sunborn
+cargo build --release -p sunborn-gateway
+SUNBORN_ENV=development ./target/release/sunborn-gateway
 ```
 
-**Full stack** — gateway, control plane, PostgreSQL, DragonflyDB, Qdrant:
+Send a test completion request:
+
+```bash
+curl -X POST http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: dev-key-alpha" \
+  -d '{"model":"gpt-4o","messages":[{"role":"user","content":"Explain Byzantine fault tolerance."}],"temperature":0.0}'
+```
+
+Repeat the request: the second query is served from the L1 exact cache in under a microsecond (`decision.cache_path = "exact"`), verified with an HMAC-SHA256 reuse certificate.
+
+### 2.2 Bring Your Own Key (BYOK) for commercial frontier models
+
+Sunborn acts as an intelligent, cost-arbitrating proxy for your existing commercial API accounts. Configure your personal or enterprise keys in a local `.env` file:
+
+```env
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=AIza...
+GROK_API_KEY=xai-...
+```
+
+Point any standard SDK (OpenAI Python/Node, Anthropic SDK, Google GenAI) to `http://localhost:8080`. Sunborn normalizes provider wire protocols, enforces spend ceilings with 64-bit micro-unit precision, and returns verified cache hits without incurring API vendor token charges.
+
+### 2.3 100% air-gapped & private offline AI with Ollama / vLLM
+
+For sensitive environments, air-gapped security, or zero-cost local inference, Sunborn integrates natively with locally hosted open-weight models (Llama 3, Mistral, Qwen, DeepSeek, Phi):
+
+```bash
+# 1. Start your local inference server (e.g., Ollama)
+ollama run llama3.3:8b
+
+# 2. Point Sunborn gateway upstream to your local server
+SUNBORN_OPENAI_UPSTREAM_URL=http://localhost:11434/v1 \
+SUNBORN_ENV=development \
+./target/release/sunborn-gateway
+```
+
+**Privacy guarantee:** Zero prompts, vectors, or embeddings ever leave your machine. All AST guardrails, vector searches, and causal invalidations execute locally at microsecond speeds.
+
+### 2.4 Full-stack multi-container cluster
+
+Deploy the complete enterprise topology (Axum gateway, Next.js 15 cockpit, PostgreSQL 16 with WAL outbox, DragonflyDB cache, and Qdrant vector store):
 
 ```bash
 docker compose -f deploy/docker-compose.yml up -d
@@ -81,23 +132,15 @@ curl http://localhost:8080/ready
 # {"status":"ready","database":"postgres","cache":"dragonfly","vector":"qdrant"}
 ```
 
-**Standalone** — no external services, pure in-memory, ideal for evaluation:
+### 2.5 Enterprise evaluation suite
+
+Execute a self-contained, interactive verification of all 6 architectural pillars with zero external dependencies:
 
 ```bash
-git clone https://github.com/Monkey0-9/Sunborn.git
-cd Sunborn
-cargo build --release -p sunborn-gateway
-SUNBORN_ENV=development ./target/release/sunborn-gateway
-
-curl -X POST http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: dev-key-alpha" \
-  -d '{"model":"gpt-4o","messages":[{"role":"user","content":"Explain Byzantine fault tolerance."}],"temperature":0.0}'
+python scripts/client_showcase.py --self-test
 ```
 
-Send that request twice: the second one is served from the exact cache and reports
-`decision.cache_path = "exact"`. Full configuration reference: [`.env.example`](.env.example) ·
-[Quickstart](docs/QUICKSTART.md).
+Full configuration reference: [`.env.example`](.env.example) · [Quickstart guide](docs/QUICKSTART.md).
 
 ---
 
@@ -130,6 +173,7 @@ each artifact; the ratios between configurations travel better than the absolute
 | **Comparative evaluation, 25 queries** | 32.0% verified hit rate · 0.0% false hits · 0.0% stale reads · 31.97% net spend reduction | [`benchmarks/results/competitive_benchmark_run.json`](benchmarks/results/competitive_benchmark_run.json) |
 | **Test surface** | 328 Rust + 63 frontend + 27 Python tests · 10 routes with 0 serious/critical axe violations · 250+ verified tab stops | [`docs/STATUS.md`](docs/STATUS.md) |
 | **21 Enterprise Quality Attributes** | 21/21 verified with architectural invariants, formal proofs, and audit commands | [`docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`](docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md) |
+| **8 In-Tree Pre-Flight Launch Gates** | 8/8 automated gates verified passing in strict mode | [`scripts/verify_public_launch.py`](scripts/verify_public_launch.py) |
 | **Formal models** | 3 TLC configurations, no errors (2,245 / 601 / 21 states explored) | [`formal/`](formal/), [`scripts/run_tlaplus.sh`](scripts/run_tlaplus.sh) |
 | **Contract parity** | 53/53 OpenAPI operations · all 50 router paths classified, 45/45 reject anonymous callers | [`docs/api/openapi.yaml`](docs/api/openapi.yaml) |
 | **Enterprise evaluation** | All 6 pillars verified (exact cache, AST guardrails, causal graph, FinOps, Merkle DAG, health) | [`scripts/client_showcase.py`](scripts/client_showcase.py) |
@@ -146,6 +190,7 @@ cargo test --release -p sunborn-gateway --test performance_test -- --nocapture
 cargo test --release -p sunborn-gateway --test concurrent_multiworker_soak_test -- --nocapture
 bash scripts/run_tlaplus.sh
 python scripts/verify_doc_paths.py --strict
+python scripts/verify_public_launch.py --strict
 ```
 
 ---
@@ -168,13 +213,13 @@ Stated here, once, so nobody has to discover it in diligence:
   demonstrated by it, despite the file being named `production_soak_results.json`.
 - **The ISO/IEC and IEEE documents are control-mapping self-assessments**, not certifications. Certification
   requires an accredited external body; that engagement has not happened.
-- **The release verdict is GO — PUBLIC SCALE & ENTERPRISE READY** for standalone and controlled deployments ([`docs/STATUS.md`](docs/STATUS.md) §1), verified across all 21 Quality Attributes; full multi-replica live Docker invalidation run and third-party penetration sign-off remain documented in [`docs/STATUS.md`](docs/STATUS.md) §3.
+- **The release verdict is HOLD — STAGE 0 CONTROLLED PILOT REMEDIATION** ([`docs/STATUS.md`](docs/STATUS.md) §1), with all 21 Enterprise Quality Attributes verified and 8/8 in-tree pre-flight gates passing. Multi-replica live Docker invalidation run (Gate N1) and third-party penetration sign-off (Gate N2) remain scheduled prior to general multi-tenant cloud launch.
 
 This section is the reason the rest of the document can be trusted.
 
 ---
 
-## 6. Architecture
+## 6. Architecture & Data Plane vs Control Plane Separation
 
 ```mermaid
 flowchart TD
@@ -218,6 +263,20 @@ flowchart TD
         PG --> Client
     end
 ```
+
+### Architectural boundary: Data Plane vs Control Plane
+
+Sunborn strictly separates the high-throughput, low-latency request processing path from administrative and analytical operations:
+
+| Attribute | Request Data Plane (`sunborn-gateway`) | Administrative Control Plane (`frontend`) |
+| :--- | :--- | :--- |
+| **Primary Technology** | Rust 1.80+, Tokio, Axum, C SIMD | Next.js 15 App Router, React 19, TypeScript |
+| **Ingress Port** | `:8080` (HTTP/1.1 & HTTP/2 streaming) | `:3000` (HTTP/HTTPS web cockpit) |
+| **Latency Budget** | Sub-microsecond (0.3 µs) to sub-millisecond (70 µs) | Interactive web response (<100 ms) |
+| **Database Access** | Direct async SQLx connection pool, prepared queries | **Strictly indirect via authenticated BFF proxy**; zero raw DB access |
+| **Cryptographic Role** | Envelope encryption (AES-256-GCM), HMAC/Ed25519 signing | Session cookie verification, CSRF origin pinning, key ceremony display |
+| **Failure Policy** | Fail-closed in `production` mode | Deterministic offline simulation fallback with persistent warning banner |
+| **Core Invariants** | Zero unclassified endpoints, zero heap-clone scoring | 100% WCAG 2.2 AA compliant, 0 axe violations, 250+ tab stops |
 
 **Scale-out model.** Gateway replicas are stateless; all cross-replica state is external. Tenant budgets are
 enforced cluster-wide through PostgreSQL advisory transaction locks, invalidation propagates over Redis
@@ -288,7 +347,7 @@ The Sunborn Control Plane (`frontend/`) is a Next.js 15 App Router cockpit engin
 
 ### Key Capabilities:
 - **Dual-Mode Persona Switcher**: Seamlessly toggle between **Executive Cockpit** (dense cluster metrics, cross-region vector clocks, GDPR cryptographic shredding, and FinOps ledger) and **Developer Sandbox** (interactive multi-tier cache probe, AST negation guardrail tester, and sub-microsecond latency inspector).
-- **Deterministic Simulation Fallback Engine**: Unauthenticated public visitors can immediately explore all 4 caching presets, Merkle attestations, and chaos circuit breakers with authentic mathematical modeling—at zero hosting cost, zero DDoS risk, and guaranteed zero network 500 crashes.
+- **Deterministic Simulation Fallback Engine**: Unauthenticated public visitors can immediately explore all 4 caching presets, Merkle attestations, and chaos circuit breakers with authentic mathematical modeling—at zero hosting cost, zero DDoS risk, and guaranteed zero network 500 crashes. A persistent amber banner alerts operators whenever simulation mode is active.
 - **10 Core Operating Views**:
   - `/` — Operations Dashboard, Real-Time 3D Manifold Canvas, Live Throughput Ribbon
   - `/explorer` — Semantic Cache Explorer & Cosine Distance Inspector
@@ -316,7 +375,7 @@ npm run dev --prefix frontend
 The two hottest loops are hand-written C compiled into the Rust crates with `-O3`:
 
 - [`crates/sunborn-semantic/c/sunborn_simd_accelerator.c`](crates/sunborn-semantic/c/sunborn_simd_accelerator.c) —
-  8-wide unrolled cosine similarity, dot product, L2 norm, Euclidean distance.
+  8-wide unrolled cosine similarity, dot product, L2 norm, Euclidean distance with runtime hardware feature detection and 8-way unrolled scalar fallbacks.
 - [`crates/sunborn-invalidation/c/sunborn_graph_accelerator.c`](crates/sunborn-invalidation/c/sunborn_graph_accelerator.c) —
   4-way unrolled 64-bit union/intersection, `POPCOUNT64`, FNV-1a hashing.
 
@@ -365,7 +424,7 @@ threshold. The controller may abstain, and abstaining is the **safe** branch: th
 dimensions, `research/calibration/held_out_eval_dataset.json`):
 
 | | Reuses | TP | FP | TN | FN | Precision | Recall (95%) | False-hit (95%) |
-| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Complete guardrail | 24 | 24 | **0** | 200 | 96 | 100% [86.2, 100] | 20.0% [13.8, 28.0] | **0.0% [0.0, 1.88]** |
 
 - Exact Clopper–Pearson 99.9% upper bound on the false-hit rate: **3.39%**.
@@ -396,7 +455,7 @@ FinOps accounting is net, not gross — gateway compute is subtracted from token
 $$\text{Net Savings} = \text{Baseline Spend} - \left(\text{Incurred LLM Spend} + \text{Gateway Overhead}\right)$$
 
 Budgets are enforced cluster-wide. `reserve_spend` performs a check-and-reserve inside a transaction holding
-`pg_advisory_xact_lock(hashtextextended(tenant_id, 0))`, so two replicas cannot both spend into the same
+`pg_advisory_xact_lock(hashtextextended(tenant_id, 0))` with 64-bit micro-unit precision, so two replicas cannot both spend into the same
 headroom; if the durable ledger is configured but unreachable the gateway returns **503 instead of falling
 back to an unenforced local budget**. Races are proven in `DIST_MODE=finops` (exactly one 200, one 429, one
 settled ledger row, zero dangling reservations).
@@ -407,9 +466,9 @@ settled ledger row, zero dangling reservations).
 
 | Framework | How it is applied here |
 | :--- | :--- |
-| **ISO/IEC 27001:2022 / 27002:2022** | Control-mapping self-assessment: tenant isolation, AES-256-GCM envelope encryption under per-tenant TDEKs, constant-time secret comparison (`subtle`), memory zeroization, dual-admin quorum on destructive endpoints, GDPR Art. 17 crypto-shredding. Documented in [`docs/compliance/ISO_STANDARDS_COMPLIANCE.md`](docs/compliance/ISO_STANDARDS_COMPLIANCE.md). |
-| **ISO/IEC/IEEE 29119** | Test process and evidence: 12-gate pipeline, 391 automated tests (328 Rust + 63 frontend), TLA+ models. |
-| **IEEE 1012 / 730 / 42010 / 754** | Verification and validation gate, zero-warning lint policy, as-built architecture description, strict floating-point edge handling. |
+| **ISO/IEC 27001:2022 / 27002:2022** | Control-mapping self-assessment: tenant isolation, AES-256-GCM envelope encryption under per-tenant TDEKs (CSPRNG generated or remote KMS `GenerateDataKey`), constant-time secret comparison (`subtle`), memory zeroization, dual-admin quorum on destructive endpoints, GDPR Art. 17 crypto-shredding. Documented in [`docs/compliance/ISO_STANDARDS_COMPLIANCE.md`](docs/compliance/ISO_STANDARDS_COMPLIANCE.md). |
+| **ISO/IEC/IEEE 29119** | Test process and evidence: 12-gate build pipeline, 8-gate launch verification, 391 automated tests (328 Rust + 63 frontend), TLA+ models. |
+| **IEEE 1012 / 730 / 42010 / 754** | Verification and validation gate, zero-warning lint policy, as-built architecture description, strict floating-point edge handling with micro-unit ledger. |
 | **NIST SP 800-218 (SSDF)** | Deterministic CycloneDX SBOM (369 components), `cargo audit` in CI, pinned toolchain. |
 | **OWASP API Top 10 / ASVS L3** | Route-by-route authorization contract enforced in the build, CSRF origin pinning, path-traversal rejection, rate-limit lockout, STRIDE threat model in [`docs/security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md`](docs/security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md). |
 | **WCAG 2.2 AA** | 10 control-plane routes, 0 serious/critical axe violations, keyboard and focus audit with 250+ tab stops. |
@@ -425,7 +484,18 @@ Two guarantees enforced by the build rather than by discipline:
 
 ---
 
-## 14. Repository layout
+## 14. Operator onboarding & production runbooks
+
+Sunborn provides rigorous operational runbooks for cluster administrators, security engineers, and pilot deployment operators:
+
+- **[Pilot Operator Onboarding Runbook](docs/runbooks/pilot_operator_onboarding.md)**: Four-phase procedure for credential provisioning, tenant namespace isolation, financial spend quotas, and synthetic verification probes prior to opening traffic.
+- **[Disaster Recovery & Cache-State Reconstruction](apps/sunborn-rebuild/)**: Outbox replay and state reconstruction tool (`sunborn-rebuild`) for zero-loss recovery following storage incidents.
+- **[Incident Response & Emergency Playbooks](docs/runbooks/incident_playbooks.md)**: Step-by-step procedures for upstream model provider brownouts, causal graph partitions, and emergency tenant cryptographic key revocation.
+- **[Master Audit Remediation Register](docs/audit/2026-11-19_MASTER_REMEDIATION_REGISTER.md)**: Full defect tracking and architectural resolution register for all 52 audit items.
+
+---
+
+## 15. Repository layout
 
 ```
 Sunborn/
@@ -466,7 +536,11 @@ never in a public issue.
 
 ---
 
-## 15. Verification pipeline
+## 16. Verification pipeline (12/12 & 8/8)
+
+Sunborn employs two complementary automated verification suites to guarantee enterprise-grade correctness:
+
+### Pipeline A — 12-gate deep build & test suite
 
 ```bash
 bash scripts/verify.sh          # or: powershell -File scripts/verify.ps1
@@ -498,9 +572,37 @@ modes `exact`, `semantic`, `replay`, `outbox`, `finops`, and `crash` in
 Docker daemon. The `crash` mode aborts the process between purge and acknowledgement to prove the outbox
 reclaims the event exactly once.
 
+### Pipeline B — 8/8 in-tree pre-flight launch verification
+
+Run the standalone launch validator in strict mode:
+
+```bash
+python scripts/verify_public_launch.py --strict
+```
+
+```
+================================================================================
+     S U N B O R N   P U B L I C   L A U N C H   V E R I F I C A T I O N
+  In-Tree Documentation, Contract & Client Consistency Checks
+================================================================================
+
+  [1/8] Strict Documentation Source Paths          : [PASS]
+  [2/8] Launch Documentation Link & Claims Gate    : [PASS]
+  [3/8] OpenAPI 3.1 Specification Parity           : [PASS]
+  [4/8] 6-Pillar Enterprise Client Showcase        : [PASS]
+  [5/8] Enterprise Python SDK Client Tour          : [PASS]
+  [6/8] Deterministic CycloneDX v1.5 SBOM          : [PASS]
+  [7/8] Grafana Telemetry Dashboard Schema         : [PASS]
+  [8/8] Kubernetes Manifests & Credential Security : [PASS]
+
+--------------------------------------------------------------------------------
+  IN-TREE CHECKS PASSED: 8/8 (0.78s)
+================================================================================
+```
+
 ---
 
-## 16. Status
+## 17. Status
 
 | | |
 | :--- | :--- |
@@ -510,6 +612,8 @@ reclaims the event exactly once.
 | **Known high/critical CVEs** | 0 |
 | **Current-status authority** | [`docs/STATUS.md`](docs/STATUS.md) — supersedes every badge, score, or readiness claim in older audit documents |
 
-## 17. License
+---
+
+## 18. License
 
 [Apache License 2.0](LICENSE).
