@@ -53,3 +53,39 @@ export function formatMicroseconds(us: number): string {
   }
   return `${(us / 1000).toFixed(2)} ms`;
 }
+
+/**
+ * Safely extracts a numeric monotonic epoch from arbitrary vector clock representations.
+ * Handles:
+ *  - { clocks: { [nodeId]: epoch } } (Sunborn Rust VectorClock schema)
+ *  - { [nodeId]: epoch } (Flat node map)
+ *  - { epoch: number }
+ *  - number
+ * Falls back safely to fallback (default 1) if not present or malformed,
+ * guaranteeing no raw object is ever rendered into React children.
+ */
+export function extractVectorClockEpoch(vc: unknown, fallback: number = 1): number {
+  if (typeof vc === "number" && !Number.isNaN(vc)) {
+    return vc;
+  }
+  if (!vc || typeof vc !== "object") {
+    return fallback;
+  }
+  const obj = vc as Record<string, unknown>;
+  if (typeof obj.epoch === "number" && !Number.isNaN(obj.epoch)) {
+    return obj.epoch;
+  }
+  const targetMap =
+    obj.clocks && typeof obj.clocks === "object"
+      ? (obj.clocks as Record<string, unknown>)
+      : obj;
+
+  const numericValues = Object.values(targetMap).filter(
+    (v): v is number => typeof v === "number" && !Number.isNaN(v)
+  );
+  if (numericValues.length > 0) {
+    return Math.max(...numericValues);
+  }
+  return fallback;
+}
+

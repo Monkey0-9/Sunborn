@@ -25,7 +25,7 @@ import {
   Sliders,
   ChevronDown,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, extractVectorClockEpoch } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { CommandMenu } from "@/components/ui/command-menu";
 import { API_BASE_URL } from "@/lib/api";
@@ -89,10 +89,8 @@ export function Header() {
             });
             if (clusterRes.ok) {
               const clusterData = await clusterRes.json();
-              const epochs = Object.values(clusterData.vector_clock || {}) as number[];
-              if (epochs.length > 0) {
-                setEpoch(epochs[0]);
-              }
+              const epochNum = extractVectorClockEpoch(clusterData?.vector_clock);
+              setEpoch(epochNum);
             }
           } catch {}
         } else {
@@ -206,7 +204,7 @@ export function Header() {
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/70 border border-white/10 text-xs font-mono text-slate-400">
                 <Globe className="w-3 h-3 text-violet-400" />
                 <span>EPOCH:</span>
-                <span className="text-white font-semibold">#{epoch}</span>
+                <span className="text-white font-semibold">#{typeof epoch === "number" ? epoch : 1}</span>
               </div>
             </div>
           </div>
@@ -471,7 +469,7 @@ export function Header() {
 
             {/* Modal Footer */}
             <div className="px-6 py-3.5 border-t border-white/10 bg-slate-900/60 flex items-center justify-between text-[11px] text-slate-400">
-              <span>Cluster Epoch #{epoch} · Multi-Region Mesh</span>
+              <span>Cluster Epoch #{typeof epoch === "number" ? epoch : 1} · Multi-Region Mesh</span>
               <button
                 onClick={() => setShowDiagnostics(false)}
                 className="px-4 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white transition-colors font-semibold"

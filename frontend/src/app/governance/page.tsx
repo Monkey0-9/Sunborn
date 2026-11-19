@@ -20,6 +20,7 @@ import {
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
+import { extractVectorClockEpoch } from "@/lib/utils";
 import { sunbornApi } from "@/lib/api";
 
 export default function GovernancePage() {
@@ -475,7 +476,7 @@ export default function GovernancePage() {
                 <div className="p-2.5 rounded-lg bg-slate-900 border border-white/10">
                   <span className="text-[10px] text-slate-400">Vector Clock</span>
                   <div className="text-emerald-400 font-bold mt-0.5">
-                    Epoch #{Object.values(clusterInfo?.vectorClock || {})[0] ?? 1}
+                    Epoch #{extractVectorClockEpoch(clusterInfo?.vectorClock)}
                   </div>
                 </div>
               </div>
