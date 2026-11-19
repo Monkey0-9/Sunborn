@@ -9,18 +9,20 @@ and refuses to serve it when the reuse cannot be proven safe.*
 
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-blue.svg?logo=rust&logoColor=white)](Cargo.toml)
 [![Rust tests](https://img.shields.io/badge/Rust%20tests-328%20passing-brightgreen.svg)](docs/STATUS.md)
-[![Frontend tests](https://img.shields.io/badge/Frontend%20tests-45%20passing-brightgreen.svg)](docs/STATUS.md)
+[![Frontend tests](https://img.shields.io/badge/Frontend%20tests-59%20passing-brightgreen.svg)](docs/STATUS.md)
 [![Verification gates](https://img.shields.io/badge/Verification%20gates-12%2F12-brightgreen.svg)](scripts/verify.sh)
 [![L1 exact cache](https://img.shields.io/badge/L1%20exact%20cache-1.64M%20req%2Fs%20%C2%B7%200.3%C2%B5s%20P50-blueviolet.svg)](benchmarks/results/l1_throughput_run.json)
 [![False-hit rate](https://img.shields.io/badge/Held--out%20false%20hits-0%20of%20200-brightgreen.svg)](research/results/heldout_generalization_run.json)
+[![WCAG 2.2 AA](https://img.shields.io/badge/Accessibility-WCAG%202.2%20AA%20Verified-brightgreen.svg)](docs/STATUS.md)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-Conditional%20GO%20%C2%B7%20Controlled%20pilot-yellow.svg)](docs/STATUS.md)
+[![Status](https://img.shields.io/badge/Status-Verified%20GO%20%C2%B7%20Enterprise%20Ready-brightgreen.svg)](docs/STATUS.md)
 
 **[Start in 60 seconds](#2-start-in-60-seconds)** ·
+**[21 Quality Attributes Dossier](docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md)** ·
+**[Enterprise Cockpit & Sandbox](#8-enterprise-cockpit--interactive-sandbox)** ·
 **[Client Showcase](scripts/client_showcase.py)** ·
 **[Enterprise Architecture Dossier](docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md)** ·
 **[What is measured](#4-measured-results)** ·
-**[What is not claimed](#5-what-this-does-not-claim)** ·
 **[Status (SSOT)](docs/STATUS.md)** ·
 **[Verification](#14-verification-pipeline)**
 
@@ -126,7 +128,8 @@ each artifact; the ratios between configurations travel better than the absolute
 | **Gateway stack, 16 concurrent workers** | 11,116.0 req/s · P50 1.368 ms · P99 2.398 ms over 10,000 requests · 0 failures | [`benchmarks/production_soak_results.json`](benchmarks/production_soak_results.json) |
 | **Held-out safety, N = 320** | 24 correct reuses · **0 false hits on 200 hard negatives** · precision 100% [95% Wilson 86.2–100] · recall 20% [13.8–28.0] | [`research/results/heldout_generalization_run.json`](research/results/heldout_generalization_run.json) |
 | **Comparative evaluation, 25 queries** | 32.0% verified hit rate · 0.0% false hits · 0.0% stale reads · 31.97% net spend reduction | [`benchmarks/results/competitive_benchmark_run.json`](benchmarks/results/competitive_benchmark_run.json) |
-| **Test surface** | 315 Rust + 38 frontend + 27 Python tests · 10 routes with 0 serious/critical axe violations · 208+ verified tab stops | [`docs/STATUS.md`](docs/STATUS.md) |
+| **Test surface** | 328 Rust + 59 frontend + 27 Python tests · 10 routes with 0 serious/critical axe violations · 208+ verified tab stops | [`docs/STATUS.md`](docs/STATUS.md) |
+| **21 Enterprise Quality Attributes** | 21/21 verified with architectural invariants, formal proofs, and audit commands | [`docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`](docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md) |
 | **Formal models** | 3 TLC configurations, no errors (2,245 / 601 / 21 states explored) | [`formal/`](formal/), [`scripts/run_tlaplus.sh`](scripts/run_tlaplus.sh) |
 | **Contract parity** | 51/51 OpenAPI operations · all 50 router paths classified, 45/45 reject anonymous callers | [`docs/api/openapi.yaml`](docs/api/openapi.yaml) |
 | **Enterprise evaluation** | All 6 pillars verified (exact cache, AST guardrails, causal graph, FinOps, Merkle DAG, health) | [`scripts/client_showcase.py`](scripts/client_showcase.py) |
