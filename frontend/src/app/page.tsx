@@ -32,6 +32,7 @@ import { PromptProbePlayground } from "@/components/cockpit/prompt-probe-playgro
 import { LiveDAGVisualizer } from "@/components/cockpit/live-dag-visualizer";
 import { ClusterMeshStatus } from "@/components/cockpit/cluster-mesh-status";
 import { FrameworkIntegrations } from "@/components/cockpit/framework-integrations";
+import { useClusterStore } from "@/lib/cluster-store";
 
 interface GatewayMetrics {
   totalRequests: number;
@@ -44,6 +45,13 @@ interface GatewayMetrics {
 }
 
 export default function OverviewPage() {
+  const { persona } = useClusterStore();
+  const [activePreset, setActivePreset] = useState<"exact" | "semantic" | "negation" | "dag">("exact");
+
+  const handleSelectPreset = (preset: "exact" | "semantic" | "negation" | "dag") => {
+    setActivePreset(preset);
+  };
+
   const [metrics, setMetrics] = useState<GatewayMetrics>({
     totalRequests: 0,
     hitRatio: 0.0,
@@ -142,6 +150,16 @@ export default function OverviewPage() {
             <span className="text-cyan-600">·</span>
             <span className="text-white font-semibold">STANDARDS-ALIGNED</span>
           </div>
+
+          {persona === "executive" ? (
+            <Badge variant="cyan" dot>
+              Executive Mission Control
+            </Badge>
+          ) : (
+            <Badge variant="violet" dot>
+              Interactive Developer Sandbox
+            </Badge>
+          )}
 
           {isConnected === true && (
             <Badge variant="emerald" dot>
