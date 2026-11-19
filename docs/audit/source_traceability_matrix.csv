@@ -247,7 +247,7 @@ docs/STATUS.md,documentation,307,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUP
 docs/adr/ADR-001-architecture-baseline.md,documentation,29,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/api/openapi.yaml,documentation,1549,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 docs/audit/2026-11-19_MASTER_REMEDIATION_REGISTER.md,documentation,62,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
-docs/audit/source_traceability_matrix.csv,documentation,517,VERIFIED_PRODUCTION,scripts/verify.ps1,TIER_3_SUPPORT
+docs/audit/source_traceability_matrix.csv,documentation,519,VERIFIED_PRODUCTION,scripts/verify.ps1,TIER_3_SUPPORT
 docs/compliance/ISO_STANDARDS_COMPLIANCE.md,documentation,89,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/engineering-audit-2026-11-17/REPORT.md,documentation,214,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/engineering-transformation/01_README.md,documentation,73,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
@@ -403,7 +403,7 @@ frontend/src/components/cockpit/framework-integrations.tsx,frontend,390,VERIFIED
 frontend/src/components/cockpit/live-dag-visualizer.tsx,frontend,141,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
 frontend/src/components/cockpit/metrics-ribbon.tsx,frontend,90,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
 frontend/src/components/cockpit/prompt-probe-playground.tsx,frontend,279,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
-frontend/src/components/layout/header.tsx,frontend,632,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
+frontend/src/components/layout/header.tsx,frontend,633,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
 frontend/src/components/simulator/stress-simulator.tsx,frontend,666,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
 frontend/src/components/ui/badge.tsx,frontend,67,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
 frontend/src/components/ui/canvas-manifold.tsx,frontend,385,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
