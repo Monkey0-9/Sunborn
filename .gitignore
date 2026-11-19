@@ -74,3 +74,6 @@ research/results/baseline_backup/
 # Screenshots (keep intentional docs images under docs/assets/)
 *.png
 !docs/assets/**
+
+.playwright-mcp/
+
