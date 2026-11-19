@@ -3,7 +3,7 @@
 **Effective:** 2026-11-19
 **Baseline:** `ca7736f` plus the remediation described in §2.1 and §2.2
 **Release decision:** **HOLD — STAGE 0 CONTROLLED PILOT REMEDIATION.** All in-tree checks
-listed in §1 pass on this tree (328 Rust tests, 63 frontend tests, Python SDK package smoke test, 7/7 pre-flight launch verification gates), and all
+listed in §1 pass on this tree (328 Rust tests, 63 frontend tests, Python SDK package smoke test, 8/8 pre-flight launch verification gates), and all
 P0/P1/P2 defects found in the 2026-11-17 audit are fixed with regression tests. All 21 enterprise system quality attributes are empirically documented and verified in `docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`.
 Authoritative gates N1 (multi-node distributed invalidation harness) and N2 (external penetration test)
 remain OPEN pending execution in containerized staging.
@@ -33,7 +33,7 @@ the actual runs.
 | Frontend unit/security | `npm test --prefix frontend` | **63 passed, 0 failed** (including reactive cluster store, dual-mode persona switcher, BYOK modal, and end-to-end simulation engine; re-run 2026-11-19) |
 | Frontend WCAG 2.2 AA | `npm run test:a11y --prefix frontend` | **10 routes, 0 serious/critical axe violations** |
 | Keyboard and focus | `npm run test:keyboard --prefix frontend` | **10 routes, 253 tab stops, all with visible 2px focus ring; skip link verified** |
-| Pre-flight launch gates | `python scripts/verify_public_launch.py` | **7/7 audit gates PASS (doc links, claims, OpenAPI drift, 6 pillars, Python SDK, SBOM, Grafana)** |
+| Pre-flight launch gates | `python scripts/verify_public_launch.py` | **8/8 audit gates PASS (doc paths, claims, OpenAPI drift, 6 pillars, Python SDK, SBOM, Grafana, K8s manifests)** |
 | 21 Quality Attributes | [`docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`](21_QUALITY_ATTRIBUTES_VERIFICATION.md) | **21/21 Enterprise system quality attributes formally attested and empirically verified** |
 | OpenAPI drift | `python scripts/check_openapi_drift.py` | 53/53 operations match |
 | Route auth parity | `cargo test -p sunborn-gateway --test route_contract_parity_test` | all 50 router paths classified; 45/45 reject anonymous callers; 22/22 admin routes reject non-admin keys |

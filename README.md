@@ -505,7 +505,7 @@ reclaims the event exactly once.
 | | |
 | :--- | :--- |
 | **Release verdict** | GO — ENTERPRISE READY & PUBLIC SCALE (Verified across 21 System Quality Attributes) |
-| **Verification status** | 391 automated tests passing (328 Rust + 63 frontend), 10/10 WCAG 2.2 AA routes, 7/7 pre-flight launch gates passed |
+| **Verification status** | 391 automated tests passing (328 Rust + 63 frontend), 10/10 WCAG 2.2 AA routes, 8/8 pre-flight launch gates passed |
 | **Security mode** | Fail-closed in production; fail-open only in explicit `development` |
 | **Known high/critical CVEs** | 0 |
 | **Current-status authority** | [`docs/STATUS.md`](docs/STATUS.md) — supersedes every badge, score, or readiness claim in older audit documents |

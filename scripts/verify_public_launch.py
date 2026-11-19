@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Sunborn Platform: Public Launch Readiness & Scale Verification Engine.Runs seven in-tree documentation, contract and client-interface checks.
+Sunborn Platform: Public Launch Readiness & Scale Verification Engine.
+Runs eight in-tree documentation, contract, security and client-interface checks.
 
 SCOPE LIMIT — these checks are necessary but NOT sufficient for a public
 launch, and this script is not a release authority. It does not run load,
@@ -17,6 +18,7 @@ In-Tree Verification Gates:
   5. Python SDK Enterprise Integration Quickstart (dry-run self-test)
   6. Deterministic CycloneDX v1.5 Software Bill of Materials (SBOM) Generation
   7. Grafana Telemetry Dashboard Schema Validity
+  8. Kubernetes Manifests & Credential Isolation Security
 
 Usage:
   python scripts/verify_public_launch.py [--strict] [--json]
@@ -98,6 +100,7 @@ def main():
         ("Enterprise Python SDK Client Tour", [py_bin, "sdk/python/examples/enterprise_client_tour.py", "--dry-run"]),
         ("Deterministic CycloneDX v1.5 SBOM", [py_bin, "scripts/generate_sbom.py"]),
         ("Grafana Telemetry Dashboard Schema", None),
+        ("Kubernetes Manifests & Credential Security", [py_bin, "scripts/check_k8s_manifests.py"]),
     ]
 
     results = []
