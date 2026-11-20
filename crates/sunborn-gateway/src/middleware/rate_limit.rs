@@ -273,6 +273,12 @@ pub async fn pre_auth_rate_limit_middleware(req: Request, next: Next) -> Respons
         return next.run(req).await;
     };
 
+    // Loopback traffic (local benchmark runners, self-probes, sidecars) is trusted
+    // from an anti-bruteforce perspective and must not be choked by the pre-auth limiter.
+    if peer_ip.is_loopback() {
+        return next.run(req).await;
+    }
+
     let status = pre_auth_limiter().check_status(&peer_ip.to_string()).await;
     if status.allowed {
         return next.run(req).await;

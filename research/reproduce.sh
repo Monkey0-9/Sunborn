@@ -155,6 +155,8 @@ else
     # The live benchmark uses one least-privilege credential per isolated
     # application so each case is authorized without sharing cache state.
     export SUNBORN_API_KEYS="$("${PYTHON_BIN}" research/benchmark_credentials.py)"
+    export SUNBORN_PREAUTH_RPS=10000
+    export SUNBORN_PREAUTH_BURST=50000
     "${CARGO_BIN}" build --bin sunborn-gateway
     GATEWAY_BIN="./target/debug/sunborn-gateway"
     if [[ -f "./target/debug/sunborn-gateway.exe" ]]; then
