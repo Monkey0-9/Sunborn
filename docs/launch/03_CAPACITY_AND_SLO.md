@@ -49,6 +49,35 @@ Two cautions that should travel with every quotation:
   from 0.070 ms to 1.368 ms. Quoting the sequential P50 as a concurrent expectation
   would be a misuse of the artifact.
 
+### 2.1 Real-HTTP baseline (measured 2026-11-20)
+
+The rows above bypass the network stack entirely. To get a figure that at least
+includes a real listener, HTTP parsing, and socket I/O, the gateway was run as a
+release binary and driven over TCP with keep-alive by
+[`benchmarks/http_load_test.py`](../../benchmarks/http_load_test.py). Results are in
+[`benchmarks/http_load_results.json`](../../benchmarks/http_load_results.json).
+
+| Measurement | Result | Conditions |
+|---|---|---|
+| Full request path, cache hit, 32 clients | 5,092 req/s · P50 6.4 ms · P99 7.4 ms · 0 failures | 8,000 requests over HTTP/1.1 keep-alive |
+| Full request path, cache hit, 64 clients | 5,297 req/s · P50 12.2 ms · P99 22.4 ms · 0 failures | 20,000 requests; queueing visible versus 32 clients |
+| Full request path, cache miss, 32 clients | 954 req/s · P50 33.0 ms · P99 63.7 ms · 0 failures | 4,000 requests, unique prompt each; includes identity, admission, stub origin |
+| Two client processes, 64 clients total | 4,956 req/s combined · 0 failures | Throughput did not rise above the single-client ceiling |
+
+Three things this run establishes, and two it does not:
+
+- Throughput is flat from 32 to 64 clients and does not increase when a second client
+  process is added, so the single gateway process is the bottleneck at roughly 5.2k
+  req/s on this host. The earlier in-process figure of 11,116 req/s is therefore about
+  twice the rate the same code sustains once sockets and HTTP parsing are involved.
+- The cache-miss path costs about 5.5x more than the hit path, which is why hit-rate mix
+  dominates any capacity statement.
+- Zero requests failed in any configuration, across more than 32,000 requests.
+- It does **not** include TLS, PostgreSQL, Redis/Dragonfly, or a real upstream provider.
+  A production replica will be slower than 5,297 req/s.
+- It does **not** establish behaviour above one process. The horizontal figure remains
+  unmeasured.
+
 ---
 
 ## 3. What the baseline does not cover
@@ -77,17 +106,22 @@ Until these exist, the model below is explicitly a planning tool.
 
 ### 4.1 Replica throughput
 
-Use the measured 16-worker figure, derate it for network and dependency latency, then
-reserve headroom:
+Use the measured real-HTTP figure, derate it for the dependencies and TLS that the
+measurement excluded, then reserve headroom:
 
 ```
 R_eff = R_measured × d × (1 - h)
 
-R_measured = 11,116 req/s      (single machine, in-process, 16 workers)
+R_measured = 5,297 req/s       (single machine, real HTTP/1.1, 64 clients, cache-hit mix)
 d          = 0.25              (derating assumption, unvalidated)
 h          = 0.25              (headroom for one replica loss and burst)
-R_eff      = 11,116 × 0.25 × 0.75 ≈ 2,084 req/s per replica
+R_eff      = 5,297 × 0.25 × 0.75 ≈ 993 req/s per replica
 ```
+
+This supersedes the earlier derivation from 11,116 req/s, which was an in-process figure
+with no socket or HTTP parsing in the path. The derating factor `d` remains an
+assumption: it must be replaced by a staging measurement with TLS and a production-like
+database before any capacity commitment is made.
 
 The derating factor is the most important number in this document and it is an
 assumption. It must be replaced by a staging measurement before B1. If the measured

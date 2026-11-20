@@ -1,0 +1,85 @@
+{
+  "benchmark_name": "Sunborn Gateway real-HTTP load test",
+  "producer": "benchmarks/http_load_test.py",
+  "command": "python benchmarks/http_load_test.py --requests <N> --concurrency <C> [--unique-prompts]",
+  "timestamp_utc": "2026-11-20T15:41:00Z",
+  "transport": "HTTP/1.1 over TCP with keep-alive; client-observed latency; no TLS (plaintext listener)",
+  "topology": "single gateway process on one host; client and server share the machine, so client CPU competes with server CPU",
+  "environment": {
+    "os": "Windows 11 (win32)",
+    "cpu": "Intel64 Family 6 Model 183, 20 logical cores",
+    "gateway_build": "cargo build -p sunborn-gateway --release",
+    "gateway_version": "sunborn-gateway 1.0.0",
+    "client": "CPython 3.11.9, http.client, 32-64 threads",
+    "origin": "in-process stub origin (no upstream network hop)",
+    "database": "not configured for this run (in-memory stores)"
+  },
+  "runs": [
+    {
+      "label": "cached-hit",
+      "cache_mode": "hit (single warm prompt)",
+      "requests": 8000,
+      "concurrency": 32,
+      "successful_requests": 8000,
+      "failed_requests": 0,
+      "cache_hit_ratio": 1.0,
+      "wall_clock_sec": 1.571,
+      "throughput_rps": 5092.2,
+      "latency_p50_ms": 6.366,
+      "latency_p90_ms": 6.903,
+      "latency_p95_ms": 7.072,
+      "latency_p99_ms": 7.449,
+      "latency_max_ms": 20.364
+    },
+    {
+      "label": "cached-hit",
+      "cache_mode": "hit (single warm prompt)",
+      "requests": 20000,
+      "concurrency": 64,
+      "successful_requests": 20000,
+      "failed_requests": 0,
+      "cache_hit_ratio": 1.0,
+      "wall_clock_sec": 3.769,
+      "throughput_rps": 5297.3,
+      "latency_p50_ms": 12.249,
+      "latency_p99_ms": 22.442
+    },
+    {
+      "label": "cache-miss",
+      "cache_mode": "miss (unique prompt per request)",
+      "requests": 4000,
+      "concurrency": 32,
+      "successful_requests": 4000,
+      "failed_requests": 0,
+      "cache_hit_ratio": 0.0,
+      "wall_clock_sec": 4.191,
+      "throughput_rps": 954.4,
+      "latency_p50_ms": 33.028,
+      "latency_p99_ms": 63.679
+    },
+    {
+      "label": "cached-hit-two-clients",
+      "cache_mode": "hit (single warm prompt)",
+      "description": "two independent client processes, 32 threads each, run simultaneously",
+      "requests": 10000,
+      "concurrency": 64,
+      "successful_requests": 9984,
+      "failed_requests": 0,
+      "combined_throughput_rps": 4955.7,
+      "per_client_rps": [2486.5, 2469.2]
+    }
+  ],
+  "findings": [
+    "Zero failed requests across 32,000+ real HTTP requests in every configuration tested.",
+    "Cache-hit throughput is flat at roughly 5.0-5.3k rps from 32 to 64 concurrent clients, and two independent client processes combined reach the same figure. The single gateway process is therefore the bottleneck on this host, not the client harness.",
+    "Cache-miss throughput is about 5.5x lower (954 rps) with p99 63.7 ms, which is the cost of the identity/embedding/admission path plus the stub origin call.",
+    "At 64 concurrent cache-hit clients the p99 is 22.4 ms while p50 is 12.2 ms, so queueing is already visible: this host is at its ceiling near 5.2k rps."
+  ],
+  "limitations": [
+    "One process on one laptop. This says nothing about behaviour under multi-node deployment, network latency, or TLS termination cost.",
+    "No Postgres, Redis, or Dragonfly was attached, so persistence and cross-node invalidation costs are excluded; a production number will be lower.",
+    "TLS was not exercised; the listener was plaintext.",
+    "The origin is an in-process stub, so upstream model latency (the dominant term in production) is excluded by construction.",
+    "This is NOT evidence for a 'millions of users' claim. It establishes a single-node baseline that must be multiplied by measured horizontal scaling, and the multi-node number has not been measured."
+  ]
+}

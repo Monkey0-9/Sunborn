@@ -1,4 +1,6 @@
 path,component,loc,status,test_coverage,security_tier
+benchmarks/http_load_results.json,benchmarks,85,CONFIG,benchmarks/adversarial_evaluation_suite.py,TIER_3_SUPPORT
+benchmarks/http_load_test.py,benchmarks,272,VERIFIED_PRODUCTION,benchmarks/adversarial_evaluation_suite.py,TIER_3_SUPPORT
 .cargo/audit.toml,root,16,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 .cargo/config.toml,root,2,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 .devcontainer/Dockerfile,root,18,VERIFIED_PRODUCTION,scripts/verify.ps1,TIER_3_SUPPORT
@@ -12,7 +14,7 @@ path,component,loc,status,test_coverage,security_tier
 .github/ISSUE_TEMPLATE/security_advisory.md,ci-cd,28,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 .github/PULL_REQUEST_TEMPLATE.md,ci-cd,42,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 .github/branch_protection.md,ci-cd,44,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
-.github/workflows/ci.yml,ci-cd,366,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
+.github/workflows/ci.yml,ci-cd,505,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 .github/workflows/release.yml,ci-cd,161,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 .github/workflows/security.yml,ci-cd,60,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 .gitignore,root,80,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
@@ -84,7 +86,7 @@ crates/sunborn-db/Cargo.toml,sunborn-db,25,CONFIG,crates/sunborn-db/src/reposito
 crates/sunborn-db/README.md,sunborn-db,16,AUTHORITATIVE_DOC,crates/sunborn-db/src/repository.rs,TIER_1_CRITICAL
 crates/sunborn-db/src/lib.rs,sunborn-db,53,VERIFIED_PRODUCTION,crates/sunborn-db/src/repository.rs,TIER_1_CRITICAL
 crates/sunborn-db/src/models.rs,sunborn-db,128,VERIFIED_PRODUCTION,crates/sunborn-db/src/repository.rs,TIER_1_CRITICAL
-crates/sunborn-db/src/postgres.rs,sunborn-db,2256,VERIFIED_PRODUCTION,crates/sunborn-db/src/repository.rs,TIER_1_CRITICAL
+crates/sunborn-db/src/postgres.rs,sunborn-db,2257,VERIFIED_PRODUCTION,crates/sunborn-db/src/repository.rs,TIER_1_CRITICAL
 crates/sunborn-db/src/repository.rs,sunborn-db,395,VERIFIED_PRODUCTION,crates/sunborn-db/src/repository.rs,TIER_1_CRITICAL
 crates/sunborn-db/src/write_behind.rs,sunborn-db,313,VERIFIED_PRODUCTION,crates/sunborn-db/src/repository.rs,TIER_1_CRITICAL
 crates/sunborn-execution/Cargo.toml,sunborn-execution,27,CONFIG,crates/sunborn-execution/src/planner.rs,TIER_2_STANDARD
@@ -92,7 +94,7 @@ crates/sunborn-execution/README.md,sunborn-execution,16,AUTHORITATIVE_DOC,crates
 crates/sunborn-execution/src/lib.rs,sunborn-execution,36,VERIFIED_PRODUCTION,crates/sunborn-execution/src/planner.rs,TIER_2_STANDARD
 crates/sunborn-execution/src/merkle.rs,sunborn-execution,397,VERIFIED_PRODUCTION,crates/sunborn-execution/src/planner.rs,TIER_2_STANDARD
 crates/sunborn-execution/src/model.rs,sunborn-execution,166,VERIFIED_PRODUCTION,crates/sunborn-execution/src/planner.rs,TIER_2_STANDARD
-crates/sunborn-execution/src/planner.rs,sunborn-execution,609,VERIFIED_PRODUCTION,crates/sunborn-execution/src/planner.rs,TIER_2_STANDARD
+crates/sunborn-execution/src/planner.rs,sunborn-execution,639,VERIFIED_PRODUCTION,crates/sunborn-execution/src/planner.rs,TIER_2_STANDARD
 crates/sunborn-execution/src/signature.rs,sunborn-execution,105,VERIFIED_PRODUCTION,crates/sunborn-execution/src/planner.rs,TIER_2_STANDARD
 crates/sunborn-execution/src/store.rs,sunborn-execution,447,VERIFIED_PRODUCTION,crates/sunborn-execution/src/planner.rs,TIER_2_STANDARD
 crates/sunborn-execution/src/transitive_closure.rs,sunborn-execution,212,VERIFIED_PRODUCTION,crates/sunborn-execution/src/planner.rs,TIER_2_STANDARD
@@ -124,7 +126,7 @@ crates/sunborn-gateway/src/learning/store.rs,sunborn-gateway,193,VERIFIED_PRODUC
 crates/sunborn-gateway/src/lib.rs,sunborn-gateway,210,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/limits.rs,sunborn-gateway,162,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/main.rs,sunborn-gateway,145,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
-crates/sunborn-gateway/src/middleware/auth.rs,sunborn-gateway,518,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+crates/sunborn-gateway/src/middleware/auth.rs,sunborn-gateway,515,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/middleware/mod.rs,sunborn-gateway,11,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/middleware/rate_limit.rs,sunborn-gateway,263,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/middleware/trace.rs,sunborn-gateway,80,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
@@ -136,9 +138,9 @@ crates/sunborn-gateway/src/origin/singleflight.rs,sunborn-gateway,320,VERIFIED_P
 crates/sunborn-gateway/src/quota.rs,sunborn-gateway,643,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/routing/mod.rs,sunborn-gateway,7,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/routing/predictive.rs,sunborn-gateway,113,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
-crates/sunborn-gateway/src/routing/radix.rs,sunborn-gateway,429,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
-crates/sunborn-gateway/src/shadow.rs,sunborn-gateway,201,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
-crates/sunborn-gateway/src/state.rs,sunborn-gateway,1232,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+crates/sunborn-gateway/src/routing/radix.rs,sunborn-gateway,439,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+crates/sunborn-gateway/src/shadow.rs,sunborn-gateway,198,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+crates/sunborn-gateway/src/state.rs,sunborn-gateway,1233,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/adversarial_security_test.rs,sunborn-gateway,1137,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/capacity_soak_test.rs,sunborn-gateway,39,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/chaos_test.rs,sunborn-gateway,144,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
@@ -370,7 +372,7 @@ docs/independent-engineering-audit/inventories/tests.csv,documentation,9,VERIFIE
 docs/integrations/ai_agents_quickstart.md,documentation,155,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/launch/01_LAUNCH_PLAN.md,documentation,118,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/launch/02_FREE_TIER_ARCHITECTURE.md,documentation,308,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
-docs/launch/03_CAPACITY_AND_SLO.md,documentation,302,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
+docs/launch/03_CAPACITY_AND_SLO.md,documentation,336,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/launch/04_TRUST_CENTER.md,documentation,302,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/launch/05_PRELAUNCH_CHECKLIST.md,documentation,328,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/launch/PUBLIC_LAUNCH_BLUEPRINT.md,documentation,173,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
@@ -471,6 +473,7 @@ migrations/0007_distributed_spend_ledger.sql,database-migrations,36,VERIFIED_PRO
 migrations/0008_free_tier_quotas.sql,database-migrations,45,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/distributed_finops_test.rs,TIER_3_SUPPORT
 migrations/0009_cluster_rate_limits.sql,database-migrations,19,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/distributed_finops_test.rs,TIER_3_SUPPORT
 migrations/0010_financial_precision_micro_units.sql,database-migrations,53,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/distributed_finops_test.rs,TIER_3_SUPPORT
+migrations/0011_micro_units_non_negative_checks.sql,database-migrations,50,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/distributed_finops_test.rs,TIER_3_SUPPORT
 requirements-dev.txt,root,9,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 research/ARTIFACT-APPENDIX.md,research,102,AUTHORITATIVE_DOC,research/tests/test_verifier_negative.py,TIER_3_SUPPORT
 research/README.md,research,63,AUTHORITATIVE_DOC,research/tests/test_verifier_negative.py,TIER_3_SUPPORT
@@ -518,7 +521,7 @@ scripts/verify.ps1,tooling,115,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/verify.sh,tooling,111,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/verify_doc_paths.py,tooling,109,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/verify_public_launch.py,tooling,147,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
-scripts/watch_ci.py,tooling,37,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
+scripts/watch_ci.py,tooling,57,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 sdk/python/README.md,sdk-python,126,AUTHORITATIVE_DOC,sdk/python/test_sunborn_agent.py,TIER_3_SUPPORT
 sdk/python/examples/enterprise_client_tour.py,sdk-python,117,VERIFIED_PRODUCTION,sdk/python/test_sunborn_agent.py,TIER_3_SUPPORT
 sdk/python/pyproject.toml,sdk-python,46,CONFIG,sdk/python/test_sunborn_agent.py,TIER_3_SUPPORT

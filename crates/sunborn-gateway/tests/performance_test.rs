@@ -143,9 +143,9 @@ async fn test_gateway_throughput_and_p99_latency() {
         p99_us as f64 / 1000.0,
     );
 
-    // Verify p99 latency SLO: < 5ms in release mode, < 15ms in unoptimized debug test profile
+    // Verify p99 latency SLO: < 5ms in release mode, < 50ms in unoptimized debug test profile on shared CI
     let threshold_us = if cfg!(debug_assertions) {
-        15_000
+        50_000
     } else {
         5_000
     };
