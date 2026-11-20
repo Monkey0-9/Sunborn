@@ -157,6 +157,12 @@ jobs:
       - name: Run Verifier Negative Tests
         run: python3 -m unittest research/tests/test_verifier_negative.py
 
+      - name: Run Conformal Calibration Dataset Tests
+        run: python3 -m unittest research/tests/test_expand_dataset.py
+
+      - name: Verify Conformal Calibration Dataset Integrity
+        run: python3 research/calibration/expand_dataset.py --validate
+
       - name: Verify Isolated Live Benchmark Credentials
         run: python3 research/tests/test_benchmark_credentials.py
 

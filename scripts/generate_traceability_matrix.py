@@ -114,7 +114,16 @@ def determine_metadata(rel_path: str):
     return component, status, test_coverage, security_tier
 
 def main():
-    out = subprocess.check_output(["git", "ls-files"], cwd=ROOT_DIR, text=True)
+    # `--cached` keeps tracked files, `--others --exclude-standard` picks up new
+    # files that are not committed yet. Without the latter, a refactor that adds
+    # modules silently produces a matrix missing them; without the existence
+    # check below, a deleted-but-still-staged file lingers as a phantom 0-line
+    # row.
+    out = subprocess.check_output(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+        cwd=ROOT_DIR,
+        text=True,
+    )
     files = [f.strip() for f in out.splitlines() if f.strip()]
     
     audit_dir = os.path.join(ROOT_DIR, "docs", "audit")
@@ -124,6 +133,9 @@ def main():
     rows = []
     for rel_path in files:
         full_path = os.path.join(ROOT_DIR, rel_path.replace("/", os.sep))
+        if not os.path.isfile(full_path):
+            # Tracked but deleted in the working tree: not part of the codebase.
+            continue
         loc = count_lines(full_path)
         component, status, test_cov, sec_tier = determine_metadata(rel_path)
         rows.append({

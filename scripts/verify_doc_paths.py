@@ -83,7 +83,12 @@ def verify(strict: bool) -> int:
             checked.add(clean)
             full = os.path.join(ROOT_DIR, clean.replace("/", os.sep))
             if not os.path.exists(full):
-                missing.add(clean)
+                # Rust module path compatibility: foo.rs can be represented as foo/mod.rs
+                mod_rs = os.path.join(ROOT_DIR, clean[:-3].replace("/", os.sep), "mod.rs") if clean.endswith(".rs") else ""
+                if mod_rs and os.path.exists(mod_rs):
+                    pass
+                else:
+                    missing.add(clean)
 
     print(f"Verified {len(checked)} distinct source paths referenced across Markdown.")
     if missing:

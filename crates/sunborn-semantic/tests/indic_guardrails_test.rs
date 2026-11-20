@@ -107,3 +107,34 @@ fn test_indic_temporal_shift_rejection() {
         "Today and tomorrow in Hindi must not match"
     );
 }
+
+#[test]
+fn test_indic_quantifier_scope_inversion_rejection() {
+    // "सभी कर्मचारी अधिकृत नहीं हैं" (Every employee is not authorized)
+    // vs "नहीं, सभी कर्मचारी अधिकृत हैं" (Not every employee is authorized)
+    let p1 = "सभी कर्मचारी अधिकृत नहीं हैं";
+    let p2 = "नहीं सभी कर्मचारी अधिकृत हैं";
+
+    let fp1 = StructuralFingerprint::extract(p1);
+    let fp2 = StructuralFingerprint::extract(p2);
+
+    assert!(
+        !fp1.matches(&fp2),
+        "Quantifier scope inversion in Hindi ('सभी ... नहीं' vs 'नहीं ... सभी') must not match"
+    );
+}
+
+#[test]
+fn test_indic_role_bound_transposition_rejection() {
+    // Financial transfer direction in Hindi: from account 101 to account 202 vs from account 202 to account 101
+    let p_a_to_b = "खाता 101 से खाता 202 को ट्रांसफर करें";
+    let p_b_to_a = "खाता 202 से खाता 101 को ट्रांसफर करें";
+
+    let fp1 = StructuralFingerprint::extract(p_a_to_b);
+    let fp2 = StructuralFingerprint::extract(p_b_to_a);
+
+    assert!(
+        !fp1.matches(&fp2),
+        "Directional numeric transposition in Hindi ('101 से 202 को' vs '202 से 101 को') must not match"
+    );
+}

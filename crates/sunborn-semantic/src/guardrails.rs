@@ -482,7 +482,40 @@ impl StructuralFingerprint {
         content_tokens.dedup();
 
         // 6. Quantifier-Negation Scope Detection
-        const QUANTIFIERS: &[&str] = &["every", "all", "each", "any", "none", "no"];
+        const QUANTIFIERS: &[&str] = &[
+            "every",
+            "all",
+            "each",
+            "any",
+            "none",
+            "no",
+            // Indic Quantifiers (Hindi, Marathi, Tamil, Telugu, Bengali, Kannada, Malayalam, Gujarati, Punjabi)
+            "सभी",
+            "हर",
+            "प्रत्येक",
+            "कोई",
+            "सारे",
+            "अனைத்து",
+            "ஒவ்வொரு",
+            "எல்லா",
+            "எந்த",
+            "అన్ని",
+            "ప్రతి",
+            "ఏదైనా",
+            "అందరూ",
+            "সব",
+            "প্রতিটি",
+            "সমস্ত",
+            "ಎಲ್ಲಾ",
+            "ಪ್ರತಿಯೊಂದು",
+            "ಯಾವುದೇ",
+            "എല്ലാ",
+            "ഓരോ",
+            "બધા",
+            "દરેક",
+            "ਸਾਰੇ",
+            "ਹਰੇਕ",
+        ];
         let mut quantifier_scope_tokens: Vec<String> = Vec::new();
         for (i, w) in clean_tokens.iter().enumerate() {
             if QUANTIFIERS.contains(w) {
@@ -523,6 +556,24 @@ impl StructuralFingerprint {
             "account",
             "port",
             "task",
+            // Indic Role Markers (Hindi, Telugu, Tamil, Bengali, Kannada, Malayalam, Gujarati, Punjabi)
+            "से",
+            "को",
+            "में",
+            "వరకు",
+            "నుండి",
+            "ద్వారా",
+            "இருந்து",
+            "க்கு",
+            "இல்",
+            "থেকে",
+            "তে",
+            "ಇಂದ",
+            "ಗೆ",
+            "இல்നിന്ന്",
+            "થી",
+            "માટે",
+            "ਤੋਂ",
             "worker",
             "tenant",
             "user",
