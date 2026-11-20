@@ -108,6 +108,32 @@ pub fn create_router(state: AppState) -> Router {
             "/v1/caches/{*key}",
             get(handlers::get_cache).delete(handlers::delete_cache),
         )
+        // Multi-Relational Knowledge Graph & Causal Invalidation Routes
+        .route("/v1/graph/nodes", post(handlers::add_graph_node))
+        .route(
+            "/v1/graph/nodes/{*id}",
+            get(handlers::get_graph_node).delete(handlers::delete_graph_node),
+        )
+        .route("/v1/graph/edges", post(handlers::add_graph_edge))
+        .route(
+            "/v1/graph/blast-radius",
+            post(handlers::calculate_graph_blast_radius),
+        )
+        .route(
+            "/v1/graph/invalidate",
+            post(handlers::invalidate_graph_causal),
+        )
+        .route("/v1/graph/explain/{*id}", get(handlers::explain_graph_node))
+        .route(
+            "/v1/graph/communities",
+            get(handlers::get_graph_communities),
+        )
+        .route("/v1/graph/god-nodes", get(handlers::get_graph_god_nodes))
+        .route(
+            "/v1/graph/subgraph/{*id}",
+            get(handlers::get_graph_subgraph),
+        )
+        .route("/v1/graph/topology", get(handlers::get_graph_topology))
         .route("/v1/execution/plan", post(handlers::plan_execution))
         .route("/v1/execution/results", post(handlers::record_tool_result))
         .route("/v1/execution/evict", post(handlers::evict_execution))
@@ -138,6 +164,24 @@ pub fn create_router(state: AppState) -> Router {
         .route(
             "/v1/governance/verify-proof",
             post(handlers::verify_merkle_attestation),
+        )
+        // Sovereign Indian Governance & Compliance Routes
+        .route(
+            "/v1/governance/dpdp/consent",
+            post(handlers::record_dpdp_consent),
+        )
+        .route(
+            "/v1/governance/dpdp/erasure",
+            post(handlers::execute_dpdp_erasure),
+        )
+        .route("/v1/governance/dpdp/audit", get(handlers::get_dpdp_audit))
+        .route(
+            "/v1/governance/cert-in/incidents",
+            get(handlers::get_cert_in_incidents),
+        )
+        .route(
+            "/v1/governance/rbi/localization",
+            get(handlers::verify_rbi_data_localization),
         )
         .route(
             "/v1/ceremony/public-keys",
@@ -200,6 +244,13 @@ pub fn create_router(state: AppState) -> Router {
             middleware::rate_limit::rate_limit_middleware,
         ))
         .layer(axum::middleware::from_fn(middleware::auth::auth_middleware))
+        // Must stay outside auth: it exists to charge requests that fail
+        // authentication, which never reach the tenant limiter below. Axum
+        // applies later layers outside earlier ones, so this placement is
+        // load-bearing, not cosmetic.
+        .layer(axum::middleware::from_fn(
+            middleware::rate_limit::pre_auth_rate_limit_middleware,
+        ))
         .layer(axum::middleware::from_fn(
             middleware::trace::request_id_middleware,
         ))

@@ -47,43 +47,129 @@ pub fn verify_openapi_contract(repo_root: &std::path::Path) -> Result<usize, Str
     let lib_content =
         fs::read_to_string(&lib_path).map_err(|e| format!("Failed to read lib.rs: {e}"))?;
 
-    // Extract gateway route paths from .route("...", ...)
-    let mut gateway_routes = std::collections::HashSet::new();
-    for line in lib_content.lines() {
-        if let Some(pos) = line.find(".route(") {
-            let rest = &line[pos + 7..];
-            if let Some(quote_start) = rest.find('"') {
-                if let Some(quote_end) = rest[quote_start + 1..].find('"') {
-                    let route = &rest[quote_start + 1..quote_start + 1 + quote_end];
-                    gateway_routes.insert(route.to_string());
-                }
-            }
-        }
-    }
-
+    let gateway_routes = extract_gateway_routes(&lib_content);
     if gateway_routes.is_empty() {
         return Err("Could not extract any routes from gateway lib.rs".to_string());
     }
 
-    // Verify presence of each gateway route in openapi.yaml
-    let mut matched_routes = 0;
-    for route in &gateway_routes {
-        // Strip path parameters for matching or check exact path
-        let route_prefix = if let Some(idx) = route.find('{') {
-            &route[..idx]
-        } else {
-            route.as_str()
-        };
-
-        if !openapi_content.contains(route_prefix) {
-            return Err(format!(
-                "Gateway route '{route}' is missing from openapi.yaml"
-            ));
-        }
-        matched_routes += 1;
+    // Compare real path sets in both directions. The previous implementation
+    // searched for each route as a substring of the whole spec, which a comment
+    // or an unrelated longer path would satisfy, and it read only single-line
+    // `.route(` calls, silently ignoring multi-line registrations.
+    let spec_paths = extract_spec_paths(&openapi_content);
+    if spec_paths.is_empty() {
+        return Err("Could not extract any paths from openapi.yaml".to_string());
     }
 
-    Ok(matched_routes)
+    let spec_normalised: std::collections::BTreeSet<String> =
+        spec_paths.iter().map(|path| normalise_path(path)).collect();
+    let route_normalised: std::collections::BTreeSet<String> = gateway_routes
+        .iter()
+        .map(|path| normalise_path(path))
+        .collect();
+
+    let missing: Vec<&String> = route_normalised
+        .iter()
+        .filter(|route| !spec_normalised.contains(*route))
+        .collect();
+    if !missing.is_empty() {
+        return Err(format!(
+            "Gateway routes missing from openapi.yaml: {}",
+            missing
+                .iter()
+                .map(|route| route.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+
+    let orphaned: Vec<&String> = spec_normalised
+        .iter()
+        .filter(|path| !route_normalised.contains(*path))
+        .collect();
+    if !orphaned.is_empty() {
+        return Err(format!(
+            "openapi.yaml documents paths with no gateway route: {}",
+            orphaned
+                .iter()
+                .map(|path| path.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+
+    Ok(route_normalised.len())
+}
+
+/// Collects every `.route("...", ...)` path, including registrations that span
+/// several lines.
+fn extract_gateway_routes(source: &str) -> std::collections::BTreeSet<String> {
+    use std::collections::BTreeSet;
+
+    let mut routes = BTreeSet::new();
+    let bytes = source.as_bytes();
+    let mut cursor = 0usize;
+
+    while let Some(offset) = source[cursor..].find(".route(") {
+        let mut index = cursor + offset + ".route(".len();
+        while index < bytes.len() && bytes[index].is_ascii_whitespace() {
+            index += 1;
+        }
+        if index < bytes.len() && bytes[index] == b'"' {
+            let path_start = index + 1;
+            let mut end = path_start;
+            while end < bytes.len() && bytes[end] != b'"' {
+                end += 1;
+            }
+            let route = &source[path_start..end];
+            if route.starts_with('/') {
+                routes.insert(route.to_string());
+            }
+        }
+        cursor = cursor + offset + ".route(".len();
+    }
+
+    routes
+}
+
+/// Collects top-level path keys from the OpenAPI document. Path keys sit at a
+/// two-space indent inside `paths:`, which keeps this independent of a YAML
+/// dependency in a supply-chain-sensitive verifier.
+fn extract_spec_paths(spec: &str) -> std::collections::BTreeSet<String> {
+    use std::collections::BTreeSet;
+
+    let mut paths = BTreeSet::new();
+    for line in spec.lines() {
+        let trimmed_end = line.trim_end();
+        if trimmed_end.starts_with("  /") && trimmed_end.ends_with(':') {
+            paths.insert(trimmed_end.trim().trim_end_matches(':').to_string());
+        }
+    }
+    paths
+}
+
+/// Reduces a path so `/v1/graph/nodes/{*id}` and `/v1/graph/nodes/{id}` compare
+/// equal: parameter names are not part of the routing contract.
+fn normalise_path(path: &str) -> String {
+    let mut normalised = String::with_capacity(path.len());
+    let mut inside_parameter = false;
+    for character in path.chars() {
+        match character {
+            '{' => {
+                inside_parameter = true;
+                normalised.push('{');
+            }
+            '}' => {
+                if inside_parameter {
+                    normalised.push('}');
+                }
+                inside_parameter = false;
+            }
+            _ if inside_parameter => {}
+            other => normalised.push(other),
+        }
+    }
+    normalised
 }
 
 fn main() {

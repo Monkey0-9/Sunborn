@@ -11,6 +11,11 @@ import os
 import re
 import sys
 
+# Windows consoles default to cp1252 and raise on the status glyphs below;
+# force UTF-8 so a drift report prints instead of crashing the checker.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 try:
     import yaml
 except ImportError:
@@ -160,6 +165,15 @@ def main():
                     structural_errors.append(f"{label}: requestBody content must define a schema")
 
     # 4. Compare (path, HTTP method) pairs.
+    # Axum spells a catch-all parameter `{*id}` while OpenAPI uses `{id}`. Both name
+    # the same route, so parameter names are normalized away before comparison;
+    # without this every wildcard route reports as drift.
+    def _normalize_route(route: str) -> str:
+        return re.sub(r"\{\*?([^}]+)\}", r"{\1}", route)
+
+    gateway_operations = {(_normalize_route(route), method) for route, method in gateway_operations}
+    openapi_operations = {(_normalize_route(route), method) for route, method in openapi_operations}
+
     missing_in_spec = gateway_operations - openapi_operations
     undocumented_in_gateway = openapi_operations - gateway_operations
 

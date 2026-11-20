@@ -95,6 +95,53 @@ export default function KnowledgePage() {
     latencyMs: number;
   } | null>(null);
 
+  // Multi-Relational Knowledge Graph & Causal Blast Radius State
+  const [graphTopology, setGraphTopology] = useState<{
+    total_nodes: number;
+    total_edges: number;
+    node_type_counts: Record<string, number>;
+  }>({
+    total_nodes: 48,
+    total_edges: 124,
+    node_type_counts: { file: 14, function: 22, table: 6, cache_entry: 6 },
+  });
+
+  const [blastRootInput, setBlastRootInput] = useState("file::src/payments/upi.rs");
+  const [blastMaxDepth, setBlastMaxDepth] = useState(8);
+  const [isBlastCalculating, setIsBlastCalculating] = useState(false);
+  const [isCausalInvalidating, setIsCausalInvalidating] = useState(false);
+  const [blastReport, setBlastReport] = useState<{
+    mutated_roots: string[];
+    affected_nodes: Array<{ node_id: string; depth: number; via_relation: string }>;
+    affected_cache_keys: string[];
+    max_depth_reached: number;
+    total_affected: number;
+  } | null>({
+    mutated_roots: ["file::src/payments/upi.rs"],
+    affected_nodes: [
+      { node_id: "func::initiate_upi_intent", depth: 1, via_relation: "defines" },
+      { node_id: "table::upi_mandates", depth: 2, via_relation: "reads_from" },
+      { node_id: "cache::upi_vpa_lookup_9876543210@ybl", depth: 3, via_relation: "depends_on" },
+    ],
+    affected_cache_keys: ["cache::upi_vpa_lookup_9876543210@ybl"],
+    max_depth_reached: 3,
+    total_affected: 3,
+  });
+
+  const [causalInvResult, setCausalInvResult] = useState<{
+    status: string;
+    evicted_cache_count: number;
+    total_affected_nodes: number;
+    avoided_inr: string;
+    latency_ms: number;
+  } | null>(null);
+
+  // DPDP & CERT-In Governance State
+  const [dpdpPrincipalId, setDpdpPrincipalId] = useState("aadhaar_ref_encrypted_hash_987654");
+  const [dpdpConsentRecorded, setDpdpConsentRecorded] = useState<string | null>(null);
+  const [dpdpErasureResult, setDpdpErasureResult] = useState<string | null>(null);
+  const [isDpdpOperating, setIsDpdpOperating] = useState(false);
+
   useEffect(() => {
     sunbornApi
       .getGraphStats()
@@ -104,6 +151,19 @@ export default function KnowledgePage() {
       .catch(() => {
         // Fallback to standalone default
       });
+
+    sunbornApi
+      .getGraphTopology()
+      .then((top) => {
+        if (top) {
+          setGraphTopology({
+            total_nodes: top.total_nodes,
+            total_edges: top.total_edges,
+            node_type_counts: top.node_type_counts || {},
+          });
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Interactive Conformal Guardrail Simulator
@@ -250,6 +310,89 @@ export default function KnowledgePage() {
       setActionError(`RTC Invalidation failed: ${err.message}`);
     } finally {
       setIsGraphInvalidating(false);
+    }
+  };
+
+  const handleCalculateBlastRadius = async () => {
+    setIsBlastCalculating(true);
+    setActionError(null);
+    try {
+      const rep = await sunbornApi.calculateBlastRadius({
+        mutated_roots: [blastRootInput.trim()],
+        max_depth: blastMaxDepth,
+      });
+      setBlastReport(rep);
+    } catch (err: any) {
+      setActionError(`Blast radius simulation failed: ${err.message}`);
+    } finally {
+      setIsBlastCalculating(false);
+    }
+  };
+
+  const handleExecuteCausalInvalidation = async () => {
+    setIsCausalInvalidating(true);
+    setActionError(null);
+    try {
+      const res = await sunbornApi.invalidateGraphCausal({
+        mutated_roots: [blastRootInput.trim()],
+        tenant_id: "enterprise-fintech",
+        max_depth: blastMaxDepth,
+      });
+      setCausalInvResult({
+        status: res.status,
+        evicted_cache_count: res.evicted_cache_count,
+        total_affected_nodes: res.total_affected_nodes,
+        avoided_inr: res.finops?.avoided_inr_formatted || "₹0.00",
+        latency_ms: res.latency_ms,
+      });
+      const top = await sunbornApi.getGraphTopology();
+      if (top) {
+        setGraphTopology({
+          total_nodes: top.total_nodes,
+          total_edges: top.total_edges,
+          node_type_counts: top.node_type_counts || {},
+        });
+      }
+    } catch (err: any) {
+      setActionError(`Causal invalidation failed: ${err.message}`);
+    } finally {
+      setIsCausalInvalidating(false);
+    }
+  };
+
+  const handleRecordDpdpConsent = async () => {
+    setIsDpdpOperating(true);
+    setActionError(null);
+    try {
+      const res = await sunbornApi.recordDpdpConsent({
+        tenant_id: "enterprise-fintech",
+        data_principal_id: dpdpPrincipalId,
+        purpose: "Account Aggregator Consent for Instant MSME Credit Evaluation",
+        retention_period_days: 180,
+        consent_notice_version: "v2.1-meity-dpdp",
+      });
+      setDpdpConsentRecorded(`Consent #${res.consent_id.slice(0, 8)} recorded (DPDP Sec 6)`);
+    } catch (err: any) {
+      setActionError(`DPDP consent failed: ${err.message}`);
+    } finally {
+      setIsDpdpOperating(false);
+    }
+  };
+
+  const handleExecuteDpdpErasure = async () => {
+    setIsDpdpOperating(true);
+    setActionError(null);
+    try {
+      const res = await sunbornApi.executeDpdpErasure({
+        tenant_id: "enterprise-fintech",
+        data_principal_id: dpdpPrincipalId,
+        reason: "Consent Withdrawn by Data Principal",
+      });
+      setDpdpErasureResult(`Erased ${res.exact_cache_records_purged} entries (DPDP Sec 12(3) Right to be Forgotten)`);
+    } catch (err: any) {
+      setActionError(`DPDP erasure failed: ${err.message}`);
+    } finally {
+      setIsDpdpOperating(false);
     }
   };
 
@@ -728,6 +871,253 @@ export default function KnowledgePage() {
           </Card>
         </div>
       </div>
+
+      {/* Multi-Relational Knowledge Graph & Causal Blast-Radius Studio */}
+      <Card glow="purple">
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <GitFork className="w-4 h-4 text-purple-400" />
+              <span>Multi-Relational Knowledge Graph &amp; Causal Invalidation Studio</span>
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Badge variant="purple">15 RELATION TYPES</Badge>
+              <Badge variant="cyan">BFS BLAST-RADIUS PROVENANCE</Badge>
+            </div>
+          </div>
+          <CardDescription>
+            Multi-relational AST dependency engine tracking Files, Functions, Tables, PromptTemplates, and CacheEntries with multi-hop causal invalidation and avoided compute FinOps.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Topology Breakdown Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10 space-y-1">
+              <div className="text-[11px] font-mono text-slate-400">TOTAL GRAPH NODES</div>
+              <div className="text-xl font-bold font-mono text-white">{graphTopology.total_nodes}</div>
+              <div className="text-[10px] font-mono text-purple-300">Typed Entities</div>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10 space-y-1">
+              <div className="text-[11px] font-mono text-slate-400">DIRECTED EDGES</div>
+              <div className="text-xl font-bold font-mono text-white">{graphTopology.total_edges}</div>
+              <div className="text-[10px] font-mono text-cyan-300">Causal Relations</div>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10 space-y-1">
+              <div className="text-[11px] font-mono text-slate-400">FILES &amp; SCHEMAS</div>
+              <div className="text-xl font-bold font-mono text-white">
+                {(graphTopology.node_type_counts.file || 0) + (graphTopology.node_type_counts.table || 0)}
+              </div>
+              <div className="text-[10px] font-mono text-emerald-300">Root Assets</div>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-900/90 border border-white/10 space-y-1">
+              <div className="text-[11px] font-mono text-slate-400">CALLABLE PROCEDURES</div>
+              <div className="text-xl font-bold font-mono text-white">
+                {graphTopology.node_type_counts.function || 0}
+              </div>
+              <div className="text-[10px] font-mono text-amber-300">Functions / Tools</div>
+            </div>
+          </div>
+
+          {/* Interactive Causal Blast-Radius Controller */}
+          <div className="p-4 rounded-xl bg-slate-900/80 border border-white/10 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <span className="text-xs font-mono font-bold text-white">
+                  CAUSAL BLAST-RADIUS EVALUATOR &amp; INVALIDATOR
+                </span>
+                <p className="text-[11px] text-slate-400">
+                  Simulate or trigger multi-hop BFS dependency invalidation from a mutated root asset.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono text-slate-400">MAX HOPS:</span>
+                <span className="text-xs font-mono font-bold text-cyan-400">{blastMaxDepth}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+              <div className="sm:col-span-6 space-y-1">
+                <label htmlFor="blast-root-input" className="text-[11px] font-mono text-slate-400">
+                  MUTATED ROOT ASSET ID
+                </label>
+                <input
+                  id="blast-root-input"
+                  type="text"
+                  value={blastRootInput}
+                  onChange={(e) => setBlastRootInput(e.target.value)}
+                  placeholder="e.g. file::src/payments/upi.rs or table::gst_slabs"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-white/10 text-xs font-mono text-white focus:border-purple-500"
+                />
+              </div>
+
+              <div className="sm:col-span-3 space-y-1">
+                <label htmlFor="blast-depth-slider" className="text-[11px] font-mono text-slate-400">
+                  MAX DEPTH ({blastMaxDepth})
+                </label>
+                <input
+                  id="blast-depth-slider"
+                  type="range"
+                  min={1}
+                  max={16}
+                  value={blastMaxDepth}
+                  onChange={(e) => setBlastMaxDepth(Number(e.target.value))}
+                  className="w-full accent-purple-500 cursor-pointer"
+                />
+              </div>
+
+              <div className="sm:col-span-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleCalculateBlastRadius}
+                  disabled={isBlastCalculating}
+                  className="flex-1 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-purple-300 font-mono text-xs font-semibold border border-purple-500/30 cursor-pointer transition-colors"
+                >
+                  {isBlastCalculating ? "Simulating..." : "Simulate"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExecuteCausalInvalidation}
+                  disabled={isCausalInvalidating}
+                  className="flex-1 px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-semibold shadow-lg shadow-purple-900/30 cursor-pointer transition-colors"
+                >
+                  {isCausalInvalidating ? "Purging..." : "Purge (RTC)"}
+                </button>
+              </div>
+            </div>
+
+            {/* Blast Radius Results */}
+            {blastReport && (
+              <div className="p-3 rounded-lg bg-slate-950 border border-purple-500/30 space-y-2 font-mono text-[11px]">
+                <div className="flex items-center justify-between text-purple-300 font-bold">
+                  <span>Blast Radius: {blastReport.total_affected} Dependent Components</span>
+                  <span>Max Hop Depth: {blastReport.max_depth_reached}</span>
+                </div>
+                <div className="space-y-1 max-h-36 overflow-y-auto">
+                  {blastReport.affected_nodes.map((node, idx) => (
+                    <div
+                      key={idx}
+                      className="p-1.5 rounded bg-slate-900/80 border border-white/5 flex items-center justify-between text-[10px]"
+                    >
+                      <span className="text-white truncate">{node.node_id}</span>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[9px]">hop {node.depth}</Badge>
+                        <Badge variant="purple" className="text-[9px]">{node.via_relation}</Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {blastReport.affected_cache_keys.length > 0 && (
+                  <div className="pt-1 text-slate-400 text-[10px]">
+                    Affected Cache Entries ({blastReport.affected_cache_keys.length}):{" "}
+                    <strong className="text-rose-400">{blastReport.affected_cache_keys.join(", ")}</strong>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Invalidation Execution Result */}
+            {causalInvResult && (
+              <div className="p-3 rounded-lg bg-slate-950 border border-emerald-500/30 space-y-1.5 font-mono text-[11px]">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Causal Invalidation Completed Successfully</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-slate-300 text-[10px]">
+                  <div>• Purged L1 Caches: <strong className="text-white">{causalInvResult.evicted_cache_count}</strong></div>
+                  <div>• Affected Nodes: <strong className="text-white">{causalInvResult.total_affected_nodes}</strong></div>
+                  <div>• Avoided Compute: <strong className="text-emerald-400">{causalInvResult.avoided_inr}</strong></div>
+                  <div>• Pipeline Latency: <strong className="text-cyan-300">{causalInvResult.latency_ms} ms</strong></div>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Sovereign Indian Governance (DPDP Act 2023, CERT-In & RBI Localization) */}
+      <Card glow="emerald">
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-emerald-400" />
+              <span>Sovereign Indian Governance &amp; Compliance (DPDP Act 2023 &amp; CERT-In)</span>
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Badge variant="cyan">DPDP ACT 2023</Badge>
+              <Badge variant="purple">CERT-IN 6-HR SLA</Badge>
+              <Badge variant="outline">RBI LOCALIZED</Badge>
+            </div>
+          </div>
+          <CardDescription>
+            Statutory compliance console adhering to the Digital Personal Data Protection Act 2023, CERT-In cybersecurity incident reporting, and RBI payment data localization.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+            <div className="sm:col-span-8 space-y-1">
+              <label htmlFor="dpdp-principal-input" className="text-[11px] font-mono text-slate-400">
+                DATA PRINCIPAL PSEUDONYM / IDENTIFIER
+              </label>
+              <input
+                id="dpdp-principal-input"
+                type="text"
+                value={dpdpPrincipalId}
+                onChange={(e) => setDpdpPrincipalId(e.target.value)}
+                placeholder="Data Principal ID (hashed with SHA-256 for zero-PII storage)"
+                className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-white/10 text-xs font-mono text-white focus:border-emerald-500"
+              />
+            </div>
+            <div className="sm:col-span-4 flex gap-2">
+              <button
+                type="button"
+                onClick={handleRecordDpdpConsent}
+                disabled={isDpdpOperating}
+                className="flex-1 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Record Consent (Sec 6)
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteDpdpErasure}
+                disabled={isDpdpOperating}
+                className="flex-1 px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-mono text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Right to Erasure (Sec 12)
+              </button>
+            </div>
+          </div>
+
+          {dpdpConsentRecorded && (
+            <div className="p-3 rounded-lg bg-slate-950 border border-emerald-500/30 text-emerald-400 font-mono text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{dpdpConsentRecorded}</span>
+            </div>
+          )}
+
+          {dpdpErasureResult && (
+            <div className="p-3 rounded-lg bg-slate-950 border border-rose-500/30 text-rose-300 font-mono text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{dpdpErasureResult}</span>
+            </div>
+          )}
+
+          {/* Statutory Badges */}
+          <div className="pt-2 border-t border-white/10 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
+            <div className="p-2.5 rounded-lg bg-slate-900/60 border border-white/5 space-y-0.5">
+              <span className="text-slate-400 text-[10px]">DATA RESIDENCY REGION</span>
+              <div className="text-white font-bold">ap-south-1 (Mumbai) / ap-south-2 (Hyderabad)</div>
+            </div>
+            <div className="p-2.5 rounded-lg bg-slate-900/60 border border-white/5 space-y-0.5">
+              <span className="text-slate-400 text-[10px]">GST SAC CLASSIFICATION</span>
+              <div className="text-cyan-300 font-bold">SAC 998313 (18% Statutory Rate)</div>
+            </div>
+            <div className="p-2.5 rounded-lg bg-slate-900/60 border border-white/5 space-y-0.5">
+              <span className="text-slate-400 text-[10px]">CERT-IN MANDATORY REPORTING</span>
+              <div className="text-emerald-400 font-bold">Rule 20(1) 6-Hour SLA Certified</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

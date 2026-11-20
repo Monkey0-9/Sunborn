@@ -95,6 +95,7 @@ pub struct AppState {
     pub request_limits: Arc<crate::limits::RequestLimits>,
     pub key_provider_configuration_error: Option<String>,
     pub graph_memory_cache: Option<Arc<GraphMemoryCache>>,
+    pub graphify_graph: Arc<sunborn_invalidation::GraphifyKnowledgeGraph>,
     pub cluster_sync_engine: Option<Arc<sunborn_invalidation::DistributedGraphSyncEngine>>,
     /// True only when the configured cluster transport is durable (Redis
     /// Streams). In-memory fallback is never accepted in production.
@@ -407,7 +408,23 @@ impl AppState {
             });
         }
 
-        // 4. Secondary failover provider if explicitly configured
+        // 4. Native Sarvam AI Indic Sovereign Provider (sarvam-2b)
+        if let Ok(sarvam_key) = std::env::var("SARVAM_API_KEY") {
+            let sarvam_url = std::env::var("SARVAM_BASE_URL")
+                .unwrap_or_else(|_| "https://api.sarvam.ai/v1".to_string());
+            arbitrage_entries.push(crate::origin::provider::ArbitrageProviderEntry {
+                name: "sarvam-indic".into(),
+                provider: Arc::new(crate::origin::sarvam::SarvamOriginProvider::new(
+                    sarvam_url,
+                    Some(sarvam_key),
+                )),
+                cost_per_million_input: 0.15,
+                cost_per_million_output: 0.30,
+                priority: 4,
+            });
+        }
+
+        // 5. Secondary failover provider if explicitly configured
         if let Ok(failover_url) = std::env::var("SUNBORN_FAILOVER_ORIGIN_URL") {
             let failover_key = std::env::var("SUNBORN_FAILOVER_ORIGIN_KEY").ok();
             arbitrage_entries.push(crate::origin::provider::ArbitrageProviderEntry {
@@ -515,13 +532,18 @@ impl AppState {
             }
         };
 
+        let graphify_graph = Arc::new(sunborn_invalidation::GraphifyKnowledgeGraph::new());
+
         let graph_memory_cache = if is_graph_cache_enabled {
             let lineage_graph = Arc::new(CompressedLineageGraph::new());
-            Some(Arc::new(GraphMemoryCache::new(
-                selected_cache.clone(),
-                dependency_graph.clone(),
-                lineage_graph,
-            )))
+            Some(Arc::new(
+                GraphMemoryCache::new(
+                    selected_cache.clone(),
+                    dependency_graph.clone(),
+                    lineage_graph,
+                )
+                .with_graphify_graph(graphify_graph.clone()),
+            ))
         } else {
             None
         };
@@ -715,6 +737,7 @@ impl AppState {
             spend_velocity_controller,
             key_provider_configuration_error,
             graph_memory_cache,
+            graphify_graph,
             cluster_sync_engine,
             cluster_transport_durable,
             orchestrator,

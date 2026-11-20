@@ -1,6 +1,10 @@
 path,component,loc,status,test_coverage,security_tier
-benchmarks/http_load_results.json,benchmarks,85,CONFIG,benchmarks/adversarial_evaluation_suite.py,TIER_3_SUPPORT
-benchmarks/http_load_test.py,benchmarks,272,VERIFIED_PRODUCTION,benchmarks/adversarial_evaluation_suite.py,TIER_3_SUPPORT
+crates/sunborn-gateway/src/handlers/governance.rs,sunborn-gateway,213,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+crates/sunborn-gateway/src/handlers/graph.rs,sunborn-gateway,415,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+crates/sunborn-gateway/src/origin/sarvam.rs,sunborn-gateway,135,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+crates/sunborn-gateway/tests/graphify_causal_invalidation_test.rs,sunborn-gateway,527,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+crates/sunborn-gateway/tests/india_sovereign_governance_test.rs,sunborn-gateway,157,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+scripts/verify_india_sovereign.py,tooling,151,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 .cargo/audit.toml,root,16,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 .cargo/config.toml,root,2,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 .devcontainer/Dockerfile,root,18,VERIFIED_PRODUCTION,scripts/verify.ps1,TIER_3_SUPPORT
@@ -46,7 +50,7 @@ apps/sunborn-rebuild/Cargo.toml,sunborn-rebuild,32,CONFIG,scripts/verify.ps1,TIE
 apps/sunborn-rebuild/README.md,sunborn-rebuild,10,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 apps/sunborn-rebuild/src/main.rs,sunborn-rebuild,275,VERIFIED_PRODUCTION,scripts/verify.ps1,TIER_3_SUPPORT
 apps/sunborn-verify/Cargo.toml,sunborn-verify,22,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
-apps/sunborn-verify/src/main.rs,sunborn-verify,348,VERIFIED_PRODUCTION,scripts/verify.ps1,TIER_3_SUPPORT
+apps/sunborn-verify/src/main.rs,sunborn-verify,434,VERIFIED_PRODUCTION,scripts/verify.ps1,TIER_3_SUPPORT
 audit.toml,root,7,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 benchmarks/adversarial_evaluation_suite.py,benchmarks,874,VERIFIED_PRODUCTION,benchmarks/adversarial_evaluation_suite.py,TIER_3_SUPPORT
 benchmarks/capacity_soak.py,benchmarks,532,VERIFIED_PRODUCTION,benchmarks/adversarial_evaluation_suite.py,TIER_3_SUPPORT
@@ -54,6 +58,8 @@ benchmarks/competitive_evaluation.py,benchmarks,438,VERIFIED_PRODUCTION,benchmar
 benchmarks/graph_invalidation_deep_benchmark.py,benchmarks,522,VERIFIED_PRODUCTION,benchmarks/adversarial_evaluation_suite.py,TIER_1_CRITICAL
 benchmarks/graph_storage_and_policy_bench.py,benchmarks,461,VERIFIED_PRODUCTION,benchmarks/adversarial_evaluation_suite.py,TIER_3_SUPPORT
 benchmarks/heldout_semantic_generalization.py,benchmarks,412,VERIFIED_PRODUCTION,benchmarks/adversarial_evaluation_suite.py,TIER_2_STANDARD
+benchmarks/http_load_results.json,benchmarks,85,CONFIG,benchmarks/adversarial_evaluation_suite.py,TIER_3_SUPPORT
+benchmarks/http_load_test.py,benchmarks,272,VERIFIED_PRODUCTION,benchmarks/adversarial_evaluation_suite.py,TIER_3_SUPPORT
 benchmarks/production_soak_results.json,benchmarks,53,CONFIG,benchmarks/adversarial_evaluation_suite.py,TIER_3_SUPPORT
 benchmarks/results/competitive_benchmark_run.json,benchmarks,139,CONFIG,benchmarks/adversarial_evaluation_suite.py,TIER_3_SUPPORT
 benchmarks/results/gateway_performance_run.json,benchmarks,36,CONFIG,benchmarks/adversarial_evaluation_suite.py,TIER_1_CRITICAL
@@ -113,7 +119,7 @@ crates/sunborn-gateway/src/handlers/invalidation.rs,sunborn-gateway,353,VERIFIED
 crates/sunborn-gateway/src/handlers/lifecycle.rs,sunborn-gateway,203,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/handlers/llm.rs,sunborn-gateway,342,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/handlers/local.rs,sunborn-gateway,100,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
-crates/sunborn-gateway/src/handlers/mod.rs,sunborn-gateway,122,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+crates/sunborn-gateway/src/handlers/mod.rs,sunborn-gateway,126,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/handlers/platform.rs,sunborn-gateway,167,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/handlers/security.rs,sunborn-gateway,280,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/handlers/tenants.rs,sunborn-gateway,225,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
@@ -123,16 +129,16 @@ crates/sunborn-gateway/src/learning/feedback.rs,sunborn-gateway,121,VERIFIED_PRO
 crates/sunborn-gateway/src/learning/mod.rs,sunborn-gateway,11,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/learning/shadow.rs,sunborn-gateway,96,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/learning/store.rs,sunborn-gateway,193,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
-crates/sunborn-gateway/src/lib.rs,sunborn-gateway,210,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+crates/sunborn-gateway/src/lib.rs,sunborn-gateway,261,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/limits.rs,sunborn-gateway,162,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
-crates/sunborn-gateway/src/main.rs,sunborn-gateway,145,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+crates/sunborn-gateway/src/main.rs,sunborn-gateway,152,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/middleware/auth.rs,sunborn-gateway,515,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/middleware/mod.rs,sunborn-gateway,11,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
-crates/sunborn-gateway/src/middleware/rate_limit.rs,sunborn-gateway,263,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+crates/sunborn-gateway/src/middleware/rate_limit.rs,sunborn-gateway,412,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/middleware/trace.rs,sunborn-gateway,80,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/origin/anthropic.rs,sunborn-gateway,138,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/origin/gemini.rs,sunborn-gateway,138,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
-crates/sunborn-gateway/src/origin/mod.rs,sunborn-gateway,12,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+crates/sunborn-gateway/src/origin/mod.rs,sunborn-gateway,14,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/origin/provider.rs,sunborn-gateway,540,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/origin/singleflight.rs,sunborn-gateway,320,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/quota.rs,sunborn-gateway,643,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
@@ -140,7 +146,7 @@ crates/sunborn-gateway/src/routing/mod.rs,sunborn-gateway,7,VERIFIED_PRODUCTION,
 crates/sunborn-gateway/src/routing/predictive.rs,sunborn-gateway,113,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/routing/radix.rs,sunborn-gateway,439,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/src/shadow.rs,sunborn-gateway,198,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
-crates/sunborn-gateway/src/state.rs,sunborn-gateway,1233,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+crates/sunborn-gateway/src/state.rs,sunborn-gateway,1256,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/adversarial_security_test.rs,sunborn-gateway,1137,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/capacity_soak_test.rs,sunborn-gateway,39,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/chaos_test.rs,sunborn-gateway,144,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
@@ -167,7 +173,7 @@ crates/sunborn-gateway/tests/quorum_authorization_test.rs,sunborn-gateway,196,VE
 crates/sunborn-gateway/tests/remediation_verification_test.rs,sunborn-gateway,723,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/request_tracing_test.rs,sunborn-gateway,88,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/reuse_certificate_path_test.rs,sunborn-gateway,649,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
-crates/sunborn-gateway/tests/route_contract_parity_test.rs,sunborn-gateway,482,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+crates/sunborn-gateway/tests/route_contract_parity_test.rs,sunborn-gateway,569,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/security_test.rs,sunborn-gateway,752,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/simulation_test.rs,sunborn-gateway,254,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/spend_ceiling_api_test.rs,sunborn-gateway,312,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
@@ -198,7 +204,7 @@ crates/sunborn-invalidation/src/graph_cache.rs,sunborn-invalidation,633,VERIFIED
 crates/sunborn-invalidation/src/graphify_graph.rs,sunborn-invalidation,267,VERIFIED_PRODUCTION,crates/sunborn-invalidation/src/graph.rs,TIER_1_CRITICAL
 crates/sunborn-invalidation/src/graphify_model.rs,sunborn-invalidation,304,VERIFIED_PRODUCTION,crates/sunborn-invalidation/src/graph.rs,TIER_1_CRITICAL
 crates/sunborn-invalidation/src/lib.rs,sunborn-invalidation,62,VERIFIED_PRODUCTION,crates/sunborn-invalidation/src/graph.rs,TIER_1_CRITICAL
-crates/sunborn-invalidation/src/orchestrator.rs,sunborn-invalidation,293,VERIFIED_PRODUCTION,crates/sunborn-invalidation/src/graph.rs,TIER_1_CRITICAL
+crates/sunborn-invalidation/src/orchestrator.rs,sunborn-invalidation,297,VERIFIED_PRODUCTION,crates/sunborn-invalidation/src/graph.rs,TIER_1_CRITICAL
 crates/sunborn-invalidation/src/outbox.rs,sunborn-invalidation,474,VERIFIED_PRODUCTION,crates/sunborn-invalidation/src/graph.rs,TIER_1_CRITICAL
 crates/sunborn-invalidation/src/query.rs,sunborn-invalidation,280,VERIFIED_PRODUCTION,crates/sunborn-invalidation/src/graph.rs,TIER_1_CRITICAL
 crates/sunborn-invalidation/src/watermark.rs,sunborn-invalidation,148,VERIFIED_PRODUCTION,crates/sunborn-invalidation/src/graph.rs,TIER_1_CRITICAL
@@ -265,9 +271,9 @@ docs/MASTER_ENGINEERING_PLAN.md,documentation,202,AUTHORITATIVE_DOC,scripts/veri
 docs/QUICKSTART.md,documentation,156,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/STATUS.md,documentation,320,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/adr/ADR-001-architecture-baseline.md,documentation,29,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
-docs/api/openapi.yaml,documentation,1662,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
+docs/api/openapi.yaml,documentation,2280,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 docs/audit/2026-11-19_MASTER_REMEDIATION_REGISTER.md,documentation,62,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
-docs/audit/source_traceability_matrix.csv,documentation,545,VERIFIED_PRODUCTION,scripts/verify.ps1,TIER_3_SUPPORT
+docs/audit/source_traceability_matrix.csv,documentation,554,VERIFIED_PRODUCTION,scripts/verify.ps1,TIER_3_SUPPORT
 docs/compliance/ISO_STANDARDS_COMPLIANCE.md,documentation,89,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/engineering-audit-2026-11-17/REPORT.md,documentation,214,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/engineering-transformation/01_README.md,documentation,73,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
@@ -413,7 +419,7 @@ frontend/src/app/finops/page.tsx,frontend,897,VERIFIED_PRODUCTION,frontend/tests
 frontend/src/app/global-error.tsx,frontend,42,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
 frontend/src/app/globals.css,frontend,164,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
 frontend/src/app/governance/page.tsx,frontend,604,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
-frontend/src/app/knowledge/page.tsx,frontend,733,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
+frontend/src/app/knowledge/page.tsx,frontend,1123,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
 frontend/src/app/layout.tsx,frontend,125,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
 frontend/src/app/learning/page.tsx,frontend,523,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
 frontend/src/app/login/page.tsx,frontend,291,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
@@ -433,7 +439,7 @@ frontend/src/components/ui/card.tsx,frontend,63,VERIFIED_PRODUCTION,frontend/tes
 frontend/src/components/ui/command-menu.tsx,frontend,272,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
 frontend/src/components/ui/shimmer-button.tsx,frontend,63,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
 frontend/src/components/ui/text-shimmer.tsx,frontend,33,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
-frontend/src/lib/api.ts,frontend,636,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
+frontend/src/lib/api.ts,frontend,826,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
 frontend/src/lib/cluster-store.ts,frontend,134,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_2_STANDARD
 frontend/src/lib/gateway-status.d.ts,frontend,5,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_1_CRITICAL
 frontend/src/lib/gateway-status.mjs,frontend,38,VERIFIED_PRODUCTION,frontend/tests/bff_security.test.mjs,TIER_1_CRITICAL
@@ -500,7 +506,7 @@ research/verify_certificate.py,research,626,VERIFIED_PRODUCTION,research/tests/t
 sbom.cyclonedx.json,root,2968,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/check_k8s_manifests.py,tooling,48,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/check_launch_docs.py,tooling,132,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
-scripts/check_openapi_drift.py,tooling,196,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
+scripts/check_openapi_drift.py,tooling,210,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/client_showcase.py,tooling,627,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/generate_320_heldout_dataset.py,tooling,469,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/generate_sbom.py,tooling,110,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT

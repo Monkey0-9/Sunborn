@@ -28,20 +28,52 @@ pub struct RateLimiter {
     capacity: f64,
     refill_rate: f64, // tokens per second
     buckets: Arc<Mutex<HashMap<String, Bucket>>>,
+    max_entries: usize,
 }
 
 impl RateLimiter {
+    /// Default ceiling on tracked keys. The map is keyed by tenant identifiers
+    /// and, for unauthenticated traffic, peer addresses: both are influenced by
+    /// the caller, so an unbounded map is a memory-exhaustion vector.
+    const DEFAULT_MAX_ENTRIES: usize = 8192;
+
     pub fn new(capacity: f64, refill_rate: f64) -> Self {
+        Self::new_bounded(capacity, refill_rate, Self::DEFAULT_MAX_ENTRIES)
+    }
+
+    pub fn new_bounded(capacity: f64, refill_rate: f64, max_entries: usize) -> Self {
         Self {
             capacity,
             refill_rate,
             buckets: Arc::new(Mutex::new(HashMap::new())),
+            max_entries: max_entries.max(1),
         }
     }
 
     pub async fn check_status(&self, key: &str) -> RateLimitStatus {
         let mut buckets = self.buckets.lock().await;
         let now = Instant::now();
+
+        if buckets.len() >= self.max_entries && !buckets.contains_key(key) {
+            // Drop buckets that have refilled to capacity: they carry no state
+            // worth keeping. If that frees nothing, drop the least recently
+            // touched bucket so a new caller is never permanently starved and
+            // the map stays bounded.
+            buckets.retain(|_, bucket| {
+                bucket.tokens
+                    + now.duration_since(bucket.last_update).as_secs_f64() * self.refill_rate
+                    < self.capacity
+            });
+            if buckets.len() >= self.max_entries {
+                if let Some(oldest) = buckets
+                    .iter()
+                    .min_by(|a, b| a.1.last_update.cmp(&b.1.last_update))
+                    .map(|(key, _)| key.clone())
+                {
+                    buckets.remove(&oldest);
+                }
+            }
+        }
 
         let bucket = buckets.entry(key.to_string()).or_insert_with(|| Bucket {
             tokens: self.capacity,
@@ -205,6 +237,77 @@ fn set_rate_headers(
 /// This layer must run inside the authentication layer so the tenant comes from
 /// the verified credential, never from a caller header. Tenants without a quota
 /// row are passed through unchanged.
+/// Per-peer throttle applied *before* authentication.
+///
+/// [`rate_limit_middleware`] budgets per tenant and reads `SecurityContext`, which
+/// `auth_middleware` inserts only after a credential has been accepted. A request
+/// carrying an invalid credential is therefore rejected before it is charged to
+/// any budget, leaving credential guessing unthrottled. This middleware runs
+/// outside auth and charges the peer address instead, so rejected attempts still
+/// cost the caller.
+///
+/// Known limit, stated rather than implied: the buckets are per process, so the
+/// effective ceiling is the configured rate multiplied by the replica count. It is
+/// a brute-force brake, not a cluster-wide quota; tenant quotas remain the
+/// cluster-wide mechanism.
+pub async fn pre_auth_rate_limit_middleware(req: Request, next: Next) -> Response {
+    if req
+        .extensions()
+        .get::<crate::middleware::auth::SecurityContext>()
+        .is_some()
+    {
+        // Authenticated: the tenant limiter owns this request. Charging it here
+        // as well would double-count and halve the configured tenant budget.
+        return next.run(req).await;
+    }
+
+    let Some(peer_ip) = req
+        .extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map(|info| info.0.ip())
+    else {
+        // Fail open when no peer address is available (in-process tests, or a
+        // server started without connect-info). Refusing here would take the
+        // service down over a plumbing detail; authenticated traffic is still
+        // covered by the tenant limiter.
+        return next.run(req).await;
+    };
+
+    let status = pre_auth_limiter().check_status(&peer_ip.to_string()).await;
+    if status.allowed {
+        return next.run(req).await;
+    }
+
+    let mut response = crate::handlers::AppError::from(sunborn_core::SunbornError::rate_limit(
+        "Too many unauthenticated requests from this address; retry shortly".to_string(),
+    ))
+    .into_response();
+    *response.status_mut() = StatusCode::TOO_MANY_REQUESTS;
+    response.headers_mut().insert(
+        axum::http::header::RETRY_AFTER,
+        HeaderValue::from_str(&status.reset_secs.to_string())
+            .unwrap_or_else(|_| HeaderValue::from_static("1")),
+    );
+    response
+}
+
+fn pre_auth_limiter() -> &'static RateLimiter {
+    static LIMITER: std::sync::OnceLock<RateLimiter> = std::sync::OnceLock::new();
+    LIMITER.get_or_init(|| {
+        let rps = std::env::var("SUNBORN_PREAUTH_RPS")
+            .ok()
+            .and_then(|value| value.parse::<f64>().ok())
+            .filter(|value| *value > 0.0)
+            .unwrap_or(20.0);
+        let burst = std::env::var("SUNBORN_PREAUTH_BURST")
+            .ok()
+            .and_then(|value| value.parse::<f64>().ok())
+            .filter(|value| *value > 0.0)
+            .unwrap_or(rps * 5.0);
+        RateLimiter::new(burst, rps)
+    })
+}
+
 pub async fn rate_limit_middleware(
     State(state): State<crate::state::AppState>,
     req: Request,
@@ -259,5 +362,51 @@ pub async fn rate_limit_middleware(
             *response.status_mut() = StatusCode::SERVICE_UNAVAILABLE;
             response
         }
+    }
+}
+
+#[cfg(test)]
+mod limiter_bounds_tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn map_stays_bounded_under_many_distinct_keys() {
+        let limiter = RateLimiter::new_bounded(2.0, 0.0, 4);
+        for index in 0..500 {
+            let _ = limiter.check_status(&format!("peer-{index}")).await;
+        }
+        let tracked = limiter.buckets.lock().await.len();
+        assert!(
+            tracked <= 4,
+            "tracked keys must stay within the cap, found {tracked}"
+        );
+    }
+
+    #[tokio::test]
+    async fn exhausted_budget_is_denied_then_refills() {
+        let limiter = RateLimiter::new(2.0, 100.0);
+        assert!(limiter.check("peer").await);
+        assert!(limiter.check("peer").await);
+        assert!(
+            !limiter.check("peer").await,
+            "third request must be denied with a two-token bucket"
+        );
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        assert!(
+            limiter.check("peer").await,
+            "bucket must refill after the configured rate elapses"
+        );
+    }
+
+    #[tokio::test]
+    async fn keys_are_isolated_from_each_other() {
+        let limiter = RateLimiter::new(1.0, 0.0);
+        assert!(limiter.check("attacker").await);
+        assert!(!limiter.check("attacker").await);
+        assert!(
+            limiter.check("victim").await,
+            "one peer exhausting its budget must not deny another peer"
+        );
     }
 }

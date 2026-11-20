@@ -880,6 +880,624 @@ paths:
         '200':
           description: FinOps report generated
 
+  /v1/graph/topology:
+    get:
+      summary: Graph Topology Snapshot
+      description: Returns node and edge counts, per-type distribution, and a bounded sample of graph nodes for operational inspection.
+      tags:
+        - Graph
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Topology snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  engine:
+                    type: string
+                    example: graphify-multi-relational-v2
+                  total_nodes:
+                    type: integer
+                  total_edges:
+                    type: integer
+                  node_type_counts:
+                    type: object
+                    additionalProperties:
+                      type: integer
+                  sample_nodes:
+                    type: array
+                    description: At most 20 nodes.
+                    items:
+                      type: object
+  /v1/graph/nodes:
+    post:
+      summary: Add Graph Node
+      description: Registers a node in the multi-relational graph used for causal invalidation and retrieval.
+      tags:
+        - Graph
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+                - label
+                - node_type
+              properties:
+                id:
+                  type: string
+                  description: Node identifier
+                label:
+                  type: string
+                  description: Human readable label
+                node_type:
+                  type: string
+                  description: File, Function, Class, Module, Document, Section, Table, PromptTemplate, CacheEntry, or Model
+                source_file:
+                  type: string
+                  description: Originating file
+                source_location:
+                  type: string
+                  description: Location within the file
+                content_hash:
+                  type: integer
+                  description: Content hash (u64)
+                community_id:
+                  type: integer
+                  description: Community assignment
+                metadata:
+                  type: object
+                  description: Arbitrary metadata
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  id:
+                    type: string
+                  node_type:
+                    type: string
+                  numeric_id:
+                    type: string
+                  total_nodes:
+                    type: integer
+  /v1/graph/nodes/{id}:
+    get:
+      summary: Get Graph Node
+      description: Returns a single node and its relationships, or 404 when the id is unknown.
+      tags:
+        - Graph
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Node identifier
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: object
+                  node:
+                    type: object
+    delete:
+      summary: Delete Graph Node
+      description: Removes a node and its incident edges. Requires an administrative credential.
+      tags:
+        - Graph
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Node identifier
+      responses:
+        '200':
+          description: Node removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  id:
+                    type: string
+                  removed_node:
+                    type: object
+                  total_nodes:
+                    type: integer
+        '403':
+          description: Credential is not administrative
+        '404':
+          description: Node not found
+
+  /v1/graph/edges:
+    post:
+      summary: Add Graph Edge
+      description: Creates a typed, directed relation between two nodes.
+      tags:
+        - Graph
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - source_id
+                - target_id
+                - relation
+              properties:
+                source_id:
+                  type: string
+                  description: Source node id
+                target_id:
+                  type: string
+                  description: Target node id
+                relation:
+                  type: string
+                  description: Calls, IndirectCall, References, Imports, ImportsFrom, DynamicImport, ReExports, Defines, Inherits, Extends, Implements, or Uses
+                confidence:
+                  type: string
+                  description: Extracted (default) or Inferred
+                weight:
+                  type: number
+                  description: Edge weight
+                source_file:
+                  type: string
+                  description: Originating file
+                source_location:
+                  type: string
+                  description: Location within the file
+                metadata:
+                  type: object
+                  description: Arbitrary metadata
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  source_id:
+                    type: string
+                  target_id:
+                    type: string
+                  relation:
+                    type: string
+                  total_edges:
+                    type: integer
+  /v1/graph/blast-radius:
+    post:
+      summary: Compute Blast Radius
+      description: Traverses dependents from the mutated roots and reports what an invalidation would touch, without mutating anything.
+      tags:
+        - Graph
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - mutated_roots
+              properties:
+                mutated_roots:
+                  type: array
+                  description: Node ids whose content changed
+                  items:
+                    type: string
+                max_depth:
+                  type: integer
+                  description: Traversal depth limit
+                allowed_relations:
+                  type: array
+                  description: Restrict traversal to these relation kinds
+                include_cache_entries:
+                  type: boolean
+                  description: Include affected cache keys in the report
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  affected_nodes:
+                    type: array
+                    items:
+                      type: string
+                  affected_cache_keys:
+                    type: array
+                    items:
+                      type: string
+                  max_depth_reached:
+                    type: integer
+  /v1/graph/invalidate:
+    post:
+      summary: Causal Invalidation
+      description: Invalidates dependents of the mutated roots, purges affected cache keys, and reports avoided spend.
+      tags:
+        - Graph
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - mutated_roots
+              properties:
+                mutated_roots:
+                  type: array
+                  description: Node ids whose content changed
+                  items:
+                    type: string
+                tenant_id:
+                  type: string
+                  description: Owning tenant
+                max_depth:
+                  type: integer
+                  description: Traversal depth limit
+                allowed_relations:
+                  type: array
+                  description: Restrict traversal to these relation kinds
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  affected_count:
+                    type: integer
+                  evicted_cache_count:
+                    type: integer
+                  purged_keys:
+                    type: integer
+                  latency_ms:
+                    type: integer
+                  timestamp:
+                    type: string
+  /v1/graph/explain/{id}:
+    get:
+      summary: Explain Graph Node
+      description: Returns a human readable explanation of why a node exists and what it connects to.
+      tags:
+        - Graph
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Node identifier
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: object
+                  explanation:
+                    type: object
+  /v1/graph/communities:
+    get:
+      summary: List Graph Communities
+      description: Returns detected communities (clusters) in the graph.
+      tags:
+        - Graph
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: object
+                  communities:
+                    type: object
+  /v1/graph/god-nodes:
+    get:
+      summary: List God Nodes
+      description: Returns the most highly connected nodes, which dominate invalidation reach.
+      tags:
+        - Graph
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: object
+                  god_nodes:
+                    type: object
+  /v1/graph/subgraph/{id}:
+    get:
+      summary: Extract Subgraph
+      description: Returns the subgraph reachable from the given root node.
+      tags:
+        - Graph
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Root node identifier
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: object
+                  root_id:
+                    type: object
+                  subgraph:
+                    type: object
+  /v1/governance/dpdp/consent:
+    post:
+      summary: Record DPDP Consent
+      description: Records a consent artefact for a data principal with purpose and retention period, and emits it to the outbox.
+      tags:
+        - Governance
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tenant_id
+                - data_principal_id
+                - purpose
+                - retention_period_days
+                - consent_notice_version
+              properties:
+                tenant_id:
+                  type: string
+                  description: Owning tenant
+                data_principal_id:
+                  type: string
+                  description: Data principal identifier
+                purpose:
+                  type: string
+                  description: Stated processing purpose
+                retention_period_days:
+                  type: integer
+                  description: Retention period in days
+                consent_notice_version:
+                  type: string
+                  description: Version of the consent notice shown to the principal
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  consent_id:
+                    type: string
+                  tenant_id:
+                    type: string
+                  principal_hash:
+                    type: string
+                  purpose:
+                    type: string
+                  collected_at:
+                    type: string
+                  expires_at:
+                    type: string
+                  dpdp_statute:
+                    type: string
+  /v1/governance/dpdp/erasure:
+    post:
+      summary: Execute DPDP Erasure
+      description: Erases a data principal's records, purges exact cache entries, and reports what was removed.
+      tags:
+        - Governance
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tenant_id
+                - data_principal_id
+              properties:
+                tenant_id:
+                  type: string
+                  description: Owning tenant
+                data_principal_id:
+                  type: string
+                  description: Data principal identifier
+                reason:
+                  type: string
+                  description: Optional erasure reason
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  exact_cache_records_purged:
+                    type: integer
+                  principal_hash:
+                    type: string
+                  latency_ms:
+                    type: integer
+  /v1/governance/dpdp/audit:
+    get:
+      summary: DPDP Audit Posture
+      description: Returns the consent architecture, retention audit cadence, grievance window, and crypto-shredding status.
+      tags:
+        - Governance
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: object
+                  governing_statute:
+                    type: object
+                  consent_architecture:
+                    type: object
+                  crypto_shredding_enabled:
+                    type: object
+                  retention_audit_frequency_days:
+                    type: object
+                  grievance_redressal_window_hours:
+                    type: object
+                  timestamp:
+                    type: object
+  /v1/governance/cert-in/incidents:
+    get:
+      summary: CERT-In Incident Log
+      description: Returns the incident log with the six-hour mandatory reporting SLA status and mitigation actions.
+      tags:
+        - Governance
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: object
+                  incidents_logged:
+                    type: object
+                  mandatory_reporting_sla_hours:
+                    type: object
+                  incident_log:
+                    type: object
+                  timestamp:
+                    type: object
+  /v1/governance/rbi/localization:
+    get:
+      summary: RBI Data Localization
+      description: Verifies end-to-end payment data localization, including disaster recovery region and cross-border mirroring policy.
+      tags:
+        - Governance
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: object
+                  regulatory_authority:
+                    type: object
+                  primary_datacenter_region:
+                    type: object
+                  disaster_recovery_datacenter_region:
+                    type: object
+                  full_end_to_end_localization_verified:
+                    type: object
+                  timestamp:
+                    type: object
   /v1/invalidation:
     post:
       summary: Trigger Invalidation Event

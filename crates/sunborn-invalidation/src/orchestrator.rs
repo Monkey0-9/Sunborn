@@ -78,6 +78,10 @@ impl InvalidationOrchestrator {
         }
     }
 
+    pub fn cluster_transport(&self) -> Option<&Arc<dyn ClusterBroadcastTransport>> {
+        self.cluster_transport.as_ref()
+    }
+
     /// Purges all cache entries and vectors dependent on mutated knowledge sources.
     pub async fn purge_sources(
         &self,

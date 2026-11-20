@@ -115,7 +115,14 @@ async fn main() -> anyhow::Result<()> {
 
     let (done_tx, done_rx) = tokio::sync::oneshot::channel::<()>();
 
-    let server = axum::serve(listener, app).with_graceful_shutdown(async move {
+    // Connect info supplies the peer address used by the pre-authentication rate
+    // limiter. Without it that middleware fails open, so this is required for the
+    // brute-force brake to be active at all.
+    let server = axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(async move {
         shutdown_waiter.await;
         tracing::info!(
             drain_timeout_secs = drain_timeout_secs,

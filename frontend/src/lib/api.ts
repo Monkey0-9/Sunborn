@@ -632,5 +632,195 @@ export const sunbornApi = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+
+  // Graphify Multi-Relational Knowledge Graph & Causal Invalidation
+  getGraphTopology: () =>
+    request<{
+      status: string;
+      engine: string;
+      total_nodes: number;
+      total_edges: number;
+      node_type_counts: Record<string, number>;
+      sample_nodes: any[];
+    }>("v1/graph/topology", { method: "GET" }),
+
+  addGraphNode: (payload: {
+    id: string;
+    label: string;
+    node_type: string;
+    source_file?: string;
+    source_location?: string;
+    content_hash?: number;
+    community_id?: number;
+    metadata?: any;
+  }) =>
+    request<any>("v1/graph/nodes", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  getGraphNode: (id: string) =>
+    request<any>(`v1/graph/nodes/${encodeURIComponent(id)}`, { method: "GET" }),
+
+  deleteGraphNode: (id: string) =>
+    request<any>(`v1/graph/nodes/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  addGraphEdge: (payload: {
+    source_id: string;
+    target_id: string;
+    relation: string;
+    confidence?: string;
+    weight?: number;
+    source_file?: string;
+    source_location?: string;
+    metadata?: any;
+  }) =>
+    request<any>("v1/graph/edges", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  calculateBlastRadius: (payload: {
+    mutated_roots: string[];
+    max_depth?: number;
+    allowed_relations?: string[];
+    include_cache_entries?: boolean;
+  }) =>
+    request<{
+      mutated_roots: string[];
+      affected_nodes: Array<{
+        node_id: string;
+        depth: number;
+        via_relation: string;
+        via_file?: string;
+        via_location?: string;
+      }>;
+      affected_cache_keys: string[];
+      max_depth_reached: number;
+      total_affected: number;
+    }>("v1/graph/blast-radius", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  invalidateGraphCausal: (payload: {
+    mutated_roots: string[];
+    tenant_id?: string;
+    max_depth?: number;
+    allowed_relations?: string[];
+  }) =>
+    request<{
+      status: string;
+      mutated_roots: string[];
+      max_depth_reached: number;
+      total_affected_nodes: number;
+      affected_nodes: any[];
+      affected_cache_keys: string[];
+      purged_keys: string[];
+      evicted_cache_count: number;
+      failed_keys: any[];
+      latency_ms: number;
+      finops: {
+        avoided_tokens_estimate: number;
+        avoided_usd: number;
+        avoided_inr: number;
+        avoided_inr_formatted: string;
+        avoided_micro_paise: number;
+      };
+      timestamp: string;
+    }>("v1/graph/invalidate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  explainGraphNode: (id: string) =>
+    request<any>(`v1/graph/explain/${encodeURIComponent(id)}`, { method: "GET" }),
+
+  getGraphCommunities: () =>
+    request<any>("v1/graph/communities", { method: "GET" }),
+
+  getGraphGodNodes: () =>
+    request<any>("v1/graph/god-nodes", { method: "GET" }),
+
+  getGraphSubgraph: (id: string) =>
+    request<any>(`v1/graph/subgraph/${encodeURIComponent(id)}`, { method: "GET" }),
+
+  // Sovereign Indian Governance & Compliance (DPDP Act 2023, CERT-In, RBI Localization)
+  recordDpdpConsent: (payload: {
+    tenant_id: string;
+    data_principal_id: string;
+    purpose: string;
+    retention_period_days: number;
+    consent_notice_version: string;
+  }) =>
+    request<{
+      status: string;
+      consent_id: string;
+      outbox_id: number;
+      principal_hash: string;
+      tenant_id: string;
+      purpose: string;
+      expires_at: string;
+      compliance: string;
+    }>("v1/governance/dpdp/consent", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  executeDpdpErasure: (payload: {
+    tenant_id: string;
+    data_principal_id: string;
+    reason?: string;
+  }) =>
+    request<{
+      status: string;
+      statute: string;
+      tenant_id: string;
+      principal_hash: string;
+      exact_cache_records_purged: number;
+      latency_ms: number;
+      timestamp: string;
+    }>("v1/governance/dpdp/erasure", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  getDpdpAudit: () =>
+    request<{
+      status: string;
+      fiduciary_jurisdiction: string;
+      governing_statute: string;
+      data_fiduciary_classification: string;
+      consent_architecture: string;
+      crypto_shredding_enabled: boolean;
+      retention_audit_frequency_days: number;
+      cross_border_transfer_policy: string;
+      grievance_redressal_window_hours: number;
+      timestamp: string;
+    }>("v1/governance/dpdp/audit", { method: "GET" }),
+
+  getCertInIncidents: () =>
+    request<{
+      status: string;
+      cert_in_statutory_directive: string;
+      mandatory_reporting_sla_hours: number;
+      incidents_logged: number;
+      incident_log: any[];
+      designated_incident_response_officer: string;
+      timestamp: string;
+    }>("v1/governance/cert-in/incidents", { method: "GET" }),
+
+  verifyRbiLocalization: () =>
+    request<{
+      status: string;
+      regulatory_authority: string;
+      circular_reference: string;
+      primary_datacenter_region: string;
+      disaster_recovery_datacenter_region: string;
+      cross_border_financial_data_mirroring: string;
+      full_end_to_end_localization_verified: boolean;
+      gst_sac_code: string;
+      timestamp: string;
+    }>("v1/governance/rbi/localization", { method: "GET" }),
 };
 

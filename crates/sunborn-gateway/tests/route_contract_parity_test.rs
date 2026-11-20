@@ -330,6 +330,93 @@ const ROUTES: &[Route] = &[
         path: "/v1/local/config",
         access: Access::Public,
     },
+    // Graph inspection surface: readable by any authenticated tenant, because
+    // reading topology does not mutate state and is needed for support triage.
+    Route {
+        method: "GET",
+        path: "/v1/graph/topology",
+        access: Access::Tenant,
+    },
+    Route {
+        method: "GET",
+        path: "/v1/graph/nodes/{*id}",
+        access: Access::Tenant,
+    },
+    Route {
+        method: "GET",
+        path: "/v1/graph/explain/{*id}",
+        access: Access::Tenant,
+    },
+    Route {
+        method: "GET",
+        path: "/v1/graph/communities",
+        access: Access::Tenant,
+    },
+    Route {
+        method: "GET",
+        path: "/v1/graph/god-nodes",
+        access: Access::Tenant,
+    },
+    Route {
+        method: "GET",
+        path: "/v1/graph/subgraph/{*id}",
+        access: Access::Tenant,
+    },
+    // Blast radius is a read-only traversal, so it stays available to tenants.
+    Route {
+        method: "POST",
+        path: "/v1/graph/blast-radius",
+        access: Access::Tenant,
+    },
+    // Graph mutations and causal invalidation change shared cache state, so they
+    // require an administrative credential (each handler calls require_admin).
+    Route {
+        method: "POST",
+        path: "/v1/graph/nodes",
+        access: Access::Admin,
+    },
+    Route {
+        method: "DELETE",
+        path: "/v1/graph/nodes/{*id}",
+        access: Access::Admin,
+    },
+    Route {
+        method: "POST",
+        path: "/v1/graph/edges",
+        access: Access::Admin,
+    },
+    Route {
+        method: "POST",
+        path: "/v1/graph/invalidate",
+        access: Access::Admin,
+    },
+    // Statutory governance surface: consent records, erasure, and regulatory
+    // posture are administrative operations, not tenant self-service.
+    Route {
+        method: "POST",
+        path: "/v1/governance/dpdp/consent",
+        access: Access::Admin,
+    },
+    Route {
+        method: "POST",
+        path: "/v1/governance/dpdp/erasure",
+        access: Access::Admin,
+    },
+    Route {
+        method: "GET",
+        path: "/v1/governance/dpdp/audit",
+        access: Access::Admin,
+    },
+    Route {
+        method: "GET",
+        path: "/v1/governance/cert-in/incidents",
+        access: Access::Admin,
+    },
+    Route {
+        method: "GET",
+        path: "/v1/governance/rbi/localization",
+        access: Access::Admin,
+    },
 ];
 
 /// Extract every literal path passed to `.route(...)` in the router source.
