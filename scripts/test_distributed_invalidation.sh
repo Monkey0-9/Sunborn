@@ -64,6 +64,7 @@ cleanup() {
     fi
 }
 trap cleanup EXIT
+trap 'fail "Command failed at line $LINENO"' ERR
 
 fail() {
     echo "FAIL: $*" >&2
@@ -377,10 +378,10 @@ qdrant_count() {
 
 if [ "${MODE}" = "finops" ]; then
     echo "=== 4/6: seed a durable cluster-wide spend ceiling ==="
-    psql_scalar "INSERT INTO spend_tenant_ceilings (tenant_id, ceiling_usd, updated_at)
-                 VALUES ('${TENANT}', 0.0001, NOW())
+    psql_scalar "INSERT INTO spend_tenant_ceilings (tenant_id, ceiling_usd, ceiling_micro_units, updated_at)
+                 VALUES ('${TENANT}', 0.0001, 100, NOW())
                  ON CONFLICT (tenant_id) DO UPDATE
-                 SET ceiling_usd = EXCLUDED.ceiling_usd, updated_at = NOW();" \
+                 SET ceiling_usd = EXCLUDED.ceiling_usd, ceiling_micro_units = EXCLUDED.ceiling_micro_units, updated_at = NOW();" \
         >/dev/null || fail "failed to seed the durable spend ceiling"
     for port in "${A_PORT}" "${B_PORT}"; do
         curl -fsS -H "x-api-key: ${ADMIN_KEY}" \

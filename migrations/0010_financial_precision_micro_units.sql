@@ -33,3 +33,21 @@ CREATE INDEX IF NOT EXISTS idx_spend_reservations_tenant_micro
 
 CREATE INDEX IF NOT EXISTS idx_spend_ledger_entries_tenant_micro
     ON spend_ledger_entries(tenant_id, amount_micro_units, recorded_at);
+
+-- Automatic synchronization trigger for legacy/direct SQL inserts
+CREATE OR REPLACE FUNCTION sync_spend_tenant_ceilings_micro_units()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.ceiling_micro_units IS NULL OR NEW.ceiling_micro_units = 0 THEN
+        IF NEW.ceiling_usd IS NOT NULL AND NEW.ceiling_usd > 0 THEN
+            NEW.ceiling_micro_units := ROUND(NEW.ceiling_usd * 1000000)::BIGINT;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_sync_spend_tenant_ceilings_micro_units ON spend_tenant_ceilings;
+CREATE TRIGGER trg_sync_spend_tenant_ceilings_micro_units
+BEFORE INSERT OR UPDATE ON spend_tenant_ceilings
+FOR EACH ROW EXECUTE FUNCTION sync_spend_tenant_ceilings_micro_units();

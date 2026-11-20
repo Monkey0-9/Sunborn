@@ -460,7 +460,11 @@ impl PostgresDatabaseStore {
         }
 
         let ceiling_micro: i64 = match sqlx::query_scalar::<_, i64>(
-            "SELECT ceiling_micro_units FROM spend_tenant_ceilings WHERE tenant_id = $1",
+            "SELECT CASE
+                 WHEN ceiling_micro_units > 0 THEN ceiling_micro_units
+                 WHEN ceiling_usd > 0 THEN ROUND(ceiling_usd * 1000000)::BIGINT
+                 ELSE 0
+             END FROM spend_tenant_ceilings WHERE tenant_id = $1",
         )
         .bind(tenant_id)
         .fetch_optional(&mut *tx)

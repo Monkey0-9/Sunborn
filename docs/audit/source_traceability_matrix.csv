@@ -84,7 +84,7 @@ crates/sunborn-db/Cargo.toml,sunborn-db,25,CONFIG,crates/sunborn-db/src/reposito
 crates/sunborn-db/README.md,sunborn-db,16,AUTHORITATIVE_DOC,crates/sunborn-db/src/repository.rs,TIER_1_CRITICAL
 crates/sunborn-db/src/lib.rs,sunborn-db,53,VERIFIED_PRODUCTION,crates/sunborn-db/src/repository.rs,TIER_1_CRITICAL
 crates/sunborn-db/src/models.rs,sunborn-db,128,VERIFIED_PRODUCTION,crates/sunborn-db/src/repository.rs,TIER_1_CRITICAL
-crates/sunborn-db/src/postgres.rs,sunborn-db,2252,VERIFIED_PRODUCTION,crates/sunborn-db/src/repository.rs,TIER_1_CRITICAL
+crates/sunborn-db/src/postgres.rs,sunborn-db,2256,VERIFIED_PRODUCTION,crates/sunborn-db/src/repository.rs,TIER_1_CRITICAL
 crates/sunborn-db/src/repository.rs,sunborn-db,395,VERIFIED_PRODUCTION,crates/sunborn-db/src/repository.rs,TIER_1_CRITICAL
 crates/sunborn-db/src/write_behind.rs,sunborn-db,313,VERIFIED_PRODUCTION,crates/sunborn-db/src/repository.rs,TIER_1_CRITICAL
 crates/sunborn-execution/Cargo.toml,sunborn-execution,27,CONFIG,crates/sunborn-execution/src/planner.rs,TIER_2_STANDARD
@@ -470,7 +470,7 @@ migrations/0006_durable_outbox_queue.sql,database-migrations,32,VERIFIED_PRODUCT
 migrations/0007_distributed_spend_ledger.sql,database-migrations,36,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/distributed_finops_test.rs,TIER_3_SUPPORT
 migrations/0008_free_tier_quotas.sql,database-migrations,45,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/distributed_finops_test.rs,TIER_3_SUPPORT
 migrations/0009_cluster_rate_limits.sql,database-migrations,19,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/distributed_finops_test.rs,TIER_3_SUPPORT
-migrations/0010_financial_precision_micro_units.sql,database-migrations,35,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/distributed_finops_test.rs,TIER_3_SUPPORT
+migrations/0010_financial_precision_micro_units.sql,database-migrations,53,VERIFIED_PRODUCTION,crates/sunborn-gateway/tests/distributed_finops_test.rs,TIER_3_SUPPORT
 requirements-dev.txt,root,9,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 research/ARTIFACT-APPENDIX.md,research,102,AUTHORITATIVE_DOC,research/tests/test_verifier_negative.py,TIER_3_SUPPORT
 research/README.md,research,63,AUTHORITATIVE_DOC,research/tests/test_verifier_negative.py,TIER_3_SUPPORT
@@ -511,7 +511,7 @@ scripts/start-all.ps1,tooling,88,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/start-all.sh,tooling,43,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/sunborn-desktop.bat,tooling,4,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/sunborn-desktop.ps1,tooling,124,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
-scripts/test_distributed_invalidation.sh,tooling,630,TOOLING,scripts/verify.ps1,TIER_1_CRITICAL
+scripts/test_distributed_invalidation.sh,tooling,631,TOOLING,scripts/verify.ps1,TIER_1_CRITICAL
 scripts/test_python_sdk.sh,tooling,88,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/uninstall-sunborn.ps1,tooling,63,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/verify.ps1,tooling,115,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
