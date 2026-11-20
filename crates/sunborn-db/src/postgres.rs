@@ -460,11 +460,11 @@ impl PostgresDatabaseStore {
         }
 
         let ceiling_micro: i64 = match sqlx::query_scalar::<_, i64>(
-            "SELECT CASE
+            "SELECT (CASE
                  WHEN ceiling_micro_units > 0 THEN ceiling_micro_units
                  WHEN ceiling_usd > 0 THEN ROUND(ceiling_usd * 1000000)::BIGINT
-                 ELSE 0
-             END FROM spend_tenant_ceilings WHERE tenant_id = $1",
+                 ELSE 0::BIGINT
+             END)::BIGINT FROM spend_tenant_ceilings WHERE tenant_id = $1",
         )
         .bind(tenant_id)
         .fetch_optional(&mut *tx)
@@ -479,11 +479,12 @@ impl PostgresDatabaseStore {
         };
 
         let committed_micro: i64 = match sqlx::query_scalar::<_, i64>(
-            "SELECT
+            "SELECT (
                  COALESCE((SELECT SUM(amount_micro_units) FROM spend_ledger_entries
                            WHERE tenant_id = $1 AND recorded_at > NOW() - ($2 * INTERVAL '1 second')), 0)
                + COALESCE((SELECT SUM(amount_micro_units) FROM spend_reservations
-                           WHERE tenant_id = $1 AND reserved_at > NOW() - ($2 * INTERVAL '1 second')), 0)",
+                           WHERE tenant_id = $1 AND reserved_at > NOW() - ($2 * INTERVAL '1 second')), 0)
+             )::BIGINT",
         )
         .bind(tenant_id)
         .bind(window_secs)
@@ -586,7 +587,7 @@ impl PostgresDatabaseStore {
         .await
         .ok()?;
         let total_micro: i64 = sqlx::query_scalar(
-            "SELECT COALESCE(SUM(amount_micro_units), 0) FROM spend_ledger_entries
+            "SELECT COALESCE(SUM(amount_micro_units), 0)::BIGINT FROM spend_ledger_entries
              WHERE tenant_id = $1 AND recorded_at > NOW() - ($2 * INTERVAL '1 second')",
         )
         .bind(tenant_id)
@@ -615,7 +616,7 @@ impl PostgresDatabaseStore {
     pub async fn spend_window_total(&self, tenant_id: &str, window: Duration) -> Option<f64> {
         let pool = self.get_pool().await?;
         let total_micro: i64 = sqlx::query_scalar(
-            "SELECT COALESCE(SUM(amount_micro_units), 0) FROM spend_ledger_entries
+            "SELECT COALESCE(SUM(amount_micro_units), 0)::BIGINT FROM spend_ledger_entries
              WHERE tenant_id = $1 AND recorded_at > NOW() - ($2 * INTERVAL '1 second')",
         )
         .bind(tenant_id)
