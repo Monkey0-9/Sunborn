@@ -9,6 +9,7 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::RwLock;
+use sunborn_core::sync::{read_lock, write_lock};
 use sunborn_core::{Result, SunbornError};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,9 +115,9 @@ impl PolicyPromotionController {
                 let _ = std::fs::create_dir_all(parent);
             }
             let state = PersistedPolicyState {
-                active_policy: self.active_policy.read().unwrap().clone(),
-                canary_policy: self.canary_policy.read().unwrap().clone(),
-                audit_logs: self.audit_logs.read().unwrap().clone(),
+                active_policy: read_lock(&self.active_policy).clone(),
+                canary_policy: read_lock(&self.canary_policy).clone(),
+                audit_logs: read_lock(&self.audit_logs).clone(),
             };
             if let Ok(mut file) = OpenOptions::new()
                 .create(true)
@@ -133,29 +134,29 @@ impl PolicyPromotionController {
 
     /// Retrieve the currently active production policy weights
     pub fn get_active_weights(&self) -> PolicyWeights {
-        self.active_policy.read().unwrap().weights.clone()
+        read_lock(&self.active_policy).weights.clone()
     }
 
     /// Retrieve the active policy
     pub fn get_active_policy(&self) -> CandidatePolicy {
-        self.active_policy.read().unwrap().clone()
+        read_lock(&self.active_policy).clone()
     }
 
     /// Retrieve active canary status if running
     pub fn get_canary_status(&self) -> Option<(CandidatePolicy, u8)> {
-        self.canary_policy.read().unwrap().clone()
+        read_lock(&self.canary_policy).clone()
     }
 
     /// Select which policy to apply for a given request based on request hash and canary split
     pub fn select_policy_for_request(&self, request_hash: u64) -> PolicyWeights {
-        let canary_guard = self.canary_policy.read().unwrap();
+        let canary_guard = read_lock(&self.canary_policy);
         if let Some((canary, pct)) = canary_guard.as_ref() {
             let bucket = (request_hash % 100) as u8;
             if bucket < *pct {
                 return canary.weights.clone();
             }
         }
-        self.active_policy.read().unwrap().weights.clone()
+        read_lock(&self.active_policy).weights.clone()
     }
 
     /// Start a staged canary rollout for a validated candidate policy
@@ -180,11 +181,11 @@ impl PolicyPromotionController {
 
         let clamped_pct = canary_percent.min(25); // Max canary limit before full promotion
         let policy_id = candidate.policy_id.clone();
-        let prev_id = self.active_policy.read().unwrap().policy_id.clone();
+        let prev_id = read_lock(&self.active_policy).policy_id.clone();
         let version = candidate.version;
 
         {
-            let mut canary_guard = self.canary_policy.write().unwrap();
+            let mut canary_guard = write_lock(&self.canary_policy);
             *canary_guard = Some((candidate, clamped_pct));
         }
 
@@ -198,7 +199,7 @@ impl PolicyPromotionController {
             timestamp: Utc::now(),
         };
 
-        self.audit_logs.write().unwrap().push(log);
+        write_lock(&self.audit_logs).push(log);
         self.save_state();
         Ok(())
     }
@@ -206,13 +207,13 @@ impl PolicyPromotionController {
     /// Promote canary policy to 100% active production policy
     pub fn complete_promotion(&self, actor: &str) -> Result<CandidatePolicy> {
         let (canary, prev_id) = {
-            let mut canary_guard = self.canary_policy.write().unwrap();
+            let mut canary_guard = write_lock(&self.canary_policy);
             let (mut c, _) = canary_guard.take().ok_or_else(|| {
                 SunbornError::validation_error("No active canary policy to promote")
             })?;
             c.is_promoted = true;
 
-            let mut active_guard = self.active_policy.write().unwrap();
+            let mut active_guard = write_lock(&self.active_policy);
             let pid = active_guard.policy_id.clone();
             *active_guard = c.clone();
             (c, pid)
@@ -228,7 +229,7 @@ impl PolicyPromotionController {
             timestamp: Utc::now(),
         };
 
-        self.audit_logs.write().unwrap().push(log);
+        write_lock(&self.audit_logs).push(log);
         self.save_state();
         Ok(canary)
     }
@@ -236,9 +237,9 @@ impl PolicyPromotionController {
     /// Automated or manual emergency rollback of the canary policy
     pub fn trigger_rollback(&self, trigger: RollbackTrigger, reason: &str) -> Result<()> {
         let rollback_log = {
-            let mut canary_guard = self.canary_policy.write().unwrap();
+            let mut canary_guard = write_lock(&self.canary_policy);
             if let Some((canary, _)) = canary_guard.take() {
-                let active_guard = self.active_policy.read().unwrap();
+                let active_guard = read_lock(&self.active_policy);
                 Some(PromotionAuditLog {
                     policy_id: active_guard.policy_id.clone(),
                     previous_policy_id: canary.policy_id.clone(),
@@ -260,7 +261,7 @@ impl PolicyPromotionController {
                 "CANARY_ROLLED_BACK: Emergency rollback restored active baseline policy"
             );
 
-            self.audit_logs.write().unwrap().push(log);
+            write_lock(&self.audit_logs).push(log);
             self.save_state();
         }
         Ok(())
@@ -268,16 +269,16 @@ impl PolicyPromotionController {
 
     /// Fetch audit trail of policy promotions and rollbacks
     pub fn get_audit_trail(&self) -> Vec<PromotionAuditLog> {
-        self.audit_logs.read().unwrap().clone()
+        read_lock(&self.audit_logs).clone()
     }
 
     /// Get active policy ID
     pub fn get_active_policy_id(&self) -> String {
-        self.active_policy.read().unwrap().policy_id.clone()
+        read_lock(&self.active_policy).policy_id.clone()
     }
 
     /// Get active policy version
     pub fn get_active_policy_version(&self) -> u32 {
-        self.active_policy.read().unwrap().version
+        read_lock(&self.active_policy).version
     }
 }

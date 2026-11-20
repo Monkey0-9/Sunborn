@@ -309,6 +309,27 @@ const ROUTES: &[Route] = &[
         path: "/v1/learning/rollback",
         access: Access::Admin,
     },
+    // Local BYOK desktop control.
+    Route {
+        method: "GET",
+        path: "/v1/local/status",
+        access: Access::Public,
+    },
+    Route {
+        method: "POST",
+        path: "/v1/local/providers",
+        access: Access::Public,
+    },
+    Route {
+        method: "DELETE",
+        path: "/v1/local/providers/{name}",
+        access: Access::Public,
+    },
+    Route {
+        method: "POST",
+        path: "/v1/local/config",
+        access: Access::Public,
+    },
 ];
 
 /// Extract every literal path passed to `.route(...)` in the router source.
@@ -332,6 +353,7 @@ fn concrete(path: &str) -> String {
     path.replace("{*key}", "probe-key")
         .replace("{key}", "probe-key")
         .replace("{id}", "tenant-probe")
+        .replace("{name}", "openai")
 }
 
 fn app_state() -> AppState {

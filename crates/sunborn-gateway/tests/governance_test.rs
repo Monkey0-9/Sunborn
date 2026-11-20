@@ -8,7 +8,7 @@ use sunborn_cache::CacheEntry;
 use sunborn_core::model::{ApplicationId, TenantId};
 use sunborn_core::AppConfig;
 use sunborn_db::models::{DurableCacheRecord, TenantRecord};
-use sunborn_execution::{ExecutionCacheStore, ToolResult};
+use sunborn_execution::ToolResult;
 use sunborn_gateway::{create_router, AppState};
 use sunborn_semantic::{VectorEntry, VectorStore};
 use tower::ServiceExt;
@@ -22,6 +22,11 @@ async fn test_tenant_cascade_offboarding_zero_lingering_data() {
     let target_tenant = "tenant-gdpr-offboard";
     let tenant_id = TenantId::new(target_tenant);
     let app_id = ApplicationId::new("app-test");
+
+    // Provision cryptographic key so shredding can be exercised genuinely
+    let _ = state
+        .crypto_registry
+        .provision_tenant_secure(tenant_id.clone());
 
     // 1. Populate data across ALL 4 system tiers for this tenant:
     // a) PostgreSQL Tenant & Durable Cache Record
@@ -296,4 +301,54 @@ async fn test_lifecycle_sweep_expired_entries() {
 
     assert!(!state.cache.exists("expired:key:1").await.unwrap());
     assert!(state.cache.exists("active:key:1").await.unwrap());
+}
+
+#[tokio::test]
+async fn test_tenant_cascade_offboarding_fails_when_key_shredding_fails() {
+    let config = AppConfig::default();
+    let state = AppState::new(config);
+    let app = create_router(state.clone());
+
+    let unprovisioned_tenant = "tenant-never-provisioned-key";
+
+    // Insert database record to verify it is NOT deleted if shredding fails
+    state
+        .db
+        .insert_tenant(TenantRecord {
+            id: unprovisioned_tenant.into(),
+            name: "Unprovisioned Corp".into(),
+            status: "active".into(),
+            rate_limit_rps: 100,
+            created_at: chrono::Utc::now(),
+        })
+        .await
+        .unwrap();
+
+    // Call DELETE /v1/tenants/:id without provisioning key
+    let del_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/v1/tenants/{}", unprovisioned_tenant))
+                .header("x-api-key", "sunborn-admin-key")
+                .header("x-quorum-admin-key", "sunborn-quorum-key")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Deletion must fail closed because cryptographic shredding cannot be confirmed
+    assert!(
+        del_res.status().is_server_error() || del_res.status().is_client_error(),
+        "Tenant offboarding must fail when cryptographic shredding fails"
+    );
+
+    // Verify tenant record in database was NOT deleted (preserved for forensics/recovery)
+    let tenant_record = state.db.get_tenant(unprovisioned_tenant).await.unwrap();
+    assert!(
+        tenant_record.is_some(),
+        "Tenant record must be preserved when cryptographic shredding fails"
+    );
 }

@@ -29,19 +29,54 @@ pub struct StructuralFingerprint {
     pub fingerprint_hash: String,
 }
 
+/// Normalizes ASCII and Indic digits (Devanagari, Bengali, Tamil, Telugu, Kannada, Gujarati, Malayalam, Odia, Gurmukhi)
+/// into standard '0'..='9' characters.
+#[inline]
+fn normalize_indic_digit(c: char) -> Option<char> {
+    if c.is_ascii_digit() || c == '.' {
+        Some(c)
+    } else if ('\u{0966}'..='\u{096F}').contains(&c) {
+        // Devanagari numerals ०-९ (Hindi, Marathi, Sanskrit)
+        Some((b'0' + (c as u32 - 0x0966) as u8) as char)
+    } else if ('\u{09E6}'..='\u{09EF}').contains(&c) {
+        // Bengali numerals ০-৯ (Bengali, Assamese)
+        Some((b'0' + (c as u32 - 0x09E6) as u8) as char)
+    } else if ('\u{0BE6}'..='\u{0BEF}').contains(&c) {
+        // Tamil numerals ௦-௯
+        Some((b'0' + (c as u32 - 0x0BE6) as u8) as char)
+    } else if ('\u{0C66}'..='\u{0C6F}').contains(&c) {
+        // Telugu numerals ౦-౯
+        Some((b'0' + (c as u32 - 0x0C66) as u8) as char)
+    } else if ('\u{0CE6}'..='\u{0CEF}').contains(&c) {
+        // Kannada numerals ೦-೯
+        Some((b'0' + (c as u32 - 0x0CE6) as u8) as char)
+    } else if ('\u{0AE6}'..='\u{0AEF}').contains(&c) {
+        // Gujarati numerals ૦-૯
+        Some((b'0' + (c as u32 - 0x0AE6) as u8) as char)
+    } else if ('\u{0D66}'..='\u{0D6F}').contains(&c) {
+        // Malayalam numerals ൦-൯
+        Some((b'0' + (c as u32 - 0x0D66) as u8) as char)
+    } else if ('\u{0B66}'..='\u{0B6F}').contains(&c) {
+        // Odia numerals ୦-୯
+        Some((b'0' + (c as u32 - 0x0B66) as u8) as char)
+    } else if ('\u{0A66}'..='\u{0A6F}').contains(&c) {
+        // Gurmukhi numerals ੦-੯ (Punjabi)
+        Some((b'0' + (c as u32 - 0x0A66) as u8) as char)
+    } else {
+        None
+    }
+}
+
 impl StructuralFingerprint {
     pub fn extract(prompt: &str) -> Self {
         let words: Vec<&str> = prompt.split_whitespace().collect();
         let token_count = words.len();
 
-        // 1. Extract numeric literals
+        // 1. Extract numeric literals (with cross-script Indic numeral normalization)
         let mut numbers: Vec<String> = words
             .iter()
             .filter_map(|w| {
-                let cleaned: String = w
-                    .chars()
-                    .filter(|c| c.is_ascii_digit() || *c == '.')
-                    .collect();
+                let cleaned: String = w.chars().filter_map(normalize_indic_digit).collect();
                 if !cleaned.is_empty() && cleaned.chars().any(|c| c.is_ascii_digit()) {
                     Some(cleaned)
                 } else {
@@ -54,7 +89,13 @@ impl StructuralFingerprint {
         // 2. Negation and antonym polarity detection
         let lower = prompt.to_lowercase();
         let clean_tokens: Vec<&str> = lower
-            .split(|c: char| !c.is_alphanumeric() && c != '\'')
+            .split(|c: char| {
+                !c.is_alphanumeric()
+                    && c != '\''
+                    && !('\u{0900}'..='\u{0D7F}').contains(&c)
+                    && c != '\u{200C}'
+                    && c != '\u{200D}'
+            })
             .filter(|s| !s.is_empty())
             .collect();
 
@@ -98,6 +139,79 @@ impl StructuralFingerprint {
             "prohibit",
             "prohibited",
             "revoked",
+            // Indic Negation Vocabulary (Hindi, Marathi, Tamil, Telugu, Bengali, Kannada, Malayalam, Gujarati, Odia, Punjabi, Hinglish)
+            "नहीं",
+            "नही",
+            "मत",
+            "ना",
+            "निषेध",
+            "वर्जित",
+            "रोकें",
+            "रोको",
+            "अस्वीकृत",
+            "रद्द",
+            "नकार",
+            "अमान्य",
+            "अस्वीकार",
+            "नाही",
+            "नको",
+            "विना",
+            "शिवाय",
+            "बंदी",
+            "இல்லை",
+            "வேண்டாம்",
+            "கூடாது",
+            "முடியாது",
+            "மறு",
+            "நிராகரி",
+            "தடை",
+            "அற்ற",
+            "లేదు",
+            "వద్దు",
+            "కాదు",
+            "రాదు",
+            "చేయవద్దు",
+            "నిషేధం",
+            "తిరస్కరించు",
+            "না",
+            "নয়",
+            "নেই",
+            "নি",
+            "বারণ",
+            "অস্বীকার",
+            "বাতিল",
+            "ಇಲ್ಲ",
+            "ಬೇಡ",
+            "ಅಲ್ಲ",
+            "ಬಾರದು",
+            "ಮಾಡಬೇಡಿ",
+            "ನಿಷೇಧ",
+            "ഇല്ല",
+            "അരുത്",
+            "പാടില്ല",
+            "വേണ്ട",
+            "വിലക്ക്",
+            "નથી",
+            "નહીં",
+            "ના",
+            "વગર",
+            "મનાઈ",
+            "ନାହିଁ",
+            "ନା",
+            "ନୁହେଁ",
+            "ମନା",
+            "ਨਹੀਂ",
+            "ਨਾ",
+            "ਮਨ੍ਹਾ",
+            "nahi",
+            "nahin",
+            "mat",
+            "band",
+            "roko",
+            "mana",
+            "rad",
+            "chodo",
+            "inkaar",
         ];
 
         let mut neg_tokens: Vec<String> = clean_tokens
@@ -108,6 +222,23 @@ impl StructuralFingerprint {
                     || (w.starts_with("dis") && w.len() > 5)
                     || (w.starts_with("non") && w.len() > 5)
                     || w.contains("n't")
+                    // Indic Dravidian & Agglutinative Negation Suffixes
+                    || (w.ends_with("వద్దు") && w.len() > "వద్దు".len())
+                    || (w.ends_with("లేదు") && w.len() > "లేదు".len())
+                    || (w.ends_with("కాదు") && w.len() > "కాదు".len())
+                    || (w.ends_with("రాదు") && w.len() > "రాదు".len())
+                    || (w.ends_with("ಬೇಡಿ") && w.len() > "ಬೇಡಿ".len())
+                    || (w.ends_with("ಬೇಡ") && w.len() > "ಬೇಡ".len())
+                    || (w.ends_with("ಬಾರದು") && w.len() > "ಬಾರದು".len())
+                    || (w.ends_with("கூடாது") && w.len() > "கூடாது".len())
+                    || (w.ends_with("வேண்டாம்") && w.len() > "வேண்டாம்".len())
+                    || (w.ends_with("முடியாது") && w.len() > "முடியாது".len())
+                    || (w.ends_with("പാടില്ല") && w.len() > "പാടില്ല".len())
+                    || (w.ends_with("അരുത്") && w.len() > "അരുത്".len())
+                    // Indic Negative Prefixes (गैर-, ना-, അ-, அ-)
+                    || (w.starts_with("गैर") && w.len() > "गैर".len())
+                    || (w.starts_with("नामंजूर"))
+                    || (w.starts_with("नापसंद"))
             })
             .map(|s| s.to_string())
             .collect();
@@ -134,6 +265,24 @@ impl StructuralFingerprint {
             "october",
             "november",
             "december",
+            // Indic Temporal Tokens
+            "आज",
+            "कल",
+            "परसों",
+            "सुबह",
+            "शाम",
+            "रात",
+            "இன்று",
+            "நேற்று",
+            "நாளை",
+            "ఈరోజు",
+            "నిన్న",
+            "రేపు",
+            "আজ",
+            "কাল",
+            "ಇಂದು",
+            "ನಿನ್ನೆ",
+            "ನಾಳೆ",
         ];
 
         let mut temp_tokens: Vec<String> = clean_tokens
@@ -393,16 +542,20 @@ impl StructuralFingerprint {
             "usd",
             "dollar",
             "amount",
+            "inr",
+            "rupee",
+            "rupees",
+            "रुपये",
+            "रुपया",
+            "खाता",
+            "लेनदेन",
         ];
 
         let mut role_bound_numeric_tokens = Vec::new();
         let mut ordered_numeric_sequence = Vec::new();
 
         for (i, word) in words.iter().enumerate() {
-            let cleaned: String = word
-                .chars()
-                .filter(|c| c.is_ascii_digit() || *c == '.')
-                .collect();
+            let cleaned: String = word.chars().filter_map(normalize_indic_digit).collect();
             if !cleaned.is_empty() && cleaned.chars().any(|c| c.is_ascii_digit()) {
                 let start = i.saturating_sub(3);
                 let window = &words[start..i];

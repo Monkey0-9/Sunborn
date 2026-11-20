@@ -406,6 +406,8 @@ async fn test_production_startup_failure_when_dragonfly_unavailable() {
         "SUNBORN_VECTOR_BACKEND",
         "SUNBORN_LLM_ORIGIN_URL",
         "SUNBORN_EMBEDDING_URL",
+        "SUNBORN_EXECUTION_STORE_PATH",
+        "SUNBORN_LEARNING_WAL_PATH",
     ]);
 
     std::env::set_var("SUNBORN_ENV", "production");
@@ -417,6 +419,10 @@ async fn test_production_startup_failure_when_dragonfly_unavailable() {
     std::env::set_var("SUNBORN_VECTOR_BACKEND", "qdrant");
     std::env::set_var("SUNBORN_LLM_ORIGIN_URL", "https://api.openai.com/v1");
     std::env::set_var("SUNBORN_EMBEDDING_URL", "https://api.openai.com/v1");
+    let temp_exec = std::env::temp_dir().join(format!("test_exec_{}.wal", uuid::Uuid::new_v4()));
+    let temp_learn = std::env::temp_dir().join(format!("test_learn_{}.wal", uuid::Uuid::new_v4()));
+    std::env::set_var("SUNBORN_EXECUTION_STORE_PATH", &temp_exec);
+    std::env::set_var("SUNBORN_LEARNING_WAL_PATH", &temp_learn);
 
     let mut config = AppConfig::default();
     config.cache.backend = "dragonfly".to_string();
@@ -431,6 +437,54 @@ async fn test_production_startup_failure_when_dragonfly_unavailable() {
     let err = res.unwrap_err();
     assert_eq!(err.code, ErrorCode::CacheUnavailable);
     assert!(err.message.contains("DragonflyDB"));
+}
+
+#[tokio::test]
+async fn test_production_startup_rejects_ephemeral_stores() {
+    let _lock = ENV_LOCK.lock().await;
+    let _guard = EnvGuard::new(&[
+        "SUNBORN_ENV",
+        "SUNBORN_MASTER_KEK",
+        "SUNBORN_ADMIN_KEY",
+        "SUNBORN_LEARNING_HMAC_SECRET",
+        "SUNBORN_CACHE_BACKEND",
+        "SUNBORN_DB_BACKEND",
+        "SUNBORN_VECTOR_BACKEND",
+        "SUNBORN_LLM_ORIGIN_URL",
+        "SUNBORN_EMBEDDING_URL",
+        "SUNBORN_EXECUTION_STORE_PATH",
+        "SUNBORN_LEARNING_WAL_PATH",
+    ]);
+
+    std::env::set_var("SUNBORN_ENV", "production");
+    std::env::set_var("SUNBORN_MASTER_KEK", VALID_PROD_KEK);
+    std::env::set_var("SUNBORN_ADMIN_KEY", VALID_PROD_ADMIN_KEY);
+    std::env::set_var("SUNBORN_LEARNING_HMAC_SECRET", VALID_PROD_HMAC_SECRET);
+    std::env::set_var("SUNBORN_CACHE_BACKEND", "dragonfly");
+    std::env::set_var("SUNBORN_DB_BACKEND", "postgres");
+    std::env::set_var("SUNBORN_VECTOR_BACKEND", "qdrant");
+    std::env::set_var("SUNBORN_LLM_ORIGIN_URL", "https://api.openai.com/v1");
+    std::env::set_var("SUNBORN_EMBEDDING_URL", "https://api.openai.com/v1");
+    std::env::remove_var("SUNBORN_EXECUTION_STORE_PATH");
+    std::env::remove_var("SUNBORN_LEARNING_WAL_PATH");
+
+    let mut config = AppConfig::default();
+    config.cache.backend = "dragonfly".to_string();
+    config.cache.database_backend = "postgres".to_string();
+    config.cache.vector_backend = "qdrant".to_string();
+
+    let state = AppState::new(config);
+    let res = state.verify_production_readiness().await;
+
+    assert!(
+        res.is_err(),
+        "Production mode must reject ephemeral execution store"
+    );
+    let err = res.unwrap_err();
+    assert_eq!(err.code, ErrorCode::ConfigurationError);
+    assert!(err
+        .message
+        .contains("forbids ephemeral in-memory execution store"));
 }
 
 #[tokio::test]
@@ -588,4 +642,27 @@ async fn test_service_backed_connectivity_verification_succeeds() {
     assert!(state.qdrant_store.verify_connection().await.is_ok());
     assert!(state.origin_provider.health_check().await.is_ok());
     assert!(state.selected_embedder.health_check().await.is_ok());
+}
+
+#[tokio::test]
+async fn test_production_startup_does_not_seed_sample_tenants() {
+    let _lock = ENV_LOCK.lock().await;
+    let _guard = EnvGuard::new(&["SUNBORN_ENV"]);
+
+    std::env::set_var("SUNBORN_ENV", "production");
+    let state = AppState::new(AppConfig::default());
+
+    for demo_tenant in [
+        "tenant-alpha",
+        "enterprise-fintech",
+        "acme-corp",
+        "healthcare-systems",
+    ] {
+        let tid = sunborn_core::TenantId::new(demo_tenant);
+        assert!(
+            !state.crypto_registry.is_active(&tid),
+            "Sample demo tenant '{}' must NOT be provisioned in production mode",
+            demo_tenant
+        );
+    }
 }

@@ -188,6 +188,13 @@ pub fn create_router(state: AppState) -> Router {
             "/v1/learning/rollback",
             post(handlers::rollback_learning_policy),
         )
+        .route("/v1/local/status", get(handlers::get_local_status))
+        .route("/v1/local/providers", post(handlers::save_local_provider))
+        .route(
+            "/v1/local/providers/{name}",
+            axum::routing::delete(handlers::delete_local_provider),
+        )
+        .route("/v1/local/config", post(handlers::configure_local_settings))
         .layer(axum::middleware::from_fn_with_state(
             rate_limit_state,
             middleware::rate_limit::rate_limit_middleware,

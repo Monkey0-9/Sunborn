@@ -8,6 +8,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
+use sunborn_core::sync::{read_lock, write_lock};
 use sunborn_core::{Result, SunbornError, TenantId};
 
 pub struct TenantLearningStore {
@@ -35,6 +36,18 @@ impl TenantLearningStore {
         }
     }
 
+    pub fn is_durable(&self) -> bool {
+        self.wal_path.is_some()
+    }
+
+    pub fn storage_tier(&self) -> &'static str {
+        if self.is_durable() {
+            "durable-wal"
+        } else {
+            "process-local-ephemeral"
+        }
+    }
+
     pub fn new_with_wal(max_events_per_tenant: usize, wal_path: Option<PathBuf>) -> Self {
         let store = Self {
             events: RwLock::new(HashMap::new()),
@@ -54,7 +67,7 @@ impl TenantLearningStore {
     fn load_from_wal(&self, path: &Path) {
         if let Ok(file) = File::open(path) {
             let reader = BufReader::new(file);
-            let mut map = self.events.write().unwrap();
+            let mut map = write_lock(&self.events);
             for line in reader.lines().map_while(std::result::Result::ok) {
                 if let Ok(event) = serde_json::from_str::<VerifiedFeedbackEvent>(&line) {
                     let queue = map.entry(event.tenant_id.clone()).or_default();
@@ -88,7 +101,7 @@ impl TenantLearningStore {
                 .truncate(true)
                 .open(path)
             {
-                let map = self.events.read().unwrap();
+                let map = read_lock(&self.events);
                 for queue in map.values() {
                     for event in queue {
                         if let Ok(serialized) = serde_json::to_string(event) {
@@ -108,7 +121,7 @@ impl TenantLearningStore {
             ));
         }
 
-        let mut map = self.events.write().unwrap();
+        let mut map = write_lock(&self.events);
         let queue = map.entry(event.tenant_id.clone()).or_default();
 
         // Poison defense: Check if this specific cache_key already received contradictory labels
@@ -139,7 +152,7 @@ impl TenantLearningStore {
 
     /// Fetch verified learning events for a specific tenant (tenant isolation invariant)
     pub fn get_tenant_events(&self, tenant_id: &TenantId) -> Vec<VerifiedFeedbackEvent> {
-        let map = self.events.read().unwrap();
+        let map = read_lock(&self.events);
         map.get(tenant_id)
             .map(|q| q.iter().cloned().collect())
             .unwrap_or_default()
@@ -147,19 +160,19 @@ impl TenantLearningStore {
 
     /// Total event count across tenants
     pub fn total_events(&self) -> usize {
-        let map = self.events.read().unwrap();
+        let map = read_lock(&self.events);
         map.values().map(|q| q.len()).sum()
     }
 
     /// Event count for a specific tenant
     pub fn tenant_event_count(&self, tenant_id: &TenantId) -> usize {
-        let map = self.events.read().unwrap();
+        let map = read_lock(&self.events);
         map.get(tenant_id).map(|q| q.len()).unwrap_or(0)
     }
 
     /// Scored event count (events with non-null similarity_score) for a specific tenant
     pub fn get_scored_event_count(&self, tenant_id: &TenantId) -> usize {
-        let map = self.events.read().unwrap();
+        let map = read_lock(&self.events);
         map.get(tenant_id)
             .map(|q| q.iter().filter(|e| e.similarity_score.is_some()).count())
             .unwrap_or(0)
@@ -168,7 +181,7 @@ impl TenantLearningStore {
     /// GDPR Article 17 / Cryptographic Shredding Cascade:
     /// Permanently wipes all learning events, calibration records, and telemetry for the tenant.
     pub fn purge_tenant(&self, tenant_id: &TenantId) -> usize {
-        let mut map = self.events.write().unwrap();
+        let mut map = write_lock(&self.events);
         let count = map.remove(tenant_id).map(|q| q.len()).unwrap_or(0);
         drop(map);
 

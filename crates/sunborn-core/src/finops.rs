@@ -24,9 +24,29 @@ impl ModelPricing {
         }
     }
 
+    pub fn sarvam_2b() -> Self {
+        Self {
+            model: "sarvam-2b".into(),
+            input_cost_per_million: 0.15,
+            output_cost_per_million: 0.30,
+        }
+    }
+
+    pub fn krutrim_v1() -> Self {
+        Self {
+            model: "krutrim-v1".into(),
+            input_cost_per_million: 0.20,
+            output_cost_per_million: 0.50,
+        }
+    }
+
     pub fn for_model(model: &str) -> Self {
         let m = model.to_lowercase();
-        if m.contains("claude") {
+        if m.contains("sarvam") {
+            Self::sarvam_2b()
+        } else if m.contains("krutrim") {
+            Self::krutrim_v1()
+        } else if m.contains("claude") {
             Self::claude35_sonnet()
         } else if m.contains("gpt-4") || m.contains("o1") || m.contains("o3") {
             Self::gpt4o()
@@ -171,6 +191,217 @@ impl std::fmt::Display for MicroUnits {
     }
 }
 
+/// Sovereign Indic micro-paise representing 1/1,000,000th of 1 INR
+/// (1 INR = 100 paise = 1,000,000 micro-paise).
+/// Ensures zero-loss precision for sub-penny Indic token billing under high concurrency.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
+pub struct MicroPaise(pub i64);
+
+impl MicroPaise {
+    pub const ZERO: Self = Self(0);
+    pub const PER_INR: i64 = 1_000_000;
+    pub const DEFAULT_INR_PER_USD: f64 = 84.50; // Reference sovereign peg
+
+    #[inline]
+    pub fn from_inr(inr: f64) -> Self {
+        if !inr.is_finite() || inr < 0.0 {
+            return Self::ZERO;
+        }
+        let units = (inr * Self::PER_INR as f64).round() as i64;
+        Self(units.max(0))
+    }
+
+    #[inline]
+    pub fn to_inr(self) -> f64 {
+        self.0 as f64 / Self::PER_INR as f64
+    }
+
+    #[inline]
+    pub fn from_usd(usd: f64, inr_per_usd: f64) -> Self {
+        let rate = if inr_per_usd.is_finite() && inr_per_usd > 0.0 {
+            inr_per_usd
+        } else {
+            Self::DEFAULT_INR_PER_USD
+        };
+        Self::from_inr(usd * rate)
+    }
+
+    #[inline]
+    pub fn to_usd(self, inr_per_usd: f64) -> f64 {
+        let rate = if inr_per_usd.is_finite() && inr_per_usd > 0.0 {
+            inr_per_usd
+        } else {
+            Self::DEFAULT_INR_PER_USD
+        };
+        self.to_inr() / rate
+    }
+
+    #[inline]
+    pub fn format_indian_currency(self) -> String {
+        format_inr_currency(self.to_inr())
+    }
+}
+
+impl std::fmt::Display for MicroPaise {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} uINR ({})", self.0, self.format_indian_currency())
+    }
+}
+
+/// Format an amount using Indian currency notation (Lakhs and Crores grouping, e.g. ₹1,50,000.00).
+pub fn format_inr_currency(amount: f64) -> String {
+    if !amount.is_finite() {
+        return "₹0.00".to_string();
+    }
+    let is_negative = amount < 0.0;
+    let abs_amount = amount.abs();
+    let integer_part = abs_amount.floor() as u64;
+    let fractional_part = ((abs_amount - integer_part as f64) * 100.0).round() as u64;
+
+    let int_str = integer_part.to_string();
+    let formatted_int = if int_str.len() <= 3 {
+        int_str
+    } else {
+        let (head, tail) = int_str.split_at(int_str.len() - 3);
+        let mut parts = Vec::new();
+        let mut remaining = head;
+        while remaining.len() > 2 {
+            let split_idx = remaining.len() - 2;
+            parts.push(&remaining[split_idx..]);
+            remaining = &remaining[..split_idx];
+        }
+        if !remaining.is_empty() {
+            parts.push(remaining);
+        }
+        parts.reverse();
+        format!("{},{}", parts.join(","), tail)
+    };
+
+    let sign = if is_negative { "-" } else { "" };
+    format!("{}₹{}.{:02}", sign, formatted_int, fractional_part.min(99))
+}
+
+/// Compact Indian denominational formatting (e.g. ₹1.50 Lakh, ₹2.40 Cr, ₹45.00k).
+pub fn format_lakhs_crores(amount: f64) -> String {
+    if !amount.is_finite() || amount <= 0.0 {
+        return "₹0.00".to_string();
+    }
+    if amount >= 10_000_000.0 {
+        format!("₹{:.2} Cr", amount / 10_000_000.0)
+    } else if amount >= 100_000.0 {
+        format!("₹{:.2} Lakh", amount / 100_000.0)
+    } else if amount >= 1_000.0 {
+        format!("₹{:.2}k", amount / 1_000.0)
+    } else {
+        format!("₹{:.2}", amount)
+    }
+}
+
+/// India GST Statutory Tax Breakdown under SAC 998313 (IT / Cloud Infrastructure Services)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GstBreakdown {
+    pub taxable_amount_inr: f64,
+    pub cgst_rate_percent: f64,
+    pub cgst_amount_inr: f64,
+    pub sgst_rate_percent: f64,
+    pub sgst_amount_inr: f64,
+    pub igst_rate_percent: f64,
+    pub igst_amount_inr: f64,
+    pub total_tax_inr: f64,
+    pub total_amount_inr: f64,
+    pub sac_code: String,
+    pub is_inter_state: bool,
+    pub gstin: Option<String>,
+}
+
+impl GstBreakdown {
+    pub const SAC_CODE: &'static str = "998313";
+    pub const TOTAL_GST_RATE: f64 = 18.0;
+    pub const CGST_RATE: f64 = 9.0;
+    pub const SGST_RATE: f64 = 9.0;
+    pub const IGST_RATE: f64 = 18.0;
+
+    pub fn calculate(taxable_inr: f64, is_inter_state: bool, gstin: Option<&str>) -> Self {
+        let taxable = if taxable_inr.is_finite() && taxable_inr > 0.0 {
+            taxable_inr
+        } else {
+            0.0
+        };
+
+        let (cgst_r, cgst_a, sgst_r, sgst_a, igst_r, igst_a) = if is_inter_state {
+            let igst = (taxable * Self::IGST_RATE / 100.0 * 100.0).round() / 100.0;
+            (0.0, 0.0, 0.0, 0.0, Self::IGST_RATE, igst)
+        } else {
+            let cgst = (taxable * Self::CGST_RATE / 100.0 * 100.0).round() / 100.0;
+            let sgst = (taxable * Self::SGST_RATE / 100.0 * 100.0).round() / 100.0;
+            (Self::CGST_RATE, cgst, Self::SGST_RATE, sgst, 0.0, 0.0)
+        };
+
+        let total_tax = cgst_a + sgst_a + igst_a;
+        let total_amount = taxable + total_tax;
+
+        Self {
+            taxable_amount_inr: taxable,
+            cgst_rate_percent: cgst_r,
+            cgst_amount_inr: cgst_a,
+            sgst_rate_percent: sgst_r,
+            sgst_amount_inr: sgst_a,
+            igst_rate_percent: igst_r,
+            igst_amount_inr: igst_a,
+            total_tax_inr: total_tax,
+            total_amount_inr: total_amount,
+            sac_code: Self::SAC_CODE.to_string(),
+            is_inter_state,
+            gstin: gstin.map(|s| s.trim().to_uppercase()),
+        }
+    }
+}
+
+/// Validate standard 15-character Goods and Services Tax Identification Number (GSTIN)
+pub fn validate_gstin(gstin: &str) -> bool {
+    let s = gstin.trim();
+    if s.len() != 15 {
+        return false;
+    }
+    let bytes = s.as_bytes();
+    // 1-2: State code (01-38)
+    if !bytes[0].is_ascii_digit() || !bytes[1].is_ascii_digit() {
+        return false;
+    }
+    let state_code: u32 = match s[0..2].parse() {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    if !(1..=38).contains(&state_code) {
+        return false;
+    }
+    // 3-7: PAN alphabetic (5 uppercase letters)
+    if !bytes[2..7].iter().all(|b| b.is_ascii_uppercase()) {
+        return false;
+    }
+    // 8-11: PAN numeric (4 digits)
+    if !bytes[7..11].iter().all(|b| b.is_ascii_digit()) {
+        return false;
+    }
+    // 12: PAN entity letter
+    if !bytes[11].is_ascii_uppercase() {
+        return false;
+    }
+    // 13: 1-9 or A-Z (entity number)
+    if !bytes[12].is_ascii_alphanumeric() {
+        return false;
+    }
+    // 14: Default 'Z'
+    if bytes[13] != b'Z' {
+        return false;
+    }
+    // 15: Checksum char (alphanumeric)
+    bytes[14].is_ascii_alphanumeric()
+}
+
+use crate::sync::{read_lock, write_lock};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
@@ -223,13 +454,13 @@ impl SpendVelocityController {
 
     /// Set an explicit custom spend velocity ceiling for a specific tenant
     pub fn set_tenant_ceiling(&self, tenant_id: impl Into<String>, ceiling_usd: f64) {
-        let mut ceilings = self.tenant_ceilings.write().unwrap();
+        let mut ceilings = write_lock(&self.tenant_ceilings);
         ceilings.insert(tenant_id.into(), ceiling_usd);
     }
 
     /// Resolves the effective spend ceiling for a tenant (custom override or global default)
     pub fn ceiling_for_tenant(&self, tenant_id: &str) -> f64 {
-        let ceilings = self.tenant_ceilings.read().unwrap();
+        let ceilings = read_lock(&self.tenant_ceilings);
         ceilings
             .get(tenant_id)
             .copied()
@@ -253,8 +484,8 @@ impl SpendVelocityController {
         let now = Instant::now();
         let cutoff = now.checked_sub(self.window_duration).unwrap_or(now);
 
-        let mut res_guard = self.reservations.write().unwrap();
-        let mut hist_guard = self.spend_history.write().unwrap();
+        let mut res_guard = write_lock(&self.reservations);
+        let mut hist_guard = write_lock(&self.spend_history);
 
         // 1. Calculate active spend
         let hist_entries = hist_guard.entry(tenant_id.to_string()).or_default();
@@ -299,13 +530,13 @@ impl SpendVelocityController {
         let now = Instant::now();
         let cutoff = now.checked_sub(self.window_duration).unwrap_or(now);
 
-        let mut res_guard = self.reservations.write().unwrap();
+        let mut res_guard = write_lock(&self.reservations);
         if let Some(res_map) = res_guard.get_mut(tenant_id) {
             res_map.remove(&reservation_id);
         }
         drop(res_guard);
 
-        let mut hist_guard = self.spend_history.write().unwrap();
+        let mut hist_guard = write_lock(&self.spend_history);
         let hist_entries = hist_guard.entry(tenant_id.to_string()).or_default();
         hist_entries.retain(|(ts, _)| *ts >= cutoff);
         hist_entries.push((now, valid_cost));
@@ -314,7 +545,7 @@ impl SpendVelocityController {
 
     /// Releases an unused reservation without billing spend (e.g. cache hit, aborted request).
     pub fn release_reservation(&self, tenant_id: &str, reservation_id: uuid::Uuid) {
-        let mut res_guard = self.reservations.write().unwrap();
+        let mut res_guard = write_lock(&self.reservations);
         if let Some(res_map) = res_guard.get_mut(tenant_id) {
             res_map.remove(&reservation_id);
         }
@@ -324,7 +555,7 @@ impl SpendVelocityController {
     pub fn current_reserved(&self, tenant_id: &str) -> f64 {
         let now = Instant::now();
         let res_cutoff = now.checked_sub(Duration::from_secs(60)).unwrap_or(now);
-        let mut res_guard = self.reservations.write().unwrap();
+        let mut res_guard = write_lock(&self.reservations);
         if let Some(res_map) = res_guard.get_mut(tenant_id) {
             res_map.retain(|_, (ts, _)| *ts >= res_cutoff);
             res_map.values().map(|(_, c)| *c).sum()
@@ -356,7 +587,7 @@ impl SpendVelocityController {
         let now = Instant::now();
         let cutoff = now.checked_sub(self.window_duration).unwrap_or(now);
 
-        let mut map = self.spend_history.write().unwrap();
+        let mut map = write_lock(&self.spend_history);
         let entries = map.entry(tenant_id.to_string()).or_default();
 
         // Prune expired entries outside rolling window
@@ -377,7 +608,7 @@ impl SpendVelocityController {
         let now = Instant::now();
         let cutoff = now.checked_sub(self.window_duration).unwrap_or(now);
 
-        let map = self.spend_history.read().unwrap();
+        let map = read_lock(&self.spend_history);
         if let Some(entries) = map.get(tenant_id) {
             entries
                 .iter()
@@ -390,9 +621,9 @@ impl SpendVelocityController {
     }
 
     pub fn reset_tenant(&self, tenant_id: &str) {
-        let mut map = self.spend_history.write().unwrap();
+        let mut map = write_lock(&self.spend_history);
         map.remove(tenant_id);
-        let mut res_map = self.reservations.write().unwrap();
+        let mut res_map = write_lock(&self.reservations);
         res_map.remove(tenant_id);
     }
 
@@ -602,5 +833,84 @@ mod tests {
             controller.current_spend_micro_units(tenant),
             MicroUnits(3_750_000)
         );
+    }
+
+    #[test]
+    fn test_micro_paise_conversion_and_display() {
+        // ₹150.50 -> 150,500,000 micro-paise
+        let mp = MicroPaise::from_inr(150.50);
+        assert_eq!(mp.0, 150_500_000);
+        assert_eq!(mp.to_inr(), 150.50);
+
+        // USD conversion at reference peg 84.50
+        // $10.00 -> ₹845.00 -> 845,000,000 micro-paise
+        let mp_usd = MicroPaise::from_usd(10.0, 84.50);
+        assert_eq!(mp_usd.0, 845_000_000);
+        assert!((mp_usd.to_usd(84.50) - 10.0).abs() < 1e-6);
+
+        // Display check
+        assert_eq!(mp.format_indian_currency(), "₹150.50");
+    }
+
+    #[test]
+    fn test_format_inr_currency_lakhs_crores() {
+        assert_eq!(format_inr_currency(500.0), "₹500.00");
+        assert_eq!(format_inr_currency(1200.50), "₹1,200.50");
+        assert_eq!(format_inr_currency(150000.0), "₹1,50,000.00");
+        assert_eq!(format_inr_currency(12345678.90), "₹1,23,45,678.90");
+
+        assert_eq!(format_lakhs_crores(500.0), "₹500.00");
+        assert_eq!(format_lakhs_crores(45000.0), "₹45.00k");
+        assert_eq!(format_lakhs_crores(150000.0), "₹1.50 Lakh");
+        assert_eq!(format_lakhs_crores(25000000.0), "₹2.50 Cr");
+    }
+
+    #[test]
+    fn test_indian_gst_tax_engine() {
+        // Intra-state (CGST 9% + SGST 9%) on ₹10,000
+        let intra = GstBreakdown::calculate(10000.0, false, Some("29ABCDE1234F1Z5"));
+        assert_eq!(intra.taxable_amount_inr, 10000.0);
+        assert_eq!(intra.cgst_rate_percent, 9.0);
+        assert_eq!(intra.cgst_amount_inr, 900.0);
+        assert_eq!(intra.sgst_rate_percent, 9.0);
+        assert_eq!(intra.sgst_amount_inr, 900.0);
+        assert_eq!(intra.igst_amount_inr, 0.0);
+        assert_eq!(intra.total_tax_inr, 1800.0);
+        assert_eq!(intra.total_amount_inr, 11800.0);
+        assert_eq!(intra.sac_code, "998313");
+
+        // Inter-state (IGST 18%) on ₹50,000
+        let inter = GstBreakdown::calculate(50000.0, true, Some("27ABCDE1234F1Z5"));
+        assert_eq!(inter.cgst_amount_inr, 0.0);
+        assert_eq!(inter.sgst_amount_inr, 0.0);
+        assert_eq!(inter.igst_rate_percent, 18.0);
+        assert_eq!(inter.igst_amount_inr, 9000.0);
+        assert_eq!(inter.total_amount_inr, 59000.0);
+    }
+
+    #[test]
+    fn test_gstin_validation() {
+        assert!(validate_gstin("29ABCDE1234F1Z5"));
+        assert!(validate_gstin("07AAAAA0000A1Z5"));
+
+        // Invalid length
+        assert!(!validate_gstin("29ABCDE1234F1Z"));
+        // Invalid state code
+        assert!(!validate_gstin("00ABCDE1234F1Z5"));
+        assert!(!validate_gstin("99ABCDE1234F1Z5"));
+        // Invalid default Z
+        assert!(!validate_gstin("29ABCDE1234F1A5"));
+    }
+
+    #[test]
+    fn test_sovereign_model_pricing() {
+        let sarvam = ModelPricing::for_model("sarvam-2b-indic");
+        assert_eq!(sarvam.model, "sarvam-2b");
+        assert_eq!(sarvam.input_cost_per_million, 0.15);
+        assert_eq!(sarvam.output_cost_per_million, 0.30);
+
+        let krutrim = ModelPricing::for_model("krutrim-v1");
+        assert_eq!(krutrim.model, "krutrim-v1");
+        assert_eq!(krutrim.input_cost_per_million, 0.20);
     }
 }

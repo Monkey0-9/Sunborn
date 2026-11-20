@@ -9,7 +9,11 @@ pub struct ServerConfig {
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
-            host: "0.0.0.0".to_string(),
+            host: if is_production_mode() {
+                "0.0.0.0".to_string()
+            } else {
+                "127.0.0.1".to_string()
+            },
             port: 8080,
         }
     }
@@ -141,7 +145,13 @@ impl AppConfig {
 
         let host = std::env::var("HOST")
             .or_else(|_| std::env::var("SUNBORN_SERVER__HOST"))
-            .unwrap_or_else(|_| "0.0.0.0".to_string());
+            .unwrap_or_else(|_| {
+                if is_production_mode() {
+                    "0.0.0.0".to_string()
+                } else {
+                    "127.0.0.1".to_string()
+                }
+            });
         let dragonfly_url = std::env::var("DRAGONFLY_URL")
             .or_else(|_| std::env::var("REDIS_URL"))
             .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());

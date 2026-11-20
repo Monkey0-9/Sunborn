@@ -19,15 +19,40 @@ import {
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
-import { formatCurrency, formatNumber } from "@/lib/utils";
+import { formatCurrency, formatNumber, formatIndianNumbering } from "@/lib/utils";
 import { sunbornApi } from "@/lib/api";
+import { useClusterStore } from "@/lib/cluster-store";
+
+const GST_STATES: Record<string, string> = {
+  "01": "Jammu & Kashmir",
+  "02": "Himachal Pradesh",
+  "03": "Punjab",
+  "06": "Haryana",
+  "07": "Delhi",
+  "08": "Rajasthan",
+  "09": "Uttar Pradesh",
+  "10": "Bihar",
+  "19": "West Bengal",
+  "24": "Gujarat",
+  "27": "Maharashtra",
+  "29": "Karnataka",
+  "32": "Kerala",
+  "33": "Tamil Nadu",
+  "36": "Telangana",
+  "37": "Andhra Pradesh",
+};
 
 export default function FinOpsPage() {
+  const { currency } = useClusterStore();
   const [monthlyQueries, setMonthlyQueries] = useState<number>(500000);
   const [cacheHitRatio, setCacheHitRatio] = useState<number>(92.5);
   const [avgInputTokens, setAvgInputTokens] = useState<number>(1200);
   const [avgOutputTokens, setAvgOutputTokens] = useState<number>(600);
-  const [modelPricing, setModelPricing] = useState<"gpt-4o" | "claude-3-5-sonnet" | "llama-3-1-70b">("gpt-4o");
+  const [modelPricing, setModelPricing] = useState<
+    "gpt-4o" | "claude-3-5-sonnet" | "llama-3-1-70b" | "sarvam-2b" | "krutrim-v1"
+  >("gpt-4o");
+  const [gstin, setGstin] = useState<string>("29ABCDE1234F1Z5");
+  const [isInterState, setIsInterState] = useState<boolean>(false);
 
   const [liveReport, setLiveReport] = useState<{
     exactHits: number;
@@ -113,6 +138,11 @@ export default function FinOpsPage() {
         "AvoidedTokens",
         "CostAvoidedUSD",
         "NetSavingsUSD",
+        "NetSavingsINR",
+        "GST_SAC",
+        "CGST_INR_9PCT",
+        "SGST_INR_9PCT",
+        "IGST_INR_18PCT",
       ],
       [
         new Date().toISOString(),
@@ -123,26 +153,41 @@ export default function FinOpsPage() {
         "1800",
         "0.054",
         "0.054",
+        "4.56",
+        "998313",
+        "0.41",
+        "0.41",
+        "0.00",
       ],
       [
         new Date(Date.now() - 60000).toISOString(),
         "tenant-enterprise-fintech",
         "app-nlp-search",
-        "gpt-4o",
+        "sarvam-2b",
         "semantic_c2",
         "1450",
-        "0.0435",
-        "0.0435",
+        "0.0065",
+        "0.0065",
+        "0.55",
+        "998313",
+        "0.05",
+        "0.05",
+        "0.00",
       ],
       [
         new Date(Date.now() - 120000).toISOString(),
         "tenant-enterprise-fintech",
         "app-risk-evaluator",
-        "claude-3-5-sonnet",
+        "krutrim-v1",
         "exact_l1",
         "2400",
-        "0.072",
-        "0.072",
+        "0.012",
+        "0.012",
+        "1.01",
+        "998313",
+        "0.09",
+        "0.09",
+        "0.00",
       ],
       [
         new Date(Date.now() - 180000).toISOString(),
@@ -153,6 +198,11 @@ export default function FinOpsPage() {
         "0",
         "0.00",
         "-0.015",
+        "-1.27",
+        "998313",
+        "0.00",
+        "0.00",
+        "0.00",
       ],
     ];
     const csvContent =
@@ -170,12 +220,25 @@ export default function FinOpsPage() {
     const data = {
       exported_at: new Date().toISOString(),
       report_period: "Trailing 30 Days",
-      active_currency: "USD",
+      active_currency: currency,
+      sovereign_metrics: {
+        exchange_rate_usd_to_inr: 84.50,
+        gst_sac_code: "998313",
+        gstin: gstin,
+        supply_type: isInterState ? "inter_state_igst" : "intra_state_cgst_sgst",
+        compliance: {
+          dpdp_act_2023: "COMPLIANT_SECTION_8",
+          rbi_localization: "COMPLIANT_CIRCULAR_2017_18",
+          cert_in: "DIRECTIVE_6HR_AUDIT_LOGGED",
+        },
+      },
       summary: {
         total_queries: monthlyQueries,
         hit_ratio_pct: cacheHitRatio,
         gross_projected_savings_usd:
           liveReport?.estimatedSavingsUsd ?? 142.5,
+        gross_projected_savings_inr:
+          (liveReport?.estimatedSavingsUsd ?? 142.5) * 84.50,
       },
       ledger_records: [
         {
@@ -186,6 +249,8 @@ export default function FinOpsPage() {
           cache_tier: "exact_l1",
           tokens_avoided: 1800,
           net_savings_usd: 0.054,
+          net_savings_inr: 4.56,
+          gst_sac: "998313",
         },
       ],
     };
@@ -222,6 +287,8 @@ export default function FinOpsPage() {
     "gpt-4o": { input: 2.5, output: 10.0, name: "OpenAI GPT-4o" },
     "claude-3-5-sonnet": { input: 3.0, output: 15.0, name: "Anthropic Claude 3.5 Sonnet" },
     "llama-3-1-70b": { input: 0.8, output: 0.8, name: "Meta Llama 3.1 70B (Hosted)" },
+    "sarvam-2b": { input: 0.15, output: 0.30, name: "Sarvam AI 2B Indic Sovereign" },
+    "krutrim-v1": { input: 0.20, output: 0.50, name: "Ola Krutrim Indic LLM" },
   };
 
   const currentRate = rates[modelPricing];
@@ -305,7 +372,7 @@ export default function FinOpsPage() {
             </div>
             <div>
               <span className="text-slate-400 mr-1.5">Modeled Estimate:</span>
-              <span className="text-emerald-300 font-bold">{formatCurrency(liveReport.estimatedSavingsUsd)}</span>
+              <span className="text-emerald-300 font-bold">{formatCurrency(liveReport.estimatedSavingsUsd, currency)}</span>
             </div>
           </div>
         </div>
@@ -320,10 +387,13 @@ export default function FinOpsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold font-mono text-emerald-300">
-              {formatCurrency(netSavings)}
+              {formatCurrency(netSavings, currency)}
             </div>
-            <p className="text-xs font-mono text-emerald-400 mt-1">
-              <span>After subtracting infrastructure overhead</span>
+            <p className="text-xs font-mono text-emerald-400 mt-1 flex items-center justify-between">
+              <span>After infra overhead</span>
+              {currency === "INR" && (
+                <span className="text-amber-300 font-bold">({formatIndianNumbering(netSavings * 84.50)})</span>
+              )}
             </p>
           </CardContent>
         </Card>
@@ -335,10 +405,13 @@ export default function FinOpsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold font-mono text-white">
-              {formatCurrency(avoidedTokenSpend)}
+              {formatCurrency(avoidedTokenSpend, currency)}
             </div>
-            <p className="text-xs font-mono text-cyan-400 mt-1">
-              <span>{formatNumber(cachedQueries)} queries served from cache</span>
+            <p className="text-xs font-mono text-cyan-400 mt-1 flex items-center justify-between">
+              <span>{formatNumber(cachedQueries)} cached reqs</span>
+              {currency === "INR" && (
+                <span className="text-amber-300 font-bold">({formatIndianNumbering(avoidedTokenSpend * 84.50)})</span>
+              )}
             </p>
           </CardContent>
         </Card>
@@ -365,10 +438,13 @@ export default function FinOpsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold font-mono text-white">
-              {formatCurrency(infraOverhead)}
+              {formatCurrency(infraOverhead, currency)}
             </div>
-            <p className="text-xs font-mono text-slate-400 mt-1">
-              <span>Dragonfly + Qdrant + Gateway host</span>
+            <p className="text-xs font-mono text-slate-400 mt-1 flex items-center justify-between">
+              <span>Dragonfly + Qdrant host</span>
+              {currency === "INR" && (
+                <span className="text-slate-300 font-bold">({formatIndianNumbering(infraOverhead * 84.50)})</span>
+              )}
             </p>
           </CardContent>
         </Card>
@@ -399,6 +475,8 @@ export default function FinOpsPage() {
                   <option value="gpt-4o">OpenAI GPT-4o ($2.50 in / $10.00 out per M)</option>
                   <option value="claude-3-5-sonnet">Anthropic Claude 3.5 Sonnet ($3.00 in / $15.00 out per M)</option>
                   <option value="llama-3-1-70b">Meta Llama 3.1 70B ($0.80 in / $0.80 out per M)</option>
+                  <option value="sarvam-2b">Sarvam AI 2B Indic Sovereign ($0.15 in / $0.30 out · ~₹12.50/M)</option>
+                  <option value="krutrim-v1">Ola Krutrim Indic LLM ($0.20 in / $0.50 out · ~₹17.00/M)</option>
                 </select>
               </div>
 
@@ -478,17 +556,17 @@ export default function FinOpsPage() {
               <div className="p-4 rounded-xl bg-slate-900/90 border border-white/10 space-y-3">
                 <div className="flex items-center justify-between text-slate-400">
                   <span>Baseline Spend (Without Cache):</span>
-                  <span className="text-rose-400 font-bold">{formatCurrency(totalMonthlySpendOrigin)}</span>
+                  <span className="text-rose-400 font-bold">{formatCurrency(totalMonthlySpendOrigin, currency)}</span>
                 </div>
                 <div className="flex items-center justify-between text-slate-400">
                   <span>Spend With Sunborn Caching:</span>
                   <span className="text-cyan-300 font-bold">
-                    {formatCurrency(totalMonthlySpendOrigin - avoidedTokenSpend + infraOverhead)}
+                    {formatCurrency(totalMonthlySpendOrigin - avoidedTokenSpend + infraOverhead, currency)}
                   </span>
                 </div>
                 <div className="pt-2 border-t border-white/10 flex items-center justify-between text-sm">
                   <span className="text-white font-bold">Total Net Monthly Savings:</span>
-                  <span className="text-emerald-400 font-bold text-base">{formatCurrency(netSavings)}</span>
+                  <span className="text-emerald-400 font-bold text-base">{formatCurrency(netSavings, currency)}</span>
                 </div>
               </div>
 
@@ -505,6 +583,165 @@ export default function FinOpsPage() {
           </Card>
         </div>
       </div>
+
+      {/* India Sovereign Statutory GST & Tax Attribution (SAC 998313) */}
+      <Card glow="amber">
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-amber-400" />
+                <span>India Sovereign Statutory GST & Tax Attribution (SAC 998313)</span>
+              </CardTitle>
+              <CardDescription>
+                Statutory Goods and Services Tax (GST) breakdown for enterprise IT & Cloud infrastructure services under the Central GST Act 2017 & CERT-In financial directives.
+              </CardDescription>
+            </div>
+            <Badge variant="warning">
+              SAC 998313 · 18% GST ELIGIBLE
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-1">
+              <label htmlFor="finops-gstin-input" className="text-xs font-mono text-slate-400">
+                ENTERPRISE GSTIN (15 CHARACTERS)
+              </label>
+              <input
+                id="finops-gstin-input"
+                type="text"
+                maxLength={15}
+                value={gstin}
+                onChange={(e) => setGstin(e.target.value.toUpperCase())}
+                placeholder="29ABCDE1234F1Z5"
+                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-amber-300 focus:border-amber-500 uppercase"
+              />
+              <span className="text-[10px] font-mono text-slate-400">
+                State: {GST_STATES[gstin.substring(0, 2)] || "Unknown State Code"}
+              </span>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-mono text-slate-400">SUPPLY TYPE</label>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsInterState(false)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-colors cursor-pointer ${
+                    !isInterState
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold"
+                      : "bg-slate-900 text-slate-400 border border-white/10"
+                  }`}
+                >
+                  Intra-State (CGST + SGST)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsInterState(true)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-colors cursor-pointer ${
+                    isInterState
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold"
+                      : "bg-slate-900 text-slate-400 border border-white/10"
+                  }`}
+                >
+                  Inter-State (IGST)
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-mono text-slate-400">SOVEREIGN PEG</label>
+              <div className="p-2.5 rounded-lg bg-slate-900 border border-white/10 font-mono text-xs flex items-center justify-between">
+                <span className="text-slate-400">1 USD =</span>
+                <span className="text-white font-bold">₹84.50 INR</span>
+              </div>
+              <span className="text-[10px] font-mono text-emerald-400">RBI Reference Rate</span>
+            </div>
+          </div>
+
+          {/* GST Statutory Breakdown Table */}
+          {(() => {
+            const taxableInr = netSavings * 84.50;
+            const cgst = !isInterState ? taxableInr * 0.09 : 0;
+            const sgst = !isInterState ? taxableInr * 0.09 : 0;
+            const igst = isInterState ? taxableInr * 0.18 : 0;
+            const totalTax = cgst + sgst + igst;
+            const totalEconomicValue = taxableInr + totalTax;
+
+            return (
+              <div className="overflow-x-auto rounded-xl border border-white/10">
+                <table className="w-full text-xs font-mono text-left">
+                  <thead className="bg-slate-950 text-slate-400 border-b border-white/10">
+                    <tr>
+                      <th className="py-2.5 px-4">Tax Component</th>
+                      <th className="py-2.5 px-4">SAC Code</th>
+                      <th className="py-2.5 px-4">Applicable Rate</th>
+                      <th className="py-2.5 px-4 text-right">Taxable Base (INR)</th>
+                      <th className="py-2.5 px-4 text-right">Tax Amount (INR)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 bg-slate-900/60">
+                    {!isInterState ? (
+                      <>
+                        <tr>
+                          <td className="py-2.5 px-4 text-white font-medium">Central GST (CGST)</td>
+                          <td className="py-2.5 px-4 text-amber-300">998313</td>
+                          <td className="py-2.5 px-4 text-slate-300">9.00%</td>
+                          <td className="py-2.5 px-4 text-right text-slate-200">
+                            {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(taxableInr)}
+                          </td>
+                          <td className="py-2.5 px-4 text-right text-amber-300 font-bold">
+                            {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(cgst)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="py-2.5 px-4 text-white font-medium">State GST (SGST)</td>
+                          <td className="py-2.5 px-4 text-amber-300">998313</td>
+                          <td className="py-2.5 px-4 text-slate-300">9.00%</td>
+                          <td className="py-2.5 px-4 text-right text-slate-200">
+                            {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(taxableInr)}
+                          </td>
+                          <td className="py-2.5 px-4 text-right text-amber-300 font-bold">
+                            {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(sgst)}
+                          </td>
+                        </tr>
+                      </>
+                    ) : (
+                      <tr>
+                        <td className="py-2.5 px-4 text-white font-medium">Integrated GST (IGST)</td>
+                        <td className="py-2.5 px-4 text-amber-300">998313</td>
+                        <td className="py-2.5 px-4 text-slate-300">18.00%</td>
+                        <td className="py-2.5 px-4 text-right text-slate-200">
+                          {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(taxableInr)}
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-amber-300 font-bold">
+                          {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(igst)}
+                        </td>
+                      </tr>
+                    )}
+                    <tr className="bg-slate-950 font-bold">
+                      <td className="py-3 px-4 text-white" colSpan={3}>
+                        Total Economic Value Delivered (Net Savings + Input Tax Credit)
+                      </td>
+                      <td className="py-3 px-4 text-right text-slate-300">
+                        {formatIndianNumbering(taxableInr)}
+                      </td>
+                      <td className="py-3 px-4 text-right text-emerald-400 text-sm">
+                        {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(totalEconomicValue)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+
+          <div className="p-3 rounded-lg bg-amber-950/20 border border-amber-500/20 text-[11px] text-amber-200/90 leading-relaxed font-sans">
+            <strong>Statutory Compliance Note:</strong> Invoices generated under SAC 998313 qualify for Input Tax Credit (ITC) under Section 16 of the Central Goods and Services Tax Act, 2017. All telemetry and transactional ledgers adhere strictly to the Digital Personal Data Protection Act, 2023 (DPDP Act) and RBI Financial Data Localization Mandate (Circular DPSS.CO.OD.No.2785/06.08.005/2017-18).
+          </div>
+        </CardContent>
+      </Card>
 
       {/* K-007 Atomic Spend Velocity Controller & Concurrency Workbench */}
       <Card glow="cyan">

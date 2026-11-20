@@ -29,7 +29,7 @@ pub use model::{
 };
 pub use planner::ExecutionPlanner;
 pub use signature::ToolSignatureEngine;
-pub use store::{ExecutionCacheStore, MemoryExecutionCacheStore};
+pub use store::{ExecutionCacheStore, MemoryExecutionCacheStore, PersistentExecutionCacheStore};
 pub use transitive_closure::{
     compute_dag_transitive_envelopes, DagNodeSpec, DerivedNodeEnvelope,
     ToolPurity as TransitiveToolPurity,

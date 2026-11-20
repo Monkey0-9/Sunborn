@@ -4,6 +4,7 @@ use std::sync::Arc;
 use sunborn_cache::ExactCacheStore;
 use sunborn_core::error::SunbornError;
 use sunborn_core::model::{ApplicationId, TenantId};
+use sunborn_core::sync::read_lock;
 use sunborn_semantic::{
     cosine_similarity, DeterministicEmbeddingProvider, EmbeddingProvider, VectorStore,
 };
@@ -56,7 +57,7 @@ impl ShadowEvaluator {
     }
 
     pub fn calibrated_threshold(&self) -> f32 {
-        self.calibrator.read().unwrap().calibrated_threshold() as f32
+        read_lock(&self.calibrator).calibrated_threshold() as f32
     }
 
     pub fn record_observation(&self, similarity: f64, semantic_loss: f64) {

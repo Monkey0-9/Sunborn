@@ -12,6 +12,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
+use sunborn_core::sync::{read_lock, write_lock};
 
 use aes_gcm::aead::rand_core::{OsRng, RngCore};
 use aes_gcm::aead::{Aead, KeyInit, Payload};
@@ -1108,14 +1109,14 @@ impl TenantCryptoRegistry {
     ) -> Result<[u8; 32], SunbornError> {
         let derived_key = self.provider.derive_tenant_key(&tenant_id, salt)?;
         let raw_bytes = *derived_key.as_bytes();
-        let mut map = self.keys.write().unwrap();
+        let mut map = write_lock(&self.keys);
         map.insert(tenant_id, (derived_key, 1));
         Ok(raw_bytes)
     }
 
     /// Wraps the in-memory tenant key using the active KMS/HSM provider for persistent database storage.
     pub fn wrap_tenant_key(&self, tenant_id: &TenantId) -> Result<Vec<u8>, SunbornError> {
-        let map = self.keys.read().unwrap();
+        let map = read_lock(&self.keys);
         let (key, _) = map.get(tenant_id).ok_or_else(|| {
             SunbornError::forbidden(format!(
                 "Tenant '{}' key shredded or unprovisioned",
@@ -1132,7 +1133,7 @@ impl TenantCryptoRegistry {
         wrapped: &[u8],
     ) -> Result<(), SunbornError> {
         let unwrapped_key = self.provider.unwrap_key(wrapped)?;
-        let mut map = self.keys.write().unwrap();
+        let mut map = write_lock(&self.keys);
         map.insert(tenant_id, (unwrapped_key, 1));
         Ok(())
     }
@@ -1140,10 +1141,10 @@ impl TenantCryptoRegistry {
     /// Register or provision a 256-bit Tenant Data Encryption Key (TDEK).
     pub fn provision_tenant(&self, tenant_id: TenantId, raw_key: [u8; 32]) {
         {
-            let mut shredded = self.shredded.write().unwrap();
+            let mut shredded = write_lock(&self.shredded);
             shredded.remove(&tenant_id);
         }
-        let mut map = self.keys.write().unwrap();
+        let mut map = write_lock(&self.keys);
         map.insert(tenant_id, (ZeroizingKey::new(raw_key), 1));
     }
 
@@ -1159,13 +1160,13 @@ impl TenantCryptoRegistry {
 
     /// Check if a tenant's key is actively present (not shredded).
     pub fn is_active(&self, tenant_id: &TenantId) -> bool {
-        let map = self.keys.read().unwrap();
+        let map = read_lock(&self.keys);
         map.contains_key(tenant_id)
     }
 
     /// Check if a tenant's key has been explicitly cryptographically shredded.
     pub fn is_shredded(&self, tenant_id: &TenantId) -> bool {
-        let shredded = self.shredded.read().unwrap();
+        let shredded = read_lock(&self.shredded);
         shredded.contains(tenant_id)
     }
 
@@ -1191,7 +1192,7 @@ impl TenantCryptoRegistry {
         context: &str,
     ) -> Result<EncryptedEnvelope, SunbornError> {
         let (tdek, key_version) = {
-            let map = self.keys.read().unwrap();
+            let map = read_lock(&self.keys);
             let entry = map.get(tenant_id).ok_or_else(|| {
                 SunbornError::forbidden(format!(
                     "Tenant '{}' key shredded or unprovisioned",
@@ -1242,7 +1243,7 @@ impl TenantCryptoRegistry {
         context: &str,
     ) -> Result<Vec<u8>, SunbornError> {
         let (tdek, _) = {
-            let map = self.keys.read().unwrap();
+            let map = read_lock(&self.keys);
             let entry = map.get(&envelope.tenant_id).ok_or_else(|| {
                 SunbornError::forbidden(format!(
                     "Tenant '{}' key shredded or unprovisioned; data permanently unrecoverable",
@@ -1277,20 +1278,36 @@ impl TenantCryptoRegistry {
     /// Atomically removes and zeroizes the tenant's TDEK in memory in < 1 millisecond.
     pub fn shred_tenant(&self, tenant_id: &TenantId) -> Result<Duration, SunbornError> {
         let start = Instant::now();
-        {
-            let mut shredded = self.shredded.write().unwrap();
-            shredded.insert(tenant_id.clone());
-        }
-        let mut map = self.keys.write().unwrap();
-        if let Some((mut key, _)) = map.remove(tenant_id) {
-            key.zeroize();
-            let elapsed = start.elapsed();
-            Ok(elapsed)
-        } else {
-            Err(SunbornError::tenant_not_found(format!(
-                "Tenant '{}' key not found",
-                tenant_id.0
-            )))
+
+        // Remove the key while holding only the key lock, then drop it before
+        // touching the shredded set. Never hold both locks at once: every other
+        // path in this type takes them sequentially, and nesting here would be
+        // the one place a lock-order inversion could deadlock.
+        let removed = {
+            let mut map = write_lock(&self.keys);
+            map.remove(tenant_id)
+        };
+
+        match removed {
+            Some((mut key, _)) => {
+                key.zeroize();
+                write_lock(&self.shredded).insert(tenant_id.clone());
+                Ok(start.elapsed())
+            }
+            None => {
+                // Erasure is a terminal state, so shredding is idempotent: a
+                // retried deletion (or a delete-after-shred) is a success, not
+                // an error. Only a tenant that was never provisioned and never
+                // shredded fails closed.
+                if read_lock(&self.shredded).contains(tenant_id) {
+                    Ok(start.elapsed())
+                } else {
+                    Err(SunbornError::tenant_not_found(format!(
+                        "Tenant '{}' key not found",
+                        tenant_id.0
+                    )))
+                }
+            }
         }
     }
 }

@@ -3,6 +3,7 @@
 import React from "react";
 import { Zap, Activity, DollarSign, Globe } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { useClusterStore } from "@/lib/cluster-store";
 
 interface MetricsRibbonProps {
   totalRequests?: number;
@@ -21,6 +22,8 @@ export function MetricsRibbon({
   activeTenants = 6,
   isConnected = true,
 }: MetricsRibbonProps) {
+  const { currency } = useClusterStore();
+
   const cards = [
     {
       id: "hit-ratio",
@@ -43,8 +46,11 @@ export function MetricsRibbon({
     {
       id: "avoided-spend",
       label: "Avoided LLM Inference Spend",
-      value: formatCurrency(avoidedCostUsd),
-      detail: "Calculated from upstream GPU token pricing",
+      value: formatCurrency(avoidedCostUsd, currency),
+      detail:
+        currency === "INR"
+          ? "Sovereign conversion @ ₹84.50/USD"
+          : "Calculated from upstream GPU token pricing",
       icon: DollarSign,
       signalColor: "text-amber-400",
       accentBorder: "border-amber-500/20",

@@ -138,18 +138,25 @@ impl SpendLedger {
     }
 
     /// Sets a durable per-tenant ceiling shared by every replica.
+    ///
+    /// The durable write is authoritative and happens first. If it fails the
+    /// local ceiling is left untouched, so a replica can never advertise (and
+    /// enforce) a budget that the shared ledger does not agree with. Enforcing
+    /// a ceiling the cluster has not committed is worse than rejecting the
+    /// request: it silently permits spend that other replicas cannot see.
     pub async fn set_ceiling(
         &self,
         tenant_id: &str,
         ceiling_usd: f64,
     ) -> std::result::Result<(), SpendLedgerError> {
-        self.local.set_tenant_ceiling(tenant_id, ceiling_usd);
         if let Some(durable) = &self.durable {
             durable
                 .set_spend_ceiling(tenant_id, ceiling_usd)
                 .await
                 .map_err(|err| SpendLedgerError::Unavailable(err.to_string()))?;
         }
+        // Only mirror into local state after the durable commit succeeded.
+        self.local.set_tenant_ceiling(tenant_id, ceiling_usd);
         Ok(())
     }
 

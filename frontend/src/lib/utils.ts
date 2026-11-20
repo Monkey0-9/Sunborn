@@ -38,13 +38,39 @@ export function formatNumber(num: number): string {
   return new Intl.NumberFormat("en-US").format(num);
 }
 
-export function formatCurrency(amount: number): string {
+export function formatCurrency(
+  amount: number,
+  currency: "USD" | "INR" = "USD",
+  exchangeRate: number = 84.50
+): string {
+  if (currency === "INR") {
+    const inrAmount = amount * exchangeRate;
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(inrAmount);
+  }
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,
     maximumFractionDigits: 4,
   }).format(amount);
+}
+
+export function formatIndianNumbering(amount: number): string {
+  if (amount >= 10000000) {
+    return `₹${(amount / 10000000).toFixed(2)} Cr`;
+  }
+  if (amount >= 100000) {
+    return `₹${(amount / 100000).toFixed(2)} Lakh`;
+  }
+  if (amount >= 1000) {
+    return `₹${(amount / 1000).toFixed(2)}k`;
+  }
+  return `₹${amount.toFixed(2)}`;
 }
 
 export function formatMicroseconds(us: number): string {

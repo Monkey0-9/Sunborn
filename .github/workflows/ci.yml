@@ -125,6 +125,7 @@ jobs:
 
       - name: Verify TypeScript SDK Build & Tests
         run: |
+          npm ci --prefix sdk/typescript
           npm run build --prefix sdk/typescript
           npm test --prefix sdk/typescript
 

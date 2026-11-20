@@ -31,12 +31,12 @@ import { cn, extractVectorClockEpoch } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { CommandMenu } from "@/components/ui/command-menu";
 import { API_BASE_URL } from "@/lib/api";
-import { useClusterStore, setPersona, setByokApiKey } from "@/lib/cluster-store";
+import { useClusterStore, setPersona, setCurrency, setByokApiKey } from "@/lib/cluster-store";
 
 export function Header() {
   const pathname = usePathname();
   const clusterState = useClusterStore();
-  const { persona, byokApiKey, isSimulated, circuitBreaker } = clusterState;
+  const { persona, currency, byokApiKey, isSimulated, circuitBreaker } = clusterState;
   const [showByokModal, setShowByokModal] = useState<boolean>(false);
   const [tempKey, setTempKey] = useState<string>("");
   const [gatewayStatus, setGatewayStatus] = useState<"live" | "offline">("offline");
@@ -265,6 +265,42 @@ export function Header() {
 
           {/* Right Controls */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Sovereign Currency Switcher (USD $ / INR ₹) */}
+            <div
+              role="group"
+              aria-label="Currency Mode"
+              className="hidden lg:flex items-center p-0.5 rounded-lg bg-slate-950/80 border border-white/10 text-xs font-mono"
+            >
+              <button
+                type="button"
+                onClick={() => setCurrency("INR")}
+                className={cn(
+                  "px-2 py-1 rounded text-[11px] font-medium transition-colors flex items-center gap-1",
+                  currency === "INR"
+                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold"
+                    : "text-slate-400 hover:text-slate-200"
+                )}
+                aria-pressed={currency === "INR"}
+              >
+                <span>₹</span>
+                <span>INR</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrency("USD")}
+                className={cn(
+                  "px-2 py-1 rounded text-[11px] font-medium transition-colors flex items-center gap-1",
+                  currency === "USD"
+                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-semibold"
+                    : "text-slate-400 hover:text-slate-200"
+                )}
+                aria-pressed={currency === "USD"}
+              >
+                <span>$</span>
+                <span>USD</span>
+              </button>
+            </div>
+
             {/* Persona Switcher */}
             <div
               role="group"
@@ -418,6 +454,37 @@ export function Header() {
                 );
               })}
             </div>
+
+            {/* Mobile Currency Switcher */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/90 border border-white/10 text-xs font-mono">
+              <span className="text-slate-400">CURRENCY MODE:</span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCurrency("INR")}
+                  className={cn(
+                    "px-3 py-1 rounded text-xs font-medium transition-colors",
+                    currency === "INR"
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold"
+                      : "text-slate-400 hover:text-slate-200"
+                  )}
+                >
+                  ₹ INR
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrency("USD")}
+                  className={cn(
+                    "px-3 py-1 rounded text-xs font-medium transition-colors",
+                    currency === "USD"
+                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-semibold"
+                      : "text-slate-400 hover:text-slate-200"
+                  )}
+                >
+                  $ USD
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -552,6 +619,37 @@ export function Header() {
                 Close HUD
               </button>
             </div>
+
+            {/* Mobile Currency Switcher */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/90 border border-white/10 text-xs font-mono">
+              <span className="text-slate-400">CURRENCY MODE:</span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCurrency("INR")}
+                  className={cn(
+                    "px-3 py-1 rounded text-xs font-medium transition-colors",
+                    currency === "INR"
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold"
+                      : "text-slate-400 hover:text-slate-200"
+                  )}
+                >
+                  ₹ INR
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrency("USD")}
+                  className={cn(
+                    "px-3 py-1 rounded text-xs font-medium transition-colors",
+                    currency === "USD"
+                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-semibold"
+                      : "text-slate-400 hover:text-slate-200"
+                  )}
+                >
+                  $ USD
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -624,6 +722,37 @@ export function Header() {
               >
                 Save Key
               </button>
+            </div>
+
+            {/* Mobile Currency Switcher */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/90 border border-white/10 text-xs font-mono">
+              <span className="text-slate-400">CURRENCY MODE:</span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCurrency("INR")}
+                  className={cn(
+                    "px-3 py-1 rounded text-xs font-medium transition-colors",
+                    currency === "INR"
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold"
+                      : "text-slate-400 hover:text-slate-200"
+                  )}
+                >
+                  ₹ INR
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrency("USD")}
+                  className={cn(
+                    "px-3 py-1 rounded text-xs font-medium transition-colors",
+                    currency === "USD"
+                      ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-semibold"
+                      : "text-slate-400 hover:text-slate-200"
+                  )}
+                >
+                  $ USD
+                </button>
+              </div>
             </div>
           </div>
         </div>

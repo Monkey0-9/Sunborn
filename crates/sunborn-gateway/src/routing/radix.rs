@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
+use sunborn_core::sync::{read_lock, write_lock};
 
 /// Result of a longest-prefix search in the Radix Tree.
 #[derive(Debug, Clone, PartialEq)]
@@ -143,13 +144,13 @@ impl PrefixRadixTree {
 
     /// Record a prompt prefix warmed on a specific backend node.
     pub fn insert(&self, prefix: &str, node_id: &str) {
-        let mut root = self.root.write().unwrap();
+        let mut root = write_lock(&self.root);
         root.insert(prefix, node_id);
     }
 
     /// Find the longest common prefix match for a prompt.
     pub fn longest_prefix_match(&self, prompt: &str) -> Option<PrefixMatchResult> {
-        let root = self.root.read().unwrap();
+        let root = read_lock(&self.root);
         root.longest_match(prompt, 0)
     }
 }

@@ -8,9 +8,12 @@ use sha2::{Digest, Sha256};
 use std::sync::{Arc, RwLock};
 use sunborn_cache::{CircuitBreakerCache, ExactCacheStore, MemoryExactCache};
 use sunborn_core::cluster::VectorClock;
+use sunborn_core::sync::write_lock;
 use sunborn_core::AppConfig;
 use sunborn_db::MemoryDatabaseStore;
-use sunborn_execution::MemoryExecutionCacheStore;
+use sunborn_execution::{
+    ExecutionCacheStore, MemoryExecutionCacheStore, PersistentExecutionCacheStore,
+};
 use sunborn_identity::crypto_shred::TenantCryptoRegistry;
 use sunborn_invalidation::{
     CompressedLineageGraph, DependencyGraph, GraphMemoryCache, InvalidationEngine,
@@ -63,9 +66,8 @@ pub struct AppState {
     pub db: Arc<dyn sunborn_db::DatabaseStore>,
     pub memory_db: Arc<MemoryDatabaseStore>,
     pub postgres_db: Arc<sunborn_db::PostgresDatabaseStore>,
-    /// Execution cache store. NOTE: Storage tier is `process-local-ephemeral`.
-    /// Execution sub-graph traces do NOT persist across gateway restarts or sync across cluster replicas.
-    pub execution_store: Arc<MemoryExecutionCacheStore>,
+    /// Execution cache store. NOTE: Storage tier is configurable via `SUNBORN_EXECUTION_STORE_PATH`.
+    pub execution_store: Arc<dyn ExecutionCacheStore>,
     pub shadow_evaluator: Arc<ShadowEvaluator>,
     pub radix_router: Arc<KvCacheRouter>,
     pub crypto_registry: Arc<TenantCryptoRegistry>,
@@ -215,7 +217,12 @@ impl AppState {
         } else {
             Arc::new(sunborn_invalidation::EpochLeaseManager::new())
         };
-        let execution_store = Arc::new(MemoryExecutionCacheStore::new());
+        let execution_store: Arc<dyn ExecutionCacheStore> =
+            if let Ok(path_str) = std::env::var("SUNBORN_EXECUTION_STORE_PATH") {
+                Arc::new(PersistentExecutionCacheStore::new_with_wal(path_str))
+            } else {
+                Arc::new(MemoryExecutionCacheStore::new())
+            };
         let shadow_evaluator = Arc::new(ShadowEvaluator::with_embedder(selected_embedder.clone()));
         let radix_router = Arc::new(KvCacheRouter::new(
             vec![
@@ -310,19 +317,41 @@ impl AppState {
         }
 
         let crypto_registry = Arc::new(TenantCryptoRegistry::with_provider(kms_provider));
-        let _ =
-            crypto_registry.provision_tenant_secure(sunborn_core::TenantId::new("tenant-alpha"));
-        let _ = crypto_registry
-            .provision_tenant_secure(sunborn_core::TenantId::new("enterprise-fintech"));
-        let _ = crypto_registry.provision_tenant_secure(sunborn_core::TenantId::new("acme-corp"));
-        let _ = crypto_registry
-            .provision_tenant_secure(sunborn_core::TenantId::new("healthcare-systems"));
+        // Sample tenant keys exist so local exploration and the shipped examples
+        // work out of the box. Their identities are fixed and public, so
+        // provisioning them in production would hand working tenant keys to
+        // anyone who reads this source file. Gate strictly on non-production
+        // mode and make the skip visible in startup logs.
+        if sunborn_core::is_production_mode() {
+            tracing::info!(
+                "Production mode: sample tenant key provisioning skipped \
+                 (tenant-alpha, enterprise-fintech, acme-corp, healthcare-systems). \
+                 Tenants must be provisioned explicitly via the governance API."
+            );
+        } else {
+            for demo_tenant in [
+                "tenant-alpha",
+                "enterprise-fintech",
+                "acme-corp",
+                "healthcare-systems",
+            ] {
+                if let Err(err) = crypto_registry
+                    .provision_tenant_secure(sunborn_core::TenantId::new(demo_tenant))
+                {
+                    tracing::warn!(
+                        tenant = demo_tenant,
+                        error = %err,
+                        "Failed to provision sample tenant key (non-production only)"
+                    );
+                }
+            }
+        }
 
         let predictive_engine = Arc::new(PredictivePrefetchEngine::default());
         let autonomic_controller = Arc::new(AutonomicSelfHealingController::new());
         let vector_clock = Arc::new(RwLock::new(VectorClock::new()));
         {
-            let mut vc = vector_clock.write().unwrap();
+            let mut vc = write_lock(&vector_clock);
             vc.increment("gateway-primary-node-1");
         }
 
@@ -901,6 +930,18 @@ impl AppState {
             if learning_hmac == admin_key {
                 return Err(sunborn_core::SunbornError::configuration_error(
                     "Cryptographic key separation violation: SUNBORN_LEARNING_HMAC_SECRET must NOT equal SUNBORN_ADMIN_KEY.",
+                ));
+            }
+
+            // Durability enforcement: Disallow ephemeral execution cache and learning store in production
+            if !self.execution_store.is_durable() {
+                return Err(sunborn_core::SunbornError::configuration_error(
+                    "Production environment SUNBORN_ENV=production forbids ephemeral in-memory execution store. Set SUNBORN_EXECUTION_STORE_PATH to configure durable execution storage.",
+                ));
+            }
+            if !self.learning_store.is_durable() {
+                return Err(sunborn_core::SunbornError::configuration_error(
+                    "Production environment SUNBORN_ENV=production forbids ephemeral in-memory learning store. Set SUNBORN_LEARNING_WAL_PATH to configure durable learning storage.",
                 ));
             }
 

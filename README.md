@@ -8,8 +8,9 @@
 and refuses to serve it when the reuse cannot be proven safe.*
 
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-blue.svg?logo=rust&logoColor=white)](Cargo.toml)
-[![Rust tests](https://img.shields.io/badge/Rust%20tests-328%20passing-brightgreen.svg)](docs/STATUS.md)
+[![Rust tests](https://img.shields.io/badge/Rust%20tests-333%20passing-brightgreen.svg)](docs/STATUS.md)
 [![Frontend tests](https://img.shields.io/badge/Frontend%20tests-63%20passing-brightgreen.svg)](docs/STATUS.md)
+[![TypeScript SDK](https://img.shields.io/badge/TypeScript%20SDK-4%20passing-brightgreen.svg)](docs/STATUS.md)
 [![Verification gates](https://img.shields.io/badge/Verification%20gates-12%2F12-brightgreen.svg)](scripts/verify.sh)
 [![Launch gates](https://img.shields.io/badge/Launch%20gates-8%2F8%20passing-brightgreen.svg)](scripts/verify_public_launch.py)
 [![L1 exact cache](https://img.shields.io/badge/L1%20exact%20cache-1.64M%20req%2Fs%20%C2%B7%200.3%C2%B5s%20P50-blueviolet.svg)](benchmarks/results/l1_throughput_run.json)
@@ -69,9 +70,35 @@ Request ──▶ Canonicalize ──▶ Auth / FinOps ──▶ Exact cache ─
 
 ## 2. Start in 60 seconds & Zero-Cost Local Desktop (100% Free BYOK)
 
-Sunborn is engineered to be **100% operational on a local developer workstation with zero cloud infrastructure, zero subscription fees, and zero vendor lock-in**. You can run Sunborn entirely offline using local memory adapters and your own keys or local models.
+Sunborn is engineered to be **100% operational on a local workstation with zero cloud infrastructure, zero subscription fees, and zero vendor lock-in**. You can run Sunborn entirely offline using local memory adapters and your own keys or local models.
 
-### 2.1 Standalone in-memory mode (zero cloud cost)
+### 2.1 One-click packaged desktop installer (Windows & Unix)
+
+Sunborn provides a packaged desktop installation experience for individual developers and non-technical end users:
+
+**Windows PowerShell 1-Click Installer:**
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/install-sunborn.ps1
+```
+- Deploys binary into `%LOCALAPPDATA%\Sunborn\bin\sunborn-gateway.exe`
+- Creates Windows Desktop shortcut and Start Menu shortcut ("Sunborn AI Gateway")
+- Configures OS-native AES-256-GCM encrypted credential vault (`%LOCALAPPDATA%\Sunborn\vault.enc`)
+- Configures persistent append-only WAL execution storage (`%LOCALAPPDATA%\Sunborn\data\execution.wal`)
+- Registers uninstaller in Windows Add/Remove Programs
+
+**Linux / macOS:**
+```bash
+bash scripts/install-sunborn.sh
+```
+
+**1-Click Desktop Launcher:**
+Double-click the **Sunborn AI Gateway** desktop shortcut, or run:
+```powershell
+powershell -File scripts/sunborn-desktop.ps1
+```
+The gateway binds strictly to loopback (`127.0.0.1:8080`) to prevent unauthorized network access and launches the local control cockpit in your default browser.
+
+### 2.2 Standalone developer in-memory mode (zero cloud cost)
 
 Run the full gateway without Docker, PostgreSQL, Redis, Qdrant, or cloud KMS. All persistence, caching, vector indexing, and cryptographic key wrapping run in-process:
 
@@ -171,11 +198,11 @@ each artifact; the ratios between configurations travel better than the absolute
 | **Gateway stack, 16 concurrent workers** | 11,116.0 req/s · P50 1.368 ms · P99 2.398 ms over 10,000 requests · 0 failures | [`benchmarks/production_soak_results.json`](benchmarks/production_soak_results.json) |
 | **Held-out safety, N = 320** | 24 correct reuses · **0 false hits on 200 hard negatives** · precision 100% [95% Wilson 86.2–100] · recall 20% [13.8–28.0] | [`research/results/heldout_generalization_run.json`](research/results/heldout_generalization_run.json) |
 | **Comparative evaluation, 25 queries** | 32.0% verified hit rate · 0.0% false hits · 0.0% stale reads · 31.97% net spend reduction | [`benchmarks/results/competitive_benchmark_run.json`](benchmarks/results/competitive_benchmark_run.json) |
-| **Test surface** | 328 Rust + 63 frontend + 27 Python tests · 10 routes with 0 serious/critical axe violations · 250+ verified tab stops | [`docs/STATUS.md`](docs/STATUS.md) |
+| **Test surface** | 333 Rust + 63 frontend + 4 TypeScript SDK + 27 Python tests · 10 routes with 0 serious/critical axe violations · 253 verified tab stops | [`docs/STATUS.md`](docs/STATUS.md) |
 | **21 Enterprise Quality Attributes** | 21/21 verified with architectural invariants, formal proofs, and audit commands | [`docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`](docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md) |
 | **8 In-Tree Pre-Flight Launch Gates** | 8/8 automated gates verified passing in strict mode | [`scripts/verify_public_launch.py`](scripts/verify_public_launch.py) |
 | **Formal models** | 3 TLC configurations, no errors (2,245 / 601 / 21 states explored) | [`formal/`](formal/), [`scripts/run_tlaplus.sh`](scripts/run_tlaplus.sh) |
-| **Contract parity** | 53/53 OpenAPI operations · all 50 router paths classified, 45/45 reject anonymous callers | [`docs/api/openapi.yaml`](docs/api/openapi.yaml) |
+| **Contract parity** | 57/57 OpenAPI operations · all 54 router paths classified, 45/45 reject anonymous callers | [`docs/api/openapi.yaml`](docs/api/openapi.yaml) |
 | **Enterprise evaluation** | All 6 pillars verified (exact cache, AST guardrails, causal graph, FinOps, Merkle DAG, health) | [`scripts/client_showcase.py`](scripts/client_showcase.py) |
 | **Systems architecture** | Defense-in-depth, active-active multi-region, formal TLA+ bounds, SOC 2 / ISO 27001 mapping | [`docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md`](docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md) |
 | **Supply chain** | CycloneDX v1.5 SBOM, 369 components, zero known high/critical CVEs | [`sbom.cyclonedx.json`](sbom.cyclonedx.json) |

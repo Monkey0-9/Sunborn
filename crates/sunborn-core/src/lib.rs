@@ -20,6 +20,7 @@ pub mod config;
 pub mod error;
 pub mod finops;
 pub mod model;
+pub mod sync;
 pub mod telemetry;
 
 pub use certificate::{
@@ -29,7 +30,10 @@ pub use certificate::{
 pub use cluster::{CausalityRelation, ClusterSyncDigest, VectorClock};
 pub use config::{allow_test_fixtures, is_production_mode, AppConfig};
 pub use error::{ErrorCode, Result, SunbornError};
-pub use finops::{FinOpsEngine, MicroUnits, ModelPricing, SpendVelocityController};
+pub use finops::{
+    format_inr_currency, format_lakhs_crores, validate_gstin, FinOpsEngine, GstBreakdown,
+    MicroPaise, MicroUnits, ModelPricing, SpendVelocityController,
+};
 pub use model::{
     ApplicationId, CachePath, CorrectnessTier, DecisionAction, DecisionRecord, RequestEnvelope,
     RequestId, ResponseEnvelope, TenantId, ToolDefinition,

@@ -128,15 +128,16 @@ Sunborn is an ultra-low-latency distributed semantic execution gateway for front
   - Responsive dark-mode cybernetic glassmorphism design system.
 
 ### 16. Accessibility (A11y)
-- **Architectural Guarantee**: 100% WCAG 2.2 AA conformance across all public and administrative views.
+- **Architectural Guarantee**: Automated WCAG 2.2 AA rule conformance across all evaluated views, visible keyboard focus management, and zero keyboard traps.
 - **Verification Evidence**:
-  - Automated `axe-core` accessibility audit: 10/10 routes checked with **0 critical or serious violations** (`npm run test:a11y --prefix frontend`).
-  - Comprehensive keyboard navigation audit: 10/10 routes checked with 208+ tab stops, visible 2px focus rings, and skip-to-content links (`npm run test:keyboard --prefix frontend`).
+  - Automated `axe-core` accessibility audit: 10/10 routes evaluated with **0 critical or serious violations** (`npm run test:a11y --prefix frontend`).
+  - Comprehensive keyboard navigation audit: 10/10 routes checked with 253 tab stops, visible 2px focus rings, and skip-to-content links (`npm run test:keyboard --prefix frontend`).
+  - Staging Operational Gate: Full assistive technology evaluation (NVDA / VoiceOver screen reader testing) scheduled during Stage 0 Controlled Pilot.
 
 ### 17. Testability & Verification
 - **Architectural Guarantee**: Comprehensive, multi-tiered test harness with automated CI pipelines.
 - **Verification Evidence**:
-  - Master system verification pipeline (`scripts/verify.sh`) executing 12 automated verification gates.
+  - Master system verification pipeline (`scripts/verify.sh` / `scripts/verify.ps1`) executing 12 automated verification gates.
   - Scientific hold-out benchmark: 320 held-out pairs with 0 false positives, 100% precision, Clopper-Pearson 99.9% bound < 3.4% (`research/results/heldout_generalization_run.json`).
 
 ### 18. Observability
@@ -147,14 +148,15 @@ Sunborn is an ultra-low-latency distributed semantic execution gateway for front
   - Autonomic anomaly and incident detection status endpoint (`/v1/autonomic/status`).
 
 ### 19. Deployability
-- **Architectural Guarantee**: Cloud-native packaging with Docker, Docker Compose, and Kubernetes Helm support.
+- **Architectural Guarantee**: Cloud-native packaging with Docker, Docker Compose, and Kubernetes Helm support, plus 1-click local desktop BYOK runtime.
 - **Verification Evidence**:
   - Multi-stage production `Dockerfile` creating minimal, distroless execution containers.
   - Complete `docker-compose.yml` orchestrating Gateway, PostgreSQL, DragonflyDB, and Qdrant.
   - Production Kubernetes Helm charts in `deploy/helm/` with configurable resource limits and pod autoscalers.
+  - Packaged 1-click desktop installer (`scripts/install-sunborn.ps1`) and runner (`scripts/sunborn-desktop.ps1`).
 
 ### 20. Cost Sustainability (FinOps)
-- **Architectural Guarantee**: Quantified token expenditure reduction and distributed spend ceilings.
+- **Architectural Guarantee**: Quantified token expenditure reduction and distributed spend ceilings enforced with 64-bit integer micro-unit precision.
 - **Verification Evidence**:
   - FinOps report endpoint (`/v1/finops/report`) tracking avoided tokens, cost savings in USD, and gross margin expansion.
   - Distributed database advisory locks (`pg_advisory_xact_lock`) enforcing atomic spend ceilings without double-spending races.
@@ -169,4 +171,11 @@ Sunborn is an ultra-low-latency distributed semantic execution gateway for front
 
 ## Conclusion & Board Readiness Certification
 
-All 21 Enterprise System Quality Attributes have been rigorously implemented, formally model-checked, and empirically verified. The platform stands ready for public launch before external developers, enterprise customers, and review boards.
+All 21 Enterprise System Quality Attributes have been rigorously implemented, formally model-checked, and in-tree verified with 333 Rust tests, 63 frontend tests, 4 TypeScript SDK tests, and 8/8 pre-flight verification gates passing with zero failures.
+
+In strict compliance with the project's single-source-of-truth governance (`docs/STATUS.md`), the authoritative release decision remains:
+**HOLD — STAGE 0 CONTROLLED PILOT REMEDIATION**
+
+This hold ensures that public release proceeds only after executing the two mandatory containerized staging gates:
+1. **Gate N1**: Multi-node distributed invalidation harness (`scripts/test_distributed_invalidation.sh`) executed on containerized staging.
+2. **Gate N2**: Independent external penetration testing with closed findings register.

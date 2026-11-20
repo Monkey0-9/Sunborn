@@ -11,6 +11,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use sunborn_core::sync::{read_lock, write_lock};
 use sunborn_core::{ApplicationId, TenantId};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -150,7 +151,7 @@ impl ApiKeyRegistry {
             is_admin,
             expires_at,
         };
-        self.credentials.write().unwrap().insert(hash, cred);
+        write_lock(&self.credentials).insert(hash, cred);
     }
 
     /// Registers a pre-constructed ApiCredential directly into memory.
@@ -169,13 +170,13 @@ impl ApiKeyRegistry {
 
     /// Revokes an API credential by its SHA256 key hash.
     pub fn revoke_key_hash(&self, key_hash: &str) -> bool {
-        let mut guard = self.credentials.write().unwrap();
+        let mut guard = write_lock(&self.credentials);
         guard.remove(key_hash).is_some()
     }
 
     /// Revokes all API credentials belonging to a specified tenant.
     pub fn revoke_tenant_keys(&self, tenant_id: &TenantId) -> usize {
-        let mut guard = self.credentials.write().unwrap();
+        let mut guard = write_lock(&self.credentials);
         let before = guard.len();
         guard.retain(|_, cred| cred.tenant_id != *tenant_id);
         before - guard.len()
@@ -183,19 +184,19 @@ impl ApiKeyRegistry {
 
     /// Returns true if the registry contains an active credential with the given hash.
     pub fn contains_key_hash(&self, key_hash: &str) -> bool {
-        let guard = self.credentials.read().unwrap();
+        let guard = read_lock(&self.credentials);
         guard.contains_key(key_hash)
     }
 
     /// Returns the total number of registered credentials currently in memory.
     pub fn key_count(&self) -> usize {
-        let guard = self.credentials.read().unwrap();
+        let guard = read_lock(&self.credentials);
         guard.len()
     }
 
     pub fn validate_key(&self, raw_key: &str) -> Option<ApiCredential> {
         let hash = Self::hash_key(raw_key);
-        let credential = self.credentials.read().unwrap().get(&hash).cloned()?;
+        let credential = read_lock(&self.credentials).get(&hash).cloned()?;
         if credential
             .expires_at
             .as_ref()
@@ -213,7 +214,7 @@ impl ApiKeyRegistry {
     ) -> Result<usize, sunborn_core::SunbornError> {
         let records = db.fetch_all_api_credentials().await?;
         let count = records.len();
-        let mut guard = self.credentials.write().unwrap();
+        let mut guard = write_lock(&self.credentials);
         for r in records {
             guard.insert(
                 r.key_hash.clone(),
@@ -387,12 +388,15 @@ pub fn get_global_registry() -> &'static ApiKeyRegistry {
 
 pub async fn auth_middleware(headers: HeaderMap, mut req: Request, next: Next) -> Response {
     let path = req.uri().path();
-    // Allow public monitoring/probes and authentication endpoints through without credentials
+    let is_prod = sunborn_core::is_production_mode();
+
+    // Allow public monitoring/probes, login ceremony, and non-prod local management endpoints without credentials
     if path == "/health"
         || path == "/ready"
         || path == "/metrics"
         || path == "/v1/auth/login"
         || path == "/v1/ceremony/public-keys"
+        || (!is_prod && path.starts_with("/v1/local/"))
     {
         return next.run(req).await;
     }

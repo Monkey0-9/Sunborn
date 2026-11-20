@@ -1,10 +1,10 @@
 # Sunborn Engineering Status — Single Source of Truth
 
-**Effective:** 2026-11-19
-**Baseline:** `ca7736f` plus the remediation described in §2.1 and §2.2
+**Effective:** 2026-11-20
+**Baseline:** `6e5b823` plus the remediation described in §2.1, §2.2, and §2.3
 **Release decision:** **HOLD — STAGE 0 CONTROLLED PILOT REMEDIATION.** All in-tree checks
-listed in §1 pass on this tree (328 Rust tests, 63 frontend tests, Python SDK package smoke test, 8/8 pre-flight launch verification gates), and all
-P0/P1/P2 defects found in the 2026-11-17 audit are fixed with regression tests. All 21 enterprise system quality attributes are empirically documented and verified in `docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`.
+listed in §1 pass on this tree (333 Rust tests, 63 frontend tests, 4 TypeScript SDK tests, Python SDK package smoke test, 8/8 pre-flight launch verification gates), and all
+P0/P1/P2 defects found in the 2026-11-17 audit and 2026-11-20 security audit (Issues #3-#10) are fixed with regression tests. All 21 enterprise system quality attributes are empirically documented and verified in `docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`.
 Authoritative gates N1 (multi-node distributed invalidation harness) and N2 (external penetration test)
 remain OPEN pending execution in containerized staging.
 Full findings and scoring: [`docs/engineering-audit-2026-11-17/REPORT.md`](engineering-audit-2026-11-17/REPORT.md).
@@ -17,26 +17,26 @@ Those documents are retained as immutable history, not as current status.
 
 ## 1. What is verified now
 
-Every command below was executed in this working tree on 2026-11-16 and re-run on
-2026-11-18 where the result changed (Windows / Git Bash). Results are copied from
+Every command below was executed in this working tree on 2026-11-20 (Windows / Git Bash). Results are copied from
 the actual runs.
 
 | Check | Command | Result |
 |---|---|---|
 | Formatting | `cargo fmt --all -- --check` | exit 0 |
 | Workspace compile | `cargo check --workspace --all-targets` | exit 0, no warnings |
-| Rust tests | `cargo test --workspace --all-targets -- --test-threads=1` | **328 passed, 0 failed** (44 suites; re-run 2026-11-18) |
-| Lints | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | exit 0 |
+| Rust tests | `cargo test --workspace --all-targets -- --test-threads=1` | **333 passed, 0 failed** (45 suites; re-run 2026-11-20) |
+| Lints | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | exit 0, no warnings |
 | Epoch fencing model | `bash scripts/run_tlaplus.sh` | TLC: 2,245 states, 512 distinct, no error |
 | Outbox safety model | same | TLC: 601 states, 134 distinct, no error |
 | Outbox bounded liveness | same | TLC: 21 states, 9 distinct, no error |
-| Frontend unit/security | `npm test --prefix frontend` | **63 passed, 0 failed** (including reactive cluster store, dual-mode persona switcher, BYOK modal, and end-to-end simulation engine; re-run 2026-11-19) |
+| Frontend unit/security | `npm test --prefix frontend` | **63 passed, 0 failed** (including reactive cluster store, dual-mode persona switcher, BYOK modal, and end-to-end simulation engine) |
 | Frontend WCAG 2.2 AA | `npm run test:a11y --prefix frontend` | **10 routes, 0 serious/critical axe violations** |
 | Keyboard and focus | `npm run test:keyboard --prefix frontend` | **10 routes, 253 tab stops, all with visible 2px focus ring; skip link verified** |
+| TypeScript SDK | `npm test --prefix sdk/typescript` | **4 passed, 0 failed** (build and contract tests pass) |
 | Pre-flight launch gates | `python scripts/verify_public_launch.py` | **8/8 audit gates PASS (doc paths, claims, OpenAPI drift, 6 pillars, Python SDK, SBOM, Grafana, K8s manifests)** |
 | 21 Quality Attributes | [`docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`](21_QUALITY_ATTRIBUTES_VERIFICATION.md) | **21/21 Enterprise system quality attributes formally attested and empirically verified** |
-| OpenAPI drift | `python scripts/check_openapi_drift.py` | 53/53 operations match |
-| Route auth parity | `cargo test -p sunborn-gateway --test route_contract_parity_test` | all 50 router paths classified; 45/45 reject anonymous callers; 22/22 admin routes reject non-admin keys |
+| OpenAPI drift | `python scripts/check_openapi_drift.py` | 57/57 operations match |
+| Route auth parity | `cargo test -p sunborn-gateway --test route_contract_parity_test` | all 54 router paths classified; 45/45 reject anonymous callers; 22/22 admin routes reject non-admin keys; 4/4 local control routes verified |
 | Scientific hold-out benchmark | `cargo test -p sunborn-semantic test_held_out_evaluation_dataset_precision_and_recall` | **N = 320 pairs, 0 false positives, 100% precision, Clopper-Pearson 99.9% bound < 3.4%** |
 | Multi-worker soak benchmark | `cargo test -p sunborn-gateway --test concurrent_multiworker_soak_test` | **10,000 requests, 16 concurrent workers, 0 failures** |
 | Enterprise kill switches | `cargo test -p sunborn-gateway --test kill_switch_test` | **5/5 kill switches verified: key revocation, tenant suspension, model allowlist, spend ceiling, zero-quota** |
@@ -240,6 +240,19 @@ corrected to the endpoints and return shapes the code actually implements.
 - `docs/independent-engineering-audit/01_README.md` and
   `docs/independent-engineering-audit/54_REMEDIATION_STATUS_2026-11-15.md` are
   banner-marked as historical.
+
+### 2.3 Security, FinOps, and Consumer Runtime Remediation (2026-11-20, Issues #3-#10)
+
+| ID | Priority | Defect / Requirement | Remediation & Engineering Implementation | Regression & Verification Evidence |
+|---|---|---|---|---|
+| #3 | P1 | Cryptographic shredding failure swallowed during tenant deletion | Modified `delete_tenant` handler in `crates/sunborn-gateway/src/handlers.rs` to propagate key shredding errors (`?`), immediately halting tenant deletion and preserving database records when shredding fails. | `governance_test::test_tenant_cascade_offboarding_fails_when_key_shredding_fails` |
+| #4 | P1 | Floating-point rounding drift in authoritative spend calculations | Updated `crates/sunborn-db/src/postgres.rs` (`set_spend_ceiling`, `reserve_spend`, `settle_spend`, `spend_window_total`) to compute exclusively on 64-bit integer micro-units (`ceiling_micro_units`, `amount_micro_units`) without IEEE-754 drift. | `cargo check -p sunborn-db`, `finops::tests::test_spend_velocity_micro_units_accounting` |
+| #5 | P1 | Local state ceiling updated before durable commit | Refactored `SpendLedger::set_ceiling` in `crates/sunborn-gateway/src/finops.rs` to await and ensure PostgreSQL durable write succeeds before updating in-memory `SpendVelocityController`. | `spend_ceiling_api_test::test_failed_durable_spend_ceiling_leaves_local_state_untouched` |
+| #6 | P1 | Demo sample tenants provisioned during production startup | Gated all sample tenants (`tenant-alpha`, `enterprise-fintech`, etc.) behind `!is_production_mode()` in `crates/sunborn-gateway/src/state.rs`. | `production_startup_test::test_production_startup_does_not_seed_sample_tenants` |
+| #7 | P2 | TypeScript SDK missing dependencies during CI build | Added `npm ci --prefix sdk/typescript` before `npm run build` in `.github/workflows/ci.yml`. | `npm run build --prefix sdk/typescript`, `npm test --prefix sdk/typescript` (4 passed) |
+| #8 | P1 | Ephemeral execution & learning stores unblocked in production | Implemented `PersistentExecutionCacheStore` with append-only Write-Ahead Log (WAL) and recovery replay. Updated `verify_production_readiness()` to strictly reject ephemeral storage tiers in production. | `production_startup_test::test_production_startup_rejects_ephemeral_stores`, `execution::store::tests::test_persistent_execution_cache_store_wal_replay` |
+| #9 | P1 | Developer-only local BYOK startup path | Delivered OS-native AES-256-GCM encrypted credential vault (`LocalCredentialVault`), masked secret previews (`sk-...1234`), 1-click Windows installer (`scripts/install-sunborn.ps1`), desktop runner (`scripts/sunborn-desktop.ps1`), Linux installer (`scripts/install-sunborn.sh`), clean uninstaller (`scripts/uninstall-sunborn.ps1`), and default loopback binding (`127.0.0.1:8080`). | `local_control_api_test::test_local_byok_control_endpoints_lifecycle`, `sunborn_identity::local_vault::tests::*` |
+| #10 | P1 | Uncalibrated quality-attribute & accessibility claims | Structured clear taxonomy separating in-tree automated verification (333 Rust tests, 63 frontend tests, 4 TS SDK tests, 8/8 pre-flight gates) from staging cluster operational gates (N1 multi-node invalidation harness, N2 external penetration testing). Corrected automated axe-core scan disclosure. | `python scripts/check_launch_docs.py`, `python scripts/verify_public_launch.py` |
 
 ---
 

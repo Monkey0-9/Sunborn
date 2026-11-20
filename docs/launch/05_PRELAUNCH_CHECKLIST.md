@@ -32,25 +32,27 @@ with the gap stated.
 ### 1.1 In-tree verification (verified)
 
 These are reported as passing in [`docs/STATUS.md`](../STATUS.md) section 1, last
-re-run 2026-11-18 where the result changed.
+re-run 2026-11-20 where the result changed.
 
 - [x] `cargo fmt --all -- --check` exits 0.
 - [x] `cargo check --workspace --all-targets` exits 0 with no warnings.
-- [x] `cargo test --workspace --all-targets -- --test-threads=1`: 328 passed, 0 failed, 44 suites.
-- [x] `cargo clippy --workspace --all-targets --all-features -- -D warnings` exits 0.
+- [x] `cargo test --workspace --all-targets -- --test-threads=1`: 333 passed, 0 failed, 45 suites.
+- [x] `cargo clippy --workspace --all-targets --all-features -- -D warnings` exits 0 with no warnings.
 - [x] Frontend production build succeeds.
 - [x] Frontend tests: 63 passed, 0 failed.
 - [x] WCAG 2.2 AA axe sweep: 10 routes, 0 serious or critical violations.
 - [x] Keyboard and focus audit: 10 routes, 253 tab stops, visible focus ring.
+- [x] TypeScript SDK: dependencies installed in CI, build and 4 tests pass cleanly.
 - [x] Python SDK packaging and clean install: 27 tests pass.
-- [x] OpenAPI 3.1 drift: 53/53 operations match.
-- [x] Route authorization parity: all 50 router paths classified; 45/45 reject
-      anonymous callers; 22/22 admin routes reject non-admin keys.
+- [x] OpenAPI 3.1 drift: 57/57 operations match.
+- [x] Route authorization parity: all 54 router paths classified; 45/45 reject
+      anonymous callers; 22/22 admin routes reject non-admin keys; 4/4 local control endpoints verified.
 - [x] TLA+ model checking: 3 configurations, no errors.
 - [x] Held-out evaluation counts asserted by a test: 0 false positives on 200 hard
       negatives; recall 20%.
 - [x] CycloneDX SBOM generated: 369 components.
 - [x] Documentation paths resolve under `scripts/verify_doc_paths.py --strict`.
+- [x] Local BYOK Runtime: 1-click installer, native OS encrypted credential vault, masked key previews, loopback isolation (`127.0.0.1:8080`).
 
 ### 1.2 Environment-dependent gates (open)
 

@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::RwLock;
+use sunborn_core::sync::{read_lock, write_lock};
 
 /// Record of an autonomic self-healing incident and automated recovery action
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,13 +41,13 @@ impl AutonomicSelfHealingController {
             resolved_at: Utc::now(),
         };
 
-        let mut list = self.incidents.write().unwrap();
+        let mut list = write_lock(&self.incidents);
         list.push(incident);
     }
 
     /// List historical self-healing recovery actions
     pub fn list_incidents(&self) -> Vec<HealingIncident> {
-        let list = self.incidents.read().unwrap();
+        let list = read_lock(&self.incidents);
         list.clone()
     }
 }

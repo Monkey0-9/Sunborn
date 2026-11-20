@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::RwLock;
+use sunborn_core::sync::{read_lock, write_lock};
 
 /// Prediction candidate with confidence score and estimated latency savings
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -45,7 +46,7 @@ impl PredictivePrefetchEngine {
 
     /// Record an observed sequence transition from action A to action B
     pub fn record_transition(&self, from: &str, to: &str) {
-        let mut map = self.transitions.write().unwrap();
+        let mut map = write_lock(&self.transitions);
         let from_entry = map.entry(from.to_string()).or_default();
         let count = from_entry.entry(to.to_string()).or_insert(0);
         *count += 1;
@@ -53,7 +54,7 @@ impl PredictivePrefetchEngine {
 
     /// Predict the most probable next actions with confidence scores above threshold
     pub fn predict_next(&self, current_action: &str) -> Vec<PrefetchPrediction> {
-        let map = self.transitions.read().unwrap();
+        let map = read_lock(&self.transitions);
         let Some(destinations) = map.get(current_action) else {
             return Vec::new();
         };

@@ -1,10 +1,12 @@
 import { useSyncExternalStore } from "react";
 
 export type PersonaMode = "executive" | "developer";
+export type CurrencyMode = "USD" | "INR";
 export type CircuitBreakerState = "CLOSED" | "OPEN";
 
 export interface ClusterState {
   persona: PersonaMode;
+  currency: CurrencyMode;
   circuitBreaker: CircuitBreakerState;
   byokApiKey: string | null;
   vectorEpoch: number;
@@ -13,6 +15,7 @@ export interface ClusterState {
 
 const DEFAULT_STATE: ClusterState = {
   persona: "executive",
+  currency: "INR",
   circuitBreaker: "CLOSED",
   byokApiKey: null,
   vectorEpoch: 4192,
@@ -44,6 +47,13 @@ export function resetClusterState(): void {
 export function setPersona(mode: PersonaMode): void {
   if (currentState.persona !== mode) {
     currentState = { ...currentState, persona: mode };
+    notify();
+  }
+}
+
+export function setCurrency(currency: CurrencyMode): void {
+  if (currentState.currency !== currency) {
+    currentState = { ...currentState, currency };
     notify();
   }
 }

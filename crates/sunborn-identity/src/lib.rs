@@ -36,6 +36,7 @@
 pub mod canonical;
 pub mod crypto_shred;
 pub mod identity;
+pub mod local_vault;
 pub mod privacy;
 
 pub use canonical::{
@@ -48,4 +49,5 @@ pub use crypto_shred::{
     RemoteVaultTransitKeyProvider, TenantCryptoRegistry, VaultTransitKeyProvider, ZeroizingKey,
 };
 pub use identity::{CacheIdentity, IdentityEngine};
+pub use local_vault::{ConfiguredProviderInfo, LocalCredentialVault};
 pub use privacy::{PiiTokenizer, PiiVaultSession};

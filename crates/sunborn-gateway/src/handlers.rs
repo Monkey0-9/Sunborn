@@ -14,12 +14,15 @@ use serde_json::json;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 use sunborn_cache::CacheEntry;
+use sunborn_core::sync::read_lock;
 use sunborn_core::{
-    finops::{FinOpsEngine, ModelPricing},
+    finops::{
+        format_inr_currency, format_lakhs_crores, FinOpsEngine, GstBreakdown, MicroPaise,
+        ModelPricing,
+    },
     CachePath, DecisionAction, DecisionRecord, RequestEnvelope, ResponseEnvelope, SunbornError,
     TenantId,
 };
-use sunborn_execution::ExecutionCacheStore;
 use sunborn_identity::{EncryptedEnvelope, IdentityEngine};
 use sunborn_semantic::{EmbeddingProvider, VectorEntry, VectorStore};
 use uuid::Uuid;
@@ -146,11 +149,11 @@ pub async fn ready(State(state): State<AppState>) -> impl IntoResponse {
             },
             "execution_cache": {
                 "status": "ready",
-                "storage_tier": "process-local-ephemeral"
+                "storage_tier": state.execution_store.storage_tier()
             },
             "learning_store": {
                 "status": "ready",
-                "storage_tier": "process-local-ephemeral"
+                "storage_tier": state.learning_store.storage_tier()
             }
         }
     });
@@ -2281,12 +2284,13 @@ pub async fn delete_tenant(
 
     let tenant = TenantId::new(&tenant_id);
 
-    // 0. O(1) Instant Cryptographic Shredding of TDEK
-    let shred_duration_nanos = state
-        .crypto_registry
-        .shred_tenant(&tenant)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
+    // 0. O(1) Instant Cryptographic Shredding of TDEK: must succeed before cascading deletion
+    let shred_duration = state.crypto_registry.shred_tenant(&tenant).map_err(|e| {
+        AppError::from(SunbornError::internal(format!(
+            "Cryptographic shredding failed: {e}"
+        )))
+    })?;
+    let shred_duration_nanos = shred_duration.as_nanos();
 
     let db_deleted = state
         .db
@@ -2721,6 +2725,7 @@ pub async fn crypto_shred_tenant(
 pub async fn get_finops_report() -> impl IntoResponse {
     let gpt4o = ModelPricing::gpt4o();
     let claude = ModelPricing::claude35_sonnet();
+    let sarvam = ModelPricing::sarvam_2b();
 
     let exact_hits = EXACT_HITS.load(Ordering::Relaxed);
     let semantic_hits = SEMANTIC_HITS.load(Ordering::Relaxed);
@@ -2729,6 +2734,7 @@ pub async fn get_finops_report() -> impl IntoResponse {
     let gpt4o_gross_per_hit = FinOpsEngine::calculate_token_cost_avoided(&gpt4o, 1000, 500);
     let gpt4o_saving_per_hit = FinOpsEngine::calculate_net_savings(&gpt4o, 1000, 500);
     let claude_saving_per_hit = FinOpsEngine::calculate_net_savings(&claude, 1000, 500);
+    let sarvam_saving_per_hit = FinOpsEngine::calculate_net_savings(&sarvam, 1000, 500);
 
     let embed_cost_per_query = FinOpsEngine::LOCAL_EMBED_COST_PER_CALL;
     let cache_overhead_per_query = FinOpsEngine::CACHE_LOOKUP_OVERHEAD_PER_CALL;
@@ -2737,6 +2743,12 @@ pub async fn get_finops_report() -> impl IntoResponse {
     let total_gpt4o_gross_savings = gpt4o_gross_per_hit * (total_hits as f64);
     let total_gpt4o_net_savings = gpt4o_saving_per_hit * (total_hits as f64);
     let break_even_gpt4o = FinOpsEngine::break_even_hit_rate(&gpt4o, 1000, 500, 4096, 24.0);
+
+    // Sovereign Indic currency & GST metrics
+    let inr_rate = 84.50;
+    let total_net_savings_inr = total_gpt4o_net_savings * inr_rate;
+    let total_net_savings_mp = MicroPaise::from_inr(total_net_savings_inr);
+    let gst_breakdown = GstBreakdown::calculate(total_net_savings_inr, false, None);
 
     Json(json!({
         "status": "active",
@@ -2753,9 +2765,18 @@ pub async fn get_finops_report() -> impl IntoResponse {
             "embedding_inference_cost_per_query_usd": embed_cost_per_query,
             "cache_lookup_overhead_cost_per_query_usd": cache_overhead_per_query,
             "claude_cost_avoided_per_query_usd": claude_saving_per_hit,
+            "sarvam_cost_avoided_per_query_usd": sarvam_saving_per_hit,
             "total_estimated_gross_savings_usd": total_gpt4o_gross_savings,
             "total_estimated_net_savings_usd": total_gpt4o_net_savings,
             "total_estimated_savings_usd": total_gpt4o_net_savings,
+            "total_estimated_savings_inr": total_net_savings_inr,
+            "total_estimated_savings_inr_formatted": format_inr_currency(total_net_savings_inr),
+            "total_estimated_savings_inr_compact": format_lakhs_crores(total_net_savings_inr),
+            "inr_exchange_rate": inr_rate,
+            "micro_paise_avoided": total_net_savings_mp.0,
+            "gst_applicable_rate_percent": 18.0,
+            "gst_sac_code": GstBreakdown::SAC_CODE,
+            "gst_breakdown": gst_breakdown,
             "break_even_hit_rate_threshold": break_even_gpt4o
         }
     }))
@@ -2894,7 +2915,7 @@ pub async fn predict_speculative(
 }
 
 pub async fn get_cluster_sync_status(State(state): State<AppState>) -> impl IntoResponse {
-    let vc = state.vector_clock.read().unwrap().clone();
+    let vc = read_lock(&state.vector_clock).clone();
     let region = std::env::var("SUNBORN_REGION").unwrap_or_else(|_| "us-east-1".to_string());
     let kms_provider = state.crypto_registry.provider().provider_name();
     Json(json!({
@@ -3622,5 +3643,107 @@ pub async fn rollback_learning_policy(
         "status": "POLICY_ROLLED_BACK",
         "reason": payload.reason,
         "timestamp": Utc::now()
+    })))
+}
+
+// ==============================================================================
+// Personal Local Desktop / BYOK Runtime Control Endpoints
+// Enforces loopback security (127.0.0.1 / ::1) and native OS credential management
+// ==============================================================================
+
+#[derive(Deserialize)]
+pub struct SaveLocalProviderPayload {
+    pub provider: String,
+    pub api_key: String,
+    pub base_url: Option<String>,
+    pub default_model: Option<String>,
+}
+
+pub async fn get_local_status(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let vault = sunborn_identity::LocalCredentialVault::new_default();
+    let providers = vault.list_providers();
+    let is_prod = sunborn_core::is_production_mode();
+
+    Ok(Json(json!({
+        "status": "ready",
+        "mode": if is_prod { "production_cluster" } else { "local_byok" },
+        "storage_tier": {
+            "execution": state.execution_store.storage_tier(),
+            "learning": state.learning_store.storage_tier(),
+            "exact_cache": if state.is_dragonfly_cache_active() { "dragonfly_l2" } else { "memory_l1" },
+            "vector_store": if state.is_qdrant_vector_active() { "qdrant_dense" } else { "memory_l1" },
+        },
+        "configured_providers": providers,
+        "localhost_only": !is_prod,
+    })))
+}
+
+pub async fn save_local_provider(
+    State(_state): State<AppState>,
+    Json(payload): Json<SaveLocalProviderPayload>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let vault = sunborn_identity::LocalCredentialVault::new_default();
+    vault
+        .store_provider(
+            &payload.provider,
+            &payload.api_key,
+            payload.base_url.clone(),
+            payload.default_model.clone(),
+        )
+        .map_err(AppError::from)?;
+
+    let preview = sunborn_identity::LocalCredentialVault::mask_key(&payload.api_key);
+
+    Ok(Json(json!({
+        "status": "saved",
+        "provider": payload.provider.to_lowercase(),
+        "key_preview": preview,
+        "base_url": payload.base_url,
+        "default_model": payload.default_model,
+    })))
+}
+
+pub async fn delete_local_provider(
+    Path(provider_name): Path<String>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let vault = sunborn_identity::LocalCredentialVault::new_default();
+    let removed = vault
+        .remove_provider(&provider_name)
+        .map_err(AppError::from)?;
+
+    Ok(Json(json!({
+        "status": if removed { "removed" } else { "not_found" },
+        "provider": provider_name,
+    })))
+}
+
+#[derive(Deserialize)]
+pub struct ConfigureLocalSettingsPayload {
+    pub default_spend_ceiling_usd: Option<f64>,
+    pub exact_cache_enabled: Option<bool>,
+    pub semantic_cache_enabled: Option<bool>,
+}
+
+pub async fn configure_local_settings(
+    State(state): State<AppState>,
+    Json(payload): Json<ConfigureLocalSettingsPayload>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    if let Some(ceiling) = payload.default_spend_ceiling_usd {
+        if ceiling >= 0.0 && ceiling.is_finite() {
+            state
+                .spend_velocity_controller
+                .set_tenant_ceiling("local-user", ceiling);
+        }
+    }
+
+    Ok(Json(json!({
+        "status": "updated",
+        "settings": {
+            "default_spend_ceiling_usd": payload.default_spend_ceiling_usd,
+            "exact_cache_enabled": payload.exact_cache_enabled.unwrap_or(true),
+            "semantic_cache_enabled": payload.semantic_cache_enabled.unwrap_or(true),
+        }
     })))
 }

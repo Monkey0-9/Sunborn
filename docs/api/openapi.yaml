@@ -1547,3 +1547,116 @@ paths:
           description: Unauthorized
         '403':
           description: Administrative privileges required
+
+  /v1/local/status:
+    get:
+      summary: Local Gateway Status and Configured Providers
+      description: Returns local BYOK configuration status, active storage tiers, and configured provider key previews.
+      tags:
+        - LocalBYOK
+      responses:
+        '200':
+          description: Local gateway status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ready"
+                  mode:
+                    type: string
+                    example: "local_byok"
+                  configured_providers:
+                    type: array
+                    items:
+                      type: object
+
+  /v1/local/providers:
+    post:
+      summary: Save Local BYOK Provider API Key
+      description: Encrypts and securely stores provider API key into OS native credential vault.
+      tags:
+        - LocalBYOK
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - provider
+                - api_key
+              properties:
+                provider:
+                  type: string
+                  example: "openai"
+                api_key:
+                  type: string
+                  example: "sk-proj-..."
+                base_url:
+                  type: string
+                  nullable: true
+                default_model:
+                  type: string
+                  nullable: true
+      responses:
+        '200':
+          description: Provider saved successfully with masked key preview
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/local/providers/{name}:
+    delete:
+      summary: Remove Local BYOK Provider
+      description: Securely deletes provider credentials from local encrypted vault.
+      tags:
+        - LocalBYOK
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: Provider name (e.g. openai, anthropic)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Provider removed
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /v1/local/config:
+    post:
+      summary: Configure Local Gateway Settings
+      description: Configures local spend ceiling and cache policy parameters.
+      tags:
+        - LocalBYOK
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                default_spend_ceiling_usd:
+                  type: number
+                  format: double
+                  nullable: true
+                exact_cache_enabled:
+                  type: boolean
+                  nullable: true
+                semantic_cache_enabled:
+                  type: boolean
+                  nullable: true
+      responses:
+        '200':
+          description: Configuration updated
+          content:
+            application/json:
+              schema:
+                type: object

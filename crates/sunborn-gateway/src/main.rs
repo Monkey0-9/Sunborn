@@ -81,7 +81,9 @@ async fn main() -> anyhow::Result<()> {
     init_tracing();
 
     let config = AppConfig::load_from_env();
-    let addr = SocketAddr::from(([0, 0, 0, 0], config.server.port));
+    let addr: SocketAddr = format!("{}:{}", config.server.host, config.server.port)
+        .parse()
+        .unwrap_or_else(|_| SocketAddr::from(([127, 0, 0, 1], config.server.port)));
 
     tracing::info!(
         address = %addr,

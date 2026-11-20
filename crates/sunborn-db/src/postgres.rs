@@ -24,6 +24,30 @@ pub fn redact_connection_url(url: &str) -> String {
     url.to_string()
 }
 
+/// Converts a USD amount into authoritative integer micro-units.
+///
+/// Money must never accumulate through binary floating point: `0.1 + 0.2` is not
+/// `0.3` in IEEE-754, and a ledger that sums floats drifts by real, billable
+/// amounts. The conversion happens exactly once, at the boundary where a price
+/// estimate enters the system, and every authoritative comparison and
+/// aggregation afterwards is `BIGINT` arithmetic.
+///
+/// Returns `None` for non-finite, negative, or implausibly large amounts so the
+/// caller can fail closed instead of recording a corrupt charge.
+fn usd_to_micro_units(usd: f64) -> Option<i64> {
+    const MAX_USD: f64 = 100_000.0;
+    if !usd.is_finite() || !(0.0..=MAX_USD).contains(&usd) {
+        return None;
+    }
+    Some((usd * 1_000_000.0).round() as i64)
+}
+
+/// Renders integer micro-units as USD for display and API responses only.
+#[inline]
+fn micro_units_to_usd(micro: i64) -> f64 {
+    micro as f64 / 1_000_000.0
+}
+
 type FallbackTdekMap = Arc<RwLock<std::collections::HashMap<String, (Vec<u8>, String)>>>;
 
 const MIGRATION_0001: &str = include_str!("../../../migrations/0001_initial_schema.sql");
@@ -371,7 +395,13 @@ impl PostgresDatabaseStore {
         let pool = self.get_pool().await.ok_or_else(|| {
             SunbornError::database("PostgreSQL connection pool unavailable for spend ceiling")
         })?;
-        let ceiling_micro = (ceiling_usd * 1_000_000.0).round() as i64;
+        // The integer column is the source of truth; the USD column is a
+        // derived display mirror so existing readers cannot diverge.
+        let ceiling_micro = usd_to_micro_units(ceiling_usd).ok_or_else(|| {
+            SunbornError::invalid_payload(format!(
+                "invalid spend ceiling {ceiling_usd}: must be finite, non-negative and <= 100000 USD"
+            ))
+        })?;
         sqlx::query(
             "INSERT INTO spend_tenant_ceilings (tenant_id, ceiling_usd, ceiling_micro_units, updated_at)
              VALUES ($1, $2, $3, NOW())
@@ -379,7 +409,7 @@ impl PostgresDatabaseStore {
              SET ceiling_usd = EXCLUDED.ceiling_usd, ceiling_micro_units = EXCLUDED.ceiling_micro_units, updated_at = NOW()",
         )
         .bind(tenant_id)
-        .bind(ceiling_usd)
+        .bind(micro_units_to_usd(ceiling_micro))
         .bind(ceiling_micro)
         .execute(&pool)
         .await
@@ -398,12 +428,14 @@ impl PostgresDatabaseStore {
         default_ceiling: f64,
         window: Duration,
     ) -> SpendReservationOutcome {
-        if !estimated_cost.is_finite() || !(0.0..=100_000.0).contains(&estimated_cost) {
+        // Single, validated conversion point for the incoming estimate.
+        let Some(estimated_micro) = usd_to_micro_units(estimated_cost) else {
             return SpendReservationOutcome::Denied {
                 committed: 0.0,
                 ceiling: default_ceiling,
             };
-        }
+        };
+        let default_ceiling_micro = usd_to_micro_units(default_ceiling).unwrap_or(0);
         let Some(pool) = self.get_pool().await else {
             return SpendReservationOutcome::StoreUnavailable;
         };
@@ -427,26 +459,26 @@ impl PostgresDatabaseStore {
             return SpendReservationOutcome::StoreUnavailable;
         }
 
-        let ceiling: f64 = match sqlx::query_scalar::<_, f64>(
-            "SELECT ceiling_usd FROM spend_tenant_ceilings WHERE tenant_id = $1",
+        let ceiling_micro: i64 = match sqlx::query_scalar::<_, i64>(
+            "SELECT ceiling_micro_units FROM spend_tenant_ceilings WHERE tenant_id = $1",
         )
         .bind(tenant_id)
         .fetch_optional(&mut *tx)
         .await
         {
             Ok(Some(value)) => value,
-            Ok(None) => default_ceiling,
+            Ok(None) => default_ceiling_micro,
             Err(err) => {
                 tracing::error!(error = %err, "Failed to read durable spend ceiling");
                 return SpendReservationOutcome::StoreUnavailable;
             }
         };
 
-        let committed: f64 = match sqlx::query_scalar::<_, f64>(
+        let committed_micro: i64 = match sqlx::query_scalar::<_, i64>(
             "SELECT
-                 COALESCE((SELECT SUM(amount_usd) FROM spend_ledger_entries
+                 COALESCE((SELECT SUM(amount_micro_units) FROM spend_ledger_entries
                            WHERE tenant_id = $1 AND recorded_at > NOW() - ($2 * INTERVAL '1 second')), 0)
-               + COALESCE((SELECT SUM(amount_usd) FROM spend_reservations
+               + COALESCE((SELECT SUM(amount_micro_units) FROM spend_reservations
                            WHERE tenant_id = $1 AND reserved_at > NOW() - ($2 * INTERVAL '1 second')), 0)",
         )
         .bind(tenant_id)
@@ -461,17 +493,18 @@ impl PostgresDatabaseStore {
             }
         };
 
-        let would_commit = committed + estimated_cost;
-        if committed >= ceiling || (committed > 0.0 && would_commit > ceiling) {
+        let would_commit_micro = committed_micro + estimated_micro;
+        if committed_micro >= ceiling_micro
+            || (committed_micro > 0 && would_commit_micro > ceiling_micro)
+        {
             // Rolling back also releases the advisory lock.
             return SpendReservationOutcome::Denied {
-                committed: would_commit,
-                ceiling,
+                committed: (would_commit_micro as f64) / 1_000_000.0,
+                ceiling: (ceiling_micro as f64) / 1_000_000.0,
             };
         }
 
         let reservation_id = Uuid::new_v4();
-        let amount_micro = (estimated_cost * 1_000_000.0).round() as i64;
         let insert = sqlx::query(
             "INSERT INTO spend_reservations (reservation_id, tenant_id, amount_usd, amount_micro_units, reserved_at)
              VALUES ($1, $2, $3, $4, NOW())",
@@ -479,7 +512,7 @@ impl PostgresDatabaseStore {
         .bind(reservation_id)
         .bind(tenant_id)
         .bind(estimated_cost)
-        .bind(amount_micro)
+        .bind(estimated_micro)
         .execute(&mut *tx)
         .await;
 
@@ -504,11 +537,9 @@ impl PostgresDatabaseStore {
         actual_cost: f64,
         window: Duration,
     ) -> Option<f64> {
-        let valid_cost = if actual_cost.is_finite() && actual_cost >= 0.0 {
-            actual_cost.min(100_000.0)
-        } else {
-            0.0
-        };
+        // Clamp first (NaN clamps to NaN, which the converter rejects), then
+        // convert once into authoritative integer micro-units.
+        let valid_micro = usd_to_micro_units(actual_cost.clamp(0.0, 100_000.0)).unwrap_or(0);
         let pool = self.get_pool().await?;
         let window_secs = window.as_secs_f64().max(1.0);
 
@@ -528,7 +559,6 @@ impl PostgresDatabaseStore {
             .execute(&mut *tx)
             .await
             .ok()?;
-        let amount_micro = (valid_cost * 1_000_000.0).round() as i64;
         sqlx::query(
             "INSERT INTO spend_ledger_entries (tenant_id, reservation_id, amount_usd, amount_micro_units, recorded_at)
              VALUES ($1, $2, $3, $4, NOW())
@@ -536,8 +566,8 @@ impl PostgresDatabaseStore {
         )
         .bind(tenant_id)
         .bind(reservation_id)
-        .bind(valid_cost)
-        .bind(amount_micro)
+        .bind(micro_units_to_usd(valid_micro))
+        .bind(valid_micro)
         .execute(&mut *tx)
         .await
         .ok()?;
@@ -551,8 +581,8 @@ impl PostgresDatabaseStore {
         .execute(&mut *tx)
         .await
         .ok()?;
-        let total: f64 = sqlx::query_scalar(
-            "SELECT COALESCE(SUM(amount_usd), 0) FROM spend_ledger_entries
+        let total_micro: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(amount_micro_units), 0) FROM spend_ledger_entries
              WHERE tenant_id = $1 AND recorded_at > NOW() - ($2 * INTERVAL '1 second')",
         )
         .bind(tenant_id)
@@ -561,7 +591,7 @@ impl PostgresDatabaseStore {
         .await
         .ok()?;
         tx.commit().await.ok()?;
-        Some(total)
+        Some((total_micro as f64) / 1_000_000.0)
     }
 
     /// Releases an unused durable reservation (cache hit or aborted request).
@@ -580,15 +610,16 @@ impl PostgresDatabaseStore {
     /// Reads the tenant's cluster-wide rolling-window spend.
     pub async fn spend_window_total(&self, tenant_id: &str, window: Duration) -> Option<f64> {
         let pool = self.get_pool().await?;
-        sqlx::query_scalar(
-            "SELECT COALESCE(SUM(amount_usd), 0) FROM spend_ledger_entries
+        let total_micro: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(amount_micro_units), 0) FROM spend_ledger_entries
              WHERE tenant_id = $1 AND recorded_at > NOW() - ($2 * INTERVAL '1 second')",
         )
         .bind(tenant_id)
         .bind(window.as_secs_f64().max(1.0))
         .fetch_one(&pool)
         .await
-        .ok()
+        .ok()?;
+        Some((total_micro as f64) / 1_000_000.0)
     }
 
     /// Removes all durable spend state for a tenant. Intended for operator resets.

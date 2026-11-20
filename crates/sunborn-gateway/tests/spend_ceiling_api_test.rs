@@ -274,3 +274,39 @@ async fn non_admin_and_invalid_ceilings_are_rejected() {
         .unwrap();
     assert_eq!(negative.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn test_failed_durable_spend_ceiling_leaves_local_state_untouched() {
+    let state = state_with_keys();
+    let tenant = "tenant-fail-test";
+
+    // Set initial local ceiling to 50.0
+    state
+        .spend_velocity_controller
+        .set_tenant_ceiling(tenant, 50.0);
+    assert_eq!(
+        state.spend_velocity_controller.ceiling_for_tenant(tenant),
+        50.0
+    );
+
+    // With an unreachable durable database, set_ceiling will fail on durable write
+    let unreachable_db = sunborn_db::PostgresDatabaseStore::new(
+        "postgres://postgres:invalid@127.0.0.1:54329/sunborn",
+    );
+    let ledger = sunborn_gateway::finops::SpendLedger::new(
+        state.spend_velocity_controller.clone(),
+        Some(Arc::new(unreachable_db)),
+    );
+
+    let res = ledger.set_ceiling(tenant, 100.0).await;
+    assert!(
+        res.is_err(),
+        "Durable write to unreachable database must fail"
+    );
+    // Local ceiling MUST NOT have been updated to 100.0!
+    assert_eq!(
+        state.spend_velocity_controller.ceiling_for_tenant(tenant),
+        50.0,
+        "Local ceiling must remain at prior value when durable write fails"
+    );
+}
