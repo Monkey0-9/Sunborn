@@ -107,20 +107,12 @@ rm -f "${A_LOG}" "${B_LOG}" "${A_LOG}.crash" "${ROOT_DIR}/target/finops-"*.json 
 echo "Waiting for PostgreSQL, Redis, and Qdrant to be fully operational..."
 READY=0
 for i in $(seq 1 90); do
-    # Require psql to successfully execute a query on sunborn db to ensure init scripts are done and server restarted
-    if docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" exec -T postgres psql -U sunborn -d sunborn -c "SELECT 1;" >/dev/null 2>&1 \
-        && docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" exec -T redis redis-cli ping 2>/dev/null | grep -q PONG \
-        && curl -fsS http://127.0.0.1:56333/readyz >/dev/null 2>&1; then
-        # Double check: ensure postgres didn't just accept a query during temporary initdb execution
-        if docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" exec -T postgres psql -U sunborn -d sunborn -c "SELECT 1 FROM spend_ledger_entries LIMIT 1;" >/dev/null 2>&1; then
-            READY=1
-            break
-        fi
-        sleep 1
-        if docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" exec -T postgres psql -U sunborn -d sunborn -c "SELECT 1;" >/dev/null 2>&1; then
-            READY=1
-            break
-        fi
+    if docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" exec -T redis redis-cli ping 2>/dev/null | grep -q PONG \
+        && curl -fsS http://127.0.0.1:56333/readyz >/dev/null 2>&1 \
+        && docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" logs postgres 2>/dev/null | grep -q "PostgreSQL init process complete; ready for start up." \
+        && docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" exec -T postgres psql -U sunborn -d sunborn -c "SELECT 1 FROM pg_constraint WHERE conname = 'spend_reservations_amount_micro_units_non_negative';" >/dev/null 2>&1; then
+        READY=1
+        break
     fi
     sleep 1
 done
@@ -128,8 +120,11 @@ done
 [ "${READY}" = "1" ] || fail "PostgreSQL, Redis, or Qdrant did not become ready within 90s"
 
 # The test tenant/application must exist before finops/cache writes (foreign keys).
-docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" exec -T postgres \
-    psql -U sunborn -d sunborn -v ON_ERROR_STOP=1 >/dev/null <<SQL
+# Robust retry loop in case postgres has a microsecond socket transition after restart.
+SEEDED=0
+for attempt in $(seq 1 30); do
+    if docker compose -p "${PROJECT}" -f "${COMPOSE_FILE}" exec -T postgres \
+        psql -U sunborn -d sunborn -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<SQL
 INSERT INTO tenants (id, name, status, rate_limit_rps)
 VALUES ('${TENANT}', 'Distributed Test Tenant', 'active', 1000)
 ON CONFLICT (id) DO NOTHING;
@@ -137,6 +132,14 @@ INSERT INTO applications (id, tenant_id, name, api_key_hash, status)
 VALUES ('${APP}', '${TENANT}', 'Distributed Test App', 'test-fixture-hash', 'active')
 ON CONFLICT (tenant_id, id) DO NOTHING;
 SQL
+    then
+        SEEDED=1
+        break
+    fi
+    sleep 1
+done
+
+[ "${SEEDED}" = "1" ] || fail "Failed to seed test tenant and application into PostgreSQL"
 
 echo "=== 3/7: start two independent gateway replicas ==="
 COMMON_ENV=(
