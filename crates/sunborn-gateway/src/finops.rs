@@ -10,10 +10,7 @@
 //! requests are rejected rather than silently reverting to an unenforced,
 //! process-local budget.
 
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
+use std::sync::Arc;
 use sunborn_core::SpendVelocityController;
 use sunborn_db::{PostgresDatabaseStore, SpendReservationOutcome};
 use uuid::Uuid;
@@ -26,56 +23,11 @@ pub enum SpendLedgerError {
     Unavailable(String),
 }
 
-/// In-memory lease of tenant budget to absorb extreme concurrency (100k+ req/sec)
-/// without serializing on PostgreSQL transaction locks.
-#[derive(Debug)]
-pub struct BudgetLease {
-    pub reservation_id: Uuid,
-    pub leased_micro_usd: i64,
-    pub consumed_micro_usd: AtomicI64,
-    pub expires_at: Instant,
-}
-
-impl BudgetLease {
-    pub fn new(reservation_id: Uuid, leased_micro_usd: i64, ttl: Duration) -> Self {
-        Self {
-            reservation_id,
-            leased_micro_usd,
-            consumed_micro_usd: AtomicI64::new(0),
-            expires_at: Instant::now() + ttl,
-        }
-    }
-
-    /// Attempts lock-free reservation against the active lease.
-    /// Returns true if reserved successfully within the leased capacity.
-    pub fn try_reserve(&self, cost_micro_usd: i64) -> bool {
-        if Instant::now() >= self.expires_at {
-            return false;
-        }
-        let mut current = self.consumed_micro_usd.load(Ordering::Relaxed);
-        loop {
-            if current + cost_micro_usd > self.leased_micro_usd {
-                return false;
-            }
-            match self.consumed_micro_usd.compare_exchange_weak(
-                current,
-                current + cost_micro_usd,
-                Ordering::SeqCst,
-                Ordering::Relaxed,
-            ) {
-                Ok(_) => return true,
-                Err(actual) => current = actual,
-            }
-        }
-    }
-}
-
 /// Facade over the process-local controller and the optional durable ledger.
 #[derive(Clone)]
 pub struct SpendLedger {
     local: Arc<SpendVelocityController>,
     durable: Option<Arc<PostgresDatabaseStore>>,
-    leases: Arc<RwLock<HashMap<String, Arc<BudgetLease>>>>,
 }
 
 impl SpendLedger {
@@ -83,11 +35,7 @@ impl SpendLedger {
         local: Arc<SpendVelocityController>,
         durable: Option<Arc<PostgresDatabaseStore>>,
     ) -> Self {
-        Self {
-            local,
-            durable,
-            leases: Arc::new(RwLock::new(HashMap::new())),
-        }
+        Self { local, durable }
     }
 
     /// The process-local controller, retained for readiness checks and metrics.
@@ -114,8 +62,6 @@ impl SpendLedger {
     }
 
     /// Atomically reserves estimated budget for a tenant before origin dispatch.
-    /// Uses adaptive in-memory budget leasing under high throughput to eliminate
-    /// database row-lock contention while preserving strict fail-closed ceilings.
     pub async fn reserve(
         &self,
         tenant_id: &str,
@@ -127,57 +73,7 @@ impl SpendLedger {
             );
         };
 
-        let cost_micro = sunborn_core::MicroUnits::from_usd(estimated_cost).0;
-
-        // 1. High-concurrency fast path: Lock-free atomic reservation from active lease
-        if let Ok(guard) = self.leases.read() {
-            if let Some(lease) = guard.get(tenant_id) {
-                if lease.try_reserve(cost_micro) {
-                    return Ok(lease.reservation_id);
-                }
-            }
-        }
-
-        // 2. Lease acquisition or direct durable reservation
         let ceiling = self.local.ceiling_for_tenant(tenant_id);
-        let should_lease = ceiling >= 20.0 && estimated_cost > 0.0;
-        let lease_chunk = if should_lease {
-            (ceiling * 0.05).clamp(1.0, 5.0)
-        } else {
-            estimated_cost
-        };
-
-        if should_lease && lease_chunk > estimated_cost {
-            match durable
-                .reserve_spend(tenant_id, lease_chunk, ceiling, self.window())
-                .await
-            {
-                SpendReservationOutcome::Granted(lease_id) => {
-                    let lease_micro = sunborn_core::MicroUnits::from_usd(lease_chunk).0;
-                    let lease = Arc::new(BudgetLease::new(
-                        lease_id,
-                        lease_micro,
-                        Duration::from_secs(5),
-                    ));
-                    let _ = lease.try_reserve(cost_micro);
-                    if let Ok(mut guard) = self.leases.write() {
-                        guard.insert(tenant_id.to_string(), lease);
-                    }
-                    return Ok(lease_id);
-                }
-                SpendReservationOutcome::Denied { .. } => {
-                    // Headroom might be smaller than full lease chunk; fall through to exact cost reservation
-                }
-                SpendReservationOutcome::StoreUnavailable => {
-                    return Err(SpendLedgerError::Unavailable(
-                        "distributed spend ledger unavailable; request rejected (fail-closed)"
-                            .to_string(),
-                    ));
-                }
-            }
-        }
-
-        // 3. Fallback: Exact direct reservation from PostgreSQL
         match durable
             .reserve_spend(tenant_id, estimated_cost, ceiling, self.window())
             .await
