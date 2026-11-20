@@ -364,3 +364,142 @@ jobs:
           python scripts/check_openapi_drift.py
           bash deploy/verify_live_stack.sh
           python scripts/verify_doc_paths.py --strict
+
+  database-migration-verification:
+    name: Apply every migration to a real PostgreSQL
+    runs-on: ubuntu-latest
+    # Nothing else in this repository executes the migrations. Without this job
+    # the 11 files under migrations/ are untested SQL: a syntax error, a column
+    # that does not exist, or a constraint that never binds would be discovered
+    # for the first time on a customer's upgrade.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sunborn_ci
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: sunborn_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sunborn_ci -d sunborn_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 24
+    env:
+      DATABASE_URL: postgresql://sunborn_ci:ci_only_password@localhost:5432/sunborn_ci
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -y && sudo apt-get install -y postgresql-client
+          fi
+
+      - name: Apply migrations in filename order
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(migrations/*.sql)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "ERROR: no migrations found." >&2
+            exit 1
+          fi
+          echo "Applying ${#files[@]} migrations to a blank database."
+          for f in "${files[@]}"; do
+            echo "  -> $f"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --quiet -f "$f"
+          done
+          echo "All migrations applied cleanly from an empty database."
+
+      - name: Assert every migration produced its schema
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          DECLARE
+              required_tables text[] := ARRAY[
+                  'tenants', 'applications', 'api_credentials',
+                  'spend_reservations', 'spend_ledger_entries',
+                  'spend_tenant_ceilings', 'durable_cache_entries',
+                  'outbox_events', 'dependency_edges', 'tenant_encryption_keys'
+              ];
+              missing text;
+          BEGIN
+              SELECT string_agg(t, ', ') INTO missing
+                FROM unnest(required_tables) AS t
+               WHERE to_regclass(t) IS NULL;
+              IF missing IS NOT NULL THEN
+                  RAISE EXCEPTION 'migrations did not create: %', missing;
+              END IF;
+              RAISE NOTICE 'OK: all % required tables exist', array_length(required_tables, 1);
+          END $$;
+          SQL
+
+      - name: Assert the micro-unit constraints exist and are validated
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          DECLARE
+              expected text[] := ARRAY[
+                  'spend_reservations_amount_micro_units_non_negative',
+                  'spend_ledger_entries_amount_micro_units_non_negative',
+                  'spend_tenant_ceilings_ceiling_micro_units_non_negative'
+              ];
+              found int;
+          BEGIN
+              SELECT count(*) INTO found
+                FROM pg_constraint
+               WHERE conname = ANY(expected)
+                 AND convalidated;
+              IF found <> array_length(expected, 1) THEN
+                  RAISE EXCEPTION
+                      'expected % validated constraints, found %',
+                      array_length(expected, 1), found;
+              END IF;
+              RAISE NOTICE 'OK: all micro-unit constraints are validated';
+          END $$;
+          SQL
+
+      - name: Assert negative micro-units are rejected by the database
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          -- Each block inserts a negative amount and fails the job if the row is
+          -- accepted instead of raising check_violation.
+          DO $$
+          BEGIN
+              BEGIN
+                  INSERT INTO spend_reservations(reservation_id, tenant_id, amount_usd, amount_micro_units)
+                  VALUES (gen_random_uuid(), 'ci-tenant', 0, -1);
+                  RAISE EXCEPTION 'spend_reservations accepted a negative amount_micro_units';
+              EXCEPTION WHEN check_violation THEN
+                  RAISE NOTICE 'OK: spend_reservations rejected negative micro-units';
+              END;
+
+              BEGIN
+                  INSERT INTO spend_ledger_entries(tenant_id, reservation_id, amount_usd, amount_micro_units)
+                  VALUES ('ci-tenant', gen_random_uuid(), 0, -1);
+                  RAISE EXCEPTION 'spend_ledger_entries accepted a negative amount_micro_units';
+              EXCEPTION WHEN check_violation THEN
+                  RAISE NOTICE 'OK: spend_ledger_entries rejected negative micro-units';
+              END;
+
+              BEGIN
+                  INSERT INTO spend_tenant_ceilings(tenant_id, ceiling_usd, ceiling_micro_units)
+                  VALUES ('ci-tenant', 0, -1);
+                  RAISE EXCEPTION 'spend_tenant_ceilings accepted a negative ceiling_micro_units';
+              EXCEPTION WHEN check_violation THEN
+                  RAISE NOTICE 'OK: spend_tenant_ceilings rejected negative micro-units';
+              END;
+          END $$;
+          SQL
+
+      - name: Assert a zero ceiling and a positive reservation are accepted
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --quiet <<'SQL'
+          INSERT INTO spend_tenant_ceilings(tenant_id, ceiling_usd, ceiling_micro_units)
+          VALUES ('ci-tenant-ok', 0, 0);
+          INSERT INTO spend_reservations(reservation_id, tenant_id, amount_usd, amount_micro_units)
+          VALUES (gen_random_uuid(), 'ci-tenant-ok', 0.000001, 1);
+          SELECT 'OK: boundary values accepted' AS result;
+          SQL

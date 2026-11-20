@@ -4,7 +4,7 @@ use std::sync::Arc;
 use sunborn_cache::ExactCacheStore;
 use sunborn_core::error::SunbornError;
 use sunborn_core::model::{ApplicationId, TenantId};
-use sunborn_core::sync::read_lock;
+use sunborn_core::sync::{read_lock, write_lock};
 use sunborn_semantic::{
     cosine_similarity, DeterministicEmbeddingProvider, EmbeddingProvider, VectorStore,
 };
@@ -61,10 +61,7 @@ impl ShadowEvaluator {
     }
 
     pub fn record_observation(&self, similarity: f64, semantic_loss: f64) {
-        self.calibrator
-            .write()
-            .unwrap()
-            .record_shadow_evaluation(similarity, semantic_loss);
+        write_lock(&self.calibrator).record_shadow_evaluation(similarity, semantic_loss);
     }
 
     /// Evaluates semantic divergence between cached content and origin execution.

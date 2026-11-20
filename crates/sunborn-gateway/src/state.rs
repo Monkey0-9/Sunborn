@@ -551,20 +551,21 @@ impl AppState {
             .map(|t| t.is_durable())
             .unwrap_or(false);
 
-        let cluster_sync_engine = if let Some(ref gmc) = graph_memory_cache {
-            let engine = Arc::new(
-                sunborn_invalidation::DistributedGraphSyncEngine::new(
-                    pod_id.clone(),
-                    cluster_transport.as_ref().unwrap().clone(),
-                    gmc.clone(),
-                )
-                .with_vector_store(selected_vector.clone())
-                .with_epoch_manager(epoch_lease_manager.clone()),
-            );
-            drop(engine.clone().start_listener());
-            Some(engine)
-        } else {
-            None
+        let cluster_sync_engine = match (graph_memory_cache.as_ref(), cluster_transport.as_ref()) {
+            (Some(gmc), Some(transport)) => {
+                let engine = Arc::new(
+                    sunborn_invalidation::DistributedGraphSyncEngine::new(
+                        pod_id.clone(),
+                        transport.clone(),
+                        gmc.clone(),
+                    )
+                    .with_vector_store(selected_vector.clone())
+                    .with_epoch_manager(epoch_lease_manager.clone()),
+                );
+                drop(engine.clone().start_listener());
+                Some(engine)
+            }
+            _ => None,
         };
 
         let orchestrator = Arc::new(InvalidationOrchestrator::new(

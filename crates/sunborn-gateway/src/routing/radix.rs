@@ -49,7 +49,9 @@ impl RadixNode {
 
                 // Split existing edge
                 let edge_clone = edge.clone();
-                let mut existing_child = self.children.remove(&edge_clone).unwrap();
+                let Some(mut existing_child) = self.children.remove(&edge_clone) else {
+                    return;
+                };
 
                 let common_edge = edge_clone[..common_len].to_string();
                 let remaining_existing = edge_clone[common_len..].to_string();
@@ -241,11 +243,19 @@ impl KvCacheRouter {
         }
 
         // Step 2: Fallback to least-loaded backend node (Consistent Bounded Load)
-        let least_loaded = self
+        // Guarded by the early `nodes.is_empty()` return above; handled again
+        // here so an edit to that guard cannot panic a live request.
+        let Some(least_loaded) = self
             .nodes
             .iter()
             .min_by_key(|n| n.active_requests.load(Ordering::Relaxed))
-            .unwrap();
+        else {
+            return RoutingDecision {
+                selected_node: "default-origin".to_string(),
+                is_kv_affinity_hit: false,
+                matched_tokens: 0,
+            };
+        };
 
         least_loaded.active_requests.fetch_add(1, Ordering::Relaxed);
         RoutingDecision {

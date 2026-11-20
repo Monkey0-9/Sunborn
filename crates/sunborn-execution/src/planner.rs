@@ -115,7 +115,14 @@ impl ExecutionPlanner {
                 && node.tool_call.is_some();
 
             if can_reuse {
-                let tool_call = node.tool_call.as_ref().unwrap();
+                // `can_reuse` already requires `tool_call.is_some()`; re-check it
+                // here so this stays correct if that predicate is ever edited.
+                let Some(tool_call) = node.tool_call.as_ref() else {
+                    return Err(SunbornError::invalid_payload(format!(
+                        "Node '{}' was marked reusable without a tool call",
+                        node.id
+                    )));
+                };
 
                 // Incorporate upstream dependency signatures into context hash for strict causal lineage
                 let mut dep_context_parts = Vec::new();
@@ -217,8 +224,22 @@ impl ExecutionPlanner {
                         node.id, dep
                     )));
                 }
-                adj.get_mut(dep).unwrap().push(node.id.clone());
-                *in_degree.get_mut(&node.id).unwrap() += 1;
+                // Both maps are populated for every node above, so these are
+                // unreachable; return an error rather than panic if that ever
+                // drifts, since this input comes straight from the API.
+                let Some(dependents) = adj.get_mut(dep) else {
+                    return Err(SunbornError::invalid_payload(format!(
+                        "Dependency graph missing node '{dep}'"
+                    )));
+                };
+                dependents.push(node.id.clone());
+                let Some(degree) = in_degree.get_mut(&node.id) else {
+                    return Err(SunbornError::invalid_payload(format!(
+                        "Dependency graph missing node '{}'",
+                        node.id
+                    )));
+                };
+                *degree += 1;
             }
         }
 
@@ -231,10 +252,19 @@ impl ExecutionPlanner {
 
         let mut sorted = Vec::with_capacity(nodes.len());
         while let Some(u) = queue.pop_front() {
-            sorted.push(node_map.get(&u).unwrap().clone());
+            let Some(node) = node_map.get(&u) else {
+                return Err(SunbornError::invalid_payload(format!(
+                    "Queued node '{u}' is absent from the plan"
+                )));
+            };
+            sorted.push(node.clone());
             if let Some(neighbors) = adj.get(&u) {
                 for v in neighbors {
-                    let deg = in_degree.get_mut(v).unwrap();
+                    let Some(deg) = in_degree.get_mut(v) else {
+                        return Err(SunbornError::invalid_payload(format!(
+                            "Adjacency references unknown node '{v}'"
+                        )));
+                    };
                     *deg -= 1;
                     if *deg == 0 {
                         queue.push_back(v.clone());
