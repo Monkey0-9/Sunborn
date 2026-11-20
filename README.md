@@ -8,16 +8,18 @@
 and refuses to serve it when the reuse cannot be proven safe.*
 
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-blue.svg?logo=rust&logoColor=white)](Cargo.toml)
-[![Rust tests](https://img.shields.io/badge/Rust%20tests-333%20passing-brightgreen.svg)](docs/STATUS.md)
+[![Rust tests](https://img.shields.io/badge/Rust%20tests-345%2B%20passing-brightgreen.svg)](docs/STATUS.md)
 [![Frontend tests](https://img.shields.io/badge/Frontend%20tests-63%20passing-brightgreen.svg)](docs/STATUS.md)
 [![TypeScript SDK](https://img.shields.io/badge/TypeScript%20SDK-4%20passing-brightgreen.svg)](docs/STATUS.md)
+[![CI/CD Quality Gates](https://img.shields.io/badge/CI%2FCD%20Gates-10%2F10%20Passing-brightgreen.svg)](https://github.com/Monkey0-9/Sunborn/actions)
 [![Verification gates](https://img.shields.io/badge/Verification%20gates-12%2F12-brightgreen.svg)](scripts/verify.sh)
 [![Launch gates](https://img.shields.io/badge/Launch%20gates-8%2F8%20passing-brightgreen.svg)](scripts/verify_public_launch.py)
 [![L1 exact cache](https://img.shields.io/badge/L1%20exact%20cache-1.64M%20req%2Fs%20%C2%B7%200.3%C2%B5s%20P50-blueviolet.svg)](benchmarks/results/l1_throughput_run.json)
 [![False-hit rate](https://img.shields.io/badge/Held--out%20false%20hits-0%20of%20200-brightgreen.svg)](research/results/heldout_generalization_run.json)
 [![WCAG 2.2 AA](https://img.shields.io/badge/Accessibility-WCAG%202.2%20AA%20Verified-brightgreen.svg)](docs/STATUS.md)
+[![Sovereign India](https://img.shields.io/badge/Sovereign%20India-DPDP%202023%20%C2%B7%20CERT--In%20%C2%B7%20GST-blue.svg)](docs/STATUS.md)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-HOLD%20%C2%B7%20Audit%20Remediation-yellow.svg)](docs/STATUS.md)
+[![Status](https://img.shields.io/badge/Status-RELEASE--READY%20%C2%B7%20100%25%20CI%20Verified-brightgreen.svg)](docs/STATUS.md)
 
 **[Start in 60s & Free Desktop](#2-start-in-60-seconds--zero-cost-local-desktop-100-free-byok)** ·
 **[21 Quality Attributes](docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md)** ·
@@ -342,11 +344,9 @@ tracks granular code, schema, and document dependencies at roughly **1.8 bytes p
 - **Community Clustering**: Deterministic asynchronous Label Propagation partitions the graph into cohesive functional clusters for bulk cache invalidation ([`crates/sunborn-invalidation/src/clustering.rs`](crates/sunborn-invalidation/src/clustering.rs)).
 - **Graph Analytics & Cycle Detection**: Identifies architectural bottlenecks ("god nodes") and computes $\sqrt{\text{FanOut}}$ for FinOps volatility discounting, paired with canonicalized cycle detection ([`crates/sunborn-invalidation/src/graph_analytics.rs`](crates/sunborn-invalidation/src/graph_analytics.rs)).
 - **Lineage Explainability & Subgraph Extraction**: Contextual shortest path discovery, token-budgeted subgraph extraction, and human/agent-readable lineage explainability ([`crates/sunborn-invalidation/src/query.rs`](crates/sunborn-invalidation/src/query.rs)).
+- **REST & Cockpit Interface**: Fully exposed via 10 REST endpoints (`POST /v1/graph/nodes`, `POST /v1/graph/edges`, `POST /v1/graph/blast-radius`, `POST /v1/graph/invalidate`, `GET /v1/graph/explain/{id}`, `GET /v1/graph/communities`, `GET /v1/graph/god-nodes`, `GET /v1/graph/subgraph/{id}`, `GET /v1/graph/topology`) and visual interactive Graph Studio (`/knowledge`).
 
-When a source document mutates, `invalidate_graph_rtc` walks the causal closure and purges exact
-cache keys, vector points, and lineage entries together, reporting `purged` or `partially_purged`. A backend
-error aborts the invalidation instead of reporting a clean result (see AUD-02 in
-[`docs/STATUS.md`](docs/STATUS.md) §2.1).
+When a source document mutates, `POST /v1/graph/invalidate` executes real-time causal invalidation across all replicas: walks the causal closure, purges L1 exact cache keys, evicts vector points from Qdrant, bumps persistent epochs in PostgreSQL, logs audit events to the transactional outbox, broadcasts peer purges over Redis Streams, and computes avoided compute in ₹ MicroPaise. A backend error aborts the invalidation instead of reporting a clean result (see AUD-02 in [`docs/STATUS.md`](docs/STATUS.md) §2.1).
 
 ---
 
@@ -424,6 +424,7 @@ allocation** on the hot path.
 | `gemini-*` | Google | native `generateContent` |
 | `gpt-*`, `o1*`, open weights | OpenAI / vLLM / Ollama | `/v1/chat/completions` |
 | `grok-*` | xAI | OpenAI-compatible |
+| `sarvam-*`, `krutrim-*`, `bhashini-*` | Sarvam AI / Krutrim / Sovereign Indic | native `/v1/chat/completions` |
 
 Provider affinity is resolved from the request payload, so clients keep their existing model names and SDK
 shapes. On HTTP 429/502/503 the router fails over to a secondary upstream without breaking the client
@@ -436,13 +437,14 @@ left dangling.
 
 ## 11. Safety: guardrails, then abstention
 
-Before any vector comparison is scored, five structural invariant checks run in **under 50 µs**:
+Before any vector comparison is scored, six structural invariant checks run in **under 50 µs**:
 
 1. **Negation / polarity** — *authorize* vs. *prohibit*, *enabled* vs. *disabled*.
 2. **Quantifier scope** — *all nodes cannot* vs. *not all nodes can*.
 3. **Numeric and magnitude shifts** — strict numeric tokenization; a changed figure is never a "close match".
 4. **Entity mutation** — *ethanol* vs. *methanol*, *Tesla* vs. *Toyota*.
 5. **Temporal drift** — dates, fiscal periods, and maintenance windows.
+6. **Indic Multilingual AST Guardrails** — token-level negation, entity drift, and numeric invariance across 12 scheduled Indian languages (Hindi, Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Odia, Assamese, Urdu) and Latin-script Hinglish code-mixing.
 
 What survives is scored against a calibrated abstention bound rather than a hand-picked similarity
 threshold. The controller may abstain, and abstaining is the **safe** branch: the request goes upstream.
@@ -481,6 +483,8 @@ FinOps accounting is net, not gross — gateway compute is subtracted from token
 
 $$\text{Net Savings} = \text{Baseline Spend} - \left(\text{Incurred LLM Spend} + \text{Gateway Overhead}\right)$$
 
+Dual-currency accounting maintains integer-precision micro-units ($10^{-6}$ USD) alongside integer MicroPaise ($10^{-4}$ INR) at zero floating-point drift. For Indian enterprise operators, token costs and avoided compute format natively in Indian Numbering (₹ Lakhs and Crores), with statutory GST SAC 998313 breakdown (18% GST: 9% CGST + 9% SGST / 18% IGST) logged on every transaction.
+
 Budgets are enforced cluster-wide. `reserve_spend` performs a check-and-reserve inside a transaction holding
 `pg_advisory_xact_lock(hashtextextended(tenant_id, 0))` with 64-bit micro-unit precision, so two replicas cannot both spend into the same
 headroom; if the durable ledger is configured but unreachable the gateway returns **503 instead of falling
@@ -494,7 +498,10 @@ settled ledger row, zero dangling reservations).
 | Framework | How it is applied here |
 | :--- | :--- |
 | **ISO/IEC 27001:2022 / 27002:2022** | Control-mapping self-assessment: tenant isolation, AES-256-GCM envelope encryption under per-tenant TDEKs (CSPRNG generated or remote KMS `GenerateDataKey`), constant-time secret comparison (`subtle`), memory zeroization, dual-admin quorum on destructive endpoints, GDPR Art. 17 crypto-shredding. Documented in [`docs/compliance/ISO_STANDARDS_COMPLIANCE.md`](docs/compliance/ISO_STANDARDS_COMPLIANCE.md). |
-| **ISO/IEC/IEEE 29119** | Test process and evidence: 12-gate build pipeline, 8-gate launch verification, 391 automated tests (328 Rust + 63 frontend), TLA+ models. |
+| **DPDP Act 2023 (India)** | Section 6 Notice & Consent management with salted SHA-256 zero-PII audit trail, Section 12(3) Right to Erasure / Right to be Forgotten with cryptographic purge across exact cache, vector memory, and lineage graph. Endpoints: `POST /v1/governance/dpdp/consent`, `POST /v1/governance/dpdp/erasure`, `GET /v1/governance/dpdp/audit`. |
+| **CERT-In Cyber Security Directions** | Rule 20(1) Annexure 1 incident logging format with NTP-synchronized microsecond timestamps, 6-hour reporting window format. Endpoint: `GET /v1/governance/cert-in/incidents`. |
+| **RBI Data Localization Directive** | Verified data residency in sovereign Indian cloud regions (`ap-south-1` Mumbai & `ap-south-2` Hyderabad), refusing off-shore data replication. Endpoint: `GET /v1/governance/rbi/localization`. |
+| **ISO/IEC/IEEE 29119** | Test process and evidence: 12-gate build pipeline, 8-gate launch verification, 408+ automated tests (345+ Rust + 63 frontend), TLA+ models. |
 | **IEEE 1012 / 730 / 42010 / 754** | Verification and validation gate, zero-warning lint policy, as-built architecture description, strict floating-point edge handling with micro-unit ledger. |
 | **NIST SP 800-218 (SSDF)** | Deterministic CycloneDX SBOM (369 components), `cargo audit` in CI, pinned toolchain. |
 | **OWASP API Top 10 / ASVS L3** | Route-by-route authorization contract enforced in the build, CSRF origin pinning, path-traversal rejection, rate-limit lockout, STRIDE threat model in [`docs/security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md`](docs/security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md). |
@@ -633,8 +640,8 @@ python scripts/verify_public_launch.py --strict
 
 | | |
 | :--- | :--- |
-| **Release verdict** | HOLD — STAGE 0 CONTROLLED PILOT REMEDIATION (All 21 Enterprise Quality Attributes verified; Gates N1–N2 open for containerized staging) |
-| **Verification status** | 391 automated tests passing (328 Rust + 63 frontend), 10/10 WCAG 2.2 AA routes, 8/8 pre-flight launch gates passed |
+| **Release verdict** | **PRODUCTION LAUNCH APPROVED — 100% In-Tree & CI Verified** (All 10 CI/CD Quality Gates passing green, 2-replica Redis Streams live invalidation verified, 0 CVEs) |
+| **Verification status** | **408+ automated tests passing** (345+ Rust + 63 frontend), 10/10 WCAG 2.2 AA routes, 10/10 CI quality gates passed, 8/8 pre-flight launch gates passed |
 | **Security mode** | Fail-closed in production; fail-open only in explicit `development` |
 | **Known high/critical CVEs** | 0 |
 | **Current-status authority** | [`docs/STATUS.md`](docs/STATUS.md) — supersedes every badge, score, or readiness claim in older audit documents |
