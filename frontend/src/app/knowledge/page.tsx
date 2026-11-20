@@ -873,7 +873,7 @@ export default function KnowledgePage() {
       </div>
 
       {/* Multi-Relational Knowledge Graph & Causal Blast-Radius Studio */}
-      <Card glow="purple">
+      <Card glow="violet">
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <CardTitle className="text-base flex items-center gap-2">
