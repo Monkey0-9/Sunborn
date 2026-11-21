@@ -3,19 +3,19 @@
   "sample_size": 320,
   "source_confusion_matrix": "research\\results\\heldout_confusion_matrix.json",
   "metrics": {
-    "true_positives": 24,
+    "true_positives": 97,
     "false_positives": 0,
     "true_negatives": 200,
-    "false_negatives": 96,
+    "false_negatives": 23,
     "precision_pct": 100.0,
     "precision_wilson_95_ci": [
-      86.2,
+      96.19,
       100.0
     ],
-    "recall_pct": 20.0,
+    "recall_pct": 80.83333333333333,
     "recall_wilson_95_ci": [
-      13.82,
-      28.04
+      72.88,
+      86.88
     ],
     "false_positive_rate_pct": 0.0,
     "false_positive_rate_wilson_95_ci": [

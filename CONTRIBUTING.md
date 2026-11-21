@@ -72,7 +72,7 @@ assert the failure is now visible, not merely that the happy path works.
 **New claims or benchmarks** need the artifact that produces them committed next to the tool that generates
 it. Hand-typed numbers in a document, a printed confusion matrix, or a percentage copied from a previous run
 will be treated as a defect: the 2026-11-17 audit withdrew a release over exactly that
-([AUD-04](docs/engineering-audit-2026-11-17/REPORT.md)).
+(AUD-04 in [`docs/audit/DEFECT_REGISTER.md`](docs/audit/DEFECT_REGISTER.md)).
 
 We would rather merge a smaller change with an honest limitation than a larger one with an unverified
 superlative.
@@ -121,3 +121,8 @@ Not here. See [`SECURITY.md`](SECURITY.md).
 ## Code of conduct
 
 Participation is covered by [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+
+## Repository settings
+
+The branch-protection and required-check expectations this project is reviewed against are documented in
+[`.github/branch_protection.md`](.github/branch_protection.md).

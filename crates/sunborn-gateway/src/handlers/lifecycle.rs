@@ -159,6 +159,55 @@ pub async fn sweep_lifecycle(
     })))
 }
 
+/// Requeue outbox events parked in FAILED state (the effective DLQ).
+///
+/// Recovery step for the `SunbornInvalidationDLQCountHigh` alert. Requeueing
+/// rather than deleting means the same invalidation is retried by the worker;
+/// the historical `outbox_dlq` audit rows are left untouched.
+pub async fn replay_outbox_dlq(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    headers: axum::http::HeaderMap,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let quorum_key = headers
+        .get("x-quorum-admin-key")
+        .and_then(|v| v.to_str().ok());
+    sec_ctx
+        .require_admin_quorum(quorum_key, &state.api_key_registry)
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
+    let replayed = state
+        .db
+        .replay_outbox_dlq(OUTBOX_REPLAY_BATCH)
+        .await
+        .map_err(AppError::from)?;
+    let remaining = state
+        .db
+        .failed_outbox_depth()
+        .await
+        .map_err(AppError::from)?;
+
+    if remaining > 0 {
+        tracing::warn!(
+            replayed,
+            remaining,
+            batch = OUTBOX_REPLAY_BATCH,
+            "Outbox DLQ replay left events pending; call again to continue draining"
+        );
+    }
+
+    Ok(Json(json!({
+        "status": if remaining == 0 { "drained" } else { "partial" },
+        "replayed": replayed,
+        "remaining_failed": remaining,
+        "batch_size": OUTBOX_REPLAY_BATCH,
+    })))
+}
+
+/// Bounded per call so a large DLQ cannot turn one admin request into an
+/// unbounded write burst. Operators call repeatedly, or schedule it.
+const OUTBOX_REPLAY_BATCH: usize = 100;
+
 pub async fn chaos_status(State(state): State<AppState>) -> impl IntoResponse {
     let status = state.circuit_breaker.status().await;
     Json(json!({

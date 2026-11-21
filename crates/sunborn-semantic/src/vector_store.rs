@@ -188,6 +188,80 @@ pub fn canonical_qdrant_point_id(id: &str) -> String {
     )
 }
 
+/// HNSW and storage parameters used when a collection is created.
+///
+/// Qdrant's defaults are sized for small collections. At the 10^7-vector scale
+/// the collection is built with a fixed HNSW graph so query latency does not
+/// drift with corpus growth, payload stored on disk so RAM holds only vectors,
+/// and optional int8 scalar quantization that cuts the resident vector footprint
+/// by ~75% at a small recall cost. Quantization stays opt-in because the recall
+/// trade-off has not been measured on this corpus.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CollectionTuning {
+    pub hnsw_m: u64,
+    pub hnsw_ef_construct: u64,
+    pub quantization: bool,
+}
+
+impl Default for CollectionTuning {
+    fn default() -> Self {
+        Self {
+            hnsw_m: 16,
+            hnsw_ef_construct: 128,
+            quantization: false,
+        }
+    }
+}
+
+impl CollectionTuning {
+    pub fn from_env() -> Self {
+        let defaults = Self::default();
+        let read_u64 = |key: &str, fallback: u64| {
+            std::env::var(key)
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .filter(|v| *v > 0)
+                .unwrap_or(fallback)
+        };
+        Self {
+            hnsw_m: read_u64("SUNBORN_QDRANT_HNSW_M", defaults.hnsw_m),
+            hnsw_ef_construct: read_u64(
+                "SUNBORN_QDRANT_HNSW_EF_CONSTRUCT",
+                defaults.hnsw_ef_construct,
+            ),
+            quantization: sunborn_core::config::parse_bool_env(
+                "SUNBORN_QDRANT_QUANTIZATION",
+                false,
+            )
+            .unwrap_or(false),
+        }
+    }
+
+    /// Request body for `PUT /collections/{name}`.
+    pub fn payload(&self, dim: usize) -> serde_json::Value {
+        let mut payload = serde_json::json!({
+            "vectors": {
+                "size": dim,
+                "distance": "Cosine"
+            },
+            "hnsw_config": {
+                "m": self.hnsw_m,
+                "ef_construct": self.hnsw_ef_construct
+            },
+            "on_disk_payload": true
+        });
+        if self.quantization {
+            payload["quantization_config"] = serde_json::json!({
+                "scalar": {
+                    "type": "int8",
+                    "always_ram": true
+                }
+            });
+        }
+        payload
+    }
+}
+
 /// Production Qdrant vector store adapter providing cosine distance search with strict tenant filters
 #[derive(Clone)]
 pub struct QdrantVectorStore {
@@ -196,6 +270,7 @@ pub struct QdrantVectorStore {
     client: reqwest::Client,
     fallback_store: Arc<MemoryVectorStore>,
     pub strict_mode: bool,
+    pub tuning: CollectionTuning,
 }
 
 impl QdrantVectorStore {
@@ -222,6 +297,7 @@ impl QdrantVectorStore {
             client,
             fallback_store: Arc::new(MemoryVectorStore::new()),
             strict_mode: strict,
+            tuning: CollectionTuning::from_env(),
         }
     }
 
@@ -238,7 +314,15 @@ impl QdrantVectorStore {
             client,
             fallback_store: Arc::new(MemoryVectorStore::new()),
             strict_mode: true,
+            tuning: CollectionTuning::from_env(),
         }
+    }
+
+    /// Overrides the collection tuning, primarily so tests can pin it without
+    /// mutating process-wide environment variables.
+    pub fn with_tuning(mut self, tuning: CollectionTuning) -> Self {
+        self.tuning = tuning;
+        self
     }
 
     /// Actively validates Qdrant vector database health via HTTP endpoint reachability.
@@ -265,12 +349,7 @@ impl QdrantVectorStore {
             self.endpoint_url.trim_end_matches('/'),
             self.collection_name
         );
-        let payload = serde_json::json!({
-            "vectors": {
-                "size": dim,
-                "distance": "Cosine"
-            }
-        });
+        let payload = self.tuning.payload(dim);
         match self.client.put(&url).json(&payload).send().await {
             Ok(resp) => {
                 let status = resp.status();
@@ -684,5 +763,55 @@ mod tests {
         // Verify distinct keys produce distinct point IDs
         let id3 = canonical_qdrant_point_id("sunborn:tenant-beta:app-2:chat");
         assert_ne!(id1, id3);
+    }
+}
+
+#[cfg(test)]
+mod collection_tuning_tests {
+    use super::*;
+
+    #[test]
+    fn payload_sets_hnsw_graph_and_disk_payload() {
+        let tuning = CollectionTuning::default();
+        let payload = tuning.payload(384);
+
+        assert_eq!(payload["vectors"]["size"], 384);
+        assert_eq!(payload["vectors"]["distance"], "Cosine");
+        assert_eq!(payload["hnsw_config"]["m"], 16);
+        assert_eq!(payload["hnsw_config"]["ef_construct"], 128);
+        assert_eq!(
+            payload["on_disk_payload"], true,
+            "payload must live on disk so RAM holds vectors only"
+        );
+    }
+
+    #[test]
+    fn quantization_is_absent_unless_enabled() {
+        let off = CollectionTuning::default();
+        assert!(
+            off.payload(384).get("quantization_config").is_none(),
+            "an unmeasured recall trade-off must not be enabled implicitly"
+        );
+
+        let on = CollectionTuning {
+            quantization: true,
+            ..CollectionTuning::default()
+        };
+        let payload = on.payload(384);
+        assert_eq!(payload["quantization_config"]["scalar"]["type"], "int8");
+        assert_eq!(payload["quantization_config"]["scalar"]["always_ram"], true);
+    }
+
+    #[test]
+    fn tuning_is_overridable_without_touching_the_environment() {
+        let tuned =
+            QdrantVectorStore::new("http://localhost:6333", "c").with_tuning(CollectionTuning {
+                hnsw_m: 32,
+                hnsw_ef_construct: 256,
+                quantization: true,
+            });
+        assert_eq!(tuned.tuning.hnsw_m, 32);
+        assert_eq!(tuned.tuning.hnsw_ef_construct, 256);
+        assert!(tuned.tuning.payload(8)["quantization_config"].is_object());
     }
 }

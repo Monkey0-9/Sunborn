@@ -11,7 +11,7 @@ spec:
     - name: sunborn-gateway.rules
       rules:
         - alert: SunbornTenantQuotaExhaustionCritical
-          expr: rate(sunborn_quota_rejections_total[5m]) > 0.5
+          expr: rate(sunborn_quota_exceeded_total[5m]) > 0.5
           for: 2m
           labels:
             severity: warning
@@ -43,15 +43,15 @@ spec:
             description: "Distributed cache cluster (DragonflyDB/Redis) is unreachable; gateway has failed-through to origin."
             runbook_url: "https://github.com/Monkey0-9/Sunborn/blob/main/docs/runbooks/incident_playbooks.md#playbook-3-distributed-cache-store-outage-dragonflydb--redis"
 
-        - alert: SunbornQdrantClusterUnreachable
-          expr: rate(sunborn_vector_search_errors_total[5m]) > 0.1
+        - alert: SunbornSemanticTierDegraded
+          expr: rate(sunborn_semantic_eval_failures_total[5m]) > 0.1
           for: 2m
           labels:
             severity: warning
             tier: vector
           annotations:
-            summary: "Semantic retrieval errors detected on Qdrant vector cluster"
-            description: "Qdrant cluster queries are failing; semantic path is abstaining to origin."
+            summary: "Semantic tier is failing and every request is going to origin"
+            description: "Embedding or vector-store errors forced semantic evaluation to abstain. Requests still succeed, but cache hit rate and origin cost are silently degraded."
             runbook_url: "https://github.com/Monkey0-9/Sunborn/blob/main/docs/runbooks/incident_playbooks.md#playbook-4-vector-store-qdrant-outage--exact-path-fallback"
 
         - alert: SunbornPostgresConnectionPoolExhausted
@@ -72,6 +72,17 @@ spec:
             severity: warning
             tier: invalidation
           annotations:
-            summary: "Dead-letter queue accumulation in causal invalidation outbox"
-            description: "Document invalidation events failed downstream delivery and were routed to DLQ."
-            runbook_url: "https://github.com/Monkey0-9/Sunborn/blob/main/docs/runbooks/incident_playbooks.md#playbook-6-invalidation-outbox-stream-backlog--dlq-accumulation"
+            summary: "Outbox events exhausted retries and are parked in FAILED state"
+            description: "Durable invalidation events did not complete after max_retries. Replay them with POST /v1/lifecycle/outbox/replay once the downstream store is healthy; stale entries may be served until then."
+            runbook_url: "https://github.com/Monkey0-9/Sunborn/blob/main/docs/runbooks/incident_playbooks.md#playbook-6-invalidation-outbox-dlq-accumulation"
+
+        - alert: SunbornInvalidationPartialFailure
+          expr: increase(sunborn_invalidation_partial_failures_total[5m]) > 0
+          for: 1m
+          labels:
+            severity: critical
+            tier: invalidation
+          annotations:
+            summary: "Invalidation left stale keys behind"
+            description: "At least one cache key or dependency edge could not be evicted. Stale entries may be served until the next successful invalidation; inspect the response `failed_keys` field for the failing store."
+            runbook_url: "https://github.com/Monkey0-9/Sunborn/blob/main/docs/runbooks/incident_playbooks.md#playbook-7-partial-invalidation-stale-keys-left-behind"

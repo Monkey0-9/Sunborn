@@ -105,6 +105,7 @@ Write-Host "[12/12] Strict Documentation & Attestation CLI Verification..." -For
 & $PythonBin scripts/verify_doc_paths.py --strict
 if ($LASTEXITCODE -ne 0) { throw "Strict doc path verification failed" }
 & $PythonBin scripts/check_launch_docs.py
+& $PythonBin scripts/check_runbook_endpoints.py
 if ($LASTEXITCODE -ne 0) { throw "Launch documentation link and claims gate failed" }
 cargo run -p sunborn-verify -- --help | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "sunborn-verify CLI execution failed" }

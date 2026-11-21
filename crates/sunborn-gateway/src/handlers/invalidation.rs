@@ -296,6 +296,15 @@ pub async fn invalidate_graph_rtc(
     } else {
         "failed"
     };
+    if !failed_keys.is_empty() {
+        record_invalidation_partial_failure();
+        tracing::error!(
+            failed = failed_keys.len(),
+            purged = count,
+            status,
+            "Invalidation completed with un-evicted keys; stale entries may be served"
+        );
+    }
 
     Ok(Json(json!({
         "status": status,

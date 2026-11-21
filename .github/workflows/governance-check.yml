@@ -35,7 +35,7 @@ jobs:
           readme = Path("README.md").read_text(encoding="utf-8")
           status = Path("docs/STATUS.md").read_text(encoding="utf-8")
           checklist = Path("docs/launch/05_PRELAUNCH_CHECKLIST.md").read_text(encoding="utf-8")
-          defect = Path("docs/engineering-transformation/25_DEFECT_REGISTER.md").read_text(encoding="utf-8")
+          defect = Path("docs/audit/DEFECT_REGISTER.md").read_text(encoding="utf-8")
 
           errors = []
 
@@ -47,10 +47,10 @@ jobs:
               errors.append("05_PRELAUNCH_CHECKLIST.md contradicts STATUS.md regarding Stage 0 Pilot approval.")
 
           if "**Open P0 / P1 Defects:** 0" not in defect and "Open P0 / P1 Defects: 0" not in defect:
-              errors.append("25_DEFECT_REGISTER.md must report 0 open P0/P1 defects.")
+              errors.append("DEFECT_REGISTER.md must report 0 open P0/P1 defects.")
 
           if "Issue #3" not in defect or "Issue #10" not in defect:
-              errors.append("25_DEFECT_REGISTER.md missing formal ledger entries for Issues #3 through #10.")
+              errors.append("DEFECT_REGISTER.md missing formal ledger entries for Issues #3 through #10.")
 
           if errors:
               print("ERROR: Governance SSOT verification failed:")

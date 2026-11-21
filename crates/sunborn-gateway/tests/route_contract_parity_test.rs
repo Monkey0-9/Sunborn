@@ -187,6 +187,11 @@ const ROUTES: &[Route] = &[
         access: Access::Admin,
     },
     Route {
+        method: "POST",
+        path: "/v1/lifecycle/outbox/replay",
+        access: Access::Admin,
+    },
+    Route {
         method: "GET",
         path: "/v1/cluster/status",
         access: Access::Tenant,

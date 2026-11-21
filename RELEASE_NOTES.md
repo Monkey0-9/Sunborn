@@ -10,7 +10,7 @@
 ## Release: `v1.0.0` — **RESCINDED on 2026-11-17**
 
 **Originally dated**: November 15, 2026  
-**Withdrawn**: November 17, 2026, after the audit in [`docs/engineering-audit-2026-11-17/REPORT.md`](docs/engineering-audit-2026-11-17/REPORT.md)  
+**Withdrawn**: November 17, 2026, after an audit whose finding was that published figures were not reproducible from the repository  
 **Current verdict**: **CONDITIONAL GO — CONTROLLED PILOT ONLY** ([`docs/STATUS.md`](docs/STATUS.md))
 
 This entry claimed "production release complete", a 9.71/10 quality score, and 100% green suites.
@@ -62,7 +62,7 @@ The earlier 0.144 ms came from a run of the same test and sits within normal run
 | **D-11** | **P2** | Accessibility | **WCAG 2.2 AA Conformance**: Form controls, ARIA landmarks, and high-contrast color tokens pass automated accessibility tests. |
 | **D-12** | **P2** | Governance | **Dual-Admin Quorum Authorization**: Required $M$-of-$N$ cryptographic signatures on destructive tenant purge endpoints. |
 
-Authoritative transformation documentation and inventories are located in [`docs/engineering-transformation/`](docs/engineering-transformation/01_README.md).
+Current status and the closed-defect register are [`docs/STATUS.md`](docs/STATUS.md) and [`docs/audit/DEFECT_REGISTER.md`](docs/audit/DEFECT_REGISTER.md).
 
 ---
 
@@ -96,7 +96,7 @@ The current verified-check ledger is maintained in [`docs/STATUS.md`](docs/STATU
 **Audited Baseline**: October 21, 2026 Master Completion Audit and Institutional-Readiness Plan  
 **Repository**: `Monkey0-9/Sunborn`  
 **License**: Apache License 2.0 (see [LICENSE](LICENSE))  
-**Governance Plan**: [`docs/MASTER_ENGINEERING_PLAN.md`](docs/MASTER_ENGINEERING_PLAN.md)  
+**Engineering governance**: [`GOVERNANCE.md`](GOVERNANCE.md)  
 **Linear Traceability**: `MON-458` (Master Execution Control), `MON-526` (Architecture Freeze), `WS-00`–`WS-12`, `Phase 00`–`Phase 28`  
 
 ### 1. Institutional Verdict & Operational Clearance

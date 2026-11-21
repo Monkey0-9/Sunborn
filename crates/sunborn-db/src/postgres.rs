@@ -1867,6 +1867,18 @@ impl DatabaseStore for PostgresDatabaseStore {
         self.fallback_store.replay_outbox_dlq(limit).await
     }
 
+    async fn failed_outbox_depth(&self) -> Result<usize> {
+        if let Some(pool) = self.get_pool().await {
+            let row: (i64,) =
+                sqlx::query_as("SELECT COUNT(*) FROM outbox_events WHERE status = 'FAILED'")
+                    .fetch_one(&pool)
+                    .await
+                    .map_err(|e| SunbornError::database(e.to_string()))?;
+            return Ok(row.0.max(0) as usize);
+        }
+        self.fallback_store.failed_outbox_depth().await
+    }
+
     async fn load_all_epochs(&self) -> Result<std::collections::HashMap<Uuid, u64>> {
         let pool = self.get_pool().await.ok_or_else(|| {
             SunbornError::database("PostgreSQL epoch authority unavailable; cannot load epochs")

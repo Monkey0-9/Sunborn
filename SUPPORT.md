@@ -16,7 +16,7 @@ badge, blog post, or older audit document disagrees with it, `STATUS.md` is corr
 | Integrate from Python | [`sdk/python/README.md`](sdk/python/README.md) |
 | Deploy to Kubernetes | [`deploy/`](deploy/), [`docs/runbooks/`](docs/runbooks/) |
 | Audit the HTTP surface | [`docs/api/openapi.yaml`](docs/api/openapi.yaml) |
-| See the assurance evidence | [`docs/STATUS.md`](docs/STATUS.md) §1, [`docs/engineering-audit-2026-11-17/REPORT.md`](docs/engineering-audit-2026-11-17/REPORT.md) |
+| See the assurance evidence | [`docs/STATUS.md`](docs/STATUS.md) §1 (commands and results), [`docs/audit/DEFECT_REGISTER.md`](docs/audit/DEFECT_REGISTER.md) |
 | Report a vulnerability | [`SECURITY.md`](SECURITY.md) — **not** a public issue |
 | Contribute a change | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 

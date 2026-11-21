@@ -19,6 +19,7 @@ impl IntoResponse for AppError {
             sunborn_core::ErrorCode::RateLimitExceeded => StatusCode::TOO_MANY_REQUESTS,
             sunborn_core::ErrorCode::CacheMiss => StatusCode::NOT_FOUND,
             sunborn_core::ErrorCode::CacheUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+            sunborn_core::ErrorCode::CapacityExceeded => StatusCode::SERVICE_UNAVAILABLE,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 

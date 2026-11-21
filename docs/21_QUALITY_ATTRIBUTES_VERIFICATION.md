@@ -138,7 +138,7 @@ Sunborn is an ultra-low-latency distributed semantic execution gateway for front
 - **Architectural Guarantee**: Comprehensive, multi-tiered test harness with automated CI pipelines.
 - **Verification Evidence**:
   - Master system verification pipeline (`scripts/verify.sh` / `scripts/verify.ps1`) executing 12 automated verification gates.
-  - Scientific hold-out benchmark: 320 held-out pairs with 0 false positives, 100% precision, Clopper-Pearson 99.9% bound < 3.4% (`research/results/heldout_generalization_run.json`).
+  - Guardrail benchmark: 320 pairs (120 equivalent, 200 hard negatives) with 0 false positives (100% precision; Clopper-Pearson 99.9% upper bound < 3.4%) and 80.8% recall (97/120) after read-only verb-class normalisation. The dataset informed that normaliser, so this is regression evidence rather than an unbiased holdout estimate (`research/results/heldout_generalization_run.json`, `heldout_confusion_matrix.json`).
 
 ### 18. Observability
 - **Architectural Guarantee**: Deep distributed tracing, structured JSON logging, and Prometheus metric exposition.

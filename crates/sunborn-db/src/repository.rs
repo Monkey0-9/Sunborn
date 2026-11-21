@@ -40,6 +40,11 @@ pub trait DatabaseStore: Send + Sync {
     async fn mark_outbox_failed(&self, id: i64, error: &str) -> Result<()>;
     /// Requeue DLQ events for another processing attempt. Returns the count.
     async fn replay_outbox_dlq(&self, limit: usize) -> Result<usize>;
+    /// Number of outbox events currently parked in FAILED state, i.e. the
+    /// effective DLQ depth. This is what `replay_outbox_dlq` can clear, so it is
+    /// the value to alert on: the historical `outbox_dlq` audit rows are kept
+    /// after a replay and would keep a naive `count(*)` alert firing forever.
+    async fn failed_outbox_depth(&self) -> Result<usize>;
     /// Authoritative source epochs for recovery/rebuild verification.
     async fn load_all_epochs(&self) -> Result<HashMap<Uuid, u64>>;
     async fn record_audit_event(&self, audit: AuditRecord) -> Result<()>;
@@ -215,6 +220,11 @@ impl DatabaseStore for MemoryDatabaseStore {
             }
         }
         Ok(replayed)
+    }
+
+    async fn failed_outbox_depth(&self) -> Result<usize> {
+        let outbox = self.outbox.read().await;
+        Ok(outbox.iter().filter(|e| e.status == "FAILED").count())
     }
 
     async fn load_all_epochs(&self) -> Result<HashMap<Uuid, u64>> {

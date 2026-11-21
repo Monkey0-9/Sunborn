@@ -59,6 +59,15 @@ The Sunborn gateway provides standard RFC-compliant HTTP probes:
   - `sunborn_cache_hits_total{tier="exact"}`: Tier 0/1 deterministic hash hits.
   - `sunborn_cache_hits_total{tier="semantic"}`: Tier 2 conformal semantic retrieval hits.
   - `sunborn_cache_misses_total`: Fallthrough cache misses dispatched to origin LLMs.
+  - `sunborn_semantic_eval_failures_total`: Semantic evaluations that errored and degraded to origin. Requests still succeed when this rises, so it is the only signal that the semantic tier is down.
+  - `sunborn_cache_circuit_breaker_status{state="closed|open|half_open"}`: One-hot gauge of the live cache breaker state.
+  - `sunborn_spend_ledger_errors_total`: Spend reservations rejected because the durable ledger was unavailable (fail-closed).
+  - `sunborn_invalidation_partial_failures_total`: Invalidations that left at least one key or edge un-evicted.
+  - `sunborn_request_duration_seconds_{bucket,sum,count}`: Cumulative request latency histogram.
+
+  Every metric referenced by `deploy/k8s/prometheusrule.yaml` is asserted to be present in a
+  live `/metrics` scrape by `crates/sunborn-gateway/tests/observability_contract_test.rs`;
+  an alert on an absent metric fails the build instead of silently never firing.
 
 ---
 

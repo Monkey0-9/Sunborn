@@ -112,8 +112,8 @@ current verdict to **CONDITIONAL GO — controlled pilot**; see [`docs/STATUS.md
   - Unified sequential migration runner tracking SHA-256 checksums in `_sunborn_migrations` (migrations 0001 through 0005).
 - **Dual-Admin Quorum Authorization (`crates/sunborn-gateway/src/middleware/auth.rs`)**:
   - Enforced $M$-of-$N$ cryptographic signature verification on destructive administrative routes (`/v1/admin/purge`, `/v1/admin/crypto-shred`).
-- **Comprehensive Documentation Suite (`docs/engineering-transformation/`)**:
-  - 32 in-depth engineering transformation reports and 3 machine-readable CSV inventories (`files.csv`, `features.csv`, `scores_matrix.csv`).
+- **Documentation consolidation (2026-11-21)**:
+  - Removed the 32-report `docs/engineering-transformation/` corpus, the 54-file independent audit corpus, the superseded 2026-11-17 audit report and four redundant executive documents. Current status lives in `docs/STATUS.md`; the closed-defect register moved to `docs/audit/DEFECT_REGISTER.md`.
 
 #### Changed
 - **Frontend Architecture (`frontend/src/app`)**:

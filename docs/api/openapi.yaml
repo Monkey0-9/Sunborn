@@ -2037,6 +2037,41 @@ paths:
         '403':
           description: Administrative privileges required
 
+  /v1/lifecycle/outbox/replay:
+    post:
+      summary: Replay Outbox Dead-Letter Events
+      description: >
+        Requeues up to 100 outbox events parked in FAILED state (the effective
+        DLQ) so the background worker retries them. Requires two-person control
+        in production via `x-quorum-admin-key`. Append-only `outbox_dlq` audit
+        rows are preserved.
+      tags:
+        - Operations
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Replay result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [drained, partial]
+                  replayed:
+                    type: integer
+                  remaining_failed:
+                    type: integer
+                  batch_size:
+                    type: integer
+        '401':
+          description: Unauthorized
+        '403':
+          description: Administrative quorum required
+
   /v1/security/evaluate:
     post:
       summary: Scan Prompt for Security Risks

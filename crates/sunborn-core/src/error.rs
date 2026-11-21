@@ -11,6 +11,10 @@ pub enum ErrorCode {
     TenantNotFound,
     InvalidPayload,
     RateLimitExceeded,
+    /// A bounded in-process structure (for example the dependency graph) is
+    /// full. Distinct from a rate limit: the caller is authorised and the
+    /// request is valid, but accepting it would make memory unbounded.
+    CapacityExceeded,
     CacheMiss,
     CacheUnavailable,
     OriginError,
@@ -64,6 +68,10 @@ impl SunbornError {
 
     pub fn configuration_error(msg: impl Into<String>) -> Self {
         Self::new(ErrorCode::ConfigurationError, msg)
+    }
+
+    pub fn capacity_exceeded(msg: impl Into<String>) -> Self {
+        Self::new(ErrorCode::CapacityExceeded, msg)
     }
 
     pub fn tenant_not_found(msg: impl Into<String>) -> Self {

@@ -160,8 +160,8 @@ Sunborn enforces zero-trust fail-closed security invariants across all runtime p
    ```
 3. Verify readiness probe returns healthy status:
    ```bash
-   curl -fsS http://localhost:8080/ready | jq '.dragonfly'
-   # Expected: "healthy"
+   curl -fsS http://localhost:8080/ready | jq '.components.cache.status'
+   # Expected: "connected" (cache status is "unavailable" during an outage)
    ```
 
 ---
@@ -169,9 +169,10 @@ Sunborn enforces zero-trust fail-closed security invariants across all runtime p
 ## Playbook 4: Vector-Store (Qdrant) Outage & Exact-Path Fallback
 
 ### 4.1 Detection & Symptoms
-- Alert: `SunbornQdrantClusterUnreachable`.
-- Gateway logs: `Semantic vector search failed; abstaining to Origin due to vector store unavailability`.
-- Exact cache (`c0_exact`, `c1_exact`) operates with 100% fidelity. Only semantic retrieval (Tier 2) abstains.
+- Alert: `SunbornSemanticTierDegraded` (`rate(sunborn_semantic_eval_failures_total[5m]) > 0.1`).
+- Gateway logs: `Semantic evaluation failed; degrading to exact-cache miss plus origin`, with the underlying error on the same event.
+- Exact cache (`c0_exact`, `c1_exact`) operates with 100% fidelity. Only semantic retrieval (Tier 2) abstains, so requests keep succeeding while the hit rate and origin cost silently degrade.
+- The same alert also fires when the embedding provider is unreachable, not only Qdrant — read the logged `error` field to tell them apart.
 
 ### 4.2 Diagnostic & Isolation Steps
 1. Query Qdrant cluster health endpoint:
@@ -204,7 +205,7 @@ Sunborn enforces zero-trust fail-closed security invariants across all runtime p
 ## Playbook 5: Distributed Spend Ledger Outage & Advisory Lock Contention
 
 ### 5.1 Detection & Symptoms
-- Alert: `SunbornPostgresConnectionPoolExhausted` or `SunbornSpendLedgerAdvisoryLockTimeout`.
+- Alert: `SunbornPostgresConnectionPoolExhausted` (`rate(sunborn_spend_ledger_errors_total[5m]) > 0.05`).
 - Gateway logs: `Spend ledger unavailable; failing closed with 503`.
 - Invariant enforcement: System strictly refuses to process new inference requests without pre-allocated spend reservation.
 
@@ -240,38 +241,103 @@ Sunborn enforces zero-trust fail-closed security invariants across all runtime p
 
 ---
 
-## Playbook 6: Invalidation Outbox Stream Backlog & DLQ Accumulation
+## Playbook 6: Invalidation Outbox DLQ Accumulation
 
 ### 6.1 Detection & Symptoms
 - Alert: `SunbornInvalidationDLQCountHigh` (`sunborn_invalidation_dlq > 0`).
-- Outbox pending records growing monotonically in table `invalidation_outbox`.
-- Risk: Invalidation lag SLI exceeds 60-second beta target; stale cached entries may be served.
+- The gauge counts outbox events in `FAILED` state — events that exhausted
+  `max_retries` (default 5). Each retry is recorded in `outbox_events.last_error`.
+- Risk: the invalidation never completed, so a cached entry or dependency edge
+  is still live. Unlike a partial failure this one is durable: it survives
+  restarts until replayed.
 
 ### 6.2 Diagnostic Steps
-1. Inspect dead-letter queue depth and failure reasons:
+1. Inspect the failed events and their last error:
    ```sql
-   SELECT error_reason, count(*), min(created_at), max(created_at) 
-   FROM invalidation_dlq 
-   GROUP BY error_reason;
+   SELECT id, tenant_id, entity_type, entity_id, retry_count, last_error
+   FROM outbox_events
+   WHERE status = 'FAILED'
+   ORDER BY id
+   LIMIT 20;
    ```
-2. Inspect pending outbox stream backlog:
+2. The immutability audit trail of every dead-lettered attempt:
    ```sql
-   SELECT count(*) FROM invalidation_outbox WHERE status = 'pending';
+   SELECT outbox_id, tenant_id, entity_id, error_message, retry_count, failed_at
+   FROM outbox_dlq
+   ORDER BY failed_at DESC
+   LIMIT 20;
+   ```
+   `outbox_dlq` is append-only history: a row stays after a successful replay,
+   which is why the alert uses the `FAILED` count and not `count(*)` on this table.
+3. Classify the error in `last_error`: a downstream store outage needs
+   Playbooks 3/4; `Unsupported outbox event` means the worker rejected the
+   event type and a retry will fail the same way.
+
+### 6.3 Recovery
+1. Fix the underlying store if the error is an outage.
+2. Requeue the failed events. The endpoint is bounded to 100 events per call and
+   is admin-quorum protected; the background worker picks them up on its next
+   cycle:
+   ```bash
+   curl -fsS -X POST http://localhost:8080/v1/lifecycle/outbox/replay \
+     -H "x-api-key: $SUNBORN_ADMIN_KEY" \
+     -H "x-quorum-admin-key: $SUNBORN_QUORUM_ADMIN_KEY" | jq
+   # {"status":"drained","replayed":N,"remaining_failed":0,"batch_size":100}
+   ```
+3. Repeat while `status` is `partial`; `remaining_failed` reports what is left.
+4. Confirm `sunborn_invalidation_dlq` returns to 0 and the queued events reach
+   `PROCESSED`:
+   ```sql
+   SELECT status, count(*) FROM outbox_events GROUP BY status;
    ```
 
-### 6.3 Recovery & DLQ Drain Procedure
-1. Verify downstream subscriber pods are running and consuming Redis Stream / PostgreSQL notification channels:
+---
+
+## Playbook 7: Partial Invalidation (Stale Keys Left Behind)
+
+### 7.1 Detection & Symptoms
+- Alert: `SunbornInvalidationPartialFailure` (`increase(sunborn_invalidation_partial_failures_total[5m]) > 0`).
+- Unlike Playbook 6, the invalidation ran but at least one store refused the
+  delete; the outbox event may still be marked processed.
+- Gateway logs: `Invalidation completed with un-evicted keys; stale entries may be served`, with `failed` and `purged` counts.
+- Risk: a cache entry or dependency edge survives an invalidation, so a later request can be served content that should already be gone.
+
+### 7.2 Diagnostic Steps
+Invalidation is synchronous: the caller receives the per-store outcome, so the
+first place to look is the response body of the failing invalidation, not a
+table.
+
+1. Re-run the invalidation and read `failed_keys`; each entry is prefixed with
+the store that rejected the delete (`exact_cache:`, `vector_store:`,
+`dependency_graph:`, `graph_memory:`, `doc_hashes:`).
    ```bash
-   kubectl get pods -l app.kubernetes.io/name=sunborn-sync-worker -n sunborn-system
+   curl -fsS -X POST http://localhost:8080/v1/invalidation \
+     -H "Content-Type: application/json" \
+     -H "x-api-key: $SUNBORN_ADMIN_KEY" \
+     -d '{"tenant_id":"tenant-enterprise-pilot-01","source_id":"<uuid>","version_tag":"v2"}' \
+     | jq '{status, purged_count, failed_keys}'
    ```
-2. Trigger automated outbox drain and dead-letter queue re-injection:
-   ```bash
-   curl -fsS -X POST http://localhost:8080/v1/lifecycle/sweep \
-     -H "Authorization: Bearer $SUNBORN_ADMIN_KEY" | jq
-   ```
-3. Confirm DLQ is emptied and pending outbox count drops to zero:
-   ```sql
-   SELECT count(*) FROM invalidation_outbox WHERE status = 'pending';
-   -- Expected: 0
-   ```
-4. Verify end-to-end freshness by publishing a canary document invalidation and querying `sunborn_invalidation_lag_seconds`.
+   `status` is `purged`, `partially_purged` or `failed`; anything other than
+   `purged` means at least one store did not confirm the delete.
+2. Match the prefix to the failing dependency:
+   - `exact_cache:` — cache store unreachable; check the circuit-breaker alert
+     and `curl -fsS http://localhost:8080/ready`.
+   - `vector_store:` — Qdrant unavailable; see Playbook 4.
+   - `dependency_graph:` / `graph_memory:` — graph edge cleanup failed; the
+     cached entry is gone but lineage may now be stale.
+   - `doc_hashes:` — document-hash eviction failed; the next retrieval can
+     re-materialise the document.
+
+### 7.3 Recovery
+1. Restore the failing store (Playbooks 3 and 4).
+2. Re-issue the same invalidation once the store is healthy. The operation is
+   idempotent: re-deleting an absent key succeeds.
+3. Confirm `status` is `purged` and `failed_keys` is empty, and that
+   `sunborn_invalidation_partial_failures_total` stops increasing.
+
+### 7.4 Relationship to the outbox
+A partial failure is reported to the caller and counted, but it does not by
+itself park an event in the DLQ: the outbox event is acknowledged once the purge
+call returns. If you need guaranteed retry of a store that was down, treat the
+non-`purged` status as a failure at your orchestration layer, or rely on the
+DLQ path in Playbook 6 (events that fail inside the worker).

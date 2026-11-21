@@ -103,6 +103,7 @@ echo "[11/12] Generating deterministic CycloneDX SBOM..."
 echo "[12/12] Strict Documentation & Attestation CLI Verification..."
 "${PYTHON_BIN}" scripts/verify_doc_paths.py --strict
 "${PYTHON_BIN}" scripts/check_launch_docs.py
+"${PYTHON_BIN}" scripts/check_runbook_endpoints.py
 cargo run -p sunborn-verify -- --help > /dev/null
 
 echo ""

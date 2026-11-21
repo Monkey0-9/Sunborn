@@ -27,7 +27,7 @@ and refuses to serve it when the reuse cannot be proven safe.*
 **[Client Showcase](scripts/client_showcase.py)** ·
 **[Enterprise Architecture](docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md)** ·
 **[Operator Runbook](docs/runbooks/pilot_operator_onboarding.md)** ·
-**[Master Audit Register](docs/audit/2026-11-19_MASTER_REMEDIATION_REGISTER.md)** ·
+**[Defect Register](docs/audit/DEFECT_REGISTER.md)** ·
 **[Status (SSOT)](docs/STATUS.md)** ·
 **[Verification](#16-verification-pipeline-1212--88)**
 
@@ -201,9 +201,9 @@ each artifact; the ratios between configurations travel better than the absolute
 | **L1 mixed get/insert** | 1,638,227 req/s · P50 0.300 µs · P99 1.100 µs | [`benchmarks/results/l1_throughput_run.json`](benchmarks/results/l1_throughput_run.json) |
 | **Gateway stack, release, sequential** | 13,241.1 req/s · P50 0.070 ms · P99 0.166 ms over 5,000 requests | [`benchmarks/results/gateway_performance_run.json`](benchmarks/results/gateway_performance_run.json) |
 | **Gateway stack, 16 concurrent workers** | 11,116.0 req/s · P50 1.368 ms · P99 2.398 ms over 10,000 requests · 0 failures | [`benchmarks/production_soak_results.json`](benchmarks/production_soak_results.json) |
-| **Held-out safety, N = 320** | 24 correct reuses · **0 false hits on 200 hard negatives** · precision 100% [95% Wilson 86.2–100] · recall 20% [13.8–28.0] | [`research/results/heldout_generalization_run.json`](research/results/heldout_generalization_run.json) |
+| **Guardrail benchmark, N = 320** | 97 correct reuses · **0 false hits on 200 hard negatives** · precision 100% [95% Wilson 96.2–100] · recall 80.8% [72.9–86.9] | [`research/results/heldout_generalization_run.json`](research/results/heldout_generalization_run.json) |
 | **Comparative evaluation, 25 queries** | 32.0% verified hit rate · 0.0% false hits · 0.0% stale reads · 31.97% net spend reduction | [`benchmarks/results/competitive_benchmark_run.json`](benchmarks/results/competitive_benchmark_run.json) |
-| **Test surface** | 333 Rust + 63 frontend + 4 TypeScript SDK + 27 Python tests · 10 routes with 0 serious/critical axe violations · 253 verified tab stops | [`docs/STATUS.md`](docs/STATUS.md) |
+| **Test surface** | 395 Rust + 67 frontend + 4 TypeScript SDK + 27 Python tests · 10 routes with 0 serious/critical axe violations · 271 verified tab stops | [`docs/STATUS.md`](docs/STATUS.md) |
 | **21 Enterprise Quality Attributes** | 21/21 verified with architectural invariants, formal proofs, and audit commands | [`docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`](docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md) |
 | **8 In-Tree Pre-Flight Launch Gates** | 8/8 automated gates verified passing in strict mode | [`scripts/verify_public_launch.py`](scripts/verify_public_launch.py) |
 | **Formal models** | 3 TLC configurations, no errors (2,245 / 601 / 21 states explored) | [`formal/`](formal/), [`scripts/run_tlaplus.sh`](scripts/run_tlaplus.sh) |
@@ -457,7 +457,7 @@ dimensions, `research/calibration/held_out_eval_dataset.json`):
 
 | | Reuses | TP | FP | TN | FN | Precision | Recall (95%) | False-hit (95%) |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Complete guardrail | 24 | 24 | **0** | 200 | 96 | 100% [86.2, 100] | 20.0% [13.8, 28.0] | **0.0% [0.0, 1.88]** |
+| Complete guardrail | 97 | 97 | **0** | 200 | 23 | 100% [96.2, 100] | 80.8% [72.9, 86.9] | **0.0% [0.0, 1.88]** |
 
 - Exact Clopper–Pearson 99.9% upper bound on the false-hit rate: **3.39%**.
 - `alpha_supported_by_999_upper_bound = false` for α = 0.001 — recorded honestly in the artifact, and the
@@ -465,6 +465,10 @@ dimensions, `research/calibration/held_out_eval_dataset.json`):
 - The same counts are asserted by
   `guardrails::tests::test_held_out_evaluation_dataset_precision_and_recall`, so the JSON and the code
   cannot drift apart.
+- **Provenance caveat:** the read-only verb-class normaliser behind the 80.8% recall was developed with
+  this dataset in view, so these figures are regression evidence, not an unbiased holdout estimate. The
+  dataset is kept as an adversarial tripwire: any relaxation that starts accepting an opposite action
+  surfaces as a false positive and fails the build.
 
 ---
 
@@ -528,7 +532,7 @@ Sunborn provides rigorous operational runbooks for cluster administrators, secur
 - **[Pilot Operator Onboarding Runbook](docs/runbooks/pilot_operator_onboarding.md)**: Four-phase procedure for credential provisioning, tenant namespace isolation, financial spend quotas, and synthetic verification probes prior to opening traffic.
 - **[Disaster Recovery & Cache-State Reconstruction](apps/sunborn-rebuild/)**: Outbox replay and state reconstruction tool (`sunborn-rebuild`) for zero-loss recovery following storage incidents.
 - **[Incident Response & Emergency Playbooks](docs/runbooks/incident_playbooks.md)**: Step-by-step procedures for upstream model provider brownouts, causal graph partitions, and emergency tenant cryptographic key revocation.
-- **[Master Audit Remediation Register](docs/audit/2026-11-19_MASTER_REMEDIATION_REGISTER.md)**: Full defect tracking and architectural resolution register for all 52 audit items.
+- **[Defect Register](docs/audit/DEFECT_REGISTER.md)**: Closed-defect ledger with the regression test that proves each fix.
 
 ---
 
@@ -562,10 +566,13 @@ Sunborn/
 Further reading: [Launch package — stages, free tier, capacity/SLOs, trust center](docs/launch/README.md) ·
 [21 System Quality Attributes Dossier](docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md) ·
 [Engineering governance](GOVERNANCE.md) · [Roadmap with exit criteria](ROADMAP.md) ·
-[Executive brief — one page, every figure linked](docs/EXECUTIVE_BRIEF.md) ·
-[Enterprise deliverables register (26 packages)](docs/ENTERPRISE_DELIVERABLES_REGISTER.md) ·
-[2026-11-17 audit report](docs/engineering-audit-2026-11-17/REPORT.md) ·
-[Runbooks](docs/runbooks/) · [ADRs](docs/adr/).
+[Current status and verified gates](docs/STATUS.md) ·
+[Architecture dossier](docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md) ·
+[Security assessment and threat model](docs/security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md) ·
+[Runbooks](docs/runbooks/) — [operations](docs/runbooks/operations.md), [incident playbooks](docs/runbooks/incident_playbooks.md), [troubleshooting](docs/runbooks/troubleshooting.md) —
+[agent integration quickstart](docs/integrations/ai_agents_quickstart.md) ·
+[calibration evidence appendix](research/ARTIFACT-APPENDIX.md) ·
+[ADR-001 architecture baseline](docs/adr/ADR-001-architecture-baseline.md) · [all ADRs](docs/adr/).
 
 Project policies: [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) ·
 [Support](SUPPORT.md) · [Code of conduct](CODE_OF_CONDUCT.md). Report vulnerabilities privately —

@@ -160,6 +160,7 @@ pub async fn execute_request_inner(
             .into());
         }
         Err(crate::finops::SpendLedgerError::Unavailable(detail)) => {
+            record_spend_ledger_error();
             tracing::error!(tenant = %req.tenant_id.0, error = %detail, "Spend ledger unavailable; failing closed");
             return Err(SunbornError::cache_unavailable(detail).into());
         }
@@ -383,15 +384,27 @@ pub async fn execute_request_inner(
             let weights = state
                 .learning_controller
                 .select_policy_for_request(req_hash);
-            if let Ok(outcome) = state
+            let eval_result = state
                 .decision_engine
                 .evaluate_with_thresholds(
                     &req,
                     weights.min_similarity_threshold,
                     weights.max_risk_threshold,
                 )
-                .await
-            {
+                .await;
+            // An embedding or vector-store outage degrades the request to origin
+            // instead of failing it. That is the right availability trade-off, but
+            // it is invisible without this signal: the request still returns 200,
+            // so nothing else would reveal that the semantic tier is gone.
+            if let Err(err) = &eval_result {
+                record_semantic_eval_failure();
+                tracing::warn!(
+                    request_id = %req.request_id.0,
+                    error = %err,
+                    "Semantic evaluation failed; degrading to exact-cache miss plus origin"
+                );
+            }
+            if let Ok(outcome) = eval_result {
                 if outcome.decision.action == DecisionAction::SafeHit {
                     if let Some(content) = outcome.matched_content {
                         SEMANTIC_HITS.fetch_add(1, Ordering::Relaxed);

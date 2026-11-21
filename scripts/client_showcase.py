@@ -575,7 +575,24 @@ def run_pillar_6_telemetry_probe(live_url: Optional[str] = None, quiet: bool = F
 # Main Orchestrator
 # ==============================================================================
 
+def _force_utf8_streams() -> None:
+    """Windows consoles default to cp1252, which cannot encode the check marks this suite prints.
+
+    Without this, ``--self-test`` raises UnicodeEncodeError as soon as stdout is redirected to a
+    file or pipe, which is exactly how the release gate invokes it.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
 def main():
+    _force_utf8_streams()
     parser = argparse.ArgumentParser(description="Sunborn Enterprise Client Evaluation Suite")
     parser.add_argument("--self-test", action="store_true", help="Execute all evaluation gates and verify exit code 0")
     parser.add_argument("--live-url", type=str, default=None, help="Base URL of running Sunborn gateway")

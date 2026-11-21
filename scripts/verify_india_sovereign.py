@@ -131,7 +131,24 @@ def test_rbi_localization():
     assert active_secondary in allowed_regions
     print("  ✓ RBI Storage of Payment System Data Localization (Mumbai/Hyderabad): PASS")
 
+def _force_utf8_streams() -> None:
+    """Windows consoles default to cp1252, which cannot encode the check marks printed below.
+
+    Without this, the suite raises UnicodeEncodeError as soon as stdout is redirected to a file
+    or pipe, which is how CI and the verification scripts invoke it.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
 def main():
+    _force_utf8_streams()
     print("================================================================================")
     print("SUNBORN SOVEREIGN INDIAN EDITION VERIFICATION SUITE")
     print("================================================================================")

@@ -125,18 +125,29 @@ curl -X POST http://localhost:8080/v1/governance/provision \
 Generate an authenticated, scoped API credential:
 
 ```bash
-curl -X POST http://localhost:8080/v1/credentials/create \
+curl -X POST http://localhost:8080/v1/auth/credentials \
   -H "Content-Type: application/json" \
   -H "x-api-key: $SUNBORN_ADMIN_KEY" \
+  -H "x-quorum-admin-key: $SUNBORN_QUORUM_ADMIN_KEY" \
   -d '{
     "tenant_id": "tenant-enterprise-pilot-01",
     "application_id": "app-pilot-rag",
     "rate_limit_rps": 50,
     "allowed_models": ["gpt-4o", "claude-3-5-sonnet"],
     "is_admin": false,
-    "expires_at": "2026-12-31T23:59:59Z"
+    "expires_in_secs": 31536000
   }'
 ```
+
+`x-quorum-admin-key` is mandatory in production mode: credential issuance
+requires two-person control, and the second key must belong to a different
+administrator than the primary caller (`$SUNBORN_QUORUM_ADMIN_KEY` is separate
+from `$SUNBORN_ADMIN_KEY`). Setting `SUNBORN_ADMIN_QUORUM_REQUIRED=false`
+disables the second key for local testing only. The response contains the raw
+key exactly once; only its hash is persisted.
+
+`expires_in_secs` is a relative lifetime, not a timestamp. Omit it for a
+non-expiring key.
 
 ---
 
@@ -158,7 +169,7 @@ curl -X POST http://localhost:8080/v1/governance/spend-ceiling \
 ### 5.2 Setting Daily & Monthly Request Quotas
 
 ```bash
-curl -X POST http://localhost:8080/v1/governance/quota \
+curl -X POST http://localhost:8080/v1/governance/tenant-quota \
   -H "Content-Type: application/json" \
   -H "x-api-key: $SUNBORN_ADMIN_KEY" \
   -d '{
@@ -189,31 +200,40 @@ Key golden signals:
 
 ### 6.2 Grafana Dashboard Setup
 Import the pre-configured Grafana telemetry dashboard from:
-[`deploy/grafana/sunborn_gateway_dashboard.json`](file:///C:/Sunborn/deploy/grafana/sunborn_gateway_dashboard.json).
+[`deploy/grafana/sunborn_gateway_dashboard.json`](../../deploy/grafana/sunborn_gateway_dashboard.json).
 
 ---
 
 ## 7. Emergency Response & Kill Switches
 
 ### 7.1 Emergency Cryptographic Shredding (GDPR Article 17)
-To immediately and irreversibly delete a tenant's cached data across all stores in < 1 millisecond:
+Crypto-shredding destroys the tenant's data-encryption key, which makes every
+ciphertext written under it permanently unreadable. The gateway then cascades
+the deletion across the exact cache, vector store, execution store, database,
+learning store, API credentials and quota ledger. The key destruction itself is
+sub-millisecond; the cascade scales with how much data the tenant has stored.
 
 ```bash
 curl -X POST http://localhost:8080/v1/governance/shred \
   -H "Content-Type: application/json" \
   -H "x-api-key: $SUNBORN_ADMIN_KEY" \
+  -H "x-quorum-admin-key: $SUNBORN_QUORUM_ADMIN_KEY" \
   -d '{
     "tenant_id": "tenant-enterprise-pilot-01"
   }'
 ```
 
+The response reports per-store deletion counts and the key-shred duration, so
+the cascade is auditable rather than assumed.
+
 ### 7.2 Immediate Credential Revocation
 Revoke a compromised credential instantly across all cluster replicas:
 
 ```bash
-curl -X POST http://localhost:8080/v1/credentials/revoke \
+curl -X POST http://localhost:8080/v1/auth/credentials/revoke \
   -H "Content-Type: application/json" \
   -H "x-api-key: $SUNBORN_ADMIN_KEY" \
+  -H "x-quorum-admin-key: $SUNBORN_QUORUM_ADMIN_KEY" \
   -d '{
     "key_hash": "a1b2c3d4e5..."
   }'

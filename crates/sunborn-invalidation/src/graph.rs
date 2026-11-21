@@ -72,22 +72,55 @@ pub trait KnowledgeGraphStore: Send + Sync {
 /// snapshot. Two independent locks allowed a concurrent key-edge write between
 /// the dependency read and the hierarchy read, which could truncate a
 /// transitive invalidation set for that call.
-#[derive(Clone, Default)]
+/// Upper bound on live lineage edges held by one in-memory graph.
+///
+/// Lineage grew without limit before: every cached response records an edge and
+/// nothing reclaimed them unless the owning source was invalidated, so a long
+/// lived process leaked memory monotonically. 1,000,000 edges is far beyond any
+/// working set observed in testing while keeping worst-case memory bounded.
+pub const DEFAULT_MAX_EDGES: usize = 1_000_000;
+
+fn capacity_error(max_edges: usize) -> SunbornError {
+    SunbornError::capacity_exceeded(format!(
+        "dependency graph edge capacity exhausted ({max_edges} edges); invalidate lineage before recording more"
+    ))
+}
+
+#[derive(Clone)]
 pub struct InMemoryGraphStore {
     state: Arc<RwLock<InMemoryGraphState>>,
+    max_edges: usize,
+}
+
+impl Default for InMemoryGraphStore {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Default)]
 struct InMemoryGraphState {
     dependencies: HashMap<Uuid, HashSet<String>>,
     key_hierarchy: HashMap<String, HashSet<String>>,
+    /// Live edges across both maps. Maintained incrementally so the cap check in
+    /// `record_dependency` stays O(1) instead of summing the maps on every write.
+    edge_count: usize,
 }
 
 impl InMemoryGraphStore {
     pub fn new() -> Self {
+        Self::with_max_edges(DEFAULT_MAX_EDGES)
+    }
+
+    pub fn with_max_edges(max_edges: usize) -> Self {
         Self {
             state: Arc::new(RwLock::new(InMemoryGraphState::default())),
+            max_edges,
         }
+    }
+
+    pub fn max_edges(&self) -> usize {
+        self.max_edges
     }
 
     /// Remove hierarchy edges that no live source dependency can reach.
@@ -114,6 +147,14 @@ impl InMemoryGraphStore {
             children.retain(|child| reachable.contains(child));
             reachable.contains(parent) && !children.is_empty()
         });
+        // Recompute rather than subtract: pruning drops whole sets and is the
+        // one path where a hand-maintained decrement would silently drift.
+        state.edge_count = state.dependencies.values().map(HashSet::len).sum::<usize>()
+            + state
+                .key_hierarchy
+                .values()
+                .map(HashSet::len)
+                .sum::<usize>();
     }
 
     #[cfg(test)]
@@ -130,21 +171,46 @@ impl KnowledgeGraphStore for InMemoryGraphStore {
 
     async fn record_dependency(&self, source_id: Uuid, cache_key: &str) -> Result<()> {
         let mut state = self.state.write().await;
-        state
+        let already_present = state
+            .dependencies
+            .get(&source_id)
+            .is_some_and(|keys| keys.contains(cache_key));
+        if !already_present && state.edge_count >= self.max_edges {
+            // Refuse rather than evict: dropping an existing edge would leave a
+            // cached response with no lineage, so it would survive the very
+            // invalidation it should have caught.
+            return Err(capacity_error(self.max_edges));
+        }
+        if state
             .dependencies
             .entry(source_id)
             .or_default()
-            .insert(cache_key.to_string());
+            .insert(cache_key.to_string())
+            && !already_present
+        {
+            state.edge_count += 1;
+        }
         Ok(())
     }
 
     async fn record_key_dependency(&self, child_key: &str, parent_key: &str) -> Result<()> {
         let mut state = self.state.write().await;
-        state
+        let already_present = state
+            .key_hierarchy
+            .get(parent_key)
+            .is_some_and(|children| children.contains(child_key));
+        if !already_present && state.edge_count >= self.max_edges {
+            return Err(capacity_error(self.max_edges));
+        }
+        if state
             .key_hierarchy
             .entry(parent_key.to_string())
             .or_default()
-            .insert(child_key.to_string());
+            .insert(child_key.to_string())
+            && !already_present
+        {
+            state.edge_count += 1;
+        }
         Ok(())
     }
 
@@ -181,11 +247,20 @@ impl KnowledgeGraphStore for InMemoryGraphStore {
 
     async fn remove_dependency(&self, source_id: &Uuid, cache_key: &str) -> Result<()> {
         let mut state = self.state.write().await;
-        if let Some(set) = state.dependencies.get_mut(source_id) {
-            set.remove(cache_key);
-            if set.is_empty() {
-                state.dependencies.remove(source_id);
-            }
+        let removed = state
+            .dependencies
+            .get_mut(source_id)
+            .map(|set| {
+                let removed = set.remove(cache_key);
+                let empty = set.is_empty();
+                (removed, empty)
+            })
+            .unwrap_or((false, false));
+        if removed.0 {
+            state.edge_count = state.edge_count.saturating_sub(1);
+        }
+        if removed.1 {
+            state.dependencies.remove(source_id);
         }
         Self::prune_unreachable_hierarchy(&mut state);
         Ok(())
@@ -193,7 +268,9 @@ impl KnowledgeGraphStore for InMemoryGraphStore {
 
     async fn clear_dependencies(&self, source_id: &Uuid) -> Result<()> {
         let mut state = self.state.write().await;
-        state.dependencies.remove(source_id);
+        if let Some(removed) = state.dependencies.remove(source_id) {
+            state.edge_count = state.edge_count.saturating_sub(removed.len());
+        }
         Self::prune_unreachable_hierarchy(&mut state);
         Ok(())
     }
@@ -897,5 +974,97 @@ mod tests {
             store.endpoint(),
             "http://neo4j-cluster.corp:7474/db/neo4j/tx/commit"
         );
+    }
+}
+
+#[cfg(test)]
+mod capacity_tests {
+    use super::*;
+    use sunborn_core::ErrorCode;
+
+    fn bounded(max_edges: usize) -> DependencyGraph {
+        DependencyGraph::with_store(Arc::new(InMemoryGraphStore::with_max_edges(max_edges)))
+    }
+
+    #[tokio::test]
+    async fn edge_capacity_is_enforced_and_refuses_rather_than_evicts() {
+        let graph = bounded(2);
+        let src = Uuid::new_v4();
+
+        graph.record_dependency(src, "key:one").await.unwrap();
+        graph.record_dependency(src, "key:two").await.unwrap();
+
+        let err = graph
+            .record_dependency(src, "key:three")
+            .await
+            .expect_err("third edge must be refused at capacity");
+        assert_eq!(err.code, ErrorCode::CapacityExceeded);
+
+        // Existing lineage must survive: refusing the write must not evict.
+        let mut affected = graph.get_affected_cache_keys(&src).await.unwrap();
+        affected.sort();
+        assert_eq!(affected, vec!["key:one".to_string(), "key:two".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn re_recording_an_existing_edge_is_idempotent_at_capacity() {
+        let graph = bounded(1);
+        let src = Uuid::new_v4();
+
+        graph.record_dependency(src, "key:one").await.unwrap();
+        // Same edge again: no new lineage, so it must not be rejected.
+        graph.record_dependency(src, "key:one").await.unwrap();
+
+        assert_eq!(graph.get_affected_cache_keys(&src).await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn removing_lineage_releases_capacity() {
+        let graph = bounded(1);
+        let src = Uuid::new_v4();
+
+        graph.record_dependency(src, "key:one").await.unwrap();
+        assert!(graph.record_dependency(src, "key:two").await.is_err());
+
+        graph.remove_dependency(&src, "key:one").await.unwrap();
+        graph
+            .record_dependency(src, "key:two")
+            .await
+            .expect("capacity freed by removal must be reusable");
+    }
+
+    #[tokio::test]
+    async fn clearing_a_source_releases_all_of_its_capacity() {
+        let graph = bounded(2);
+        let src = Uuid::new_v4();
+
+        graph.record_dependency(src, "key:one").await.unwrap();
+        graph.record_dependency(src, "key:two").await.unwrap();
+        graph.clear_dependencies(&src).await.unwrap();
+
+        graph.record_dependency(src, "key:three").await.unwrap();
+        graph.record_dependency(src, "key:four").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn key_hierarchy_edges_share_the_same_budget() {
+        let graph = bounded(2);
+        let src = Uuid::new_v4();
+
+        graph.record_dependency(src, "root").await.unwrap();
+        graph.record_key_dependency("child", "root").await.unwrap();
+
+        let err = graph
+            .record_key_dependency("grandchild", "child")
+            .await
+            .expect_err("hierarchy edges must consume the same budget");
+        assert_eq!(err.code, ErrorCode::CapacityExceeded);
+    }
+
+    #[tokio::test]
+    async fn default_graph_is_bounded_and_reports_its_limit() {
+        let store = InMemoryGraphStore::new();
+        assert_eq!(store.max_edges(), DEFAULT_MAX_EDGES);
+        const { assert!(DEFAULT_MAX_EDGES >= 100_000) };
     }
 }

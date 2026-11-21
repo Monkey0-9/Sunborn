@@ -1,6 +1,7 @@
 //! Handlers grouped by domain; see `super` for shared imports.
 
 use super::*;
+use sunborn_cache::CircuitStatus as SunbornCacheCircuitStatus;
 
 /// Build identity, exposed by `/health` and `/version`.
 fn build_metadata() -> serde_json::Value {
@@ -112,7 +113,7 @@ pub async fn ready(State(state): State<AppState>) -> impl IntoResponse {
     (status_code, Json(report))
 }
 
-pub async fn metrics() -> impl IntoResponse {
+pub async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
     let requests = REQUESTS_TOTAL.load(Ordering::Relaxed);
     let exact = EXACT_HITS.load(Ordering::Relaxed);
     let semantic = SEMANTIC_HITS.load(Ordering::Relaxed);
@@ -193,6 +194,58 @@ pub async fn metrics() -> impl IntoResponse {
          sunborn_build_info{{version=\"{version}\",git_sha=\"{git_sha}\",profile=\"{profile}\"}} 1\n",
         profile = build["build_profile"].as_str().unwrap_or("unknown")
     );
+
+    // Degradations are counted separately from errors: a request served from
+    // origin after a failed semantic evaluation is a success for the caller and
+    // an outage for the cache tier.
+    let output = format!(
+        "{output}\
+         # HELP sunborn_semantic_eval_failures_total Semantic evaluations that failed and degraded to origin\n\
+         # TYPE sunborn_semantic_eval_failures_total counter\n\
+         sunborn_semantic_eval_failures_total{{scope=\"process_local\"}} {}\n",
+        semantic_eval_failures()
+    );
+
+    // Infrastructure gauges are read from live runtime state. Every series the
+    // shipped alert rules reference is produced here, so a rule that fires
+    // corresponds to a condition the gateway can actually report.
+    let (cb_closed, cb_open, cb_half_open) = match state.circuit_breaker.status().await {
+        SunbornCacheCircuitStatus::Closed => (1, 0, 0),
+        SunbornCacheCircuitStatus::Open => (0, 1, 0),
+        SunbornCacheCircuitStatus::HalfOpen => (0, 0, 1),
+    };
+    let output = format!(
+        "{output}\
+         # HELP sunborn_cache_circuit_breaker_status Cache circuit breaker state as a one-hot gauge\n\
+         # TYPE sunborn_cache_circuit_breaker_status gauge\n\
+         sunborn_cache_circuit_breaker_status{{state=\"closed\"}} {cb_closed}\n\
+         sunborn_cache_circuit_breaker_status{{state=\"open\"}} {cb_open}\n\
+         sunborn_cache_circuit_breaker_status{{state=\"half_open\"}} {cb_half_open}\n\
+         # HELP sunborn_spend_ledger_errors_total Spend reservations rejected because the durable ledger was unavailable\n\
+         # TYPE sunborn_spend_ledger_errors_total counter\n\
+         sunborn_spend_ledger_errors_total{{scope=\"process_local\"}} {}\n\
+         # HELP sunborn_invalidation_partial_failures_total Invalidations that left at least one key or edge un-evicted\n\
+         # TYPE sunborn_invalidation_partial_failures_total counter\n\
+         sunborn_invalidation_partial_failures_total{{scope=\"process_local\"}} {}\n",
+        spend_ledger_errors(),
+        invalidation_partial_failures()
+    );
+
+    // DLQ depth needs a database round trip, which can fail independently of
+    // everything else. When it does, omit the sample instead of reporting a
+    // reassuring zero: `absent()` is a truthful scrape result, a fake 0 is not.
+    let mut output = format!(
+        "{output}\
+         # HELP sunborn_invalidation_dlq Outbox events parked in FAILED state (cleared by replay)\n\
+         # TYPE sunborn_invalidation_dlq gauge\n"
+    );
+    match state.db.failed_outbox_depth().await {
+        Ok(depth) => output.push_str(&format!("sunborn_invalidation_dlq {depth}\n")),
+        Err(err) => tracing::warn!(
+            error = %err,
+            "Failed to read outbox DLQ depth; omitting sunborn_invalidation_dlq from this scrape"
+        ),
+    }
 
     (
         StatusCode::OK,

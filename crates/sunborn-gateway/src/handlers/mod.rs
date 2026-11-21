@@ -40,6 +40,10 @@ use uuid::Uuid;
 static REQUESTS_TOTAL: AtomicU64 = AtomicU64::new(0);
 static EXACT_HITS: AtomicU64 = AtomicU64::new(0);
 static SEMANTIC_HITS: AtomicU64 = AtomicU64::new(0);
+/// Counts semantic evaluations that returned an error and degraded to origin.
+/// Without this an embedding/vector outage is invisible: requests still succeed,
+/// so neither latency nor error rate reveals that the cache tier is gone.
+static SEMANTIC_EVAL_FAILURES: AtomicU64 = AtomicU64::new(0);
 static CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
 static RATE_LIMITED_TOTAL: AtomicU64 = AtomicU64::new(0);
 static SPEND_VELOCITY_REJECTIONS_TOTAL: AtomicU64 = AtomicU64::new(0);
@@ -88,6 +92,41 @@ pub(crate) fn observe_request_latency(duration_ms: u64) {
 /// Pins the process start instant. Call once during startup so
 /// `sunborn_uptime_seconds` reflects real process age rather than the first
 /// scrape.
+/// Counts invalidation requests that left at least one cache key or edge
+/// un-evicted. A stale cache entry is a correctness bug, so this is a signal to
+/// page on rather than a debug aid.
+static INVALIDATION_PARTIAL_FAILURES: AtomicU64 = AtomicU64::new(0);
+
+pub fn invalidation_partial_failures() -> u64 {
+    INVALIDATION_PARTIAL_FAILURES.load(Ordering::Relaxed)
+}
+
+pub(crate) fn record_invalidation_partial_failure() {
+    INVALIDATION_PARTIAL_FAILURES.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Counts spend-ledger reservation failures. The request is rejected
+/// (fail-closed) whenever this increments, so it is an availability signal, not
+/// a warning: the tenant cannot spend until the ledger recovers.
+static SPEND_LEDGER_ERRORS: AtomicU64 = AtomicU64::new(0);
+
+pub fn spend_ledger_errors() -> u64 {
+    SPEND_LEDGER_ERRORS.load(Ordering::Relaxed)
+}
+
+pub(crate) fn record_spend_ledger_error() {
+    SPEND_LEDGER_ERRORS.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Number of semantic evaluations that failed and fell through to origin.
+pub fn semantic_eval_failures() -> u64 {
+    SEMANTIC_EVAL_FAILURES.load(Ordering::Relaxed)
+}
+
+pub(crate) fn record_semantic_eval_failure() {
+    SEMANTIC_EVAL_FAILURES.fetch_add(1, Ordering::Relaxed);
+}
+
 pub fn init_metrics() {
     PROCESS_START.get_or_init(Instant::now);
 }

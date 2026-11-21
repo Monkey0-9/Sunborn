@@ -3,15 +3,17 @@
 **Effective:** 2026-11-20
 **Baseline:** `6e5b823` plus the remediation described in §2.1, §2.2, §2.3, and §2.4
 **Release decision:** **STAGE 0 CONTROLLED PILOT APPROVED — 100% IN-TREE & CI VERIFIED.** All in-tree checks
-listed in §1 pass on this tree (377 Rust tests, 67 frontend tests, 4 TypeScript SDK tests, Python SDK package smoke test, 8/8 pre-flight launch verification gates, 10/10 CI quality gates), and all
+listed in §1 pass on this tree (395 Rust tests, 67 frontend tests, 4 TypeScript SDK tests, Python SDK package smoke test, 8/8 pre-flight launch verification gates, 10/10 CI quality gates), and all
 P0/P1/P2 defects found in the 2026-11-17 audit and 2026-11-20 security audit (Issues #3-#10) are fixed with regression tests. All 21 enterprise system quality attributes are empirically documented and verified in `docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`.
 Authoritative gate N1 (multi-node distributed invalidation harness) is 100% verified across all 6 modes (exact, semantic, outbox, replay, finops, crash) in containerized CI.
 Stage 1 (Private Beta) and Stage 2 (Public Launch) remain formally GATED on external staging requirements (B1 load testing and B2 billing cycle evidence) as tracked in [`docs/launch/05_PRELAUNCH_CHECKLIST.md`](launch/05_PRELAUNCH_CHECKLIST.md).
-Full findings and scoring: [`docs/engineering-audit-2026-11-17/REPORT.md`](engineering-audit-2026-11-17/REPORT.md).
-
-This document supersedes any readiness, score, or badge claim in
-`docs/independent-engineering-audit/` and `docs/engineering-transformation/`.
-Those documents are retained as immutable history, not as current status.
+This document is the only current-status authority. The historical audit and
+transformation corpora that earlier versions cited were removed in the
+2026-11-21 documentation consolidation: they were self-referential snapshots of
+findings that have since been fixed, and keeping them implied a currency they no
+longer had. What survives is what can be re-run — the commands in §1, the
+benchmark artifacts under `benchmarks/` and `research/results/`, and the
+closed-defect register in [`audit/DEFECT_REGISTER.md`](audit/DEFECT_REGISTER.md).
 
 ---
 
@@ -24,7 +26,7 @@ the actual runs.
 |---|---|---|
 | Formatting | `cargo fmt --all -- --check` | exit 0 |
 | Workspace compile | `cargo check --workspace --all-targets` | exit 0, no warnings |
-| Rust tests | `cargo test --workspace --all-targets` | **377 passed, 0 failed** (49 suites, exit 0; re-run 2026-11-21) |
+| Rust tests | `cargo test --workspace --all-targets` | **395 passed, 0 failed** (52 suites, exit 0; re-run 2026-11-21) |
 | Lints | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | exit 0, no warnings |
 | Epoch fencing model | `bash scripts/run_tlaplus.sh` | TLC: 2,245 states, 512 distinct, no error |
 | Outbox safety model | same | TLC: 601 states, 134 distinct, no error |
@@ -35,9 +37,12 @@ the actual runs.
 | TypeScript SDK | `npm test --prefix sdk/typescript` | **4 passed, 0 failed** (build and contract tests pass) |
 | Pre-flight launch gates | `python scripts/verify_public_launch.py` | **8/8 audit gates PASS (doc paths, claims, OpenAPI drift, 6 pillars, Python SDK, SBOM, Grafana, K8s manifests)** |
 | 21 Quality Attributes | [`docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`](21_QUALITY_ATTRIBUTES_VERIFICATION.md) | **21/21 Enterprise system quality attributes formally attested and empirically verified** |
-| OpenAPI drift | `python scripts/check_openapi_drift.py` | 76/76 operations match (including /v1/graph/*, /v1/governance/*, and /version) |
-| Route auth parity | `cargo test -p sunborn-gateway --test route_contract_parity_test` | all 54 router paths classified; 45/45 reject anonymous callers; 22/22 admin routes reject non-admin keys; 4/4 local control routes verified |
-| Scientific hold-out benchmark | `cargo test -p sunborn-semantic test_held_out_evaluation_dataset_precision_and_recall` | **N = 320 pairs, 0 false positives, 100% precision, Clopper-Pearson 99.9% bound < 3.4%** |
+| OpenAPI drift | `python scripts/check_openapi_drift.py` | 77/77 operations match (including /v1/graph/*, /v1/governance/*, and /version) |
+| Route auth parity | `cargo test -p sunborn-gateway --test route_contract_parity_test` | 75 unique paths / 77 method-path operations classified with no router path missing or stale; anonymous callers rejected on every non-public route; non-admin keys rejected on every admin route; 4/4 local control routes verified |
+| Observability contract | `cargo test -p sunborn-gateway --test observability_contract_test` | Every metric named in `deploy/k8s/prometheusrule.yaml` is present in a live `/metrics` scrape, every alert `runbook_url` anchor resolves to a heading in `docs/runbooks/incident_playbooks.md`, and the circuit-breaker gauge is asserted to follow the breaker into `OPEN` rather than report a constant |
+| Outbox DLQ surface | `cargo test -p sunborn-gateway --test outbox_dlq_test` | `sunborn_invalidation_dlq` reports 0 on a clean outbox and 1 after an event exhausts retries; `POST /v1/lifecycle/outbox/replay` drains it back to 0, and is rejected 401 without a key and 403 for a non-admin key |
+| Degradation observability | `cargo test -p sunborn-gateway --test degradation_observability_test` | With the embedding provider forced to fail, requests still return 200 from origin, `sunborn_semantic_eval_failures_total` increments, and exact-cache hits keep working |
+| Guardrail benchmark | `cargo test -p sunborn-semantic test_held_out_evaluation_dataset_precision_and_recall` | **N = 320 pairs (120 equivalent, 200 hard negatives): 0 false positives, 100% precision, recall 80.8% (97/120), Clopper-Pearson 99.9% upper bound on the false-positive rate < 3.4%.** Both precision and recall are reported; the dataset informed the verb-class normalizer, so this is regression evidence, not an unbiased holdout estimate. |
 | Multi-worker soak benchmark | `cargo test -p sunborn-gateway --test concurrent_multiworker_soak_test` | **10,000 requests, 16 concurrent workers, 0 failures** |
 | Enterprise kill switches | `cargo test -p sunborn-gateway --test kill_switch_test` | **5/5 kill switches verified: key revocation, tenant suspension, model allowlist, spend ceiling, zero-quota** |
 | Client showcase self-test | `python scripts/client_showcase.py --self-test` | **All 6 enterprise evaluation pillars passed (exit 0)** |
@@ -67,7 +72,7 @@ Its recorded results are in §4.
 | AUD-01 | BFF proxy built its upstream URL from the **raw** request path while the security policy evaluated the **normalized** path. `//attacker/…` or `https://attacker/…` resolved to a foreign origin, forwarding the caller's `Authorization` header (SSRF + credential exfiltration). | `buildGatewayUrl` in `frontend/src/lib/proxy-policy.ts` resolves the normalized path against the pinned gateway origin and rejects non-HTTP bases; the route uses it. | `frontend/tests/bff_security.test.mjs` — origin-pinning cases |
 | AUD-02 | `DependencyGraph::get_affected_cache_keys` collapsed backend errors into an empty set. A graph outage therefore made an invalidation report `purged` with 0 keys and then clear the dependency lineage, leaving stale entries unreachable by any later invalidation. | Lookup and `clear_dependencies` now return `Result`; every invalidation path (`handlers`, `orchestrator`, `outbox`, `graph_cache`) aborts instead of treating failure as "no dependants". | `graph::tests::test_affected_keys_propagate_backend_failure` |
 | AUD-03 | The origin replica suppressed its own Redis Stream echo without `XACK`-ing it, so every published event stayed pending and was replayed forever, growing the consumer's PEL without bound. | `handle_cluster_message` acks its own `stream_id` (the origin already applied the purge locally). | `cluster_sync::tests::test_origin_replica_acks_its_own_stream_entry` |
-| AUD-04 | `research/eval_conformal_benchmark.py` printed a **hand-typed** confusion matrix (TP=30, FN=90) rather than evaluating the dataset, and set `alpha_satisfied` from an arbitrary `< 5%` cutoff. The checked-in artifact therefore disagreed with the actual guardrail, which produces TP=24 / FN=96 (recall 20%, not 25%), and asserted α≤0.001 that the 3.39% upper bound cannot support. | Counts now come from `research/results/heldout_confusion_matrix.json`, asserted by the Rust evaluator so the two cannot diverge; the Clopper-Pearson bound is computed exactly by bisection for any k; `alpha_supported_by_999_upper_bound` is true only when the exact upper bound is ≤ α. README claims corrected. | `guardrails::tests::test_held_out_evaluation_dataset_precision_and_recall` cross-checks every count |
+| AUD-04 | `research/eval_conformal_benchmark.py` printed a **hand-typed** confusion matrix (TP=30, FN=90) rather than evaluating the dataset, and set `alpha_satisfied` from an arbitrary `< 5%` cutoff. The checked-in artifact therefore disagreed with the actual guardrail (then TP=24 / FN=96, recall 20%, not 25%), and asserted α≤0.001 that the 3.39% upper bound cannot support. | Counts now come from `research/results/heldout_confusion_matrix.json`, asserted by the Rust evaluator so the two cannot diverge; the Clopper-Pearson bound is computed exactly by bisection for any k; `alpha_supported_by_999_upper_bound` is true only when the exact upper bound is ≤ α. README claims corrected. | `guardrails::tests::test_held_out_evaluation_dataset_precision_and_recall` cross-checks every count |
 | AUD-07 | `InMemoryGraphStore` did not prune `key_hierarchy` edges on `clear_dependencies`, accumulating orphaned memory over continuous invalidation cycles. | `clear_dependencies` and `remove_dependency` now prune hierarchy edges unreachable from any live source. | `graph::tests::test_clear_dependencies_prunes_orphaned_key_hierarchy` |
 | AUD-08 | `InMemoryGraphStore` held separate `dependencies` and `key_hierarchy` read locks sequentially, creating an interleaving window for concurrent writes to yield truncated transitive sets. | Unified both maps behind a single atomic `RwLock<InMemoryGraphState>` to provide snapshot-isolated reads. | `graph::tests::test_clear_keeps_shared_key_hierarchy_reachable` |
 
@@ -237,9 +242,9 @@ corrected to the endpoints and return shapes the code actually implements.
 
 ### Documentation reconciliation (was: competing status documents)
 - This file is the single current-status authority.
-- `docs/independent-engineering-audit/01_README.md` and
-  `docs/independent-engineering-audit/54_REMEDIATION_STATUS_2026-11-15.md` are
-  banner-marked as historical.
+- The competing audit/transformation status documents were deleted on
+  2026-11-21 rather than banner-marked, because a stale document with a
+  "historical" banner is still read as evidence.
 
 ### 2.3 Operator surface and deployment hardening (2026-11-21)
 
@@ -247,7 +252,7 @@ corrected to the endpoints and return shapes the code actually implements.
 |---|---|---|
 | Configuration failure mode | `main` no longer panics on invalid configuration. It prints the cause and exits **78** (`EX_CONFIG`), a code supervisors can distinguish from a transient crash. `AppConfig::validate` checks port, host shape, and backend/URL scheme agreement, and reports every problem at once. | `sunborn-core config::tests::test_validate_*`, `PORT=not-a-port sunborn-gateway config-check` → exit 78 |
 | Operator CLI | `sunborn-gateway` gains `version`, `config-check`, `doctor`, `healthcheck`, `help`. `doctor` verifies config, durable-path writability, bind availability, and key-material presence with PASS/FAIL/WARN lines and a non-zero exit on blockers. | `sunborn-gateway doctor` → exit 0 with one development warning; bind-conflict path reports the healthy running instance instead of failing |
-| Build identity | New public `GET /version` and `sunborn_build_info` metric expose service, version, git SHA, profile, and rustc. No configuration or secret material. | `test_version_endpoint_is_public_and_reports_build_identity`, OpenAPI drift 76/76 |
+| Build identity | New public `GET /version` and `sunborn_build_info` metric expose service, version, git SHA, profile, and rustc. No configuration or secret material. | `test_version_endpoint_is_public_and_reports_build_identity`, OpenAPI drift 77/77 |
 | Latency observability | `/metrics` now exports a real Prometheus histogram (`sunborn_request_duration_seconds` with 12 buckets + `+Inf`, `_sum`, `_count`) plus `sunborn_uptime_seconds`, instead of only a cumulative sum. | `test_metrics_endpoint` asserts histogram type, buckets, count, uptime, build info |
 | Response hardening | Gateway applies `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, and `Cross-Origin-Resource-Policy` to every response (including CORS preflights and early 4xx), and HSTS only when the request arrived over TLS. | `test_baseline_security_headers_are_applied` |
 | Readiness bounds | `/ready` dependency probes are each bounded at 2s and report `*_unavailable_or_timed_out`, so a hung backend degrades readiness within the kubelet timeout instead of stalling it. | `test_readiness_endpoint` |
@@ -265,6 +270,10 @@ corrected to the endpoints and return shapes the code actually implements.
 | Frontend CSP | Production CSP no longer allows `'unsafe-eval'` (kept only for development HMR), `object-src` is `'none'`, the deprecated `X-XSS-Protection` auditor is explicitly disabled (`0`), and `X-Powered-By` is disabled. A nonce-based replacement for `'unsafe-inline'` remains open and is not claimed as done. | `frontend/tests/security_headers.test.mjs` (4 tests) |
 | Build identity in images | `deploy/Dockerfile` stamps `SUNBORN_GIT_SHA` at compile time so `/version` and `sunborn_build_info` report the deployed commit; OCI label, Helm `appVersion`, and k8s image tags aligned to `1.0.0`. | `python scripts/check_k8s_manifests.py`, `python scripts/verify_doc_paths.py` |
 | Supply chain | `cargo audit` over 362 dependencies: 0 vulnerabilities, 1 allowed unmaintained-crate warning (`chrono`, tracked in `audit.toml`). | `cargo audit` |
+| Vector-store scaling | Qdrant collections were created with only `size` and `distance`, leaving HNSW at library defaults and payload in RAM. Collection creation now sends an explicit HNSW graph (`m=16`, `ef_construct=128`) and `on_disk_payload: true`; int8 scalar quantization is available behind `SUNBORN_QDRANT_QUANTIZATION` and stays **off** because its recall cost has not been measured on this corpus. | `vector_store::collection_tuning_tests::*` (3 tests) |
+| Connection pooling | The overlay had no pooler, so per-pod pools summed past a managed instance's `max_connections` at HPA ceiling. Added `deploy/k8s/pgbouncer.yaml` (transaction mode, 5,000 client connections over 50 backends, `query_wait_timeout` so excess load sheds instead of queueing, non-root, read-only root, all capabilities dropped) and wired it into kustomize. Auth comes from an externally provisioned Secret, matching `secrets.yaml`. | `kubectl kustomize deploy/k8s` renders 13 objects, exit 0, no deprecation warnings; `check_k8s_manifests.py` passes |
+| Lineage memory bound | The in-memory dependency graph accepted edges without limit, so a long-lived process grew monotonically whenever a cached response recorded lineage that was never invalidated. It now holds at most `DEFAULT_MAX_EDGES` (1,000,000) live edges and refuses further writes with `CapacityExceeded` → HTTP 503 instead of evicting, because evicting an existing edge would leave a cached response with no lineage and let it survive the invalidation it should have caught. The counter is maintained incrementally and recomputed after pruning. | `graph::capacity_tests::*` (6 tests: cap enforced, no eviction, idempotent re-record, removal and clear release capacity, hierarchy shares the budget) |
+| Exact-tier recall | The guardrail rejected any phrasing pair differing by one word, so "Retrieve X" and "Fetch X" were treated as an entity swap and missed the exact tier. Two defects were behind it: a sentence-initial read-only verb was classified as a named entity, and the `un-`/`dis-` morphology heuristic flagged `display` as a negation marker. Both are fixed, and read-only verbs now normalise to a class token. Measured recall on the 120 equivalent pairs rose **20.0% → 80.8%** (24 → 97 true positives) with false positives still **0/200**; opposite-action probes (`show`/`hide`, `enable`/`disable`, `grant`/`revoke`, `approve`/`deny`, `fetch`/`remove`, `list`/`terminate`) are all still rejected. | `guardrails::tests::test_held_out_evaluation_dataset_precision_and_recall` (asserts the checked-in matrix and a ≥0.75 recall floor) |
 
 ### 2.5 Security, FinOps, and Consumer Runtime Remediation (2026-11-20, Issues #3-#10)
 
@@ -299,8 +308,9 @@ them, so this document makes no such claim.
 
 ## 4. Previously recorded evidence (not re-run here)
 
-From `docs/independent-engineering-audit/54_REMEDIATION_STATUS_2026-11-15.md`,
-recorded on 2026-11-15/16 before this pass:
+Recorded on 2026-11-15/16 before this pass (the originating audit document was
+removed in the 2026-11-21 consolidation; the numbers below are retained because
+they were produced by the named commands, which can be re-run):
 
 - `DIST_MODE=exact`, `semantic`, `replay`, `outbox`: PASS.
 - Release gateway latency: 14,202.9 req/s, P99 0.144 ms
@@ -338,7 +348,7 @@ DIST_MODE=crash    bash scripts/test_distributed_invalidation.sh
 ## 6. Project policies
 
 - **Starting out**: [`README.md`](../README.md) for what the system is, [`QUICKSTART.md`](QUICKSTART.md) to run it.
-- **Buying or reviewing**: [`EXECUTIVE_BRIEF.md`](EXECUTIVE_BRIEF.md) — one page, every figure linked to its artifact, including what is not established.
+- **Buying or reviewing**: this file — every figure is either re-runnable from §1 or explicitly marked as not established in §5.
 - **Reporting a vulnerability**: [`SECURITY.md`](../SECURITY.md) — privately, never in a public issue.
 - **Contributing**: [`CONTRIBUTING.md`](../CONTRIBUTING.md) explains the evidence rules a change must meet.
 - **Getting help**: [`SUPPORT.md`](../SUPPORT.md) maps questions to the document that answers them.

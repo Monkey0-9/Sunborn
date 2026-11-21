@@ -3,10 +3,14 @@ kind: Kustomization
 
 namespace: sunborn-system
 
-commonLabels:
-  app.kubernetes.io/name: sunborn
-  app.kubernetes.io/part-of: sunborn-platform
-  app.kubernetes.io/managed-by: kustomize
+# `labels` with includeSelectors reproduces the old commonLabels behaviour
+# exactly (they were already injected into selectors) without the v5 deprecation.
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/name: sunborn
+      app.kubernetes.io/part-of: sunborn-platform
+      app.kubernetes.io/managed-by: kustomize
 
 resources:
   - configmap.yaml
@@ -16,5 +20,6 @@ resources:
   - pdb.yaml
   - ingress.yaml
   - hpa.yaml
+  - pgbouncer.yaml
   - networkpolicy.yaml
   - prometheusrule.yaml

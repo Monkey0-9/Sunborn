@@ -110,6 +110,47 @@ following is true, rather than silently degrading:
 - The LLM origin provider is still the mock
 - Execution or learning storage is ephemeral
 
+### Scaling beyond one node
+
+Two pieces of the Kubernetes overlay exist only for multi-replica operation:
+
+**PgBouncer (`deploy/k8s/pgbouncer.yaml`).** Each gateway pod opens its own
+server-side connection pool. With the HPA at its ceiling those pools sum to more
+postgres backends than a managed instance's `max_connections` allows, and the
+surplus queues inside the database where nothing can shed it. The pooler runs in
+`transaction` mode — which matches how the gateway uses connections (one
+statement or explicit transaction per request) — so 5,000 client connections
+share 50 backends. Point the gateway's `DATABASE_URL` at
+`sunborn-pgbouncer:6432`. The auth file is not in this repository; provision
+the Secret `sunborn-pgbouncer-auth` (key `userlist.txt`) from your secret
+manager, following the same rule as `sunborn-gateway-secrets`.
+
+Session-pooling mode would break the gateway: it relies on releasing a
+connection between requests, and holding one per client reproduces the
+connection explosion the pooler exists to prevent.
+
+**Qdrant collection tuning (`SUNBORN_QDRANT_*`).** `ensure_collection` now sends
+an explicit HNSW graph (`m=16`, `ef_construct=128`) and `on_disk_payload: true`,
+so RAM holds vectors rather than payload and query latency does not drift as the
+corpus grows. Scalar int8 quantization is available with
+`SUNBORN_QDRANT_QUANTIZATION=true` and cuts the resident vector footprint by
+roughly 75%; it is **off by default** because its recall impact has not been
+measured on this corpus. Enable it only after running the semantic evaluation
+and comparing results.
+
+```bash
+SUNBORN_QDRANT_HNSW_M=16 \
+SUNBORN_QDRANT_HNSW_EF_CONSTRUCT=128 \
+SUNBORN_QDRANT_QUANTIZATION=false \
+  sunborn-gateway
+```
+
+Cost ceilings are per process. `SUNBORN_MAX_SPEND_PER_WINDOW_USD` (default
+$100 per rolling 60 s) plus the per-tenant ceilings bound one replica; a
+fleet-wide cap is therefore approximately `replicas × window cap`, not a single
+global number. If you need a hard global daily budget, enforce it at the edge or
+in the billing layer — the gateway does not aggregate spend across pods.
+
 ---
 
 ## Operator commands
