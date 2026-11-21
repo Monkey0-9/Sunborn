@@ -13,7 +13,7 @@ path,component,loc,status,test_coverage,security_tier
 .github/PULL_REQUEST_TEMPLATE.md,ci-cd,42,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 .github/branch-ruleset.json,ci-cd,80,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 .github/branch_protection.md,ci-cd,44,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
-.github/workflows/ci.yml,ci-cd,506,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
+.github/workflows/ci.yml,ci-cd,507,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 .github/workflows/governance-check.yml,ci-cd,62,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 .github/workflows/release.yml,ci-cd,163,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 .github/workflows/security.yml,ci-cd,60,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
