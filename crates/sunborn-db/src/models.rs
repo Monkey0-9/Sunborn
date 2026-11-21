@@ -126,3 +126,21 @@ pub struct FinOpsLedgerRecord {
     pub net_savings_usd: f64,
     pub recorded_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TenantErasureTaskRecord {
+    pub task_id: Uuid,
+    pub tenant_id: String,
+    pub current_step: String,
+    pub status: String,
+    pub last_error: Option<String>,
+    pub shred_duration_ns: Option<i64>,
+    pub deleted_db_entries: i32,
+    pub deleted_exact_cache: i32,
+    pub deleted_vectors: i32,
+    pub deleted_execution_tools: i32,
+    pub deleted_learning_events: i32,
+    pub verified_integrity: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}

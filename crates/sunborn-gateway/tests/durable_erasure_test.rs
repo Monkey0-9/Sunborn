@@ -175,3 +175,66 @@ async fn test_end_to_end_durable_erasure_with_disk_verification() {
     assert_eq!(val["verified_multi_store_erasure"], true);
     assert_eq!(val["residual_records"]["learning_store"], 0);
 }
+
+#[tokio::test]
+async fn test_durable_erasure_state_machine_crash_recovery_resumption() {
+    let config = AppConfig::default();
+    let state = AppState::new(config);
+
+    let tenant = "tenant-crash-recovery";
+    let tenant_id = TenantId::new(tenant);
+    let app_id = ApplicationId::new("app-recovery");
+
+    let _ = state
+        .crypto_registry
+        .provision_tenant_secure(tenant_id.clone());
+
+    // Record some state in learning store
+    let event = VerifiedFeedbackEvent {
+        event_id: "ev-crash-1".to_string(),
+        tenant_id: tenant_id.clone(),
+        application_id: app_id.clone(),
+        cache_key: format!("sunborn:{}:k", tenant),
+        decision_type: "exact_hit".to_string(),
+        prompt_hash: "hash-crash-1".to_string(),
+        similarity_score: Some(1.0),
+        conformal_risk_score: Some(0.0),
+        tokens_saved: 50,
+        cost_saved_usd: 0.005,
+        latency_ms: 2.0,
+        verified_outcome: VerifiedOutcome::VerifiedCorrect,
+        verification_source: "origin_execution".to_string(),
+        hmac_signature: "mock_sig".to_string(),
+        timestamp: chrono::Utc::now(),
+    };
+    state.learning_store.record_event(event).unwrap();
+    assert_eq!(state.learning_store.tenant_event_count(&tenant_id), 1);
+
+    // Create an erasure task in DB that was interrupted halfway (e.g. at TDEK_SHREDDED)
+    let mut task = state.db.create_erasure_task(tenant).await.unwrap();
+    task.current_step = "TDEK_SHREDDED".to_string();
+    task.status = "IN_PROGRESS".to_string();
+    state.db.update_erasure_task(&task).await.unwrap();
+
+    // Verify task is in incomplete list
+    let incomplete = state.db.list_incomplete_erasure_tasks().await.unwrap();
+    assert!(incomplete.iter().any(|t| t.tenant_id == tenant));
+
+    // Call crash recovery resumption
+    let resumed_count = sunborn_gateway::handlers::resume_interrupted_erasure_tasks(&state)
+        .await
+        .unwrap();
+    assert!(resumed_count >= 1);
+
+    // Verify task is now COMPLETED and verified_integrity is true
+    let updated_task = state
+        .db
+        .get_erasure_task(task.task_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(updated_task.status, "COMPLETED");
+    assert_eq!(updated_task.current_step, "VERIFIED_ERASED");
+    assert!(updated_task.verified_integrity);
+    assert_eq!(state.learning_store.tenant_event_count(&tenant_id), 0);
+}

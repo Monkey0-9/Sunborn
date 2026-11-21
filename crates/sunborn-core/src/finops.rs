@@ -169,20 +169,35 @@ pub struct MicroUnits(pub i64);
 impl MicroUnits {
     pub const ZERO: Self = Self(0);
     pub const PER_USD: i64 = 1_000_000;
+    pub const MAX_USD: f64 = 100_000.0;
 
     #[inline]
-    pub fn try_from_usd(usd: f64) -> Option<Self> {
-        const MAX_USD: f64 = 100_000.0;
-        if !usd.is_finite() || !(0.0..=MAX_USD).contains(&usd) {
-            return None;
+    pub fn try_from_usd(usd: f64) -> crate::error::Result<Self> {
+        if !usd.is_finite() {
+            return Err(crate::error::SunbornError::invalid_payload(
+                "Financial micro-units rejection: amount must be a finite number",
+            ));
+        }
+        if usd < 0.0 {
+            return Err(crate::error::SunbornError::invalid_payload(
+                "Financial micro-units rejection: amount cannot be negative",
+            ));
+        }
+        if usd > Self::MAX_USD {
+            return Err(crate::error::SunbornError::invalid_payload(format!(
+                "Financial micro-units rejection: amount ${usd:.2} exceeds maximum allowed ceiling of ${:.2}",
+                Self::MAX_USD
+            )));
         }
         let units = (usd * Self::PER_USD as f64).round() as i64;
-        Some(Self(units))
+        Ok(Self(units))
     }
 
+    /// Explicit, non-silent financial conversion. Fails closed on invalid inputs.
+    /// Never converts invalid or negative monetary values to zero.
     #[inline]
-    pub fn from_usd(usd: f64) -> Self {
-        Self::try_from_usd(usd).unwrap_or(Self::ZERO)
+    pub fn from_usd(usd: f64) -> crate::error::Result<Self> {
+        Self::try_from_usd(usd)
     }
 
     #[inline]
@@ -209,29 +224,53 @@ impl MicroPaise {
     pub const ZERO: Self = Self(0);
     pub const PER_INR: i64 = 1_000_000;
     pub const DEFAULT_INR_PER_USD: f64 = 84.50; // Reference sovereign peg
+    pub const MAX_INR: f64 = 10_000_000.0;
 
     #[inline]
-    pub fn from_inr(inr: f64) -> Self {
-        if !inr.is_finite() || inr < 0.0 {
-            return Self::ZERO;
+    pub fn try_from_inr(inr: f64) -> crate::error::Result<Self> {
+        if !inr.is_finite() {
+            return Err(crate::error::SunbornError::invalid_payload(
+                "MicroPaise rejection: INR amount must be a finite number",
+            ));
+        }
+        if inr < 0.0 {
+            return Err(crate::error::SunbornError::invalid_payload(
+                "MicroPaise rejection: INR amount cannot be negative",
+            ));
+        }
+        if inr > Self::MAX_INR {
+            return Err(crate::error::SunbornError::invalid_payload(format!(
+                "MicroPaise rejection: INR amount ₹{inr:.2} exceeds maximum allowed ceiling of ₹{:.2}",
+                Self::MAX_INR
+            )));
         }
         let units = (inr * Self::PER_INR as f64).round() as i64;
-        Self(units.max(0))
+        Ok(Self(units))
     }
 
     #[inline]
-    pub fn to_inr(self) -> f64 {
-        self.0 as f64 / Self::PER_INR as f64
-    }
-
-    #[inline]
-    pub fn from_usd(usd: f64, inr_per_usd: f64) -> Self {
+    pub fn try_from_usd(usd: f64, inr_per_usd: f64) -> crate::error::Result<Self> {
         let rate = if inr_per_usd.is_finite() && inr_per_usd > 0.0 {
             inr_per_usd
         } else {
             Self::DEFAULT_INR_PER_USD
         };
-        Self::from_inr(usd * rate)
+        Self::try_from_inr(usd * rate)
+    }
+
+    #[inline]
+    pub fn from_inr(inr: f64) -> crate::error::Result<Self> {
+        Self::try_from_inr(inr)
+    }
+
+    #[inline]
+    pub fn from_usd(usd: f64, inr_per_usd: f64) -> crate::error::Result<Self> {
+        Self::try_from_usd(usd, inr_per_usd)
+    }
+
+    #[inline]
+    pub fn to_inr(self) -> f64 {
+        self.0 as f64 / Self::PER_INR as f64
     }
 
     #[inline]
@@ -651,8 +690,11 @@ impl SpendVelocityController {
     }
 
     /// Resolves effective spend ceiling in micro-units
-    pub fn ceiling_for_tenant_micro_units(&self, tenant_id: &str) -> MicroUnits {
-        MicroUnits::from_usd(self.ceiling_for_tenant(tenant_id))
+    pub fn ceiling_for_tenant_micro_units(
+        &self,
+        tenant_id: &str,
+    ) -> crate::error::Result<MicroUnits> {
+        MicroUnits::try_from_usd(self.ceiling_for_tenant(tenant_id))
     }
 
     /// Reserve spend using strongly-typed micro-units
@@ -664,8 +706,8 @@ impl SpendVelocityController {
         self.reserve_spend(tenant_id, estimated_cost.to_usd())
             .map_err(|(committed, ceiling)| {
                 (
-                    MicroUnits::from_usd(committed),
-                    MicroUnits::from_usd(ceiling),
+                    MicroUnits::try_from_usd(committed).unwrap_or(MicroUnits::ZERO),
+                    MicroUnits::try_from_usd(ceiling).unwrap_or(MicroUnits::ZERO),
                 )
             })
     }
@@ -676,18 +718,20 @@ impl SpendVelocityController {
         tenant_id: &str,
         reservation_id: uuid::Uuid,
         actual_cost: MicroUnits,
-    ) -> MicroUnits {
+    ) -> crate::error::Result<MicroUnits> {
         if actual_cost.0 < 0 {
             tracing::warn!(tenant = %tenant_id, cost = %actual_cost.0, "Rejected negative micro-units settlement");
-            return self.current_spend_micro_units(tenant_id);
+            return Err(crate::error::SunbornError::invalid_payload(
+                "Negative micro-units settlement rejected",
+            ));
         }
         let total = self.settle_spend(tenant_id, reservation_id, actual_cost.to_usd());
-        MicroUnits::from_usd(total)
+        MicroUnits::try_from_usd(total)
     }
 
     /// Current spend in micro-units
-    pub fn current_spend_micro_units(&self, tenant_id: &str) -> MicroUnits {
-        MicroUnits::from_usd(self.current_spend(tenant_id))
+    pub fn current_spend_micro_units(&self, tenant_id: &str) -> crate::error::Result<MicroUnits> {
+        MicroUnits::try_from_usd(self.current_spend(tenant_id))
     }
 }
 
@@ -828,14 +872,14 @@ mod tests {
 
         // Ceiling $5.0 = 5,000,000 micro-units
         assert_eq!(
-            controller.ceiling_for_tenant_micro_units(tenant),
+            controller.ceiling_for_tenant_micro_units(tenant).unwrap(),
             MicroUnits(5_000_000)
         );
 
         // Set custom ceiling $12.50 = 12,500,000 micro-units
         controller.set_tenant_ceiling_micro_units(tenant, MicroUnits(12_500_000));
         assert_eq!(
-            controller.ceiling_for_tenant_micro_units(tenant),
+            controller.ceiling_for_tenant_micro_units(tenant).unwrap(),
             MicroUnits(12_500_000)
         );
 
@@ -845,24 +889,46 @@ mod tests {
             .expect("r1 should succeed");
 
         // Settle with 3,750,000 micro-units ($3.75)
-        let settled = controller.settle_spend_micro_units(tenant, r1, MicroUnits(3_750_000));
+        let settled = controller
+            .settle_spend_micro_units(tenant, r1, MicroUnits(3_750_000))
+            .unwrap();
         assert_eq!(settled, MicroUnits(3_750_000));
         assert_eq!(
-            controller.current_spend_micro_units(tenant),
+            controller.current_spend_micro_units(tenant).unwrap(),
             MicroUnits(3_750_000)
         );
     }
 
     #[test]
+    fn test_microunits_fail_closed_rejects_negative_and_nan() {
+        assert!(MicroUnits::try_from_usd(-1.0).is_err());
+        assert!(MicroUnits::try_from_usd(f64::NAN).is_err());
+        assert!(MicroUnits::try_from_usd(f64::INFINITY).is_err());
+        assert!(MicroUnits::try_from_usd(f64::NEG_INFINITY).is_err());
+        assert!(MicroUnits::try_from_usd(100_001.0).is_err());
+        assert!(MicroUnits::from_usd(-0.01).is_err());
+        assert!(MicroUnits::from_usd(f64::NAN).is_err());
+
+        let valid = MicroUnits::from_usd(42.50).unwrap();
+        assert_eq!(valid.0, 42_500_000);
+        assert_eq!(valid.to_usd(), 42.50);
+
+        assert!(MicroPaise::try_from_inr(-10.0).is_err());
+        assert!(MicroPaise::try_from_inr(f64::NAN).is_err());
+        assert!(MicroPaise::try_from_usd(-5.0, 84.50).is_err());
+        assert!(MicroPaise::from_inr(f64::INFINITY).is_err());
+    }
+
+    #[test]
     fn test_micro_paise_conversion_and_display() {
         // ₹150.50 -> 150,500,000 micro-paise
-        let mp = MicroPaise::from_inr(150.50);
+        let mp = MicroPaise::from_inr(150.50).unwrap();
         assert_eq!(mp.0, 150_500_000);
         assert_eq!(mp.to_inr(), 150.50);
 
         // USD conversion at reference peg 84.50
         // $10.00 -> ₹845.00 -> 845,000,000 micro-paise
-        let mp_usd = MicroPaise::from_usd(10.0, 84.50);
+        let mp_usd = MicroPaise::from_usd(10.0, 84.50).unwrap();
         assert_eq!(mp_usd.0, 845_000_000);
         assert!((mp_usd.to_usd(84.50) - 10.0).abs() < 1e-6);
 

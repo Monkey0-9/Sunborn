@@ -186,7 +186,8 @@ pub async fn get_finops_report() -> impl IntoResponse {
     // Sovereign Indic currency & GST metrics
     let inr_rate = 84.50;
     let total_net_savings_inr = total_gpt4o_net_savings * inr_rate;
-    let total_net_savings_mp = MicroPaise::from_inr(total_net_savings_inr);
+    let total_net_savings_mp =
+        MicroPaise::from_inr(total_net_savings_inr).unwrap_or(MicroPaise::ZERO);
     let gst_breakdown = GstBreakdown::calculate(total_net_savings_inr, false, None);
 
     (
