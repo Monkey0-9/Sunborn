@@ -46,6 +46,8 @@ the actual runs.
 | Multi-worker soak benchmark | `cargo test -p sunborn-gateway --test concurrent_multiworker_soak_test` | **10,000 requests, 16 concurrent workers, 0 failures** |
 | Enterprise kill switches | `cargo test -p sunborn-gateway --test kill_switch_test` | **5/5 kill switches verified: key revocation, tenant suspension, model allowlist, spend ceiling, zero-quota** |
 | Client showcase self-test | `python scripts/client_showcase.py --self-test` | **All 6 enterprise evaluation pillars passed (exit 0)** |
+| Full verification script | `bash scripts/verify.sh` | **All 12 stages completed, exit 0** on the cleaned tree. Two stages are honestly degraded here and say so in their own output: stage 6 falls back to chart-schema validation when `helm` is absent from PATH, and stage 7 is a static compose/Dockerfile/manifest pre-flight, not a live container run (no Docker daemon on this host). |
+| Windows stdio portability | `python scripts/client_showcase.py --self-test`, `python scripts/verify_india_sovereign.py` | Both scripts print `✓` and previously raised `UnicodeEncodeError` under cp1252 whenever stdout was redirected to a file or pipe, which is how CI invokes them. They now reconfigure stdout/stderr to UTF-8 with `errors="replace"`; both exit 0 redirected. |
 | Architecture dossier | [`docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md`](ENTERPRISE_ARCHITECTURE_DOSSIER.md) | Verified specification across 8 enterprise dimensions |
 | Incident playbooks | [`docs/runbooks/incident_playbooks.md`](runbooks/incident_playbooks.md) | Published runbooks for all 6 mission-critical failure scenarios |
 
@@ -245,6 +247,17 @@ corrected to the endpoints and return shapes the code actually implements.
 - The competing audit/transformation status documents were deleted on
   2026-11-21 rather than banner-marked, because a stale document with a
   "historical" banner is still read as evidence.
+- Consolidation finished the same day: **153 Markdown files (944 KB) → 52 files
+  (416 KB)**. Removed: the 54-file independent-audit corpus, 31 transformation
+  reports, the superpowers agent scratch, `MASTER_ENGINEERING_PLAN`,
+  `EXECUTIVE_BRIEF`, `IEEE_ACM_COMPLIANCE`, `ENTERPRISE_DELIVERABLES_REGISTER`,
+  `PUBLIC_LAUNCH_BLUEPRINT`, and `docs/release/RELEASE_READINESS.md`.
+  That last one was deleted for being *wrong*, not for being long: it claimed
+  315 passing tests (252 Rust / 37 frontend) and 11/11 gates against measured
+  395 / 67 / 8. What remains is either gate-required, CI-consumed, declared as a
+  Cargo package readme, or the single source for a claim.
+- Every dangling reference was repaired; `scripts/verify_doc_paths.py --strict`
+  reports 100 referenced source paths, all present.
 
 ### 2.3 Operator surface and deployment hardening (2026-11-21)
 

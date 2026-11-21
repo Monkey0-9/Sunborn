@@ -1,10 +1,4 @@
 path,component,loc,status,test_coverage,security_tier
-crates/sunborn-gateway/tests/degradation_observability_test.rs,sunborn-gateway,255,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
-crates/sunborn-gateway/tests/observability_contract_test.rs,sunborn-gateway,179,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
-crates/sunborn-gateway/tests/outbox_dlq_test.rs,sunborn-gateway,178,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
-deploy/k8s/pgbouncer.yaml,deploy-infra,154,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
-docs/audit/DEFECT_REGISTER.md,documentation,87,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
-scripts/check_runbook_endpoints.py,tooling,84,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 .cargo/audit.toml,root,16,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 .cargo/config.toml,root,2,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 .devcontainer/Dockerfile,root,18,VERIFIED_PRODUCTION,scripts/verify.ps1,TIER_3_SUPPORT
@@ -159,6 +153,7 @@ crates/sunborn-gateway/tests/chaos_test.rs,sunborn-gateway,144,VERIFIED_TEST,cra
 crates/sunborn-gateway/tests/chat_completions_test.rs,sunborn-gateway,313,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/concurrent_multiworker_soak_test.rs,sunborn-gateway,152,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/credential_lifecycle_test.rs,sunborn-gateway,180,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+crates/sunborn-gateway/tests/degradation_observability_test.rs,sunborn-gateway,255,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/disaster_recovery_test.rs,sunborn-gateway,145,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/distributed_finops_test.rs,sunborn-gateway,73,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/durable_erasure_test.rs,sunborn-gateway,240,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
@@ -174,6 +169,8 @@ crates/sunborn-gateway/tests/learning_controller_test.rs,sunborn-gateway,1171,VE
 crates/sunborn-gateway/tests/local_control_api_test.rs,sunborn-gateway,114,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/login_test.rs,sunborn-gateway,381,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/multi_replica_consistency_test.rs,sunborn-gateway,256,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+crates/sunborn-gateway/tests/observability_contract_test.rs,sunborn-gateway,179,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
+crates/sunborn-gateway/tests/outbox_dlq_test.rs,sunborn-gateway,178,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/performance_test.rs,sunborn-gateway,158,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/production_startup_test.rs,sunborn-gateway,668,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
 crates/sunborn-gateway/tests/property_invariants_test.rs,sunborn-gateway,341,VERIFIED_TEST,crates/sunborn-gateway/tests/route_contract_parity_test.rs,TIER_1_CRITICAL
@@ -268,6 +265,7 @@ deploy/k8s/multi-region/primary-region-us-east.yaml,deploy-infra,95,CONFIG,scrip
 deploy/k8s/multi-region/secondary-region-eu-central.yaml,deploy-infra,95,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 deploy/k8s/networkpolicy.yaml,deploy-infra,60,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 deploy/k8s/pdb.yaml,deploy-infra,16,CONFIG,scripts/verify.ps1,TIER_1_CRITICAL
+deploy/k8s/pgbouncer.yaml,deploy-infra,154,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 deploy/k8s/prometheusrule.yaml,deploy-infra,88,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 deploy/k8s/secrets.yaml,deploy-infra,4,CONFIG,scripts/verify.ps1,TIER_1_CRITICAL
 deploy/k8s/service.yaml,deploy-infra,17,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
@@ -276,9 +274,10 @@ docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md,documentation,181,AUTHORITATIVE_DOC,s
 docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md,documentation,253,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/INSTALL.md,documentation,196,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/QUICKSTART.md,documentation,169,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
-docs/STATUS.md,documentation,355,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
+docs/STATUS.md,documentation,368,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/adr/ADR-001-architecture-baseline.md,documentation,29,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/api/openapi.yaml,documentation,2380,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
+docs/audit/DEFECT_REGISTER.md,documentation,87,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/audit/source_traceability_matrix.csv,documentation,458,VERIFIED_PRODUCTION,scripts/verify.ps1,TIER_3_SUPPORT
 docs/compliance/ISO_STANDARDS_COMPLIANCE.md,documentation,89,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
 docs/frontend/WCAG_2.2_AA_SPECIALIST_AUDIT.md,documentation,122,AUTHORITATIVE_DOC,scripts/verify.ps1,TIER_3_SUPPORT
@@ -409,7 +408,8 @@ sbom.cyclonedx.json,root,2968,CONFIG,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/check_k8s_manifests.py,tooling,48,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/check_launch_docs.py,tooling,132,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/check_openapi_drift.py,tooling,210,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
-scripts/client_showcase.py,tooling,627,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
+scripts/check_runbook_endpoints.py,tooling,84,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
+scripts/client_showcase.py,tooling,644,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/generate_320_heldout_dataset.py,tooling,469,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/generate_sbom.py,tooling,110,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/generate_traceability_matrix.py,tooling,158,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
@@ -429,7 +429,7 @@ scripts/uninstall-sunborn.ps1,tooling,63,TOOLING,scripts/verify.ps1,TIER_3_SUPPO
 scripts/verify.ps1,tooling,116,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/verify.sh,tooling,112,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/verify_doc_paths.py,tooling,109,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
-scripts/verify_india_sovereign.py,tooling,151,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
+scripts/verify_india_sovereign.py,tooling,168,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/verify_public_launch.py,tooling,147,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 scripts/watch_ci.py,tooling,57,TOOLING,scripts/verify.ps1,TIER_3_SUPPORT
 sdk/python/README.md,sdk-python,126,AUTHORITATIVE_DOC,sdk/python/test_sunborn_agent.py,TIER_3_SUPPORT

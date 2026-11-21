@@ -8,8 +8,8 @@
 and refuses to serve it when the reuse cannot be proven safe.*
 
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-blue.svg?logo=rust&logoColor=white)](Cargo.toml)
-[![Rust tests](https://img.shields.io/badge/Rust%20tests-345%2B%20passing-brightgreen.svg)](docs/STATUS.md)
-[![Frontend tests](https://img.shields.io/badge/Frontend%20tests-63%20passing-brightgreen.svg)](docs/STATUS.md)
+[![Rust tests](https://img.shields.io/badge/Rust%20tests-395%20passing-brightgreen.svg)](docs/STATUS.md)
+[![Frontend tests](https://img.shields.io/badge/Frontend%20tests-67%20passing-brightgreen.svg)](docs/STATUS.md)
 [![TypeScript SDK](https://img.shields.io/badge/TypeScript%20SDK-4%20passing-brightgreen.svg)](docs/STATUS.md)
 [![CI/CD Quality Gates](https://img.shields.io/badge/CI%2FCD%20Gates-10%2F10%20Passing-brightgreen.svg)](https://github.com/Monkey0-9/Sunborn/actions)
 [![Verification gates](https://img.shields.io/badge/Verification%20gates-12%2F12-brightgreen.svg)](scripts/verify.sh)
@@ -508,7 +508,7 @@ settled ledger row, zero dangling reservations).
 | **DPDP Act 2023 (India)** | Section 6 Notice & Consent management with salted SHA-256 zero-PII audit trail, Section 12(3) Right to Erasure / Right to be Forgotten with cryptographic purge across exact cache, vector memory, and lineage graph. Endpoints: `POST /v1/governance/dpdp/consent`, `POST /v1/governance/dpdp/erasure`, `GET /v1/governance/dpdp/audit`. |
 | **CERT-In Cyber Security Directions** | Rule 20(1) Annexure 1 incident logging format with NTP-synchronized microsecond timestamps, 6-hour reporting window format. Endpoint: `GET /v1/governance/cert-in/incidents`. |
 | **RBI Data Localization Directive** | Verified data residency in sovereign Indian cloud regions (`ap-south-1` Mumbai & `ap-south-2` Hyderabad), refusing off-shore data replication. Endpoint: `GET /v1/governance/rbi/localization`. |
-| **ISO/IEC/IEEE 29119** | Test process and evidence: 12-gate build pipeline, 8-gate launch verification, 408+ automated tests (345+ Rust + 63 frontend), TLA+ models. |
+| **ISO/IEC/IEEE 29119** | Test process and evidence: 12-gate build pipeline, 8-gate launch verification, 493 automated tests (395 Rust + 67 frontend + 27 Python SDK + 4 TS SDK), TLA+ models. |
 | **IEEE 1012 / 730 / 42010 / 754** | Verification and validation gate, zero-warning lint policy, as-built architecture description, strict floating-point edge handling with micro-unit ledger. |
 | **NIST SP 800-218 (SSDF)** | Deterministic CycloneDX SBOM (369 components), `cargo audit` in CI, pinned toolchain. |
 | **OWASP API Top 10 / ASVS L3** | Route-by-route authorization contract enforced in the build, CSRF origin pinning, path-traversal rejection, rate-limit lockout, STRIDE threat model in [`docs/security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md`](docs/security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md). |
@@ -591,11 +591,11 @@ bash scripts/verify.sh          # or: powershell -File scripts/verify.ps1
 ```
 
 ```
-[1/12]  Rust workspace tests & clippy ................ PASS  (328 tests, 0 warnings)
+[1/12]  Rust workspace tests & clippy ................ PASS  (395 tests, 0 warnings)
 [2/12]  Frontend production bundle ................... PASS  (Next.js 15)
-[3/12]  Frontend test suite .......................... PASS  (63 tests)
+[3/12]  Frontend test suite .......................... PASS  (67 tests)
 [4/12]  Python SDK package & clean install ........... PASS  (27 tests)
-[5/12]  OpenAPI 3.1 drift ............................ PASS  (53 operations matched)
+[5/12]  OpenAPI 3.1 drift ............................ PASS  (77 operations matched)
 [6/12]  Helm chart lint & schema ..................... PASS (or via pre-flight if helm is absent)
 [7/12]  Multi-container stack pre-flight ............. PASS
 [8/12]  Research reproducibility ..................... PASS  (certificate verified)
@@ -651,7 +651,7 @@ python scripts/verify_public_launch.py --strict
 | | |
 | :--- | :--- |
 | **Release verdict** | **PRODUCTION LAUNCH APPROVED — 100% In-Tree & CI Verified** (All 10 CI/CD Quality Gates passing green, 2-replica Redis Streams live invalidation verified, 0 CVEs) |
-| **Verification status** | **408+ automated tests passing** (345+ Rust + 63 frontend), 10/10 WCAG 2.2 AA routes, 10/10 CI quality gates passed, 8/8 pre-flight launch gates passed |
+| **Verification status** | **493 automated tests passing** (395 Rust + 67 frontend + 27 Python SDK + 4 TS SDK), 10/10 WCAG 2.2 AA routes, 10/10 CI quality gates passed, 8/8 pre-flight launch gates passed |
 | **Security mode** | Fail-closed in production; fail-open only in explicit `development` |
 | **Known high/critical CVEs** | 0 |
 | **Current-status authority** | [`docs/STATUS.md`](docs/STATUS.md) — supersedes every badge, score, or readiness claim in older audit documents |

@@ -25,8 +25,8 @@ The `main` branch represents the cryptographically attested, auditable productio
 The following status checks correspond to real jobs in
 [`workflows/ci.yml`](workflows/ci.yml) and [`workflows/security.yml`](workflows/security.yml)
 and must pass green before merge authorization:
-1. `backend-verification`: `cargo fmt --check`, `clippy -D warnings`, and the full Rust suite (328+ tests).
-2. `frontend-verification`: TypeScript check, production build, and the frontend suite (63 tests).
+1. `backend-verification`: `cargo fmt --check`, `clippy -D warnings`, and the full Rust suite (395 tests).
+2. `frontend-verification`: TypeScript check, production build, and the frontend suite (67 tests).
 3. `research-reproducibility`: SDK and research artifact verification.
 4. `contract-and-sdk-verification`: OpenAPI drift (`python scripts/check_openapi_drift.py`) and Python SDK tests.
 5. `helm-and-manifest-verification`: `helm lint`/`template` and Kubernetes manifest checks.
