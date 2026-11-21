@@ -1,5 +1,6 @@
 use crate::models::{
-    AuditRecord, DurableCacheRecord, FinOpsLedgerRecord, OutboxRecord, TenantRecord,
+    AuditRecord, DurableCacheRecord, FinOpsLedgerRecord, OutboxRecord, TenantErasureTaskRecord,
+    TenantRecord,
 };
 use async_trait::async_trait;
 use chrono::Utc;
@@ -51,6 +52,14 @@ pub trait DatabaseStore: Send + Sync {
     async fn count_cache_entries(&self) -> Result<usize>;
     async fn count_tenant_entries(&self, tenant_id: &str) -> Result<usize>;
     async fn delete_tenant_data(&self, tenant_id: &str) -> Result<usize>;
+    async fn create_erasure_task(&self, tenant_id: &str) -> Result<TenantErasureTaskRecord>;
+    async fn update_erasure_task(&self, task: &TenantErasureTaskRecord) -> Result<()>;
+    async fn get_erasure_task(&self, task_id: Uuid) -> Result<Option<TenantErasureTaskRecord>>;
+    async fn get_active_erasure_task(
+        &self,
+        tenant_id: &str,
+    ) -> Result<Option<TenantErasureTaskRecord>>;
+    async fn list_incomplete_erasure_tasks(&self) -> Result<Vec<TenantErasureTaskRecord>>;
 }
 
 #[derive(Clone, Default)]
@@ -65,6 +74,7 @@ pub struct MemoryDatabaseStore {
     epochs: Arc<RwLock<HashMap<Uuid, u64>>>,
     audits: Arc<RwLock<Vec<AuditRecord>>>,
     finops_ledger: Arc<RwLock<Vec<FinOpsLedgerRecord>>>,
+    erasure_tasks: Arc<RwLock<HashMap<Uuid, TenantErasureTaskRecord>>>,
 }
 
 impl MemoryDatabaseStore {
@@ -80,6 +90,7 @@ impl MemoryDatabaseStore {
             epochs: Arc::new(RwLock::new(HashMap::new())),
             audits: Arc::new(RwLock::new(Vec::new())),
             finops_ledger: Arc::new(RwLock::new(Vec::new())),
+            erasure_tasks: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -277,6 +288,65 @@ impl DatabaseStore for MemoryDatabaseStore {
         let cache = self.cache_entries.read().await;
         count += cache.values().filter(|v| v.tenant_id == tenant_id).count();
         Ok(count)
+    }
+
+    async fn create_erasure_task(&self, tenant_id: &str) -> Result<TenantErasureTaskRecord> {
+        let task = TenantErasureTaskRecord {
+            task_id: Uuid::new_v4(),
+            tenant_id: tenant_id.to_string(),
+            current_step: "INITIATED".to_string(),
+            status: "IN_PROGRESS".to_string(),
+            last_error: None,
+            shred_duration_ns: None,
+            deleted_db_entries: 0,
+            deleted_exact_cache: 0,
+            deleted_vectors: 0,
+            deleted_execution_tools: 0,
+            deleted_learning_events: 0,
+            verified_integrity: false,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        let mut tasks = self.erasure_tasks.write().await;
+        tasks.insert(task.task_id, task.clone());
+        Ok(task)
+    }
+
+    async fn update_erasure_task(&self, task: &TenantErasureTaskRecord) -> Result<()> {
+        let mut tasks = self.erasure_tasks.write().await;
+        let mut updated = task.clone();
+        updated.updated_at = Utc::now();
+        tasks.insert(updated.task_id, updated);
+        Ok(())
+    }
+
+    async fn get_erasure_task(&self, task_id: Uuid) -> Result<Option<TenantErasureTaskRecord>> {
+        let tasks = self.erasure_tasks.read().await;
+        Ok(tasks.get(&task_id).cloned())
+    }
+
+    async fn get_active_erasure_task(
+        &self,
+        tenant_id: &str,
+    ) -> Result<Option<TenantErasureTaskRecord>> {
+        let tasks = self.erasure_tasks.read().await;
+        let active = tasks
+            .values()
+            .filter(|t| t.tenant_id == tenant_id && t.status == "IN_PROGRESS")
+            .max_by_key(|t| t.created_at)
+            .cloned();
+        Ok(active)
+    }
+
+    async fn list_incomplete_erasure_tasks(&self) -> Result<Vec<TenantErasureTaskRecord>> {
+        let tasks = self.erasure_tasks.read().await;
+        let mut list: Vec<_> = tasks
+            .values()
+            .filter(|t| t.status == "IN_PROGRESS" || t.status == "FAILED")
+            .cloned()
+            .collect();
+        list.sort_by_key(|t| t.created_at);
+        Ok(list)
     }
 }
 

@@ -313,7 +313,8 @@ pub async fn invalidate_graph_causal(
     let sarvam_pricing = ModelPricing::sarvam_2b();
     let avoided_usd =
         FinOpsEngine::calculate_token_cost_avoided(&sarvam_pricing, avoided_tokens, 0);
-    let avoided_micro_paise = MicroPaise::from_usd(avoided_usd, MicroPaise::DEFAULT_INR_PER_USD);
+    let avoided_micro_paise = MicroPaise::from_usd(avoided_usd, MicroPaise::DEFAULT_INR_PER_USD)
+        .unwrap_or(MicroPaise::ZERO);
 
     Ok(Json(json!({
         "status": if failed_keys.is_empty() { "purged" } else { "partially_purged" },

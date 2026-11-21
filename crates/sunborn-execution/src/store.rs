@@ -235,19 +235,29 @@ impl PersistentExecutionCacheStore {
         }
     }
 
-    fn append_wal(&self, record: &WalExecutionRecord) {
+    fn append_wal(&self, record: &WalExecutionRecord) -> Result<(), SunbornError> {
         if let Some(parent) = self.wal_path.parent() {
-            let _ = std::fs::create_dir_all(parent);
+            std::fs::create_dir_all(parent).map_err(|e| {
+                SunbornError::internal(format!("Failed to create execution WAL directory: {e}"))
+            })?;
         }
-        if let Ok(mut file) = OpenOptions::new()
+        let mut file = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&self.wal_path)
-        {
-            if let Ok(line) = serde_json::to_string(record) {
-                let _ = writeln!(file, "{}", line);
-            }
-        }
+            .map_err(|e| {
+                SunbornError::internal(format!("Failed to open execution WAL file for append: {e}"))
+            })?;
+        let line = serde_json::to_string(record).map_err(|e| {
+            SunbornError::internal(format!("Failed to serialize execution WAL record: {e}"))
+        })?;
+        writeln!(file, "{}", line).map_err(|e| {
+            SunbornError::internal(format!("Failed to write execution WAL record: {e}"))
+        })?;
+        file.sync_all().map_err(|e| {
+            SunbornError::internal(format!("Failed to fsync execution WAL to disk: {e}"))
+        })?;
+        Ok(())
     }
 
     /// Atomically rewrites the execution WAL file to physically remove all entries
@@ -339,36 +349,39 @@ impl ExecutionCacheStore for PersistentExecutionCacheStore {
             result: result.clone(),
             expires_at,
         };
-        {
-            let mut map = self.entries.write().await;
-            map.insert(key, entry);
-        }
         self.append_wal(&WalExecutionRecord {
             tenant_id: tenant_id.0.clone(),
             signature: signature.to_string(),
             result: Some(result.clone()),
             expires_at,
             op: "set".to_string(),
-        });
+        })?;
+        {
+            let mut map = self.entries.write().await;
+            map.insert(key, entry);
+        }
         Ok(())
     }
 
     async fn evict(&self, tenant_id: &TenantId, signature: &str) -> Result<bool, SunbornError> {
         let key = Self::key(tenant_id, signature);
-        let removed = {
-            let mut map = self.entries.write().await;
-            map.remove(&key).is_some()
+        let exists = {
+            let map = self.entries.read().await;
+            map.contains_key(&key)
         };
-        if removed {
+        if exists {
             self.append_wal(&WalExecutionRecord {
                 tenant_id: tenant_id.0.clone(),
                 signature: signature.to_string(),
                 result: None,
                 expires_at: None,
                 op: "evict".to_string(),
-            });
+            })?;
+            let mut map = self.entries.write().await;
+            Ok(map.remove(&key).is_some())
+        } else {
+            Ok(false)
         }
-        Ok(removed)
     }
 
     async fn evict_by_tool(
@@ -377,20 +390,26 @@ impl ExecutionCacheStore for PersistentExecutionCacheStore {
         tool_name: &str,
     ) -> Result<usize, SunbornError> {
         let prefix = format!("tenant:{}:sig:", tenant_id.0);
-        let mut map = self.entries.write().await;
-        let initial_len = map.len();
-        map.retain(|k, v| !(k.starts_with(&prefix) && v.result.tool_name == tool_name));
-        let count = initial_len - map.len();
-        if count > 0 {
+        let has_matching = {
+            let map = self.entries.read().await;
+            map.iter()
+                .any(|(k, v)| k.starts_with(&prefix) && v.result.tool_name == tool_name)
+        };
+        if has_matching {
             self.append_wal(&WalExecutionRecord {
                 tenant_id: tenant_id.0.clone(),
                 signature: tool_name.to_string(),
                 result: None,
                 expires_at: None,
                 op: "evict_by_tool".to_string(),
-            });
+            })?;
+            let mut map = self.entries.write().await;
+            let initial_len = map.len();
+            map.retain(|k, v| !(k.starts_with(&prefix) && v.result.tool_name == tool_name));
+            Ok(initial_len - map.len())
+        } else {
+            Ok(0)
         }
-        Ok(count)
     }
 
     async fn evict_by_tenant(&self, tenant_id: &TenantId) -> Result<usize, SunbornError> {
@@ -505,5 +524,30 @@ mod tests {
 
         // Cleanup
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn test_persistent_execution_cache_store_fsync_and_error_handling() {
+        #[cfg(unix)]
+        let invalid_path = PathBuf::from("/proc/nonexistent/wal.log");
+        #[cfg(windows)]
+        let invalid_path = PathBuf::from("Z:\\invalid_nonexistent_drive_12345\\wal.log");
+
+        let store = PersistentExecutionCacheStore::new_with_wal(&invalid_path);
+        let tenant = TenantId::new("t-err");
+        let res = ToolResult {
+            tool_name: "test".into(),
+            signature: "sig".into(),
+            output: serde_json::json!({}),
+            is_error: false,
+            execution_latency_ms: 1,
+            created_at: Utc::now(),
+        };
+
+        let result = store.set(&tenant, "sig", &res, None).await;
+        assert!(
+            result.is_err(),
+            "Must fail closed when WAL fsync/write fails"
+        );
     }
 }

@@ -1,6 +1,7 @@
 use crate::models::{
     AuditRecord, DurableApiCredentialRecord, DurableCacheRecord, FinOpsLedgerRecord,
-    FreePoolLimits, NewApiCredentialRecord, OutboxRecord, TenantQuotaLimits, TenantRecord,
+    FreePoolLimits, NewApiCredentialRecord, OutboxRecord, TenantErasureTaskRecord,
+    TenantQuotaLimits, TenantRecord,
 };
 use crate::repository::{DatabaseStore, MemoryDatabaseStore};
 use async_trait::async_trait;
@@ -2232,6 +2233,284 @@ impl DatabaseStore for PostgresDatabaseStore {
         }
         let mem_count = self.fallback_store.count_tenant_entries(tenant_id).await?;
         Ok(pg_count.max(mem_count))
+    }
+
+    async fn create_erasure_task(&self, tenant_id: &str) -> Result<TenantErasureTaskRecord> {
+        let task_id = Uuid::new_v4();
+        let now = Utc::now();
+        if let Some(pool) = self.get_pool().await {
+            let row = sqlx::query(
+                "INSERT INTO tenant_erasure_tasks 
+                 (task_id, tenant_id, current_step, status, created_at, updated_at)
+                 VALUES ($1, $2, 'INITIATED', 'IN_PROGRESS', $3, $3)
+                 RETURNING task_id, tenant_id, current_step, status, last_error, shred_duration_ns,
+                           deleted_db_entries, deleted_exact_cache, deleted_vectors,
+                           deleted_execution_tools, deleted_learning_events, verified_integrity,
+                           created_at, updated_at",
+            )
+            .bind(task_id)
+            .bind(tenant_id)
+            .bind(now)
+            .fetch_one(&pool)
+            .await;
+
+            match row {
+                Ok(r) => {
+                    let task = TenantErasureTaskRecord {
+                        task_id: r.get("task_id"),
+                        tenant_id: r.get("tenant_id"),
+                        current_step: r.get("current_step"),
+                        status: r.get("status"),
+                        last_error: r.get("last_error"),
+                        shred_duration_ns: r.get("shred_duration_ns"),
+                        deleted_db_entries: r.get("deleted_db_entries"),
+                        deleted_exact_cache: r.get("deleted_exact_cache"),
+                        deleted_vectors: r.get("deleted_vectors"),
+                        deleted_execution_tools: r.get("deleted_execution_tools"),
+                        deleted_learning_events: r.get("deleted_learning_events"),
+                        verified_integrity: r
+                            .get::<Option<bool>, _>("verified_integrity")
+                            .unwrap_or(false),
+                        created_at: r.get("created_at"),
+                        updated_at: r.get("updated_at"),
+                    };
+                    let _ = self.fallback_store.update_erasure_task(&task).await;
+                    return Ok(task);
+                }
+                Err(err) => {
+                    tracing::error!(error = %err, "PostgreSQL create_erasure_task failed");
+                    if self.strict_durability {
+                        return Err(SunbornError::database(format!(
+                            "PostgreSQL create_erasure_task failed: {err}"
+                        )));
+                    }
+                }
+            }
+        } else if self.strict_durability {
+            return Err(SunbornError::database(
+                "PostgreSQL connection pool unavailable; fail-closed durability enforced",
+            ));
+        }
+        self.fallback_store.create_erasure_task(tenant_id).await
+    }
+
+    async fn update_erasure_task(&self, task: &TenantErasureTaskRecord) -> Result<()> {
+        if let Some(pool) = self.get_pool().await {
+            let res = sqlx::query(
+                "UPDATE tenant_erasure_tasks
+                 SET current_step = $2,
+                     status = $3,
+                     last_error = $4,
+                     shred_duration_ns = $5,
+                     deleted_db_entries = $6,
+                     deleted_exact_cache = $7,
+                     deleted_vectors = $8,
+                     deleted_execution_tools = $9,
+                     deleted_learning_events = $10,
+                     verified_integrity = $11,
+                     updated_at = NOW()
+                 WHERE task_id = $1",
+            )
+            .bind(task.task_id)
+            .bind(&task.current_step)
+            .bind(&task.status)
+            .bind(&task.last_error)
+            .bind(task.shred_duration_ns)
+            .bind(task.deleted_db_entries)
+            .bind(task.deleted_exact_cache)
+            .bind(task.deleted_vectors)
+            .bind(task.deleted_execution_tools)
+            .bind(task.deleted_learning_events)
+            .bind(task.verified_integrity)
+            .execute(&pool)
+            .await;
+
+            match res {
+                Ok(_) => {
+                    let _ = self.fallback_store.update_erasure_task(task).await;
+                    return Ok(());
+                }
+                Err(err) => {
+                    tracing::error!(error = %err, "PostgreSQL update_erasure_task failed");
+                    if self.strict_durability {
+                        return Err(SunbornError::database(format!(
+                            "PostgreSQL update_erasure_task failed: {err}"
+                        )));
+                    }
+                }
+            }
+        } else if self.strict_durability {
+            return Err(SunbornError::database(
+                "PostgreSQL connection pool unavailable; fail-closed durability enforced",
+            ));
+        }
+        self.fallback_store.update_erasure_task(task).await
+    }
+
+    async fn get_erasure_task(&self, task_id: Uuid) -> Result<Option<TenantErasureTaskRecord>> {
+        if let Some(pool) = self.get_pool().await {
+            let row = sqlx::query(
+                "SELECT task_id, tenant_id, current_step, status, last_error, shred_duration_ns,
+                        deleted_db_entries, deleted_exact_cache, deleted_vectors,
+                        deleted_execution_tools, deleted_learning_events, verified_integrity,
+                        created_at, updated_at
+                 FROM tenant_erasure_tasks
+                 WHERE task_id = $1",
+            )
+            .bind(task_id)
+            .fetch_optional(&pool)
+            .await;
+
+            match row {
+                Ok(Some(r)) => {
+                    return Ok(Some(TenantErasureTaskRecord {
+                        task_id: r.get("task_id"),
+                        tenant_id: r.get("tenant_id"),
+                        current_step: r.get("current_step"),
+                        status: r.get("status"),
+                        last_error: r.get("last_error"),
+                        shred_duration_ns: r.get("shred_duration_ns"),
+                        deleted_db_entries: r.get("deleted_db_entries"),
+                        deleted_exact_cache: r.get("deleted_exact_cache"),
+                        deleted_vectors: r.get("deleted_vectors"),
+                        deleted_execution_tools: r.get("deleted_execution_tools"),
+                        deleted_learning_events: r.get("deleted_learning_events"),
+                        verified_integrity: r
+                            .get::<Option<bool>, _>("verified_integrity")
+                            .unwrap_or(false),
+                        created_at: r.get("created_at"),
+                        updated_at: r.get("updated_at"),
+                    }));
+                }
+                Ok(None) => return Ok(None),
+                Err(err) => {
+                    tracing::error!(error = %err, "PostgreSQL get_erasure_task failed");
+                    if self.strict_durability {
+                        return Err(SunbornError::database(format!(
+                            "PostgreSQL get_erasure_task failed: {err}"
+                        )));
+                    }
+                }
+            }
+        } else if self.strict_durability {
+            return Err(SunbornError::database(
+                "PostgreSQL connection pool unavailable; fail-closed durability enforced",
+            ));
+        }
+        self.fallback_store.get_erasure_task(task_id).await
+    }
+
+    async fn get_active_erasure_task(
+        &self,
+        tenant_id: &str,
+    ) -> Result<Option<TenantErasureTaskRecord>> {
+        if let Some(pool) = self.get_pool().await {
+            let row = sqlx::query(
+                "SELECT task_id, tenant_id, current_step, status, last_error, shred_duration_ns,
+                        deleted_db_entries, deleted_exact_cache, deleted_vectors,
+                        deleted_execution_tools, deleted_learning_events, verified_integrity,
+                        created_at, updated_at
+                 FROM tenant_erasure_tasks
+                 WHERE tenant_id = $1 AND status = 'IN_PROGRESS'
+                 ORDER BY created_at DESC
+                 LIMIT 1",
+            )
+            .bind(tenant_id)
+            .fetch_optional(&pool)
+            .await;
+
+            match row {
+                Ok(Some(r)) => {
+                    return Ok(Some(TenantErasureTaskRecord {
+                        task_id: r.get("task_id"),
+                        tenant_id: r.get("tenant_id"),
+                        current_step: r.get("current_step"),
+                        status: r.get("status"),
+                        last_error: r.get("last_error"),
+                        shred_duration_ns: r.get("shred_duration_ns"),
+                        deleted_db_entries: r.get("deleted_db_entries"),
+                        deleted_exact_cache: r.get("deleted_exact_cache"),
+                        deleted_vectors: r.get("deleted_vectors"),
+                        deleted_execution_tools: r.get("deleted_execution_tools"),
+                        deleted_learning_events: r.get("deleted_learning_events"),
+                        verified_integrity: r
+                            .get::<Option<bool>, _>("verified_integrity")
+                            .unwrap_or(false),
+                        created_at: r.get("created_at"),
+                        updated_at: r.get("updated_at"),
+                    }));
+                }
+                Ok(None) => return Ok(None),
+                Err(err) => {
+                    tracing::error!(error = %err, "PostgreSQL get_active_erasure_task failed");
+                    if self.strict_durability {
+                        return Err(SunbornError::database(format!(
+                            "PostgreSQL get_active_erasure_task failed: {err}"
+                        )));
+                    }
+                }
+            }
+        } else if self.strict_durability {
+            return Err(SunbornError::database(
+                "PostgreSQL connection pool unavailable; fail-closed durability enforced",
+            ));
+        }
+        self.fallback_store.get_active_erasure_task(tenant_id).await
+    }
+
+    async fn list_incomplete_erasure_tasks(&self) -> Result<Vec<TenantErasureTaskRecord>> {
+        if let Some(pool) = self.get_pool().await {
+            let rows = sqlx::query(
+                "SELECT task_id, tenant_id, current_step, status, last_error, shred_duration_ns,
+                        deleted_db_entries, deleted_exact_cache, deleted_vectors,
+                        deleted_execution_tools, deleted_learning_events, verified_integrity,
+                        created_at, updated_at
+                 FROM tenant_erasure_tasks
+                 WHERE status IN ('IN_PROGRESS', 'FAILED')
+                 ORDER BY created_at ASC",
+            )
+            .fetch_all(&pool)
+            .await;
+
+            match rows {
+                Ok(list) => {
+                    return Ok(list
+                        .into_iter()
+                        .map(|r| TenantErasureTaskRecord {
+                            task_id: r.get("task_id"),
+                            tenant_id: r.get("tenant_id"),
+                            current_step: r.get("current_step"),
+                            status: r.get("status"),
+                            last_error: r.get("last_error"),
+                            shred_duration_ns: r.get("shred_duration_ns"),
+                            deleted_db_entries: r.get("deleted_db_entries"),
+                            deleted_exact_cache: r.get("deleted_exact_cache"),
+                            deleted_vectors: r.get("deleted_vectors"),
+                            deleted_execution_tools: r.get("deleted_execution_tools"),
+                            deleted_learning_events: r.get("deleted_learning_events"),
+                            verified_integrity: r
+                                .get::<Option<bool>, _>("verified_integrity")
+                                .unwrap_or(false),
+                            created_at: r.get("created_at"),
+                            updated_at: r.get("updated_at"),
+                        })
+                        .collect());
+                }
+                Err(err) => {
+                    tracing::error!(error = %err, "PostgreSQL list_incomplete_erasure_tasks failed");
+                    if self.strict_durability {
+                        return Err(SunbornError::database(format!(
+                            "PostgreSQL list_incomplete_erasure_tasks failed: {err}"
+                        )));
+                    }
+                }
+            }
+        } else if self.strict_durability {
+            return Err(SunbornError::database(
+                "PostgreSQL connection pool unavailable; fail-closed durability enforced",
+            ));
+        }
+        self.fallback_store.list_incomplete_erasure_tasks().await
     }
 }
 

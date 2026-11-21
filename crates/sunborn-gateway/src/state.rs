@@ -686,7 +686,7 @@ impl AppState {
             }
         }
 
-        Self {
+        let this = Self {
             config,
             cache: selected_cache,
             circuit_breaker,
@@ -741,7 +741,16 @@ impl AppState {
             cluster_sync_engine,
             cluster_transport_durable,
             orchestrator,
-        }
+        };
+
+        // Automatic crash-recovery: resume any incomplete or interrupted tenant erasure tasks
+        let state_clone = this.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            let _ = crate::handlers::resume_interrupted_erasure_tasks(&state_clone).await;
+        });
+
+        this
     }
 
     /// Returns true if DragonflyCacheStore is actively wired into the exact cache path.

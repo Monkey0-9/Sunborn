@@ -1,15 +1,16 @@
 # Sunborn Enterprise Security Assessment & Penetration Testing Register
 
-**Engagement Type:** Adversarial Red-Team & White-Box Penetration Test  
+**Engagement Type:** In-Tree Engineering Adversarial Red-Team & White-Box Penetration Test  
 **Scope:** Distributed Semantic Gateway, Cryptographic Key Custody, Multi-Tenant Isolation, BFF Proxy Ingress, FinOps Micro-Unit Accounting  
 **Standard:** OWASP Top 10 API Security Risks (2023), NIST SP 800-115, CERT-In Guidelines  
-**Status:** ALL FINDINGS REMEDIATED & VERIFIED (0 Critical, 0 High, 0 Medium Open)
+**In-Tree Vector Status:** ALL 10 IN-TREE ATTACK VECTORS REMEDIATED & VERIFIED (0 Critical, 0 High, 0 Medium Open via automated regression tests)  
+**External Assurance Notice:** An independently signed external penetration-test report from an accredited third-party commercial cybersecurity audit firm is an external operational prerequisite for Stage 2 Public Launch and remains tracked as an open external gate (Gate N2 / Stage 2).
 
 ---
 
 ## 1. Executive Summary
 
-A comprehensive threat modeling and penetration testing audit was performed against Sunborn's network ingress, authentication handlers, cryptographic shredding lifecycle, and database persistence layers. Ten key attack vectors were probed. Every identified vulnerability has been remediated with automated regression tests enforcing prevention.
+A comprehensive threat modeling and penetration testing audit was performed against Sunborn's network ingress, authentication handlers, cryptographic shredding lifecycle, and database persistence layers. Ten key attack vectors were probed. Every identified vulnerability has been remediated with automated regression tests enforcing prevention. This document constitutes the authoritative in-tree defect and remediation ledger for engineering validation; commercial third-party accreditation requires the formal independent audit engagement report specified in `docs/STATUS.md` §3.
 
 ---
 
