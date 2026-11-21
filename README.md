@@ -19,7 +19,7 @@ and refuses to serve it when the reuse cannot be proven safe.*
 [![WCAG 2.2 AA](https://img.shields.io/badge/Accessibility-WCAG%202.2%20AA%20Verified-brightgreen.svg)](docs/STATUS.md)
 [![Sovereign India](https://img.shields.io/badge/Sovereign%20India-DPDP%202023%20%C2%B7%20CERT--In%20%C2%B7%20GST-blue.svg)](docs/STATUS.md)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-RELEASE--READY%20%C2%B7%20100%25%20CI%20Verified-brightgreen.svg)](docs/STATUS.md)
+[![Status](https://img.shields.io/badge/Status-STAGE%200%20PILOT%20APPROVED%20%C2%B7%20100%25%20CI%20Verified%20%C2%B7%20BETA%20GATED-brightgreen.svg)](docs/STATUS.md)
 
 **[Start in 60s & Free Desktop](#2-start-in-60-seconds--zero-cost-local-desktop-100-free-byok)** ·
 **[21 Quality Attributes](docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md)** ·

@@ -143,7 +143,7 @@ fn test_layer2_tenant_safe_store_isolation_capacity_and_gdpr() {
     assert_eq!(store.total_events(), 8);
 
     // GDPR purge of tenant alpha
-    let purged = store.purge_tenant(&t1);
+    let purged = store.purge_tenant(&t1).unwrap();
     assert_eq!(purged, 5);
     assert_eq!(store.get_tenant_events(&t1).len(), 0);
     assert_eq!(store.tenant_event_count(&t1), 0);

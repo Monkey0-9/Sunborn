@@ -67,6 +67,19 @@ pub async fn verify_multi_store_erasure_integrity(
 
     let learning_res = state.learning_store.tenant_event_count(&tenant);
 
+    // Physical on-disk WAL verification for durable storage tiers
+    let learning_wal_clean = state.learning_store.verify_tenant_erased_on_disk(&tenant);
+    let execution_wal_clean = state.execution_store.verify_tenant_erased_on_disk(&tenant);
+    if !learning_wal_clean || !execution_wal_clean {
+        tracing::error!(
+            tenant = %tenant_id,
+            learning_wal_clean,
+            execution_wal_clean,
+            "Physical disk WAL verification failed: tenant remnants detected in on-disk WAL files"
+        );
+        verification_failed = true;
+    }
+
     let residuals = ErasureResidualCounts {
         db: db_res,
         exact_cache: exact_res,
@@ -99,6 +112,35 @@ pub async fn verify_multi_store_erasure_integrity(
     (all_zero, residuals)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ErasureStateStep {
+    Initiated,
+    TdekShredded,
+    DbPurged,
+    ExactCachePurged,
+    VectorStorePurged,
+    ExecutionStorePurged,
+    LearningStorePurged,
+    CredentialsRevoked,
+    QuotaRemoved,
+    VerifiedErased,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TenantErasureProgress {
+    pub tenant_id: String,
+    pub current_step: String,
+    pub status: String,
+    pub shred_duration_ns: u128,
+    pub deleted_db_entries: usize,
+    pub deleted_exact_cache: usize,
+    pub deleted_vectors: usize,
+    pub deleted_execution_tools: usize,
+    pub deleted_learning_events: usize,
+    pub verified_erasure: bool,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
 pub async fn delete_tenant(
     State(state): State<AppState>,
     Extension(sec_ctx): Extension<SecurityContext>,
@@ -114,19 +156,27 @@ pub async fn delete_tenant(
 
     let tenant = TenantId::new(&tenant_id);
 
-    // 0. O(1) Instant Cryptographic Shredding of TDEK: must succeed before cascading deletion
+    // Durable Erasure State Machine: Milestone 1 - Initiated
+    tracing::info!(tenant = %tenant_id, step = "INITIATED", "Starting durable tenant erasure workflow");
+
+    // Milestone 2 - O(1) Instant Cryptographic Shredding of TDEK: must succeed before cascading deletion
     let shred_duration = state.crypto_registry.shred_tenant(&tenant).map_err(|e| {
         AppError::from(SunbornError::internal(format!(
             "Cryptographic shredding failed: {e}"
         )))
     })?;
     let shred_duration_nanos = shred_duration.as_nanos();
+    tracing::info!(tenant = %tenant_id, step = "TDEK_SHREDDED", shred_duration_nanos, "Milestone achieved");
 
+    // Milestone 3 - PostgreSQL database purge
     let db_deleted = state
         .db
         .delete_tenant_data(&tenant_id)
         .await
         .map_err(AppError::from)?;
+    tracing::info!(tenant = %tenant_id, step = "DB_PURGED", db_deleted, "Milestone achieved");
+
+    // Milestone 4 - Exact cache purge
     let prefix_sunborn = format!("sunborn:{}:", tenant_id);
     let exact_deleted_sunborn = state
         .cache
@@ -140,22 +190,37 @@ pub async fn delete_tenant(
         .await
         .map_err(AppError::from)?;
     let exact_deleted = exact_deleted_sunborn + exact_deleted_legacy;
+    tracing::info!(tenant = %tenant_id, step = "EXACT_CACHE_PURGED", exact_deleted, "Milestone achieved");
 
+    // Milestone 5 - Semantic vector store purge
     let vector_deleted = state
         .vector_store
         .delete_by_tenant(&tenant)
         .await
         .map_err(AppError::from)?;
+    tracing::info!(tenant = %tenant_id, step = "VECTOR_STORE_PURGED", vector_deleted, "Milestone achieved");
+
+    // Milestone 6 - Execution store eviction & WAL rewrite
     let execution_deleted = state
         .execution_store
         .evict_by_tenant(&tenant)
         .await
         .map_err(AppError::from)?;
-    let learning_deleted = state.learning_store.purge_tenant(&tenant);
+    tracing::info!(tenant = %tenant_id, step = "EXECUTION_STORE_PURGED", execution_deleted, "Milestone achieved");
+
+    // Milestone 7 - Learning store purge & atomic WAL rewrite
+    let learning_deleted = state
+        .learning_store
+        .purge_tenant(&tenant)
+        .map_err(AppError::from)?;
+    tracing::info!(tenant = %tenant_id, step = "LEARNING_STORE_PURGED", learning_deleted, "Milestone achieved");
+
+    // Milestone 8 - Revoke tenant credentials & clear quota ledger
     let _credentials_revoked = state.api_key_registry.revoke_tenant_keys(&tenant);
     state.quota_ledger.remove_tenant(&tenant_id).await;
+    tracing::info!(tenant = %tenant_id, step = "CREDENTIALS_AND_QUOTA_CLEARED", "Milestone achieved");
 
-    // 1. Independent Read-After-Delete Verification Pass
+    // Milestone 9 - Independent Read-After-Delete & Physical Disk Verification Pass
     let (verified_erasure, residuals) =
         verify_multi_store_erasure_integrity(&state, &tenant_id).await;
     let final_status = if verified_erasure {
@@ -173,7 +238,8 @@ pub async fn delete_tenant(
         execution_deleted,
         learning_deleted,
         verified_multi_store_erasure = verified_erasure,
-        "Completed tenant cascade offboarding"
+        step = "VERIFIED_ERASED",
+        "Completed durable tenant cascade offboarding"
     );
 
     Ok(Json(json!({

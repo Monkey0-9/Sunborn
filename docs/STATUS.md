@@ -2,10 +2,11 @@
 
 **Effective:** 2026-11-20
 **Baseline:** `6e5b823` plus the remediation described in §2.1, §2.2, and §2.3
-**Release decision:** **PRODUCTION LAUNCH APPROVED — 100% IN-TREE & CI VERIFIED.** All in-tree checks
-listed in §1 pass on this tree (345+ Rust tests, 63 frontend tests, 4 TypeScript SDK tests, Python SDK package smoke test, 8/8 pre-flight launch verification gates, 10/10 CI quality gates), and all
+**Release decision:** **STAGE 0 CONTROLLED PILOT APPROVED — 100% IN-TREE & CI VERIFIED.** All in-tree checks
+listed in §1 pass on this tree (348+ Rust tests, 63 frontend tests, 4 TypeScript SDK tests, Python SDK package smoke test, 8/8 pre-flight launch verification gates, 10/10 CI quality gates), and all
 P0/P1/P2 defects found in the 2026-11-17 audit and 2026-11-20 security audit (Issues #3-#10) are fixed with regression tests. All 21 enterprise system quality attributes are empirically documented and verified in `docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`.
 Authoritative gate N1 (multi-node distributed invalidation harness) is 100% verified across all 6 modes (exact, semantic, outbox, replay, finops, crash) in containerized CI.
+Stage 1 (Private Beta) and Stage 2 (Public Launch) remain formally GATED on external staging requirements (B1 load testing and B2 billing cycle evidence) as tracked in [`docs/launch/05_PRELAUNCH_CHECKLIST.md`](launch/05_PRELAUNCH_CHECKLIST.md).
 Full findings and scoring: [`docs/engineering-audit-2026-11-17/REPORT.md`](engineering-audit-2026-11-17/REPORT.md).
 
 This document supersedes any readiness, score, or badge claim in

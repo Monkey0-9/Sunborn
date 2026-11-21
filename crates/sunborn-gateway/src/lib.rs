@@ -233,6 +233,8 @@ pub fn create_router(state: AppState) -> Router {
             post(handlers::rollback_learning_policy),
         )
         .route("/v1/local/status", get(handlers::get_local_status))
+        .route("/", get(handlers::get_local_cockpit_html))
+        .route("/cockpit", get(handlers::get_local_cockpit_html))
         .route("/v1/local/providers", post(handlers::save_local_provider))
         .route(
             "/v1/local/providers/{name}",

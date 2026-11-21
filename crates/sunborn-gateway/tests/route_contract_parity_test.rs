@@ -312,6 +312,16 @@ const ROUTES: &[Route] = &[
     // Local BYOK desktop control.
     Route {
         method: "GET",
+        path: "/",
+        access: Access::Public,
+    },
+    Route {
+        method: "GET",
+        path: "/cockpit",
+        access: Access::Public,
+    },
+    Route {
+        method: "GET",
         path: "/v1/local/status",
         access: Access::Public,
     },

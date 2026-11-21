@@ -1,0 +1,62 @@
+name: Enterprise Release Governance & SSOT Integrity Gate
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  governance-verification:
+    name: Release Governance & SSOT Alignment Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+
+      - name: Verify Strict Public Launch Gates
+        run: python3 scripts/verify_public_launch.py --strict
+
+      - name: Verify SSOT Release Verdict Alignment
+        run: |
+          python3 - <<'EOF'
+          import sys
+          from pathlib import Path
+
+          readme = Path("README.md").read_text(encoding="utf-8")
+          status = Path("docs/STATUS.md").read_text(encoding="utf-8")
+          checklist = Path("docs/launch/05_PRELAUNCH_CHECKLIST.md").read_text(encoding="utf-8")
+          defect = Path("docs/engineering-transformation/25_DEFECT_REGISTER.md").read_text(encoding="utf-8")
+
+          errors = []
+
+          # Assert that README and STATUS share the Stage 0 Pilot Approved / Beta Gated verdict
+          if "STAGE%200%20PILOT%20APPROVED" not in readme and "STAGE 0 PILOT APPROVED" not in readme:
+              errors.append("README.md missing synchronized Stage 0 Pilot Approved status badge.")
+
+          if "Stage 0 Pilot APPROVED" not in checklist:
+              errors.append("05_PRELAUNCH_CHECKLIST.md contradicts STATUS.md regarding Stage 0 Pilot approval.")
+
+          if "**Open P0 / P1 Defects:** 0" not in defect and "Open P0 / P1 Defects: 0" not in defect:
+              errors.append("25_DEFECT_REGISTER.md must report 0 open P0/P1 defects.")
+
+          if "Issue #3" not in defect or "Issue #10" not in defect:
+              errors.append("25_DEFECT_REGISTER.md missing formal ledger entries for Issues #3 through #10.")
+
+          if errors:
+              print("ERROR: Governance SSOT verification failed:")
+              for err in errors:
+                  print(f"  - {err}")
+              sys.exit(1)
+
+          print("OK: All governance and release decision claims are 100% synchronized across SSOT documents.")
+          EOF

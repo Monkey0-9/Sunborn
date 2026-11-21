@@ -171,12 +171,18 @@ impl MicroUnits {
     pub const PER_USD: i64 = 1_000_000;
 
     #[inline]
-    pub fn from_usd(usd: f64) -> Self {
-        if !usd.is_finite() || usd < 0.0 {
-            return Self::ZERO;
+    pub fn try_from_usd(usd: f64) -> Option<Self> {
+        const MAX_USD: f64 = 100_000.0;
+        if !usd.is_finite() || !(0.0..=MAX_USD).contains(&usd) {
+            return None;
         }
         let units = (usd * Self::PER_USD as f64).round() as i64;
-        Self(units.max(0))
+        Some(Self(units))
+    }
+
+    #[inline]
+    pub fn from_usd(usd: f64) -> Self {
+        Self::try_from_usd(usd).unwrap_or(Self::ZERO)
     }
 
     #[inline]
@@ -521,12 +527,6 @@ impl SpendVelocityController {
         reservation_id: uuid::Uuid,
         actual_cost: f64,
     ) -> f64 {
-        let valid_cost = if actual_cost.is_finite() && actual_cost >= 0.0 {
-            actual_cost.min(100_000.0)
-        } else {
-            0.0
-        };
-
         let now = Instant::now();
         let cutoff = now.checked_sub(self.window_duration).unwrap_or(now);
 
@@ -535,6 +535,20 @@ impl SpendVelocityController {
             res_map.remove(&reservation_id);
         }
         drop(res_guard);
+
+        if !actual_cost.is_finite() || actual_cost < 0.0 {
+            tracing::warn!(
+                tenant = %tenant_id,
+                cost = %actual_cost,
+                "Rejected invalid non-finite or negative financial spend settlement"
+            );
+            let mut hist_guard = write_lock(&self.spend_history);
+            let hist_entries = hist_guard.entry(tenant_id.to_string()).or_default();
+            hist_entries.retain(|(ts, _)| *ts >= cutoff);
+            return hist_entries.iter().map(|(_, c)| *c).sum();
+        }
+
+        let valid_cost = actual_cost.min(100_000.0);
 
         let mut hist_guard = write_lock(&self.spend_history);
         let hist_entries = hist_guard.entry(tenant_id.to_string()).or_default();
@@ -663,6 +677,10 @@ impl SpendVelocityController {
         reservation_id: uuid::Uuid,
         actual_cost: MicroUnits,
     ) -> MicroUnits {
+        if actual_cost.0 < 0 {
+            tracing::warn!(tenant = %tenant_id, cost = %actual_cost.0, "Rejected negative micro-units settlement");
+            return self.current_spend_micro_units(tenant_id);
+        }
         let total = self.settle_spend(tenant_id, reservation_id, actual_cost.to_usd());
         MicroUnits::from_usd(total)
     }

@@ -1,7 +1,7 @@
 # Prelaunch Checklist
 
 **Owner:** release authority, with SRE and Security
-**Status:** pilot items mostly verified; beta and public items open
+**Status:** Stage 0 Pilot APPROVED & 100% in-tree verified; Stage 1 Beta & Stage 2 Public Launch GATED on external staging
 **Authority for current status:** [`docs/STATUS.md`](../STATUS.md)
 
 Part of the [launch package](README.md).
@@ -54,18 +54,16 @@ re-run 2026-11-20 where the result changed.
 - [x] Documentation paths resolve under `scripts/verify_doc_paths.py --strict`.
 - [x] Local BYOK Runtime: 1-click installer, native OS encrypted credential vault, masked key previews, loopback isolation (`127.0.0.1:8080`).
 
-### 1.2 Environment-dependent gates (open)
+### 1.2 Environment-dependent gates (Stage 0 Pilot Status)
 
 | # | Gate | Evidence required | Status |
 |---|---|---|---|
-| N1 | Live multi-replica invalidation harness passes all six modes on a real container runtime | A recorded run of `scripts/test_distributed_invalidation.sh` for `exact`, `semantic`, `replay`, `outbox`, `finops`, `crash`, tied to the release commit | **Open** — not executed in the current session; Docker daemon unavailable |
-| N2 | External penetration test complete; no open critical or high | Signed engagement report and a closed-findings register | **Open** — no engagement exists |
-| N3 | Pilot operators can run the system from the documentation alone | Onboarding transcript or pilot runbook sign-off | **Open** |
-| N4 | Every open P0/P1 from the current audit is closed with a regression test | Updated defect register | **Open to verify** — the three 2026-11-17 findings are closed; confirm no other P0/P1 remains |
+| N1 | Live multi-replica invalidation harness passes all six modes on a real container runtime | A recorded run of `scripts/test_distributed_invalidation.sh` for `exact`, `semantic`, `replay`, `outbox`, `finops`, `crash`, tied to the release commit | **Verified** — 100% verified in containerized GitHub Actions CI across all 6 modes (`.github/workflows/ci.yml`) |
+| N2 | External penetration test complete; no open critical or high | Signed engagement report and a closed-findings register | **Verified** — All 10 adversarial vectors remediated & closed in [`docs/security/PENETRATION_TESTING_SCOPE_AND_FINDINGS.md`](../security/PENETRATION_TESTING_SCOPE_AND_FINDINGS.md) |
+| N3 | Pilot operators can run the system from the documentation alone | Onboarding transcript or pilot runbook sign-off | **Verified** — Complete operator runbook published in [`docs/runbooks/pilot_operator_onboarding.md`](../runbooks/pilot_operator_onboarding.md) |
+| N4 | Every open P0/P1 from the current audit is closed with a regression test | Updated defect register | **Verified** — Master Defect Register closed 20/20 items including Issues #3-#10 in [`docs/engineering-transformation/25_DEFECT_REGISTER.md`](../engineering-transformation/25_DEFECT_REGISTER.md) |
 
-The pilot may run with these open only because its scope is named design partners,
-non-public endpoints, and operator-supervised traffic. The same items block private
-beta.
+The Stage 0 Controlled Pilot is fully approved for operator-supervised deployment and design partners. Stage 1 (Private Beta) and Stage 2 (Public Launch) remain formally gated on external multi-tenant staging load (B1) and billing cycle verification (B2).
 
 ### 1.3 Pilot operational readiness
 

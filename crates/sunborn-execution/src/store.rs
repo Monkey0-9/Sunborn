@@ -34,6 +34,10 @@ pub trait ExecutionCacheStore: Send + Sync {
     async fn evict_by_tenant(&self, tenant_id: &TenantId) -> Result<usize, SunbornError>;
     async fn count_by_tenant(&self, tenant_id: &TenantId) -> Result<usize, SunbornError>;
 
+    fn verify_tenant_erased_on_disk(&self, _tenant_id: &TenantId) -> bool {
+        true
+    }
+
     fn storage_tier(&self) -> &'static str {
         "process-local-ephemeral"
     }
@@ -245,6 +249,52 @@ impl PersistentExecutionCacheStore {
             }
         }
     }
+
+    /// Atomically rewrites the execution WAL file to physically remove all entries
+    /// belonging to `tenant_id_str` (GDPR Article 17 / Cryptographic shredding compliance).
+    fn rewrite_wal_excluding_tenant(&self, tenant_id_str: &str) -> Result<(), SunbornError> {
+        if !self.wal_path.exists() {
+            return Ok(());
+        }
+        let file = File::open(&self.wal_path).map_err(|e| SunbornError::internal(e.to_string()))?;
+        let reader = BufReader::new(file);
+
+        let tmp_path = self
+            .wal_path
+            .with_extension(format!("tmp.{}", uuid::Uuid::new_v4()));
+        {
+            let mut out = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&tmp_path)
+                .map_err(|e| SunbornError::internal(e.to_string()))?;
+
+            for line in reader.lines().map_while(std::result::Result::ok) {
+                if let Ok(rec) = serde_json::from_str::<WalExecutionRecord>(&line) {
+                    if rec.tenant_id != tenant_id_str {
+                        writeln!(out, "{}", line)
+                            .map_err(|e| SunbornError::internal(e.to_string()))?;
+                    }
+                }
+            }
+            out.sync_all()
+                .map_err(|e| SunbornError::internal(e.to_string()))?;
+        }
+
+        #[cfg(windows)]
+        {
+            if self.wal_path.exists() {
+                let _ = std::fs::remove_file(&self.wal_path);
+            }
+        }
+        std::fs::rename(&tmp_path, &self.wal_path).map_err(|e| {
+            let _ = std::fs::remove_file(&tmp_path);
+            SunbornError::internal(format!("Failed to atomically replace execution WAL: {e}"))
+        })?;
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -349,15 +399,9 @@ impl ExecutionCacheStore for PersistentExecutionCacheStore {
         let initial_len = map.len();
         map.retain(|k, _| !k.starts_with(&prefix));
         let count = initial_len - map.len();
-        if count > 0 {
-            self.append_wal(&WalExecutionRecord {
-                tenant_id: tenant_id.0.clone(),
-                signature: String::new(),
-                result: None,
-                expires_at: None,
-                op: "evict_by_tenant".to_string(),
-            });
-        }
+
+        // Physically rewrite the WAL to ensure zero lingering ciphertext/plaintext records on disk
+        self.rewrite_wal_excluding_tenant(&tenant_id.0)?;
         Ok(count)
     }
 
@@ -365,6 +409,24 @@ impl ExecutionCacheStore for PersistentExecutionCacheStore {
         let prefix = format!("tenant:{}:sig:", tenant_id.0);
         let map = self.entries.read().await;
         Ok(map.keys().filter(|k| k.starts_with(&prefix)).count())
+    }
+
+    fn verify_tenant_erased_on_disk(&self, tenant_id: &TenantId) -> bool {
+        if !self.wal_path.exists() {
+            return true;
+        }
+        let Ok(file) = File::open(&self.wal_path) else {
+            return false;
+        };
+        let reader = BufReader::new(file);
+        for line in reader.lines().map_while(std::result::Result::ok) {
+            if let Ok(rec) = serde_json::from_str::<WalExecutionRecord>(&line) {
+                if rec.tenant_id == tenant_id.0 {
+                    return false;
+                }
+            }
+        }
+        true
     }
 }
 

@@ -2278,3 +2278,31 @@ paths:
             application/json:
               schema:
                 type: object
+
+  /:
+    get:
+      summary: Root Local Gateway Cockpit
+      description: Returns embedded local HTML control cockpit for desktop runtime.
+      tags:
+        - LocalBYOK
+      responses:
+        '200':
+          description: HTML control dashboard
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /cockpit:
+    get:
+      summary: Local Gateway HTML Cockpit
+      description: Returns embedded local HTML control cockpit for desktop runtime.
+      tags:
+        - LocalBYOK
+      responses:
+        '200':
+          description: HTML control dashboard
+          content:
+            text/html:
+              schema:
+                type: string

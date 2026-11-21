@@ -39,6 +39,7 @@ if (-not (Test-Path $BinPath)) {
 }
 
 $HealthUrl = "http://127.0.0.1:$Port/health"
+$CockpitUrl = "http://127.0.0.1:$Port/cockpit"
 $StatusUrl = "http://127.0.0.1:$Port/v1/local/status"
 $FrontendUrl = "http://localhost:3000"
 
@@ -105,8 +106,8 @@ if (-not $AlreadyRunning) {
 }
 
 if (-not $NoBrowser) {
-    # Check if Next.js frontend is active, otherwise open gateway local status
-    $TargetUrl = $StatusUrl
+    # Default to built-in embedded local cockpit UI; switch to full Next.js control plane if running
+    $TargetUrl = $CockpitUrl
     try {
         $fe = Invoke-WebRequest -Uri $FrontendUrl -TimeoutSec 1 -ErrorAction SilentlyContinue
         if ($fe.StatusCode -eq 200) {
@@ -119,6 +120,7 @@ if (-not $NoBrowser) {
 }
 
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "   Local status: $StatusUrl" -ForegroundColor White
+Write-Host "   Local Cockpit: $CockpitUrl" -ForegroundColor White
+Write-Host "   Local status:  $StatusUrl" -ForegroundColor White
 Write-Host "   Encrypted vault: $LocalAppDir\vault.enc" -ForegroundColor DarkGray
 Write-Host "==========================================================" -ForegroundColor Cyan

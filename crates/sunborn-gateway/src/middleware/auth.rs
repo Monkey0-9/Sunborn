@@ -393,7 +393,7 @@ pub async fn auth_middleware(headers: HeaderMap, mut req: Request, next: Next) -
         || path == "/metrics"
         || path == "/v1/auth/login"
         || path == "/v1/ceremony/public-keys"
-        || (!is_prod && path.starts_with("/v1/local/"))
+        || (!is_prod && (path == "/" || path == "/cockpit" || path.starts_with("/v1/local/")))
     {
         return next.run(req).await;
     }

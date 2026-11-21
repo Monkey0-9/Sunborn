@@ -10,6 +10,10 @@ pub struct SaveLocalProviderPayload {
     pub default_model: Option<String>,
 }
 
+pub async fn get_local_cockpit_html() -> axum::response::Html<&'static str> {
+    axum::response::Html(include_str!("../templates/local_cockpit.html"))
+}
+
 pub async fn get_local_status(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, AppError> {

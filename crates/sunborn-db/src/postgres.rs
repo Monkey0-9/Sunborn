@@ -61,6 +61,10 @@ const MIGRATION_0008: &str = include_str!("../../../migrations/0008_free_tier_qu
 const MIGRATION_0009: &str = include_str!("../../../migrations/0009_cluster_rate_limits.sql");
 const MIGRATION_0010: &str =
     include_str!("../../../migrations/0010_financial_precision_micro_units.sql");
+const MIGRATION_0011: &str =
+    include_str!("../../../migrations/0011_micro_units_non_negative_checks.sql");
+const MIGRATION_0012: &str =
+    include_str!("../../../migrations/0012_durable_erasure_and_learning.sql");
 
 /// Outcome of a cluster-wide spend reservation attempt.
 #[derive(Debug, Clone, PartialEq)]
@@ -348,6 +352,8 @@ impl PostgresDatabaseStore {
             (8, "0008_free_tier_quotas", MIGRATION_0008),
             (9, "0009_cluster_rate_limits", MIGRATION_0009),
             (10, "0010_financial_precision_micro_units", MIGRATION_0010),
+            (11, "0011_micro_units_non_negative_checks", MIGRATION_0011),
+            (12, "0012_durable_erasure_and_learning", MIGRATION_0012),
         ];
 
         for (version, name, sql) in migrations {
@@ -435,7 +441,20 @@ impl PostgresDatabaseStore {
                 ceiling: default_ceiling,
             };
         };
-        let default_ceiling_micro = usd_to_micro_units(default_ceiling).unwrap_or(0);
+        let default_ceiling_micro = match usd_to_micro_units(default_ceiling) {
+            Some(m) if m >= 0 => m,
+            _ => {
+                tracing::error!(
+                    tenant = %tenant_id,
+                    ceiling = %default_ceiling,
+                    "Rejecting invalid default ceiling during spend reservation"
+                );
+                return SpendReservationOutcome::Denied {
+                    committed: 0.0,
+                    ceiling: 0.0,
+                };
+            }
+        };
         let Some(pool) = self.get_pool().await else {
             return SpendReservationOutcome::StoreUnavailable;
         };
@@ -542,9 +561,20 @@ impl PostgresDatabaseStore {
         actual_cost: f64,
         window: Duration,
     ) -> Option<f64> {
-        // Clamp first (NaN clamps to NaN, which the converter rejects), then
-        // convert once into authoritative integer micro-units.
-        let valid_micro = usd_to_micro_units(actual_cost.clamp(0.0, 100_000.0)).unwrap_or(0);
+        // Reject invalid financial input strictly (negative, non-finite, NaN, or > 100k USD)
+        // rather than silently converting into zero spend.
+        let valid_micro = match usd_to_micro_units(actual_cost) {
+            Some(m) if m >= 0 => m,
+            _ => {
+                tracing::error!(
+                    tenant = %tenant_id,
+                    reservation = %reservation_id,
+                    cost = %actual_cost,
+                    "Rejecting invalid financial spend settlement: negative or non-finite amount"
+                );
+                return None;
+            }
+        };
         let pool = self.get_pool().await?;
         let window_secs = window.as_secs_f64().max(1.0);
 

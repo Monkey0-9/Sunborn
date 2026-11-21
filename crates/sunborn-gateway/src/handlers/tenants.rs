@@ -125,7 +125,10 @@ pub async fn crypto_shred_tenant(
         .delete_tenant_data(&payload.tenant_id)
         .await
         .map_err(AppError::from)?;
-    let learning_deleted = state.learning_store.purge_tenant(&tenant);
+    let learning_deleted = state
+        .learning_store
+        .purge_tenant(&tenant)
+        .map_err(AppError::from)?;
     let _credentials_revoked = state.api_key_registry.revoke_tenant_keys(&tenant);
     state.quota_ledger.remove_tenant(&payload.tenant_id).await;
 

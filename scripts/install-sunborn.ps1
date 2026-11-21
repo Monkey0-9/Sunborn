@@ -23,33 +23,45 @@ Write-Host "==========================================================" -Foregro
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $ReleaseBin = Join-Path $ProjectRoot "target\release\sunborn-gateway.exe"
 $DebugBin = Join-Path $ProjectRoot "target\debug\sunborn-gateway.exe"
+$BundledBin = Join-Path $PSScriptRoot "bin\sunborn-gateway.exe"
+$LocalBin = Join-Path $PSScriptRoot "sunborn-gateway.exe"
 
 $SourceBin = $null
-if (Test-Path $ReleaseBin) {
+if (Test-Path $BundledBin) {
+    $SourceBin = $BundledBin
+} elseif (Test-Path $LocalBin) {
+    $SourceBin = $LocalBin
+} elseif (Test-Path $ReleaseBin) {
     $SourceBin = $ReleaseBin
 } elseif (Test-Path $DebugBin) {
     $SourceBin = $DebugBin
 } elseif (-not $SkipBuild) {
-    Write-Host "[1/5] Building sunborn-gateway release binary..." -ForegroundColor Yellow
-    Push-Location $ProjectRoot
-    try {
-        & cargo build --release -p sunborn-gateway
-        if ($LASTEXITCODE -eq 0 -and (Test-Path $ReleaseBin)) {
-            $SourceBin = $ReleaseBin
-        } else {
-            Write-Host "Release build failed, checking debug..." -ForegroundColor Yellow
-            & cargo build -p sunborn-gateway
-            if ($LASTEXITCODE -eq 0 -and (Test-Path $DebugBin)) {
-                $SourceBin = $DebugBin
+    $CargoCmd = Get-Command cargo -ErrorAction SilentlyContinue
+    if ($CargoCmd) {
+        Write-Host "[1/5] Building sunborn-gateway release binary..." -ForegroundColor Yellow
+        Push-Location $ProjectRoot
+        try {
+            & cargo build --release -p sunborn-gateway
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $ReleaseBin)) {
+                $SourceBin = $ReleaseBin
+            } else {
+                Write-Host "Release build failed, checking debug..." -ForegroundColor Yellow
+                & cargo build -p sunborn-gateway
+                if ($LASTEXITCODE -eq 0 -and (Test-Path $DebugBin)) {
+                    $SourceBin = $DebugBin
+                }
             }
+        } finally {
+            Pop-Location
         }
-    } finally {
-        Pop-Location
+    } else {
+        Write-Host "[-] Cargo build toolchain not found on this clean machine." -ForegroundColor Yellow
+        Write-Host "[-] Use pre-packaged distribution zip or install Rust toolchain." -ForegroundColor Yellow
     }
 }
 
 if (-not $SourceBin -or -not (Test-Path $SourceBin)) {
-    Write-Error "Could not locate or compile sunborn-gateway.exe. Ensure Rust toolchain is installed."
+    Write-Error "Could not locate sunborn-gateway.exe. For clean machines without a Rust compiler, please download the self-contained Sunborn Desktop release package (containing pre-compiled binaries and embedded local cockpit)."
     exit 1
 }
 

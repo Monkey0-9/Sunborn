@@ -369,7 +369,7 @@ jobs:
     name: Apply every migration to a real PostgreSQL
     runs-on: ubuntu-latest
     # Nothing else in this repository executes the migrations. Without this job
-    # the 11 files under migrations/ are untested SQL: a syntax error, a column
+    # the 12 files under migrations/ are untested SQL: a syntax error, a column
     # that does not exist, or a constraint that never binds would be discovered
     # for the first time on a customer's upgrade.
     services:
@@ -422,7 +422,8 @@ jobs:
                   'tenants', 'applications', 'api_credentials',
                   'spend_reservations', 'spend_ledger_entries',
                   'spend_tenant_ceilings', 'durable_cache_entries',
-                  'outbox_events', 'dependency_edges', 'tenant_encryption_keys'
+                  'outbox_events', 'dependency_edges', 'tenant_encryption_keys',
+                  'tenant_erasure_tasks', 'learning_feedback_events'
               ];
               missing text;
           BEGIN

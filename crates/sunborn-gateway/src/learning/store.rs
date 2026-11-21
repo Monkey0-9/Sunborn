@@ -80,37 +80,84 @@ impl TenantLearningStore {
         }
     }
 
-    fn append_to_wal(&self, event: &VerifiedFeedbackEvent) {
+    fn append_to_wal(&self, event: &VerifiedFeedbackEvent) -> Result<()> {
         if let Some(ref path) = self.wal_path {
             if let Some(parent) = path.parent() {
-                let _ = std::fs::create_dir_all(parent);
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    SunbornError::internal(format!("Failed to create WAL directory: {e}"))
+                })?;
             }
-            if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
-                if let Ok(serialized) = serde_json::to_string(event) {
-                    let _ = writeln!(file, "{}", serialized);
-                }
-            }
+            let mut file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .map_err(|e| {
+                    SunbornError::internal(format!("Failed to open WAL file for append: {e}"))
+                })?;
+            let serialized = serde_json::to_string(event).map_err(|e| {
+                SunbornError::internal(format!("Failed to serialize feedback event: {e}"))
+            })?;
+            writeln!(file, "{}", serialized).map_err(|e| {
+                SunbornError::internal(format!("Failed to write feedback event to WAL: {e}"))
+            })?;
+            file.sync_all().map_err(|e| {
+                SunbornError::internal(format!("Failed to fsync learning WAL to disk: {e}"))
+            })?;
         }
+        Ok(())
     }
 
-    fn rewrite_wal(&self) {
+    pub fn rewrite_wal(&self) -> Result<()> {
         if let Some(ref path) = self.wal_path {
-            if let Ok(mut file) = OpenOptions::new()
-                .create(true)
-                .write(true)
-                .truncate(true)
-                .open(path)
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    SunbornError::internal(format!("Failed to create WAL directory: {e}"))
+                })?;
+            }
+            let tmp_path = path.with_extension(format!("tmp.{}", uuid::Uuid::new_v4()));
             {
+                let mut file = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(&tmp_path)
+                    .map_err(|e| {
+                        SunbornError::internal(format!("Failed to open temp WAL for rewrite: {e}"))
+                    })?;
                 let map = read_lock(&self.events);
                 for queue in map.values() {
                     for event in queue {
-                        if let Ok(serialized) = serde_json::to_string(event) {
-                            let _ = writeln!(file, "{}", serialized);
-                        }
+                        let serialized = serde_json::to_string(event).map_err(|e| {
+                            SunbornError::internal(format!(
+                                "Failed to serialize event during rewrite: {e}"
+                            ))
+                        })?;
+                        writeln!(file, "{}", serialized).map_err(|e| {
+                            SunbornError::internal(format!(
+                                "Failed to write event during rewrite: {e}"
+                            ))
+                        })?;
                     }
                 }
+                file.sync_all().map_err(|e| {
+                    SunbornError::internal(format!("Failed to fsync temp WAL during rewrite: {e}"))
+                })?;
             }
+
+            #[cfg(windows)]
+            {
+                if path.exists() {
+                    let _ = std::fs::remove_file(path);
+                }
+            }
+            std::fs::rename(&tmp_path, path).map_err(|e| {
+                let _ = std::fs::remove_file(&tmp_path);
+                SunbornError::internal(format!(
+                    "Atomic replacement of learning WAL file failed: {e}"
+                ))
+            })?;
         }
+        Ok(())
     }
 
     /// Record a verified feedback event with tenant isolation and poison filtering
@@ -146,7 +193,7 @@ impl TenantLearningStore {
         queue.push_back(event.clone());
         drop(map);
 
-        self.append_to_wal(&event);
+        self.append_to_wal(&event)?;
         Ok(())
     }
 
@@ -180,14 +227,36 @@ impl TenantLearningStore {
 
     /// GDPR Article 17 / Cryptographic Shredding Cascade:
     /// Permanently wipes all learning events, calibration records, and telemetry for the tenant.
-    pub fn purge_tenant(&self, tenant_id: &TenantId) -> usize {
+    pub fn purge_tenant(&self, tenant_id: &TenantId) -> Result<usize> {
         let mut map = write_lock(&self.events);
         let count = map.remove(tenant_id).map(|q| q.len()).unwrap_or(0);
         drop(map);
 
         if count > 0 {
-            self.rewrite_wal();
+            self.rewrite_wal()?;
         }
-        count
+        Ok(count)
+    }
+
+    /// Verifies that zero records for the specified tenant exist in the on-disk WAL.
+    pub fn verify_tenant_erased_on_disk(&self, tenant_id: &TenantId) -> bool {
+        let Some(ref path) = self.wal_path else {
+            return true;
+        };
+        if !path.exists() {
+            return true;
+        }
+        let Ok(file) = File::open(path) else {
+            return false;
+        };
+        let reader = BufReader::new(file);
+        for line in reader.lines().map_while(std::result::Result::ok) {
+            if let Ok(event) = serde_json::from_str::<VerifiedFeedbackEvent>(&line) {
+                if &event.tenant_id == tenant_id {
+                    return false;
+                }
+            }
+        }
+        true
     }
 }

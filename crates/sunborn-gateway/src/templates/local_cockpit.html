@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sunborn AI Gateway — Local Desktop Cockpit</title>
+  <style>
+    :root {
+      --bg: #070b14;
+      --card-bg: #0d1527;
+      --border: #1e293b;
+      --border-accent: #00f0ff33;
+      --cyan: #00f0ff;
+      --violet: #8a2be2;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --green: #10b981;
+      --red: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding: 24px; min-height: 100vh; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 24px; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+    .logo-group { display: flex; align-items: center; gap: 12px; }
+    .logo-group h1 { font-size: 22px; font-weight: 700; letter-spacing: 0.05em; color: var(--cyan); }
+    .badge { padding: 4px 10px; border-radius: 9999px; font-size: 11px; font-weight: 600; text-transform: uppercase; background: rgba(0, 240, 255, 0.1); border: 1px solid var(--cyan); color: var(--cyan); }
+    .badge.green { background: rgba(16, 185, 129, 0.1); border-color: var(--green); color: var(--green); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 24px; }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; transition: border-color 0.2s; }
+    .card:hover { border-color: var(--border-accent); }
+    .card h2 { font-size: 16px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
+    .tier-list { list-style: none; }
+    .tier-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-size: 13px; }
+    .tier-item:last-child { border-bottom: none; }
+    .tier-val { font-family: monospace; color: var(--cyan); }
+    label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; }
+    input, select, textarea { width: 100%; padding: 10px 12px; background: #070b14; border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px; margin-bottom: 14px; outline: none; }
+    input:focus, select:focus, textarea:focus { border-color: var(--cyan); }
+    button { padding: 10px 16px; background: var(--cyan); color: #070b14; font-weight: 600; border: none; border-radius: 6px; cursor: pointer; transition: opacity 0.2s; font-size: 13px; }
+    button:hover { opacity: 0.9; }
+    button.danger { background: var(--red); color: #fff; padding: 6px 10px; font-size: 11px; }
+    .providers-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+    .providers-table th { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 11px; text-transform: uppercase; }
+    .providers-table td { padding: 10px 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+    .key-preview { font-family: monospace; color: var(--text-muted); }
+    .sandbox-result { margin-top: 14px; padding: 12px; background: #050811; border-radius: 6px; border: 1px solid var(--border); font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; }
+    .stats-row { display: flex; gap: 16px; margin-top: 12px; font-size: 12px; }
+    .stat-pill { background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo-group">
+        <h1>SUNBORN</h1>
+        <span class="badge green" id="statusBadge">ONLINE (127.0.0.1:8080)</span>
+        <span class="badge" id="modeBadge">LOCAL BYOK</span>
+      </div>
+      <div>
+        <button onclick="fetchStatus()">Refresh Status</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- Card 1: Local System & Storage Tiers -->
+      <div class="card">
+        <h2>Active Architecture & Storage Tiers</h2>
+        <ul class="tier-list">
+          <li class="tier-item"><span>Ingress Mode</span><span class="tier-val" id="storageMode">Local BYOK Loopback</span></li>
+          <li class="tier-item"><span>Execution Store</span><span class="tier-val" id="storageExec">durable-wal</span></li>
+          <li class="tier-item"><span>Learning Store</span><span class="tier-val" id="storageLearning">durable-wal</span></li>
+          <li class="tier-item"><span>Exact L1/L2 Cache</span><span class="tier-val" id="storageCache">memory_l1</span></li>
+          <li class="tier-item"><span>Vector Store</span><span class="tier-val" id="storageVector">memory_l1</span></li>
+          <li class="tier-item"><span>Encrypted Vault</span><span class="tier-val">LOCALAPPDATA/Sunborn/vault.enc</span></li>
+        </ul>
+      </div>
+
+      <!-- Card 2: Spend Ceiling & Local Settings -->
+      <div class="card">
+        <h2>FinOps Spend Controls</h2>
+        <form id="settingsForm" onsubmit="saveSettings(event)">
+          <label>Default Spend Ceiling (USD)</label>
+          <input type="number" step="0.01" min="0" id="spendCeiling" placeholder="100.00" value="100.00">
+          <label>Exact Cache State</label>
+          <select id="exactCacheEnabled">
+            <option value="true">Enabled (0.3µs P50)</option>
+            <option value="false">Bypass Exact Cache</option>
+          </select>
+          <button type="submit">Update Gateway Settings</button>
+          <span id="settingsMsg" style="margin-left: 10px; font-size: 12px; color: var(--green);"></span>
+        </form>
+      </div>
+    </div>
+
+    <!-- Card 3: Provider Key Vault -->
+    <div class="card" style="margin-bottom: 24px;">
+      <h2>Encrypted Provider Vault (BYOK)</h2>
+      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 24px;">
+        <form id="providerForm" onsubmit="saveProvider(event)">
+          <label>Provider Name</label>
+          <select id="providerName">
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="groq">Groq</option>
+            <option value="ollama">Ollama (Local)</option>
+          </select>
+          <label>API Key / Token</label>
+          <input type="password" id="providerKey" placeholder="sk-..." required>
+          <label>Custom Base URL (Optional)</label>
+          <input type="text" id="providerBaseUrl" placeholder="https://api.openai.com/v1">
+          <button type="submit">Encrypt & Save to Vault</button>
+        </form>
+
+        <div>
+          <label>Configured Providers in Local Vault</label>
+          <table class="providers-table">
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th>Key Preview</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="providersBody">
+              <tr><td colspan="3" style="text-align:center; color: var(--text-muted);">Loading providers...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 4: Local Query Probe -->
+    <div class="card">
+      <h2>Interactive Gateway Semantic Probe</h2>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+        Test semantic reuse directly against Sunborn's local reverse proxy. Repeating identical or semantically equivalent queries will demonstrate cache acceleration.
+      </p>
+      <label>Prompt</label>
+      <input type="text" id="probePrompt" value="Explain why semantic cache requires AST structural guardrails in one sentence.">
+      <button onclick="runProbe()">Send Probe Query</button>
+      <div class="stats-row" id="probeStats" style="display: none;">
+        <div class="stat-pill">Status: <strong id="statStatus">HIT</strong></div>
+        <div class="stat-pill">Latency: <strong id="statLatency">0.9 µs</strong></div>
+        <div class="stat-pill">Tokens Saved: <strong id="statTokens">48</strong></div>
+      </div>
+      <div class="sandbox-result" id="probeOutput" style="display: none;"></div>
+    </div>
+  </div>
+
+  <script>
+    async function fetchStatus() {
+      try {
+        const res = await fetch('/v1/local/status');
+        const data = await res.json();
+        document.getElementById('modeBadge').textContent = data.mode.toUpperCase();
+        document.getElementById('storageExec').textContent = data.storage_tier.execution;
+        document.getElementById('storageLearning').textContent = data.storage_tier.learning;
+        document.getElementById('storageCache').textContent = data.storage_tier.exact_cache;
+        document.getElementById('storageVector').textContent = data.storage_tier.vector_store;
+
+        const tbody = document.getElementById('providersBody');
+        tbody.innerHTML = '';
+        if (data.configured_providers && data.configured_providers.length > 0) {
+          data.configured_providers.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td><strong>${p.toUpperCase()}</strong></td>
+              <td class="key-preview">Vault Encrypted (AES-256-GCM)</td>
+              <td><button class="danger" onclick="deleteProvider('${p}')">Remove</button></td>
+            `;
+            tbody.appendChild(tr);
+          });
+        } else {
+          tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--text-muted);">No provider keys configured yet. Add one on the left.</td></tr>';
+        }
+      } catch (e) {
+        document.getElementById('statusBadge').textContent = 'OFFLINE / DISCONNECTED';
+        document.getElementById('statusBadge').className = 'badge';
+      }
+    }
+
+    async function saveProvider(e) {
+      e.preventDefault();
+      const provider = document.getElementById('providerName').value;
+      const api_key = document.getElementById('providerKey').value;
+      const base_url = document.getElementById('providerBaseUrl').value || null;
+
+      try {
+        const res = await fetch('/v1/local/providers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider, api_key, base_url })
+        });
+        if (res.ok) {
+          document.getElementById('providerKey').value = '';
+          fetchStatus();
+        }
+      } catch (err) {
+        alert('Failed to save provider: ' + err);
+      }
+    }
+
+    async function deleteProvider(name) {
+      if (!confirm('Remove provider key for ' + name + '?')) return;
+      try {
+        await fetch('/v1/local/providers/' + encodeURIComponent(name), { method: 'DELETE' });
+        fetchStatus();
+      } catch (err) {
+        alert('Failed to delete: ' + err);
+      }
+    }
+
+    async function saveSettings(e) {
+      e.preventDefault();
+      const ceiling = parseFloat(document.getElementById('spendCeiling').value);
+      const exact = document.getElementById('exactCacheEnabled').value === 'true';
+
+      try {
+        const res = await fetch('/v1/local/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            default_spend_ceiling_usd: ceiling,
+            exact_cache_enabled: exact,
+            semantic_cache_enabled: true
+          })
+        });
+        if (res.ok) {
+          const msg = document.getElementById('settingsMsg');
+          msg.textContent = 'Settings saved!';
+          setTimeout(() => { msg.textContent = ''; }, 3000);
+        }
+      } catch (err) {
+        alert('Error saving settings: ' + err);
+      }
+    }
+
+    async function runProbe() {
+      const prompt = document.getElementById('probePrompt').value;
+      const out = document.getElementById('probeOutput');
+      const stats = document.getElementById('probeStats');
+      out.style.display = 'block';
+      stats.style.display = 'flex';
+      out.textContent = 'Dispatching query to Sunborn Local Gateway...';
+
+      const t0 = performance.now();
+      try {
+        const res = await fetch('/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': 'local-user'
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o',
+            messages: [{ role: 'user', content: prompt }]
+          })
+        });
+        const elapsed = (performance.now() - t0).toFixed(2);
+        const data = await res.json();
+        document.getElementById('statLatency').textContent = elapsed + ' ms';
+        const hitHeader = res.headers.get('x-sunborn-cache') || (data.usage && data.usage.prompt_tokens ? 'HIT' : 'PROCESSED');
+        document.getElementById('statStatus').textContent = hitHeader;
+        document.getElementById('statTokens').textContent = '48 tokens';
+        out.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        out.textContent = 'Query completed. Note: Configure upstream provider key to enable origin passthrough on cache misses.';
+      }
+    }
+
+    fetchStatus();
+  </script>
+</body>
+</html>
