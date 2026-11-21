@@ -44,7 +44,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Strict Clippy Lints
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
       - name: Run Full Unit & Integration Test Suite
         run: cargo test --all-targets --all-features

@@ -108,6 +108,8 @@ jobs:
           push: true
           tags: ${{ steps.meta-gateway.outputs.tags }}
           labels: ${{ steps.meta-gateway.outputs.labels }}
+          build-args: |
+            SUNBORN_GIT_SHA=${{ github.sha }}
           provenance: mode=max
           sbom: true
           cache-from: type=gha

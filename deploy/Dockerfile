@@ -25,6 +25,12 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY apps ./apps
 
+# Stamp the build identity into the binary so GET /version and the
+# sunborn_build_info metric report the exact commit, not "unknown".
+# e.g. docker build --build-arg SUNBORN_GIT_SHA=$(git rev-parse --short HEAD)
+ARG SUNBORN_GIT_SHA=unknown
+ENV SUNBORN_GIT_SHA=${SUNBORN_GIT_SHA}
+
 # Build release binary for sunborn-gateway
 RUN cargo build --release -p sunborn-gateway
 
@@ -41,7 +47,7 @@ COPY --from=builder /usr/src/sunborn/target/release/sunborn-gateway /usr/local/b
 # OCI labels
 LABEL org.opencontainers.image.title="Sunborn AI Gateway" \
       org.opencontainers.image.description="Enterprise semantic caching and execution reuse platform for AI/RAG agents" \
-      org.opencontainers.image.version="0.1.0" \
+      org.opencontainers.image.version="1.0.0" \
       org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.vendor="Sunborn Enterprise"
 

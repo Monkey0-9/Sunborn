@@ -92,11 +92,13 @@ async function handleProxy(req: NextRequest, context: RouteContext) {
     headers.set("Authorization", `Bearer ${process.env.SUNBORN_READ_ONLY_TOKEN}`);
   }
 
-  // Enforce 10MB request payload size cap (BFF-001)
+  // Enforce the same 4 MiB request body cap the gateway applies
+  // (DefaultBodyLimit in crates/sunborn-gateway/src/lib.rs). Rejecting here
+  // avoids streaming an oversized body to the gateway only to have it refuse it.
   const contentLength = Number(req.headers.get("content-length") || "0");
-  if (contentLength > 10 * 1024 * 1024) {
+  if (contentLength > 4 * 1024 * 1024) {
     return NextResponse.json(
-      { error: "PAYLOAD_TOO_LARGE", detail: "Request body exceeds maximum permitted 10MB limit." },
+      { error: "PAYLOAD_TOO_LARGE", detail: "Request body exceeds maximum permitted 4MB limit." },
       { status: 413 }
     );
   }

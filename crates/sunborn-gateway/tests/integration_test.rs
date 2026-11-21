@@ -190,6 +190,78 @@ async fn test_metrics_endpoint() {
     assert!(metrics_text.contains("sunborn_requests_total"));
     assert!(metrics_text.contains("sunborn_cache_hits_total"));
     assert!(metrics_text.contains("sunborn_cache_misses_total"));
+    // The latency histogram must be a real Prometheus histogram, not a bare sum.
+    assert!(metrics_text.contains("# TYPE sunborn_request_duration_seconds histogram"));
+    assert!(metrics_text.contains("sunborn_request_duration_seconds_bucket{"));
+    assert!(metrics_text.contains("le=\"+Inf\""));
+    assert!(metrics_text.contains("sunborn_request_duration_seconds_count"));
+    assert!(metrics_text.contains("sunborn_uptime_seconds"));
+    assert!(metrics_text.contains("sunborn_build_info"));
+}
+
+#[tokio::test]
+async fn test_baseline_security_headers_are_applied() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let headers = response.headers();
+    assert_eq!(headers.get("x-content-type-options").unwrap(), "nosniff");
+    assert_eq!(headers.get("x-frame-options").unwrap(), "DENY");
+    assert_eq!(headers.get("referrer-policy").unwrap(), "no-referrer");
+    assert!(headers.get("permissions-policy").is_some());
+    // HSTS must not be advertised over a plain-HTTP request: it would poison
+    // the browser cache for every other site on the host.
+    assert!(headers.get("strict-transport-security").is_none());
+
+    let https_response = app
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .header("x-forwarded-proto", "https")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert!(https_response
+        .headers()
+        .get("strict-transport-security")
+        .is_some());
+}
+
+#[tokio::test]
+async fn test_version_endpoint_is_public_and_reports_build_identity() {
+    let state = AppState::new(AppConfig::default());
+    let app = create_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/version")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(payload["service"], "sunborn-gateway");
+    assert_eq!(payload["version"], env!("CARGO_PKG_VERSION"));
+    // Build identity only: no configuration or secret material may leak here.
+    assert!(payload.get("secrets").is_none());
 }
 
 #[tokio::test]

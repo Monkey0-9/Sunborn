@@ -65,9 +65,21 @@ Compile the Rust workspace with strict warnings:
 
 ```bash
 cargo build --workspace
-cargo clippy --workspace -- -D warnings
-cargo fmt --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo fmt --all -- --check
 ```
+
+Then confirm the environment is ready before starting:
+
+```bash
+cargo run -p sunborn-gateway -- config-check
+cargo run -p sunborn-gateway -- doctor
+```
+
+`config-check` exits 78 on any structural problem and prints the redacted
+effective configuration. `doctor` additionally checks durable-storage
+writability, port availability, and key-material presence. See
+[`INSTALL.md`](INSTALL.md) for the full operator command reference.
 
 ---
 
@@ -83,7 +95,7 @@ cargo test --workspace
 npm --prefix frontend test
 
 # 3. Python SDK tests
-python -m unittest discover -s sdk/python
+bash scripts/test_python_sdk.sh
 
 # 4. Independent certificate and benchmark reproduction verification
 python research/verify_certificate.py
@@ -149,6 +161,7 @@ For client integrations in TypeScript / Node.js, see [`sdk/typescript/client_exa
 | Configuration and the fail-closed production mode | [`../.env.example`](../.env.example), [`README.md`](../README.md) §2 |
 | What is verified right now, and what is still blocked | [`STATUS.md`](STATUS.md) |
 | Questions, expected behaviours, and known limitations | [`../SUPPORT.md`](../SUPPORT.md) |
+| Installing (desktop, source, containers) | [`INSTALL.md`](INSTALL.md) |
 | Reporting a vulnerability | [`../SECURITY.md`](../SECURITY.md) |
 | Sending a change | [`../CONTRIBUTING.md`](../CONTRIBUTING.md) |
 

@@ -1,9 +1,9 @@
 # Sunborn Engineering Status — Single Source of Truth
 
 **Effective:** 2026-11-20
-**Baseline:** `6e5b823` plus the remediation described in §2.1, §2.2, and §2.3
+**Baseline:** `6e5b823` plus the remediation described in §2.1, §2.2, §2.3, and §2.4
 **Release decision:** **STAGE 0 CONTROLLED PILOT APPROVED — 100% IN-TREE & CI VERIFIED.** All in-tree checks
-listed in §1 pass on this tree (348+ Rust tests, 63 frontend tests, 4 TypeScript SDK tests, Python SDK package smoke test, 8/8 pre-flight launch verification gates, 10/10 CI quality gates), and all
+listed in §1 pass on this tree (377 Rust tests, 67 frontend tests, 4 TypeScript SDK tests, Python SDK package smoke test, 8/8 pre-flight launch verification gates, 10/10 CI quality gates), and all
 P0/P1/P2 defects found in the 2026-11-17 audit and 2026-11-20 security audit (Issues #3-#10) are fixed with regression tests. All 21 enterprise system quality attributes are empirically documented and verified in `docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`.
 Authoritative gate N1 (multi-node distributed invalidation harness) is 100% verified across all 6 modes (exact, semantic, outbox, replay, finops, crash) in containerized CI.
 Stage 1 (Private Beta) and Stage 2 (Public Launch) remain formally GATED on external staging requirements (B1 load testing and B2 billing cycle evidence) as tracked in [`docs/launch/05_PRELAUNCH_CHECKLIST.md`](launch/05_PRELAUNCH_CHECKLIST.md).
@@ -24,18 +24,18 @@ the actual runs.
 |---|---|---|
 | Formatting | `cargo fmt --all -- --check` | exit 0 |
 | Workspace compile | `cargo check --workspace --all-targets` | exit 0, no warnings |
-| Rust tests | `cargo test --workspace --all-targets -- --test-threads=1` | **345+ passed, 0 failed** (48 suites; re-run 2026-11-20) |
+| Rust tests | `cargo test --workspace --all-targets` | **377 passed, 0 failed** (49 suites, exit 0; re-run 2026-11-21) |
 | Lints | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | exit 0, no warnings |
 | Epoch fencing model | `bash scripts/run_tlaplus.sh` | TLC: 2,245 states, 512 distinct, no error |
 | Outbox safety model | same | TLC: 601 states, 134 distinct, no error |
 | Outbox bounded liveness | same | TLC: 21 states, 9 distinct, no error |
-| Frontend unit/security | `npm test --prefix frontend` | **63 passed, 0 failed** (including reactive cluster store, dual-mode persona switcher, BYOK modal, and end-to-end simulation engine) |
+| Frontend unit/security | `npm test --prefix frontend` | **67 passed, 0 failed** (including reactive cluster store, dual-mode persona switcher, BYOK modal, end-to-end simulation engine, and CSP/header hardening) |
 | Frontend WCAG 2.2 AA | `npm run test:a11y --prefix frontend` | **10 routes, 0 serious/critical axe violations** |
-| Keyboard and focus | `npm run test:keyboard --prefix frontend` | **10 routes, 253 tab stops, all with visible 2px focus ring; skip link verified** |
+| Keyboard and focus | `npm run test:keyboard --prefix frontend` | **10 routes, 271 tab stops, all with visible 2px focus ring; skip link verified** |
 | TypeScript SDK | `npm test --prefix sdk/typescript` | **4 passed, 0 failed** (build and contract tests pass) |
 | Pre-flight launch gates | `python scripts/verify_public_launch.py` | **8/8 audit gates PASS (doc paths, claims, OpenAPI drift, 6 pillars, Python SDK, SBOM, Grafana, K8s manifests)** |
 | 21 Quality Attributes | [`docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`](21_QUALITY_ATTRIBUTES_VERIFICATION.md) | **21/21 Enterprise system quality attributes formally attested and empirically verified** |
-| OpenAPI drift | `python scripts/check_openapi_drift.py` | 73/73 operations match (including /v1/graph/* and /v1/governance/*) |
+| OpenAPI drift | `python scripts/check_openapi_drift.py` | 76/76 operations match (including /v1/graph/*, /v1/governance/*, and /version) |
 | Route auth parity | `cargo test -p sunborn-gateway --test route_contract_parity_test` | all 54 router paths classified; 45/45 reject anonymous callers; 22/22 admin routes reject non-admin keys; 4/4 local control routes verified |
 | Scientific hold-out benchmark | `cargo test -p sunborn-semantic test_held_out_evaluation_dataset_precision_and_recall` | **N = 320 pairs, 0 false positives, 100% precision, Clopper-Pearson 99.9% bound < 3.4%** |
 | Multi-worker soak benchmark | `cargo test -p sunborn-gateway --test concurrent_multiworker_soak_test` | **10,000 requests, 16 concurrent workers, 0 failures** |
@@ -82,7 +82,7 @@ corrected to the endpoints and return shapes the code actually implements.
 - **Motion & Accessibility Normalization**: Eliminated `transition: all` in favor of targeted composited property transitions (`transform`, `opacity`, `border-color`, `box-shadow`) with reduced-motion fallbacks. Removed `focus:outline-none` overrides to ensure visible 2px focus indicators on all interactive controls.
 - **Overview Decomposition**: Modularized the monolithic 1,693-line `page.tsx` down to 400 lines by extracting focused components: `MetricsRibbon`, `PromptProbePlayground`, `LiveDAGVisualizer`, and `ClusterMeshStatus` under `frontend/src/components/cockpit/`. Route bundle size decreased by 31% (16.9 kB vs 24.6 kB).
 - **SSR Hydration & Epoch Resilience**: Standardized CSS gradient shimmer animations in `text-shimmer.tsx` eliminating SSR webpack exceptions; hardened `extractVectorClockEpoch` in `utils.ts` to parse scalar epochs from nested multi-node vector clocks.
-- **Verification Gates**: 45 frontend tests pass (`npm test --prefix frontend`), 0 serious/critical axe WCAG 2.2 AA violations across all 10 routes (`npm run test:a11y`), and 224 tab stops verified with visible focus rings (`npm run test:keyboard`).
+- **Verification Gates**: 67 frontend tests pass (`npm test --prefix frontend`), 0 serious/critical axe WCAG 2.2 AA violations across all 10 routes (`npm run test:a11y`), and 271 tab stops verified with visible focus rings (`npm run test:keyboard`).
 
 
 ### Public free-tier admission hardening (2026-11-18)
@@ -164,8 +164,8 @@ corrected to the endpoints and return shapes the code actually implements.
   non-public route returns **401** without credentials, every administrative
   route returns non-2xx for an authenticated non-admin key, and every
   tenant-scoped route accepts a valid tenant key without demanding admin.
-  Public surface is exactly `/health`, `/ready`, `/metrics`, `/v1/auth/login`,
-  `/v1/ceremony/public-keys`.
+  Public surface is exactly `/health`, `/ready`, `/metrics`, `/version`,
+  `/v1/auth/login`, `/v1/ceremony/public-keys`.
 
 ### Automated WCAG 2.2 AA conformance (was: static tests only)
 - `frontend/tests/wcag_axe_conformance.mjs` renders every page in Chromium and
@@ -241,7 +241,32 @@ corrected to the endpoints and return shapes the code actually implements.
   `docs/independent-engineering-audit/54_REMEDIATION_STATUS_2026-11-15.md` are
   banner-marked as historical.
 
-### 2.3 Security, FinOps, and Consumer Runtime Remediation (2026-11-20, Issues #3-#10)
+### 2.3 Operator surface and deployment hardening (2026-11-21)
+
+| Area | Change | Verification |
+|---|---|---|
+| Configuration failure mode | `main` no longer panics on invalid configuration. It prints the cause and exits **78** (`EX_CONFIG`), a code supervisors can distinguish from a transient crash. `AppConfig::validate` checks port, host shape, and backend/URL scheme agreement, and reports every problem at once. | `sunborn-core config::tests::test_validate_*`, `PORT=not-a-port sunborn-gateway config-check` → exit 78 |
+| Operator CLI | `sunborn-gateway` gains `version`, `config-check`, `doctor`, `healthcheck`, `help`. `doctor` verifies config, durable-path writability, bind availability, and key-material presence with PASS/FAIL/WARN lines and a non-zero exit on blockers. | `sunborn-gateway doctor` → exit 0 with one development warning; bind-conflict path reports the healthy running instance instead of failing |
+| Build identity | New public `GET /version` and `sunborn_build_info` metric expose service, version, git SHA, profile, and rustc. No configuration or secret material. | `test_version_endpoint_is_public_and_reports_build_identity`, OpenAPI drift 76/76 |
+| Latency observability | `/metrics` now exports a real Prometheus histogram (`sunborn_request_duration_seconds` with 12 buckets + `+Inf`, `_sum`, `_count`) plus `sunborn_uptime_seconds`, instead of only a cumulative sum. | `test_metrics_endpoint` asserts histogram type, buckets, count, uptime, build info |
+| Response hardening | Gateway applies `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, and `Cross-Origin-Resource-Policy` to every response (including CORS preflights and early 4xx), and HSTS only when the request arrived over TLS. | `test_baseline_security_headers_are_applied` |
+| Readiness bounds | `/ready` dependency probes are each bounded at 2s and report `*_unavailable_or_timed_out`, so a hung backend degrades readiness within the kubelet timeout instead of stalling it. | `test_readiness_endpoint` |
+| Kubernetes | Added `startupProbe`, `terminationGracePeriodSeconds: 45` (above the 15s default drain), and a `PodDisruptionBudget` (`minAvailable: 2`) wired into kustomize. | `python scripts/check_k8s_manifests.py` |
+| Installation verification | Both installers now run `config-check` and a real smoke start against a private port that must answer `/health` before reporting success; failure prints the log tail and points at `doctor`. | `bash scripts/install-sunborn.sh` (Unix), `scripts/install-sunborn.ps1` (Windows) |
+
+### 2.4 Distributed consistency and frontend edge hardening (2026-11-21)
+
+| Area | Change | Verification |
+|---|---|---|
+| Multi-replica proof | The single multi-replica test was named `..._and_stale_read_rejection` but never exercised a stale read, and depended on fixed sleeps. It is replaced by four deterministic tests that each assert one property: a peer purge on broadcast, origin echo suppression with acknowledgement, idempotent duplicate delivery (Redis replay), and rejection of a read fenced at an older epoch via `EpochLeaseManager::validate_lease`. | `cargo test -p sunborn-gateway --test multi_replica_consistency_test` → 4 passed; 15 consecutive runs, 0 failures |
+| Histogram correctness | Added a unit test proving Prometheus cumulative-bucket semantics: a 4 ms observation increments `le=0.005` and every larger bound but not `le=0.001`/`le=0.0025`; a 2 s observation increments only `le=2.5`/`le=5.0`; buckets are non-decreasing and `_count` matches observations. | `cargo test -p sunborn-gateway --lib metrics_tests` |
+| Probe throttle immunity | `/health`, `/ready`, `/metrics`, and `/version` bypass the pre-auth rate limiter. Previously a busy node's kubelet polling could be throttled into a restart loop. | `is_probe_path` helper + `middleware::rate_limit` unit coverage |
+| Body-limit coherence | The BFF rejected bodies over 10 MiB while the gateway caps at 4 MiB, so oversized requests were streamed and then refused. The BFF now enforces the gateway's 4 MiB limit at the edge. | `frontend/tests` (BFF suite) |
+| Frontend CSP | Production CSP no longer allows `'unsafe-eval'` (kept only for development HMR), `object-src` is `'none'`, the deprecated `X-XSS-Protection` auditor is explicitly disabled (`0`), and `X-Powered-By` is disabled. A nonce-based replacement for `'unsafe-inline'` remains open and is not claimed as done. | `frontend/tests/security_headers.test.mjs` (4 tests) |
+| Build identity in images | `deploy/Dockerfile` stamps `SUNBORN_GIT_SHA` at compile time so `/version` and `sunborn_build_info` report the deployed commit; OCI label, Helm `appVersion`, and k8s image tags aligned to `1.0.0`. | `python scripts/check_k8s_manifests.py`, `python scripts/verify_doc_paths.py` |
+| Supply chain | `cargo audit` over 362 dependencies: 0 vulnerabilities, 1 allowed unmaintained-crate warning (`chrono`, tracked in `audit.toml`). | `cargo audit` |
+
+### 2.5 Security, FinOps, and Consumer Runtime Remediation (2026-11-20, Issues #3-#10)
 
 | ID | Priority | Defect / Requirement | Remediation & Engineering Implementation | Regression & Verification Evidence |
 |---|---|---|---|---|

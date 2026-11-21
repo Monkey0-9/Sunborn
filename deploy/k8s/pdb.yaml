@@ -1,0 +1,16 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sunborn-gateway
+  namespace: sunborn-system
+  labels:
+    app.kubernetes.io/name: sunborn-gateway
+    app.kubernetes.io/part-of: sunborn
+spec:
+  # Rolling updates already use maxUnavailable: 0; this also protects voluntary
+  # disruptions (node drains, cluster upgrades) from taking the gateway below a
+  # quorum of ready replicas.
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sunborn-gateway

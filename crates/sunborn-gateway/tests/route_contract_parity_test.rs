@@ -53,6 +53,11 @@ const ROUTES: &[Route] = &[
         access: Access::Public,
     },
     Route {
+        method: "GET",
+        path: "/version",
+        access: Access::Public,
+    },
+    Route {
         method: "POST",
         path: "/v1/auth/login",
         access: Access::Public,

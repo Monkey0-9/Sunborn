@@ -403,7 +403,10 @@ paths:
   /metrics:
     get:
       summary: Operational Prometheus Metrics
-      description: Internal scraping endpoint exporting atomic counters for cache hits, misses, and requests.
+      description: >-
+        Scraping endpoint exporting request and cache counters, a latency
+        histogram (sunborn_request_duration_seconds), process uptime, and build
+        identity in Prometheus text exposition format.
       security: []
       responses:
         '200':
@@ -412,6 +415,40 @@ paths:
             text/plain:
               schema:
                 type: string
+
+  /version:
+    get:
+      summary: Build Identity
+      description: >-
+        Returns the running service name, semantic version, git SHA, build
+        profile, and rustc version. Public by design; exposes build metadata
+        only, never configuration or secrets.
+      security: []
+      responses:
+        '200':
+          description: Build identity of the running gateway
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service:
+                    type: string
+                    example: "sunborn-gateway"
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  git_sha:
+                    type: string
+                    example: "unknown"
+                  build_profile:
+                    type: string
+                    enum: [debug, release]
+                  rustc:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
 
   /v1/auth/login:
     post:

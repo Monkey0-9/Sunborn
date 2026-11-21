@@ -29,6 +29,9 @@ pub mod routing;
 pub mod shadow;
 pub mod state;
 
+use axum::http::Request;
+use axum::middleware::Next;
+use axum::response::Response;
 use axum::{
     http::{header, HeaderName, Method},
     routing::{get, post},
@@ -37,6 +40,57 @@ use axum::{
 pub use state::AppState;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
+
+/// Baseline security headers applied to every response.
+///
+/// The ingress in `deploy/k8s` sets a comparable set at the edge; this layer
+/// guarantees the invariants hold for direct gateway traffic, local installs,
+/// and any deployment that exposes the gateway without that ingress.
+/// HSTS is only sent when the request arrived over TLS (directly or via a
+/// trusted proxy reporting `x-forwarded-proto: https`), because advertising it
+/// on a plain-HTTP listener would strand local development on a poisoned
+/// host cache.
+async fn security_headers(req: Request<axum::body::Body>, next: Next) -> Response {
+    let is_https = req
+        .headers()
+        .get("x-forwarded-proto")
+        .and_then(|value| value.to_str().ok())
+        .map(|proto| proto.eq_ignore_ascii_case("https"))
+        .unwrap_or(false)
+        || req.uri().scheme_str() == Some("https");
+
+    let mut response = next.run(req).await;
+    let headers = response.headers_mut();
+
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        header::HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        header::X_FRAME_OPTIONS,
+        header::HeaderValue::from_static("DENY"),
+    );
+    headers.insert(
+        header::REFERRER_POLICY,
+        header::HeaderValue::from_static("no-referrer"),
+    );
+    headers.insert(
+        HeaderName::from_static("permissions-policy"),
+        header::HeaderValue::from_static("geolocation=(), microphone=(), camera=()"),
+    );
+    headers.insert(
+        HeaderName::from_static("cross-origin-resource-policy"),
+        header::HeaderValue::from_static("same-site"),
+    );
+    if is_https {
+        headers.insert(
+            header::STRICT_TRANSPORT_SECURITY,
+            header::HeaderValue::from_static("max-age=63072000; includeSubDomains"),
+        );
+    }
+
+    response
+}
 
 pub fn create_router(state: AppState) -> Router {
     let allowed_origins: Vec<header::HeaderValue> =
@@ -76,6 +130,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/health", get(handlers::health))
         .route("/ready", get(handlers::ready))
         .route("/metrics", get(handlers::metrics))
+        .route("/version", get(handlers::version))
         .route("/v1/auth/login", post(handlers::login))
         .route("/v1/auth/session", get(handlers::verify_session))
         .route(
@@ -259,5 +314,8 @@ pub fn create_router(state: AppState) -> Router {
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .layer(axum::extract::DefaultBodyLimit::max(4 * 1024 * 1024))
+        // Last layer applied is the outermost, so these headers also cover
+        // CORS preflights and early 4xx/413 rejections.
+        .layer(axum::middleware::from_fn(security_headers))
         .with_state(state)
 }

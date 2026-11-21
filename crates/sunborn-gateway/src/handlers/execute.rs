@@ -331,6 +331,7 @@ pub async fn execute_request_inner(
                             .release(&req.tenant_id.0, reservation_id)
                             .await;
                         REQUEST_DURATION_MS_SUM.fetch_add(duration_ms, Ordering::Relaxed);
+                        observe_request_latency(duration_ms);
                         return Ok(ResponseEnvelope {
                             request_id: req.request_id,
                             tenant_id: req.tenant_id,
@@ -552,6 +553,7 @@ pub async fn execute_request_inner(
                             .await;
 
                         REQUEST_DURATION_MS_SUM.fetch_add(duration_ms, Ordering::Relaxed);
+                        observe_request_latency(duration_ms);
                         return Ok(ResponseEnvelope {
                             request_id: req.request_id,
                             tenant_id: req.tenant_id,
@@ -931,6 +933,7 @@ pub async fn execute_request_inner(
         certificate: None,
     };
     REQUEST_DURATION_MS_SUM.fetch_add(duration_ms, Ordering::Relaxed);
+    observe_request_latency(duration_ms);
     Ok(resp)
 }
 

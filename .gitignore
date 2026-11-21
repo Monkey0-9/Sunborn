@@ -77,4 +77,6 @@ research/results/baseline_backup/
 
 .playwright-mcp/
 .superpowers/
+*.ipynb
+
 

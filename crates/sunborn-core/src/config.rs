@@ -215,9 +215,116 @@ impl AppConfig {
         })
     }
 
+    /// Panicking loader retained for the library quick-start example and tests.
+    /// Runtime code must use [`AppConfig::try_load_from_env`] so a bad
+    /// configuration exits with a diagnosable error instead of a panic.
     pub fn load_from_env() -> Self {
         Self::try_load_from_env().unwrap_or_else(|err| {
             panic!("FATAL: Sunborn Gateway configuration load failed: {err}");
+        })
+    }
+
+    /// Structural validation that does not touch the network. It catches the
+    /// mistakes operators actually make — a zero port, a backend selected with
+    /// a URL of the wrong scheme, an empty required URL — and reports every
+    /// problem at once so a single run is enough to fix them all.
+    pub fn validate(&self) -> crate::error::Result<()> {
+        let mut problems: Vec<String> = Vec::new();
+
+        if self.server.port == 0 {
+            problems.push("server port must not be 0".to_string());
+        }
+        if self.server.host.trim().is_empty() {
+            problems.push("server host must not be empty".to_string());
+        }
+        if self.server.host.contains('/') || self.server.host.contains(':') {
+            problems.push(format!(
+                "server host '{}' must be a bare host name or IP address, not a URL or host:port pair",
+                self.server.host
+            ));
+        }
+
+        if self.cache.backend.eq_ignore_ascii_case("dragonfly") {
+            let url = self.cache.dragonfly_url.trim();
+            if !(url.starts_with("redis://")
+                || url.starts_with("rediss://")
+                || url.starts_with("unix://"))
+            {
+                problems.push(format!(
+                    "SUNBORN_CACHE_BACKEND=dragonfly requires DRAGONFLY_URL/REDIS_URL to start with redis://, rediss://, or unix:// (got '{url}')"
+                ));
+            }
+        }
+
+        if self.cache.vector_backend.eq_ignore_ascii_case("qdrant") {
+            let url = self.cache.qdrant_url.trim();
+            if !(url.starts_with("http://") || url.starts_with("https://")) {
+                problems.push(format!(
+                    "SUNBORN_VECTOR_BACKEND=qdrant requires QDRANT_URL to start with http:// or https:// (got '{url}')"
+                ));
+            }
+        }
+
+        if self.cache.database_backend.eq_ignore_ascii_case("postgres") {
+            let url = self.cache.postgres_url.trim();
+            if !(url.starts_with("postgres://") || url.starts_with("postgresql://")) {
+                problems.push(format!(
+                    "SUNBORN_DB_BACKEND=postgres requires POSTGRES_URL/DATABASE_URL to start with postgres:// or postgresql:// (got '{url}')"
+                ));
+            }
+        }
+
+        if is_production_mode() {
+            if !self.auth.enforce_auth {
+                problems.push(
+                    "production mode requires authentication to be enforced (SUNBORN_AUTH_ENFORCE=true)"
+                        .to_string(),
+                );
+            }
+            match self.cache.master_kek.as_deref() {
+                None | Some("") => problems
+                    .push("production mode requires SUNBORN_MASTER_KEK to be set".to_string()),
+                Some(_) => {}
+            }
+        }
+
+        if problems.is_empty() {
+            Ok(())
+        } else {
+            Err(crate::error::SunbornError::configuration_error(format!(
+                "configuration validation failed with {} problem(s):\n  - {}",
+                problems.len(),
+                problems.join("\n  - ")
+            )))
+        }
+    }
+
+    /// Effective configuration with secrets redacted. Safe to print in logs,
+    /// `sunborn-gateway config-check`, and operator runbooks.
+    pub fn redacted_summary(&self) -> serde_json::Value {
+        serde_json::json!({
+            "environment": if is_production_mode() { "production" } else { "development" },
+            "server": {
+                "host": self.server.host,
+                "port": self.server.port,
+            },
+            "backends": {
+                "exact_cache": self.cache.backend,
+                "vector_store": self.cache.vector_backend,
+                "database": self.cache.database_backend,
+            },
+            "cache": {
+                "exact_enabled": self.cache.exact_cache_enabled,
+                "semantic_enabled": self.cache.semantic_cache_enabled,
+                "graph_dependency_enabled": self.cache.graph_dependency_cache_enabled,
+                "strict_durability": self.cache.strict_durability,
+            },
+            "auth": {
+                "enforce": self.auth.enforce_auth,
+            },
+            "secrets": {
+                "master_kek": if self.cache.master_kek.as_deref().is_some_and(|k| !k.is_empty()) { "set" } else { "unset" },
+            },
         })
     }
 }
@@ -225,6 +332,44 @@ impl AppConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_validate_rejects_zero_port_and_wrong_url_scheme() {
+        let mut config = AppConfig::default();
+        config.server.port = 0;
+        config.cache.backend = "dragonfly".to_string();
+        config.cache.dragonfly_url = "http://not-redis:6379".to_string();
+
+        let err = config
+            .validate()
+            .expect_err("invalid config must be rejected");
+        let message = err.to_string();
+        assert!(message.contains("port must not be 0"), "{message}");
+        assert!(
+            message.contains("requires DRAGONFLY_URL/REDIS_URL"),
+            "{message}"
+        );
+        // Every problem is reported in one pass, not just the first.
+        assert!(message.contains("2 problem(s)"), "{message}");
+    }
+
+    #[test]
+    fn test_validate_accepts_default_memory_profile() {
+        let config = AppConfig::default();
+        config
+            .validate()
+            .expect("in-memory development profile is valid");
+    }
+
+    #[test]
+    fn test_redacted_summary_never_contains_secret_material() {
+        let mut config = AppConfig::default();
+        config.cache.master_kek = Some("super-secret-kek-value-that-must-not-print".to_string());
+
+        let rendered = config.redacted_summary().to_string();
+        assert!(!rendered.contains("super-secret-kek-value"));
+        assert!(rendered.contains("\"master_kek\":\"set\""));
+    }
 
     #[test]
     fn test_parse_bool_env_valid() {

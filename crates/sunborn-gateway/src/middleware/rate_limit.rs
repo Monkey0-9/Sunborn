@@ -279,6 +279,14 @@ pub async fn pre_auth_rate_limit_middleware(req: Request, next: Next) -> Respons
         return next.run(req).await;
     }
 
+    // Health, readiness, metrics, and build identity are unauthenticated,
+    // read-only, and polled by infrastructure (kubelet probes, Prometheus).
+    // Throttling them would turn a busy node into a restart loop, so they are
+    // exempt from the anti-bruteforce limiter by design.
+    if is_probe_path(req.uri().path()) {
+        return next.run(req).await;
+    }
+
     let status = pre_auth_limiter().check_status(&peer_ip.to_string()).await;
     if status.allowed {
         return next.run(req).await;
@@ -295,6 +303,12 @@ pub async fn pre_auth_rate_limit_middleware(req: Request, next: Next) -> Respons
             .unwrap_or_else(|_| HeaderValue::from_static("1")),
     );
     response
+}
+
+/// Unauthenticated, read-only endpoints polled by infrastructure. These bypass
+/// the pre-auth limiter so probe traffic can never be mistaken for abuse.
+pub fn is_probe_path(path: &str) -> bool {
+    matches!(path, "/health" | "/ready" | "/metrics" | "/version")
 }
 
 fn pre_auth_limiter() -> &'static RateLimiter {

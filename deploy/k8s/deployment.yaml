@@ -27,6 +27,9 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
+      # Must exceed SUNBORN_SHUTDOWN_DRAIN_TIMEOUT_SECS (default 15s) so the
+      # process can finish its own drain before SIGKILL.
+      terminationGracePeriodSeconds: 45
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
@@ -41,7 +44,7 @@ spec:
         fsGroup: 65532
       containers:
         - name: gateway
-          image: ghcr.io/sunborn/sunborn-gateway:0.1.0
+          image: ghcr.io/sunborn/sunborn-gateway:1.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -65,11 +68,17 @@ spec:
             capabilities:
               drop:
                 - ALL
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 2
+            timeoutSeconds: 2
+            failureThreshold: 30
           livenessProbe:
             httpGet:
               path: /health
               port: http
-            initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 2
             failureThreshold: 3

@@ -3,7 +3,7 @@ ifeq ($(OS),Windows_NT)
 PYTHON := python
 endif
 
-.PHONY: all build test check fmt lint run clean help docker-up docker-down test-frontend build-frontend test-sdk lint-helm verify-stack reproduce verify-all
+.PHONY: all build test check fmt lint run clean help docker-up docker-down test-frontend build-frontend test-sdk lint-helm verify-stack reproduce verify-all doctor config-check
 
 all: check test
 
@@ -21,6 +21,8 @@ help:
 	@echo "  make verify-stack  - Run multi-container live stack pre-flight"
 	@echo "  make reproduce     - Run research reproducibility suite"
 	@echo "  make verify-all    - Comprehensive pre-merge gate validation"
+	@echo "  make doctor        - Pre-flight: validate config, storage, port, key material"
+	@echo "  make config-check  - Validate configuration and print the redacted effective view"
 	@echo "  make run           - Run the sunborn-gateway service"
 	@echo "  make docker-up     - Start local dependencies via Docker Compose"
 	@echo "  make docker-down   - Stop local dependencies"
@@ -59,7 +61,13 @@ fmt:
 	cargo fmt --all
 
 lint:
-	cargo clippy --all-targets --all-features -- -D warnings
+	cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+doctor:
+	cargo run -p sunborn-gateway -- doctor
+
+config-check:
+	cargo run -p sunborn-gateway -- config-check
 
 run:
 	cargo run -p sunborn-gateway

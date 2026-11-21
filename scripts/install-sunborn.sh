@@ -47,10 +47,45 @@ EOF
     echo "[+] Created desktop entry: ${DESKTOP_ENTRY_DIR}/sunborn.desktop"
 fi
 
+# Post-install verification: configuration must load, and the binary must
+# actually serve /health before we call the install successful.
+echo "[*] Verifying the installed binary..."
+if ! "${INSTALL_DIR}/sunborn-gateway" config-check >/dev/null 2>&1; then
+    echo "[-] Installed binary failed configuration validation."
+    "${INSTALL_DIR}/sunborn-gateway" config-check || true
+    exit 1
+fi
+
+SMOKE_PORT="${SUNBORN_SMOKE_PORT:-18081}"
+SMOKE_LOG="${DATA_DIR}/install-smoke.log"
+SUNBORN_ENV=development HOST=127.0.0.1 PORT="${SMOKE_PORT}" \
+    "${INSTALL_DIR}/sunborn-gateway" >"${SMOKE_LOG}" 2>&1 &
+SMOKE_PID=$!
+SMOKE_OK=0
+for _ in $(seq 1 40); do
+    if PORT="${SMOKE_PORT}" "${INSTALL_DIR}/sunborn-gateway" healthcheck >/dev/null 2>&1; then
+        SMOKE_OK=1
+        break
+    fi
+    sleep 0.25
+done
+kill "${SMOKE_PID}" 2>/dev/null || true
+wait "${SMOKE_PID}" 2>/dev/null || true
+
+if [[ "${SMOKE_OK}" -eq 1 ]]; then
+    echo "[+] Smoke test passed: gateway answered /health on 127.0.0.1:${SMOKE_PORT}."
+else
+    echo "[-] Smoke test did not get a healthy response. Last log lines (${SMOKE_LOG}):"
+    tail -n 15 "${SMOKE_LOG}" || true
+    echo "[-] Installation copied the binary but could not verify it. Run:"
+    echo "      ${INSTALL_DIR}/sunborn-gateway doctor"
+fi
+
 echo "=========================================================="
 echo "   INSTALLATION COMPLETE!                                 "
 echo "=========================================================="
 echo "   Binary:   ${INSTALL_DIR}/sunborn-gateway"
 echo "   Data:     ${DATA_DIR}"
+echo "   Verify:   ${INSTALL_DIR}/sunborn-gateway doctor"
 echo "   Start with: SUNBORN_SERVER__HOST=127.0.0.1 ${INSTALL_DIR}/sunborn-gateway"
 echo "=========================================================="

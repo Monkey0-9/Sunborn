@@ -391,6 +391,7 @@ pub async fn auth_middleware(headers: HeaderMap, mut req: Request, next: Next) -
     if path == "/health"
         || path == "/ready"
         || path == "/metrics"
+        || path == "/version"
         || path == "/v1/auth/login"
         || path == "/v1/ceremony/public-keys"
         || (!is_prod && (path == "/" || path == "/cockpit" || path.starts_with("/v1/local/")))

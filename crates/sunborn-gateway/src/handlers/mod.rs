@@ -46,6 +46,60 @@ static SPEND_VELOCITY_REJECTIONS_TOTAL: AtomicU64 = AtomicU64::new(0);
 static QUOTA_REJECTIONS_TOTAL: AtomicU64 = AtomicU64::new(0);
 static REQUEST_DURATION_MS_SUM: AtomicU64 = AtomicU64::new(0);
 
+/// Prometheus histogram buckets for end-to-end request latency, in seconds.
+/// "+Inf" is implied by the total observation count (`REQUEST_OBSERVATIONS`).
+pub(crate) const LATENCY_BUCKETS_SECS: [f64; 12] = [
+    0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0,
+];
+
+/// One cumulative counter per bucket, plus the observation count and sum.
+/// Buckets are stored as cumulative counts at render time: each observation
+/// increments every bucket whose upper bound it falls at or below.
+static LATENCY_BUCKET_COUNTS: [AtomicU64; LATENCY_BUCKETS_SECS.len()] = [
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+];
+static REQUEST_OBSERVATIONS: AtomicU64 = AtomicU64::new(0);
+
+/// Process start time, used to derive `sunborn_uptime_seconds`.
+static PROCESS_START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+
+/// Records one completed request in the latency histogram.
+pub(crate) fn observe_request_latency(duration_ms: u64) {
+    let seconds = duration_ms as f64 / 1000.0;
+    REQUEST_OBSERVATIONS.fetch_add(1, Ordering::Relaxed);
+    for (idx, bound) in LATENCY_BUCKETS_SECS.iter().enumerate() {
+        if seconds <= *bound {
+            LATENCY_BUCKET_COUNTS[idx].fetch_add(1, Ordering::Relaxed);
+        }
+    }
+}
+
+/// Pins the process start instant. Call once during startup so
+/// `sunborn_uptime_seconds` reflects real process age rather than the first
+/// scrape.
+pub fn init_metrics() {
+    PROCESS_START.get_or_init(Instant::now);
+}
+
+/// Returns process uptime in seconds.
+pub(crate) fn process_uptime_seconds() -> f64 {
+    PROCESS_START
+        .get_or_init(Instant::now)
+        .elapsed()
+        .as_secs_f64()
+}
+
 /// Measures safety evidence by comparing the certificate's bound reference
 /// fingerprint against the candidate prompt. Returns `None` for legacy
 /// certificates with no reference fingerprint.
@@ -124,3 +178,60 @@ pub use local::*;
 pub use platform::*;
 pub use security::*;
 pub use tenants::*;
+
+#[cfg(test)]
+mod metrics_tests {
+    use super::*;
+    use std::sync::atomic::Ordering;
+
+    fn snapshot() -> (Vec<u64>, u64) {
+        let buckets = (0..LATENCY_BUCKETS_SECS.len())
+            .map(|idx| LATENCY_BUCKET_COUNTS[idx].load(Ordering::Relaxed))
+            .collect();
+        (buckets, REQUEST_OBSERVATIONS.load(Ordering::Relaxed))
+    }
+
+    /// Prometheus requires cumulative buckets: an observation must increment
+    /// every bucket whose upper bound it falls at or below. A non-cumulative
+    /// implementation still renders, but every rate() calculation over it is
+    /// silently wrong and `le="+Inf"` stops matching `_count`.
+    #[test]
+    fn latency_buckets_are_cumulative_and_agree_with_the_observation_count() {
+        let (before, observations_before) = snapshot();
+
+        observe_request_latency(4); // 4ms: falls in le=0.005 and every larger bound
+        observe_request_latency(2_000); // 2s: falls in le=2.5 and le=5.0 only
+
+        let (after, observations_after) = snapshot();
+        assert_eq!(observations_after - observations_before, 2);
+
+        let delta: Vec<u64> = before
+            .iter()
+            .zip(after.iter())
+            .map(|(b, a)| a - b)
+            .collect();
+
+        // le=0.001 and le=0.0025 are below 0.004, so neither observation counts.
+        assert_eq!(delta[0], 0, "le=0.001 must not count a 4ms observation");
+        assert_eq!(delta[1], 0, "le=0.0025 must not count a 4ms observation");
+        // le=0.005 .. le=2.0 include the 4ms request but not the 2s one.
+        for (idx, count) in delta.iter().enumerate().take(10).skip(2) {
+            assert_eq!(
+                *count, 1,
+                "le={} should count only the 4ms observation",
+                LATENCY_BUCKETS_SECS[idx]
+            );
+        }
+        // le=2.5 and le=5.0 include both observations.
+        assert_eq!(delta[10], 2, "le=2.5 must count both observations");
+        assert_eq!(delta[11], 2, "le=5.0 must count both observations");
+
+        // Cumulative order: every bucket is >= the one below it.
+        for window in after.windows(2) {
+            assert!(
+                window[1] >= window[0],
+                "bucket counts must be non-decreasing as the bound grows"
+            );
+        }
+    }
+}

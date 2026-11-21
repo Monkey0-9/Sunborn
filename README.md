@@ -108,8 +108,11 @@ Run the full gateway without Docker, PostgreSQL, Redis, Qdrant, or cloud KMS. Al
 git clone https://github.com/Monkey0-9/Sunborn.git
 cd Sunborn
 cargo build --release -p sunborn-gateway
+SUNBORN_ENV=development ./target/release/sunborn-gateway doctor   # verify first
 SUNBORN_ENV=development ./target/release/sunborn-gateway
 ```
+
+`doctor` checks configuration, durable-storage writability, port availability, and key material, then exits non-zero if anything blocks startup. `config-check` prints the effective, redacted configuration; `version` prints build identity. See [`docs/INSTALL.md`](docs/INSTALL.md) for every install path and exit code.
 
 Send a test completion request:
 

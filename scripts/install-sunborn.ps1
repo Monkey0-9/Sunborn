@@ -119,10 +119,49 @@ Set-ItemProperty -Path $UninstallRegKey -Name "InstallLocation" -Value $TargetDi
 Set-ItemProperty -Path $UninstallRegKey -Name "UninstallString" -Value "powershell.exe -ExecutionPolicy Bypass -File `"$TargetDir\uninstall.ps1`""
 Set-ItemProperty -Path $UninstallRegKey -Name "QuietUninstallString" -Value "powershell.exe -ExecutionPolicy Bypass -File `"$TargetDir\uninstall.ps1`" -Silent"
 
+# Post-install verification: configuration must load, and the binary must
+# actually answer /health before the install is reported as successful.
+Write-Host "`n[*] Verifying the installed binary..." -ForegroundColor Yellow
+$InstalledExe = Join-Path $BinDir "sunborn-gateway.exe"
+& $InstalledExe config-check *> $null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[-] Installed binary failed configuration validation." -ForegroundColor Red
+    & $InstalledExe config-check
+    exit 1
+}
+
+$SmokePort = if ($env:SUNBORN_SMOKE_PORT) { [int]$env:SUNBORN_SMOKE_PORT } else { 18081 }
+$SmokeLog = Join-Path $DataDir "install-smoke.log"
+$SmokeOk = $false
+$env:SUNBORN_ENV = "development"
+$env:HOST = "127.0.0.1"
+$env:PORT = "$SmokePort"
+$SmokeProc = Start-Process -FilePath $InstalledExe -PassThru -WindowStyle Hidden -RedirectStandardOutput $SmokeLog -RedirectStandardError "$SmokeLog.err"
+try {
+    for ($i = 0; $i -lt 40; $i++) {
+        & $InstalledExe healthcheck *> $null
+        if ($LASTEXITCODE -eq 0) { $SmokeOk = $true; break }
+        Start-Sleep -Milliseconds 250
+    }
+} finally {
+    if ($SmokeProc -and -not $SmokeProc.HasExited) {
+        Stop-Process -Id $SmokeProc.Id -Force -ErrorAction SilentlyContinue
+    }
+}
+
+if ($SmokeOk) {
+    Write-Host "[+] Smoke test passed: gateway answered /health on 127.0.0.1:$SmokePort." -ForegroundColor Green
+} else {
+    Write-Host "[-] Smoke test did not get a healthy response. See $SmokeLog" -ForegroundColor Yellow
+    if (Test-Path $SmokeLog) { Get-Content $SmokeLog -Tail 15 }
+    Write-Host "[-] Run '$InstalledExe doctor' for a diagnosis." -ForegroundColor Yellow
+}
+
 Write-Host "`n==========================================================" -ForegroundColor Green
 Write-Host "   INSTALLATION COMPLETE!                                 " -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green
 Write-Host "   Application Path: $BinDir\sunborn-gateway.exe"
+Write-Host "   Verify:           $BinDir\sunborn-gateway.exe doctor"
 Write-Host "   Encrypted Vault:  $TargetDir\vault.enc"
 Write-Host "   WAL Storage:      $DataDir\execution.wal"
 Write-Host "   Launcher:         $DesktopShortcutPath"
