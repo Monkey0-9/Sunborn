@@ -165,6 +165,8 @@ pub async fn get_finops_report() -> impl IntoResponse {
     let gpt4o = ModelPricing::gpt4o();
     let claude = ModelPricing::claude35_sonnet();
     let sarvam = ModelPricing::sarvam_2b();
+    let grok = ModelPricing::grok2();
+    let gemini = ModelPricing::gemini15_pro();
 
     let exact_hits = EXACT_HITS.load(Ordering::Relaxed);
     let semantic_hits = SEMANTIC_HITS.load(Ordering::Relaxed);
@@ -174,6 +176,8 @@ pub async fn get_finops_report() -> impl IntoResponse {
     let gpt4o_saving_per_hit = FinOpsEngine::calculate_net_savings(&gpt4o, 1000, 500);
     let claude_saving_per_hit = FinOpsEngine::calculate_net_savings(&claude, 1000, 500);
     let sarvam_saving_per_hit = FinOpsEngine::calculate_net_savings(&sarvam, 1000, 500);
+    let grok_saving_per_hit = FinOpsEngine::calculate_net_savings(&grok, 1000, 500);
+    let gemini_saving_per_hit = FinOpsEngine::calculate_net_savings(&gemini, 1000, 500);
 
     let embed_cost_per_query = FinOpsEngine::LOCAL_EMBED_COST_PER_CALL;
     let cache_overhead_per_query = FinOpsEngine::CACHE_LOOKUP_OVERHEAD_PER_CALL;
@@ -210,6 +214,8 @@ pub async fn get_finops_report() -> impl IntoResponse {
                 "embedding_inference_cost_per_query_usd": embed_cost_per_query,
                 "cache_lookup_overhead_cost_per_query_usd": cache_overhead_per_query,
                 "claude_cost_avoided_per_query_usd": claude_saving_per_hit,
+                "grok_cost_avoided_per_query_usd": grok_saving_per_hit,
+                "gemini_cost_avoided_per_query_usd": gemini_saving_per_hit,
                 "sarvam_cost_avoided_per_query_usd": sarvam_saving_per_hit,
                 "total_estimated_gross_savings_usd": total_gpt4o_gross_savings,
                 "total_estimated_net_savings_usd": total_gpt4o_net_savings,
