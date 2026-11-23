@@ -151,6 +151,11 @@ jobs:
           # extra-allowed in .trunk/configs/.yamllint.yaml instead.
           python-version: 3.11
 
+      - name: Install Python dev dependencies & SDK
+        run: |
+          python3 -m pip install -r requirements-dev.txt
+          python3 -m pip install -e sdk/python
+
       - name: Run Python SDK Unit Tests
         run: |
           PYTHONPATH=sdk/python python3 -m unittest sdk/python/test_sunborn_agent.py

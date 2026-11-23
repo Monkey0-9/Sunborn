@@ -7,3 +7,5 @@
 # Required by deploy/verify_live_stack.sh (gate 6/7) to parse Compose and
 # Kubernetes manifests.
 pyyaml>=6.0
+httpx>=0.25.0
+
