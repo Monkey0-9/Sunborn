@@ -9,7 +9,7 @@
 # ------------------------------------------------------------------------------
 # Stage 1: Rust Builder
 # ------------------------------------------------------------------------------
-FROM rust:1.94-bookworm AS builder
+FROM rust:bookworm AS builder
 
 WORKDIR /usr/src/sunborn
 

@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Zero-risk Docker deployment & root compose orchestration**: Added root
+  `docker-compose.yml` and automated cross-platform launcher `scripts/docker_launch.py`.
+  Features pre-flight port collision detection, automatic 256-bit AES-GCM
+  cryptographic key generation, fail-safe healthcheck polling, live endpoint
+  verification, and non-destructive management targets (`make docker-up`,
+  `make docker-down`, `make docker-status`). Updated `deploy/Dockerfile` builder
+  stage to official `rust:bookworm` and eliminated deprecated compose version attributes.
 - **Python SDK quality & transport**: pooled httpx transport with a stdlib
   fallback, typed `execute_request()` / `evict_execution()`, a real `sunborn`
   CLI, and LangChain/LlamaIndex adapters backed by the `/v1/execution/*`

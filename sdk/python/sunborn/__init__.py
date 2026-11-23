@@ -38,10 +38,12 @@ from .models import (
 )
 from .openai import (
     AsyncOpenAI,
+    AsyncStream,
     AsyncSunbornOpenAI,
     ChatCompletion,
     ChatCompletionChunk,
     OpenAI,
+    Stream,
     SunbornOpenAI,
 )
 
@@ -62,6 +64,8 @@ __all__ = [
     "SunbornOpenAI",
     "AsyncOpenAI",
     "AsyncSunbornOpenAI",
+    "Stream",
+    "AsyncStream",
     "ChatCompletion",
     "ChatCompletionChunk",
     "Anthropic",

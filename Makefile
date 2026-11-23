@@ -3,7 +3,7 @@ ifeq ($(OS),Windows_NT)
 PYTHON := python
 endif
 
-.PHONY: all build test check fmt lint run clean help docker-up docker-down brokers dev smoke test-frontend build-frontend test-sdk lint-python typecheck-python test-python verify-python hygiene lint-helm verify-stack reproduce verify-all doctor config-check
+.PHONY: all build test check fmt lint run clean help docker-up docker-down docker-status brokers dev smoke test-frontend build-frontend test-sdk lint-python typecheck-python test-python verify-python hygiene lint-helm verify-stack reproduce verify-all doctor config-check
 
 all: check test
 
@@ -32,8 +32,9 @@ help:
 	@echo "  make brokers       - Start Postgres, Dragonfly and Qdrant only"
 	@echo "  make dev           - Wire brokers, generate .env.local, and run the gateway"
 	@echo "  make smoke         - Verify origin miss to exact cache hit against a running gateway"
-	@echo "  make docker-up     - Start local dependencies via Docker Compose"
-	@echo "  make docker-down   - Stop local dependencies"
+	@echo "  make docker-up     - Start zero-risk Docker deployment with health probes"
+	@echo "  make docker-down   - Gracefully stop Docker containers (preserves data)"
+	@echo "  make docker-status - Inspect real-time container health and gateway endpoints"
 
 build:
 	cargo build --release
@@ -96,7 +97,7 @@ run:
 	cargo run -p sunborn-gateway
 
 brokers:
-	docker compose -f deploy/docker-compose.yml up -d postgres dragonfly qdrant
+	$(PYTHON) scripts/docker_launch.py --brokers
 
 dev:
 	bash scripts/dev-up.sh
@@ -105,10 +106,13 @@ smoke:
 	bash scripts/dev-smoke.sh
 
 docker-up:
-	docker compose -f deploy/docker-compose.yml up -d
+	$(PYTHON) scripts/docker_launch.py --up
 
 docker-down:
-	docker compose -f deploy/docker-compose.yml down
+	$(PYTHON) scripts/docker_launch.py --down
+
+docker-status:
+	$(PYTHON) scripts/docker_launch.py --status
 
 clean:
 	cargo clean

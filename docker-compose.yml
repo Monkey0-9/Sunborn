@@ -1,0 +1,135 @@
+# ==============================================================================
+# Sunborn Enterprise AI Gateway — Root Docker Compose Stack
+# Multi-container orchestration: Gateway (Rust), PostgreSQL (Metadata & Invalidation),
+# DragonflyDB (Zero-GC C0/C1 Cache), Qdrant (Semantic Vector C2), Next.js 15 Frontend
+# ==============================================================================
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    container_name: sunborn-gateway
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+      - path: deploy/.env
+        required: false
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      SUNBORN_DB_BACKEND: "${SUNBORN_DB_BACKEND:-postgres}"
+      POSTGRES_URL: "postgres://${POSTGRES_USER:-sunborn}:${POSTGRES_PASSWORD:-dev_insecure_postgres_password}@postgres:5432/${POSTGRES_DB:-sunborn}"
+      SUNBORN_CACHE_BACKEND: "${SUNBORN_CACHE_BACKEND:-dragonfly}"
+      DRAGONFLY_URL: "${DRAGONFLY_URL:-redis://dragonfly:6379}"
+      SUNBORN_VECTOR_BACKEND: "${SUNBORN_VECTOR_BACKEND:-qdrant}"
+      QDRANT_URL: "${QDRANT_URL:-http://qdrant:6333}"
+      SUNBORN_ENV: "${SUNBORN_ENV:-development}"
+      SUNBORN_MASTER_KEK: "${SUNBORN_MASTER_KEK:-dev_insecure_master_kek_32bytes_local}"
+      SUNBORN_ADMIN_KEY: "${SUNBORN_ADMIN_KEY:-dev_insecure_admin_key_32bytes_local}"
+      SUNBORN_LEARNING_HMAC_SECRET: "${SUNBORN_LEARNING_HMAC_SECRET:-dev_insecure_hmac_secret_32bytes_local}"
+      SUNBORN_CORS_ALLOWED_ORIGINS: "${SUNBORN_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,https://monkey0-9.github.io}"
+    ports:
+      - "${GATEWAY_BIND_ADDR:-127.0.0.1}:8080:8080"
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/sunborn-gateway", "healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    networks:
+      - sunborn-net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: sunborn-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-sunborn}"
+      POSTGRES_USER: "${POSTGRES_USER:-sunborn}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-dev_insecure_postgres_password}"
+    ports:
+      - "${POSTGRES_BIND_ADDR:-127.0.0.1}:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sunborn} -d ${POSTGRES_DB:-sunborn}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sunborn-net
+
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.20.0
+    container_name: sunborn-dragonfly
+    restart: unless-stopped
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "${DRAGONFLY_BIND_ADDR:-127.0.0.1}:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sunborn-net
+
+  qdrant:
+    image: qdrant/qdrant:v1.10.0
+    container_name: sunborn-qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_BIND_ADDR:-127.0.0.1}:6333:6333"
+      - "${QDRANT_GRPC_BIND_ADDR:-127.0.0.1}:6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sunborn-net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.frontend
+    container_name: sunborn-frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      SUNBORN_GATEWAY_URL: "http://gateway:8080"
+      SUNBORN_READ_ONLY_TOKEN: "${SUNBORN_READ_ONLY_TOKEN:-}"
+    ports:
+      - "${FRONTEND_BIND_ADDR:-127.0.0.1}:3000:3000"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - sunborn-net
+
+networks:
+  sunborn-net:
+    driver: bridge
+
+volumes:
+  pgdata:
+  qdrant_data:

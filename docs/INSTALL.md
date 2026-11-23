@@ -82,7 +82,11 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 ## 3. Container / Kubernetes (production)
 
 ```bash
-docker compose -f deploy/docker-compose.yml up -d
+# Automated zero-risk deployment with pre-flight checks and key generation:
+python scripts/docker_launch.py
+
+# Or standard Docker Compose from repository root:
+docker compose up -d
 ```
 
 Kubernetes, plain manifests:

@@ -209,6 +209,76 @@ class TestAsyncAndStreaming(unittest.TestCase):
 
         asyncio.run(_run())
 
+    @patch("urllib.request.urlopen")
+    def test_sync_stream_context_manager_and_json_fallback(self, mock_urlopen):
+        # 1. Non-SSE JSON fallback (when cached hit returned as application/json)
+        mock_resp = MagicMock()
+        mock_resp.headers = {"Content-Type": "application/json"}
+        mock_resp.read.return_value = json.dumps(
+            {
+                "id": "chatcmpl-cached-full",
+                "object": "chat.completion",
+                "model": "gpt-4o",
+                "sunborn_cached": True,
+                "sunborn_tier": "c1_exact",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "Full cached stream fallback"},
+                        "finish_reason": "stop",
+                    }
+                ],
+            }
+        ).encode("utf-8")
+        mock_urlopen.return_value = mock_resp
+
+        client = OpenAI(api_key="sk-test")
+        with client.chat.completions.create(
+            model="gpt-4o", messages=[{"role": "user", "content": "hi"}], stream=True
+        ) as stream:
+            chunks = list(stream)
+            self.assertEqual(len(chunks), 1)
+            self.assertEqual(chunks[0].choices[0].delta.content, "Full cached stream fallback")
+            self.assertEqual(chunks[0].choices[0].finish_reason, "stop")
+
+    def test_async_stream_and_context_manager(self):
+        async def _run():
+            with patch("urllib.request.urlopen") as mock_urlopen:
+                mock_resp = MagicMock()
+                mock_resp.headers = {"Content-Type": "text/event-stream"}
+                mock_resp.__iter__.return_value = [
+                    b'data: {"id": "c1", "choices": [{"index": 0, "delta": {"content": "Async"}}]}\n\n',
+                    b'data: {"id": "c2", "choices": [{"index": 0, "delta": {"content": " Stream"}}]}\n\n',
+                    b"data: [DONE]\n\n",
+                ]
+                mock_urlopen.return_value = mock_resp
+
+                async with AsyncOpenAI(api_key="async-key") as client:
+                    self.assertFalse(client.is_closed)
+                    # Test both await and async with
+                    stream = await client.chat.completions.create(
+                        model="gpt-4o", messages=[{"role": "user", "content": "hi"}], stream=True
+                    )
+                    texts = []
+                    async with stream as active_stream:
+                        async for chunk in active_stream:
+                            texts.append(chunk.choices[0].delta.content)
+                    self.assertEqual("".join(texts), "Async Stream")
+
+                    # Models and embeddings on AsyncOpenAI
+                    models = await client.models.list()
+                    self.assertGreaterEqual(len(models), 1)
+
+                    with patch.object(client._sync_client, "_post") as mock_post:
+                        mock_post.return_value = {
+                            "data": [{"index": 0, "embedding": [0.0, 1.0]}],
+                            "model": "text-embedding-3-small",
+                        }
+                        emb = await client.embeddings.create(model="text-embedding-3-small", input=["test"])
+                        self.assertEqual(emb.data[0].embedding, [0.0, 1.0])
+
+        asyncio.run(_run())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,3 @@
-version: '3.8'
-
 # ==============================================================================
 # Sunborn Production Docker Compose Stack (Fail-Closed Architecture)
 # Strictly requires high-entropy secrets and production backend services.

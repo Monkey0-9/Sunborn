@@ -171,14 +171,31 @@ SUNBORN_ENV=development \
 
 **Privacy guarantee:** Zero prompts, vectors, or embeddings ever leave your machine. All AST guardrails, vector searches, and causal invalidations execute locally at microsecond speeds.
 
-### 2.4 Full-stack multi-container cluster
+### 2.4 Full-stack multi-container cluster (Zero-Risk One-Command Launch)
 
 Deploy the complete enterprise topology (Axum gateway, Next.js 15 cockpit, PostgreSQL 16 with WAL outbox, DragonflyDB cache, and Qdrant vector store):
 
 ```bash
-docker compose -f deploy/docker-compose.yml up -d
+# Automated launcher with pre-flight port checks, cryptographic secret generation, and health polling:
+python scripts/docker_launch.py
+
+# Or via standard Docker Compose from root:
+docker compose up -d
+
+# Or via Makefile:
+make docker-up
+```
+
+Verify cluster readiness:
+```bash
 curl http://localhost:8080/ready
 # {"status":"ready","database":"postgres","cache":"dragonfly","vector":"qdrant"}
+```
+
+Management commands:
+```bash
+make docker-status   # Inspect container health & live gateway telemetry
+make docker-down     # Gracefully stop containers (preserves database volumes)
 ```
 
 ### 2.5 Enterprise evaluation suite
