@@ -23,13 +23,13 @@ Computes cryptographic cache identity keys over 10 independent operational dimen
 10. Multi-turn conversation history digests and retrieval context hashes
 
 ### 3. Zero-Leakage Inline PII Tokenization
-Compliant with SOC 2 Type II, HIPAA, and PCI-DSS requirements:
+Designed to support controls relevant to SOC 2 Type II, HIPAA, and PCI-DSS. This is a technical control, not a certification:
 - Redacts sensitive identifiers (SSNs, credit card numbers, Bearer/API tokens, email addresses, phone numbers) into typed tokens (`<US_SSN_1>`, `<EMAIL_1>`).
 - Retains raw sensitive data exclusively in an ephemeral, in-memory, request-scoped `PiiVaultSession`.
 - Allows downstream caches, embeddings, and vector databases to index queries without persisting unredacted PII.
 - Automatically re-hydrates responses before returning data to the authenticated client.
 
-### 4. $O(1)$ Cryptographic Tenant Shredding (GDPR Article 17)
+### 4. Cryptographic Tenant Shredding (supports GDPR Article 17 erasure)
 - Encrypts each tenant's sensitive cached outputs with a distinct 256-bit Tenant Data Encryption Key (TDEK) using AES-256-GCM authenticated encryption (RFC 5116 / NIST SP 800-38D).
 - Uses cryptographically secure 96-bit random nonces derived from OS entropy.
 - Supports pluggable Key Management Providers:

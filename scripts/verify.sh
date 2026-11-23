@@ -70,7 +70,7 @@ echo "[3/12] Running Frontend & TypeScript SDK Test Suite..."
 echo "[4/12] Running Python SDK Packaging & Clean Installation Verification..."
 bash scripts/test_python_sdk.sh
 PYTHONPATH=sdk/python "${PYTHON_BIN}" -m unittest sdk/python/test_sunborn_agent.py
-PYTHONPATH=sdk/python "${PYTHON_BIN}" -m unittest sdk/python/tests/test_sdk_package.py
+PYTHONPATH=sdk/python "${PYTHON_BIN}" -m unittest discover -s sdk/python/tests -v
 
 echo "[5/12] Validating OpenAPI 3.1 Specification Drift..."
 "${PYTHON_BIN}" scripts/check_openapi_drift.py

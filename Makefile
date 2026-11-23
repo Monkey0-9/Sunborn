@@ -43,8 +43,8 @@ build-frontend:
 	npm run build --prefix frontend
 
 test-sdk:
-	$(PYTHON) -m unittest sdk/python/test_sunborn_agent.py
-	$(PYTHON) -m unittest sdk/python/tests/test_sdk_package.py
+	PYTHONPATH=sdk/python $(PYTHON) -m unittest sdk/python/test_sunborn_agent.py
+	PYTHONPATH=sdk/python $(PYTHON) -m unittest discover -s sdk/python/tests -v
 
 lint-helm:
 	helm lint deploy/helm/sunborn --set secrets.existingSecret="ci-validation"

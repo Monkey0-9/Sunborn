@@ -10,7 +10,7 @@ Official Python client library for the **Sunborn Enterprise AI Gateway & Autonom
 
 ## 1. Overview
 
-The Sunborn Python SDK provides high-performance, strictly typed synchronous and asynchronous clients for interacting with the Sunborn Gateway. It enables transparent semantic caching, multi-tier execution reuse, conformal risk calibration, and GDPR-compliant cryptographic tenant governance for LLM and agentic workflows.
+The Sunborn Python SDK provides high-performance, strictly typed synchronous and asynchronous clients for interacting with the Sunborn Gateway. It enables transparent semantic caching, multi-tier execution reuse, conformal risk calibration, and tenant-scoped cryptographic attestation for LLM and agentic workflows. Compliance obligations remain deployment-specific; the SDK provides technical controls, not a compliance certification.
 
 ### Key Capabilities
 - **Exact & Semantic AI Request Routing**: Execute prompts with automatic L1/L2 cache lookup and conformal confidence verification.
@@ -23,16 +23,19 @@ The Sunborn Python SDK provides high-performance, strictly typed synchronous and
 
 ## 2. Installation
 
-Install via `pip`:
+The package is not published on PyPI yet. Install it from this repository:
 
 ```bash
-pip install sunborn
+# Editable install from the repository root
+pip install -e sdk/python
 ```
 
-Or install from the built wheel:
+Or build and install a wheel from this tree:
 
 ```bash
-pip install dist/sunborn-0.1.0rc1-py3-none-any.whl
+python -m pip install build
+python -m build sdk/python
+pip install sdk/python/dist/sunborn-1.0.0-py3-none-any.whl
 ```
 
 Requirements: Python 3.10 or higher.

@@ -152,7 +152,9 @@ jobs:
           python-version: 3.11
 
       - name: Run Python SDK Unit Tests
-        run: python3 -m unittest sdk/python/test_sunborn_agent.py
+        run: |
+          PYTHONPATH=sdk/python python3 -m unittest sdk/python/test_sunborn_agent.py
+          PYTHONPATH=sdk/python python3 -m unittest discover -s sdk/python/tests -v
 
       - name: Run Verifier Negative Tests
         run: python3 -m unittest research/tests/test_verifier_negative.py

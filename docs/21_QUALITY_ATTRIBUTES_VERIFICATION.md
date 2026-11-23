@@ -87,7 +87,7 @@ Sunborn is an ultra-low-latency distributed semantic execution gateway for front
   - Zero sensitive production credentials in client-side bundles.
 
 ### 10. Privacy
-- **Architectural Guarantee**: Complete GDPR Article 17 "Right to be Forgotten" compliance through per-tenant cryptographic shredding.
+- **Architectural Control**: Per-tenant cryptographic shredding provides a technical mechanism for GDPR Article 17 erasure requests. Legal compliance remains deployment- and operator-specific; this is not a certification.
 - **Verification Evidence**:
   - Cryptographic shredding endpoint (`/v1/governance/shred`) zeroizes tenant encryption master keys, instantaneously rendering all encrypted database records, exact caches, and vectors unrecoverable across all stores in <1.5 ms.
   - Zero-leak telemetry: prompt bodies and completion payloads are never logged in plain text.

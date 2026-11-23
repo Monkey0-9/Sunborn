@@ -63,8 +63,8 @@ if (Get-Command bash -ErrorAction SilentlyContinue) {
 $env:PYTHONPATH = "sdk/python"
 & $PythonBin -m unittest sdk/python/test_sunborn_agent.py
 if ($LASTEXITCODE -ne 0) { throw "Python SDK agent test failed" }
-& $PythonBin -m unittest sdk/python/tests/test_sdk_package.py
-if ($LASTEXITCODE -ne 0) { throw "Python SDK package test failed" }
+& $PythonBin -m unittest discover -s sdk/python/tests -v
+if ($LASTEXITCODE -ne 0) { throw "Python SDK test suite failed" }
 
 Write-Host "[5/12] Validating OpenAPI 3.1 Specification Drift..." -ForegroundColor Yellow
 & $PythonBin scripts/check_openapi_drift.py

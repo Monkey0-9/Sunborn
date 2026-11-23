@@ -72,14 +72,14 @@ Request ──▶ Canonicalize ──▶ Auth / FinOps ──▶ Exact cache ─
 
 | Feature / Capability | Cloud Edge Proxies (V8) | Hosted SaaS Gateways | Generic Python Proxies | **Sunborn** |
 | :--- | :--- | :--- | :--- | :--- |
-| **Core Architecture** | JavaScript / V8 Workers | Node.js / Python Proxy | Python Proxy | **Systems Rust + C-SIMD Bitsets (<1ms, zero GC)** |
-| **Exact Cache Hit Latency** | 25ms – 80ms (Cloud WAN) | 40ms – 120ms (Cloud) | 5ms – 15ms (Redis) | **< 1.0 µs (L1 Moka) / 4.2ms (L2 Dragonfly)** |
+| **Core Architecture** | JavaScript / V8 Workers | Node.js / Python Proxy | Python Proxy | **Systems Rust + compressed Roaring bitmaps (no GC)** |
+| **Exact Cache Hit Latency** | 25ms – 80ms (Cloud WAN) | 40ms – 120ms (Cloud) | 5ms – 15ms (Redis) | **In-process lookup < 1 µs; end-to-end HTTP p50 ~6 ms (published single-node benchmark)** |
 | **Semantic Hallucination Defense** | None (Naive exact only) | Naive vector distance threshold | Naive vector cosine | **Structural AST Guardrails + Conformal Risk Bounds** |
-| **Negation & Number Invariance** | Returns False Hits | Returns False Hits | Returns False Hits | **0.0% False Hits (Calibrated Abstention)** |
-| **Causal Blast-Radius Invalidation** | Manual / TTL only | Basic key purge | TTL only | **Multi-Relational Knowledge Graph + Roaring SIMD** |
-| **Zero-Cloud Air-Gapped BYOK** | No (Vendor hosted) | Cloud / Self-hosted Node | Self-hosted Python | **1-Click Zero-Dependency Desktop (Windows/Linux/Mac)** |
-| **Python Ecosystem Drop-in** | Manual URL override | Proprietary SDK wrapper | Basic wrapper | **Drop-in `from sunborn.openai import OpenAI` + Agent Caching** |
-| **Sovereign Regulatory Compliance** | US / EU vendor edge | US Cloud edge | Generic self-host | **India DPDP 2023, RBI Data Localization, GST SAC 998313** |
+| **Negation & Number Invariance** | Returns False Hits | Returns False Hits | Returns False Hits | **0 false hits at 80.8% recall on the 320-pair held-out set (measured; not an open-domain guarantee)** |
+| **Causal Blast-Radius Invalidation** | Manual / TTL only | Basic key purge | TTL only | **Multi-relational knowledge graph + Roaring bitmaps** |
+| **Zero-Cloud Air-Gapped BYOK** | No (Vendor hosted) | Cloud / Self-hosted Node | Self-hosted Python | **BYOK desktop installers (Windows; Unix/macOS shell script)** |
+| **Python Ecosystem Drop-in** | Manual URL override | Proprietary SDK wrapper | Basic wrapper | **Drop-in `from sunborn.openai import OpenAI` + agent-framework cache adapters** |
+| **Sovereign Regulatory Posture** | US / EU vendor edge | US Cloud edge | Generic self-host | **Designed for India data-residency deployments; compliance is deployment-specific** |
 
 ---
 
@@ -265,7 +265,7 @@ each artifact; the ratios between configurations travel better than the absolute
 | **Formal models** | 3 TLC configurations, no errors (2,245 / 601 / 21 states explored) | [`formal/`](formal/), [`scripts/run_tlaplus.sh`](scripts/run_tlaplus.sh) |
 | **Contract parity** | 57/57 OpenAPI operations · all 54 router paths classified, 45/45 reject anonymous callers | [`docs/api/openapi.yaml`](docs/api/openapi.yaml) |
 | **Enterprise evaluation** | All 6 pillars verified (exact cache, AST guardrails, causal graph, FinOps, Merkle DAG, health) | [`scripts/client_showcase.py`](scripts/client_showcase.py) |
-| **Systems architecture** | Defense-in-depth, active-active multi-region, formal TLA+ bounds, SOC 2 / ISO 27001 mapping | [`docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md`](docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md) |
+| **Systems architecture** | Defense-in-depth, formal TLA+ bounds, SOC 2 / ISO 27001 control mapping (self-assessment, not certification) | [`docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md`](docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md) |
 | **Supply chain** | CycloneDX v1.5 SBOM, 369 components, zero known high/critical CVEs | [`sbom.cyclonedx.json`](sbom.cyclonedx.json) |
 
 Reproduce all of it:
@@ -362,11 +362,11 @@ Sunborn strictly separates the high-throughput, low-latency request processing p
 | :--- | :--- | :--- |
 | **Primary Technology** | Rust 1.80+, Tokio, Axum, C SIMD | Next.js 15 App Router, React 19, TypeScript |
 | **Ingress Port** | `:8080` (HTTP/1.1 & HTTP/2 streaming) | `:3000` (HTTP/HTTPS web cockpit) |
-| **Latency Budget** | Sub-microsecond (0.3 µs) to sub-millisecond (70 µs) | Interactive web response (<100 ms) |
+| **Latency Budget** | In-process overhead: sub-microsecond to sub-millisecond (excludes client, network, and origin; end-to-end HTTP p50 ~6 ms in the published benchmark) | Interactive web response (<100 ms) |
 | **Database Access** | Direct async SQLx connection pool, prepared queries | **Strictly indirect via authenticated BFF proxy**; zero raw DB access |
 | **Cryptographic Role** | Envelope encryption (AES-256-GCM), HMAC/Ed25519 signing | Session cookie verification, CSRF origin pinning, key ceremony display |
 | **Failure Policy** | Fail-closed in `production` mode | Deterministic offline simulation fallback with persistent warning banner |
-| **Core Invariants** | Zero unclassified endpoints, zero heap-clone scoring | 100% WCAG 2.2 AA compliant, 0 axe violations, 250+ tab stops |
+| **Core Invariants** | Zero unclassified endpoints, zero heap-clone scoring | WCAG 2.2 AA target; 0 axe violation groups on the checked routes (automated check, not full manual conformance) |
 
 **Scale-out model.** Gateway replicas are stateless; all cross-replica state is external. Tenant budgets are
 enforced cluster-wide through PostgreSQL advisory transaction locks, invalidation propagates over Redis
