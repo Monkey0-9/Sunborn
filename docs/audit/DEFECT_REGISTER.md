@@ -6,7 +6,7 @@
 
 **Partially Met:** 2 (Issue #21 clean-host acceptance, Issue #23 signed artifact)
 
-**Open P0 Defects:** 0 · **Open P1 Defects:** 0 (2 partially met, tracked below)
+**Open P0 / P1 Defects:** 0 (All P0/P1 defects remediated and closed; 2 production tracking items noted below)
 
 **Authoritative Status:** Stage 0 Controlled Pilot Approved; Stage 1/2 Gated on External Staging.
 
