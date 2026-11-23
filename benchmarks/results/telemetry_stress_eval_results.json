@@ -1,0 +1,321 @@
+{
+  "metadata": {
+    "suite": "Sunborn Telemetry, Scalability, FinOps & Conformal Evaluation",
+    "version": "1.0.0",
+    "timestamp": "2026-11-23T13:59:02.944020+00:00",
+    "platform": "Windows-10-10.0.26300-SP0",
+    "python_version": "3.11.9"
+  },
+  "hashing_and_routing": {
+    "iterations": 25000,
+    "p50_us": 0.5,
+    "p90_us": 0.6,
+    "p99_us": 0.7,
+    "p999_us": 1.9,
+    "mean_us": 0.55,
+    "throughput_ops_per_sec": 1819319
+  },
+  "vector_semantic_similarity": {
+    "iterations": 10000,
+    "vector_dim": 384,
+    "p50_us": 12.7,
+    "p90_us": 14.1,
+    "p99_us": 24.7,
+    "p999_us": 55.4,
+    "throughput_comparisons_per_sec": 76424
+  },
+  "concurrency_scale": {
+    "concurrency": 32,
+    "total_requests": 24992,
+    "wall_time_seconds": 0.4571,
+    "measured_qps": 54680.29,
+    "latency_p50_ms": 0.565,
+    "latency_p90_ms": 0.713,
+    "latency_p99_ms": 0.824,
+    "latency_p999_ms": 0.949
+  },
+  "reliability_and_negation_traps": {
+    "circuit_breaker": {
+      "verified": true,
+      "transitions_recorded": 3,
+      "state_progression": [
+        "Closed",
+        "Open",
+        "Closed"
+      ]
+    },
+    "negation_traps": {
+      "total_adversarial_pairs_evaluated": 5,
+      "false_reuse_count": 0,
+      "false_reuse_rate_percent": 0.0,
+      "safety_certification": "PASSED (Zero False Reuses under Polarity Reversal)"
+    }
+  },
+  "conformal_risk_evaluation": {
+    "calibration_samples": 10000,
+    "target_risk_alpha": 0.001,
+    "conformal_threshold_tau": 0.146551,
+    "empirical_test_violations": 7,
+    "empirical_risk": 0.0007,
+    "conformal_bound_satisfied": true,
+    "mathematical_guarantee": "Empirical risk 0.0007 <= target ceiling 0.001"
+  },
+  "frontier_finops_economics": {
+    "gpt-4o": {
+      "provider": "OpenAI",
+      "cost_per_query_usd": 0.0075,
+      "net_saved_per_hit_usd": 0.00748,
+      "break_even_hit_rate_threshold": "0.267%",
+      "projections": {
+        "1,000,000_queries": {
+          "origin_cost_usd": 7500.0,
+          "sunborn_net_bill_usd": 2638.0,
+          "net_savings_usd": 4862.0,
+          "savings_percentage": 64.83,
+          "net_savings_inr": 410839.0,
+          "gst_avoided_inr_18pct": 73951.02
+        },
+        "10,000,000_queries": {
+          "origin_cost_usd": 75000.0,
+          "sunborn_net_bill_usd": 26380.0,
+          "net_savings_usd": 48620.0,
+          "savings_percentage": 64.83,
+          "net_savings_inr": 4108390.0,
+          "gst_avoided_inr_18pct": 739510.2
+        },
+        "100,000,000_queries": {
+          "origin_cost_usd": 750000.0,
+          "sunborn_net_bill_usd": 263800.0,
+          "net_savings_usd": 486200.0,
+          "savings_percentage": 64.83,
+          "net_savings_inr": 41083900.0,
+          "gst_avoided_inr_18pct": 7395102.0
+        }
+      }
+    },
+    "gpt-4o-mini": {
+      "provider": "OpenAI",
+      "cost_per_query_usd": 0.00045,
+      "net_saved_per_hit_usd": 0.00043,
+      "break_even_hit_rate_threshold": "4.444%",
+      "projections": {
+        "1,000,000_queries": {
+          "origin_cost_usd": 450.0,
+          "sunborn_net_bill_usd": 170.5,
+          "net_savings_usd": 279.5,
+          "savings_percentage": 62.11,
+          "net_savings_inr": 23617.75,
+          "gst_avoided_inr_18pct": 4251.19
+        },
+        "10,000,000_queries": {
+          "origin_cost_usd": 4500.0,
+          "sunborn_net_bill_usd": 1705.0,
+          "net_savings_usd": 2795.0,
+          "savings_percentage": 62.11,
+          "net_savings_inr": 236177.5,
+          "gst_avoided_inr_18pct": 42511.95
+        },
+        "100,000,000_queries": {
+          "origin_cost_usd": 45000.0,
+          "sunborn_net_bill_usd": 17050.0,
+          "net_savings_usd": 27950.0,
+          "savings_percentage": 62.11,
+          "net_savings_inr": 2361775.0,
+          "gst_avoided_inr_18pct": 425119.5
+        }
+      }
+    },
+    "claude-3-5-sonnet": {
+      "provider": "Anthropic",
+      "cost_per_query_usd": 0.0105,
+      "net_saved_per_hit_usd": 0.01048,
+      "break_even_hit_rate_threshold": "0.190%",
+      "projections": {
+        "1,000,000_queries": {
+          "origin_cost_usd": 10500.0,
+          "sunborn_net_bill_usd": 3688.0,
+          "net_savings_usd": 6812.0,
+          "savings_percentage": 64.88,
+          "net_savings_inr": 575614.0,
+          "gst_avoided_inr_18pct": 103610.52
+        },
+        "10,000,000_queries": {
+          "origin_cost_usd": 105000.0,
+          "sunborn_net_bill_usd": 36880.0,
+          "net_savings_usd": 68120.0,
+          "savings_percentage": 64.88,
+          "net_savings_inr": 5756140.0,
+          "gst_avoided_inr_18pct": 1036105.2
+        },
+        "100,000,000_queries": {
+          "origin_cost_usd": 1050000.0,
+          "sunborn_net_bill_usd": 368800.0,
+          "net_savings_usd": 681200.0,
+          "savings_percentage": 64.88,
+          "net_savings_inr": 57561400.0,
+          "gst_avoided_inr_18pct": 10361052.0
+        }
+      }
+    },
+    "claude-3-5-haiku": {
+      "provider": "Anthropic",
+      "cost_per_query_usd": 0.0028,
+      "net_saved_per_hit_usd": 0.00278,
+      "break_even_hit_rate_threshold": "0.714%",
+      "projections": {
+        "1,000,000_queries": {
+          "origin_cost_usd": 2800.0,
+          "sunborn_net_bill_usd": 993.0,
+          "net_savings_usd": 1807.0,
+          "savings_percentage": 64.54,
+          "net_savings_inr": 152691.5,
+          "gst_avoided_inr_18pct": 27484.47
+        },
+        "10,000,000_queries": {
+          "origin_cost_usd": 28000.0,
+          "sunborn_net_bill_usd": 9930.0,
+          "net_savings_usd": 18070.0,
+          "savings_percentage": 64.54,
+          "net_savings_inr": 1526915.0,
+          "gst_avoided_inr_18pct": 274844.7
+        },
+        "100,000,000_queries": {
+          "origin_cost_usd": 280000.0,
+          "sunborn_net_bill_usd": 99300.0,
+          "net_savings_usd": 180700.0,
+          "savings_percentage": 64.54,
+          "net_savings_inr": 15269150.0,
+          "gst_avoided_inr_18pct": 2748447.0
+        }
+      }
+    },
+    "grok-2": {
+      "provider": "xAI",
+      "cost_per_query_usd": 0.007,
+      "net_saved_per_hit_usd": 0.00698,
+      "break_even_hit_rate_threshold": "0.286%",
+      "projections": {
+        "1,000,000_queries": {
+          "origin_cost_usd": 7000.0,
+          "sunborn_net_bill_usd": 2463.0,
+          "net_savings_usd": 4537.0,
+          "savings_percentage": 64.81,
+          "net_savings_inr": 383376.5,
+          "gst_avoided_inr_18pct": 69007.77
+        },
+        "10,000,000_queries": {
+          "origin_cost_usd": 70000.0,
+          "sunborn_net_bill_usd": 24630.0,
+          "net_savings_usd": 45370.0,
+          "savings_percentage": 64.81,
+          "net_savings_inr": 3833765.0,
+          "gst_avoided_inr_18pct": 690077.7
+        },
+        "100,000,000_queries": {
+          "origin_cost_usd": 700000.0,
+          "sunborn_net_bill_usd": 246300.0,
+          "net_savings_usd": 453700.0,
+          "savings_percentage": 64.81,
+          "net_savings_inr": 38337650.0,
+          "gst_avoided_inr_18pct": 6900777.0
+        }
+      }
+    },
+    "gemini-1-5-pro": {
+      "provider": "Google",
+      "cost_per_query_usd": 0.00375,
+      "net_saved_per_hit_usd": 0.00373,
+      "break_even_hit_rate_threshold": "0.533%",
+      "projections": {
+        "1,000,000_queries": {
+          "origin_cost_usd": 3750.0,
+          "sunborn_net_bill_usd": 1325.5,
+          "net_savings_usd": 2424.5,
+          "savings_percentage": 64.65,
+          "net_savings_inr": 204870.25,
+          "gst_avoided_inr_18pct": 36876.64
+        },
+        "10,000,000_queries": {
+          "origin_cost_usd": 37500.0,
+          "sunborn_net_bill_usd": 13255.0,
+          "net_savings_usd": 24245.0,
+          "savings_percentage": 64.65,
+          "net_savings_inr": 2048702.5,
+          "gst_avoided_inr_18pct": 368766.45
+        },
+        "100,000,000_queries": {
+          "origin_cost_usd": 375000.0,
+          "sunborn_net_bill_usd": 132550.0,
+          "net_savings_usd": 242450.0,
+          "savings_percentage": 64.65,
+          "net_savings_inr": 20487025.0,
+          "gst_avoided_inr_18pct": 3687664.5
+        }
+      }
+    },
+    "gemini-1-5-flash": {
+      "provider": "Google",
+      "cost_per_query_usd": 0.000225,
+      "net_saved_per_hit_usd": 0.000205,
+      "break_even_hit_rate_threshold": "8.889%",
+      "projections": {
+        "1,000,000_queries": {
+          "origin_cost_usd": 225.0,
+          "sunborn_net_bill_usd": 91.75,
+          "net_savings_usd": 133.25,
+          "savings_percentage": 59.22,
+          "net_savings_inr": 11259.62,
+          "gst_avoided_inr_18pct": 2026.73
+        },
+        "10,000,000_queries": {
+          "origin_cost_usd": 2250.0,
+          "sunborn_net_bill_usd": 917.5,
+          "net_savings_usd": 1332.5,
+          "savings_percentage": 59.22,
+          "net_savings_inr": 112596.25,
+          "gst_avoided_inr_18pct": 20267.33
+        },
+        "100,000,000_queries": {
+          "origin_cost_usd": 22500.0,
+          "sunborn_net_bill_usd": 9175.0,
+          "net_savings_usd": 13325.0,
+          "savings_percentage": 59.22,
+          "net_savings_inr": 1125962.5,
+          "gst_avoided_inr_18pct": 202673.25
+        }
+      }
+    },
+    "sarvam-2b": {
+      "provider": "Sarvam AI (Indic)",
+      "cost_per_query_usd": 0.002655,
+      "net_saved_per_hit_usd": 0.002635,
+      "break_even_hit_rate_threshold": "0.753%",
+      "projections": {
+        "1,000,000_queries": {
+          "origin_cost_usd": 2655.0,
+          "sunborn_net_bill_usd": 942.25,
+          "net_savings_usd": 1712.75,
+          "savings_percentage": 64.51,
+          "net_savings_inr": 144727.38,
+          "gst_avoided_inr_18pct": 26050.93
+        },
+        "10,000,000_queries": {
+          "origin_cost_usd": 26550.0,
+          "sunborn_net_bill_usd": 9422.5,
+          "net_savings_usd": 17127.5,
+          "savings_percentage": 64.51,
+          "net_savings_inr": 1447273.75,
+          "gst_avoided_inr_18pct": 260509.27
+        },
+        "100,000,000_queries": {
+          "origin_cost_usd": 265500.0,
+          "sunborn_net_bill_usd": 94225.0,
+          "net_savings_usd": 171275.0,
+          "savings_percentage": 64.51,
+          "net_savings_inr": 14472737.5,
+          "gst_avoided_inr_18pct": 2605092.75
+        }
+      }
+    }
+  }
+}

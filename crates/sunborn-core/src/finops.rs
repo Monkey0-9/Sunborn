@@ -24,6 +24,46 @@ impl ModelPricing {
         }
     }
 
+    pub fn claude35_haiku() -> Self {
+        Self {
+            model: "claude-3-5-haiku".into(),
+            input_cost_per_million: 0.80,
+            output_cost_per_million: 4.00,
+        }
+    }
+
+    pub fn gpt4o_mini() -> Self {
+        Self {
+            model: "gpt-4o-mini".into(),
+            input_cost_per_million: 0.15,
+            output_cost_per_million: 0.60,
+        }
+    }
+
+    pub fn grok2() -> Self {
+        Self {
+            model: "grok-2".into(),
+            input_cost_per_million: 2.00,
+            output_cost_per_million: 10.00,
+        }
+    }
+
+    pub fn gemini15_pro() -> Self {
+        Self {
+            model: "gemini-1.5-pro".into(),
+            input_cost_per_million: 1.25,
+            output_cost_per_million: 5.00,
+        }
+    }
+
+    pub fn gemini15_flash() -> Self {
+        Self {
+            model: "gemini-1.5-flash".into(),
+            input_cost_per_million: 0.075,
+            output_cost_per_million: 0.30,
+        }
+    }
+
     pub fn sarvam_2b() -> Self {
         Self {
             model: "sarvam-2b".into(),
@@ -42,7 +82,17 @@ impl ModelPricing {
 
     pub fn for_model(model: &str) -> Self {
         let m = model.to_lowercase();
-        if m.contains("sarvam") {
+        if m.contains("grok") {
+            Self::grok2()
+        } else if m.contains("flash") {
+            Self::gemini15_flash()
+        } else if m.contains("gemini") {
+            Self::gemini15_pro()
+        } else if m.contains("haiku") {
+            Self::claude35_haiku()
+        } else if m.contains("mini") {
+            Self::gpt4o_mini()
+        } else if m.contains("sarvam") {
             Self::sarvam_2b()
         } else if m.contains("krutrim") {
             Self::krutrim_v1()
