@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background-color: #020617;
+  color: #f1f5f9;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.01em;
+}
+
+*:focus-visible {
+  outline: 2px solid #00f0ff;
+  outline-offset: 2px;
+}
+
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.panel {
+  @apply rounded-2xl border border-white/[0.08] bg-gradient-to-br from-[#0c1328]/80 via-[#070b18]/90 to-[#030612]/95 shadow-glass backdrop-blur-xl;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -36,17 +36,17 @@ re-run 2026-11-20 where the result changed.
 
 - [x] `cargo fmt --all -- --check` exits 0.
 - [x] `cargo check --workspace --all-targets` exits 0 with no warnings.
-- [x] `cargo test --workspace --all-targets -- --test-threads=1`: 333 passed, 0 failed, 45 suites.
+- [x] `cargo test --workspace --all-targets`: 395 passed, 0 failed, 52 suites.
 - [x] `cargo clippy --workspace --all-targets --all-features -- -D warnings` exits 0 with no warnings.
 - [x] Frontend production build succeeds.
-- [x] Frontend tests: 63 passed, 0 failed.
+- [x] Frontend tests: 67 passed, 0 failed (WCAG 2.2 AA accessibility, BFF security, CSRF protection, 6 E2E browser workflows).
 - [x] WCAG 2.2 AA axe sweep: 10 routes, 0 serious or critical violations.
-- [x] Keyboard and focus audit: 10 routes, 253 tab stops, visible focus ring.
+- [x] Keyboard and focus audit: 10 routes, 271 tab stops, visible focus ring.
 - [x] TypeScript SDK: dependencies installed in CI, build and 4 tests pass cleanly.
 - [x] Python SDK packaging and clean install: 27 tests pass.
-- [x] OpenAPI 3.1 drift: 57/57 operations match.
-- [x] Route authorization parity: all 54 router paths classified; 45/45 reject
-      anonymous callers; 22/22 admin routes reject non-admin keys; 4/4 local control endpoints verified.
+- [x] OpenAPI 3.1 drift: 77/77 operations match.
+- [x] Route authorization parity: all 75 router paths classified; 71/71 reject
+      anonymous callers; 32/32 admin routes reject non-admin keys; 4/4 local control endpoints verified.
 - [x] TLA+ model checking: 3 configurations, no errors.
 - [x] Held-out evaluation counts asserted by a test: 0 false positives on 200 hard
       negatives; recall 20%.

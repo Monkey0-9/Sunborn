@@ -80,7 +80,12 @@ if (Test-Path $ZipFilePath) {
 }
 Compress-Archive -Path "$StageDir\*" -DestinationPath $ZipFilePath -CompressionLevel Optimal
 
-# 4. Cleanup stage directory
+# 4. Generate SHA-256 checksum
+$Sha256 = (Get-FileHash -Path $ZipFilePath -Algorithm SHA256).Hash.ToLower()
+$ShaPath = Join-Path $OutputDir "SHA256SUMS.txt"
+Set-Content -Path $ShaPath -Value "$Sha256  $ZipFileName" -Encoding UTF8
+
+# 5. Cleanup stage directory
 Remove-Item -Path (Join-Path $OutputDir "stage") -Recurse -Force
 
 $SizeMB = [math]::Round((Get-Item $ZipFilePath).Length / 1MB, 2)
@@ -89,6 +94,7 @@ Write-Host "`n==========================================================" -Foreg
 Write-Host "   PACKAGING COMPLETE!                                    " -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green
 Write-Host "   Archive: $ZipFilePath" -ForegroundColor White
+Write-Host "   SHA-256: $Sha256" -ForegroundColor White
 Write-Host "   Payload Size: $SizeMB MB" -ForegroundColor White
 Write-Host "   Target: Any clean Windows 10/11 x64 (Zero dev tools needed)" -ForegroundColor White
 Write-Host "==========================================================" -ForegroundColor Green

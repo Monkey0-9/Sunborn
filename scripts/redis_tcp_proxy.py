@@ -48,8 +48,18 @@ def main() -> None:
 
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind(("127.0.0.1", args.listen_port))
+    if hasattr(socket, "SO_REUSEPORT"):
+        try:
+            server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        except OSError:
+            pass
+    try:
+        server.bind(("127.0.0.1", args.listen_port))
+    except Exception as e:
+        print(f"FAILED to bind 127.0.0.1:{args.listen_port}: {e}", flush=True)
+        raise
     server.listen(128)
+    print(f"Proxy listening on 127.0.0.1:{args.listen_port} -> 127.0.0.1:{args.target_port}", flush=True)
     while True:
         client, _ = server.accept()
         threading.Thread(

@@ -16,7 +16,7 @@ and refuses to serve it when the reuse cannot be proven safe.*
 [![Launch gates](https://img.shields.io/badge/Launch%20gates-8%2F8%20passing-brightgreen.svg)](scripts/verify_public_launch.py)
 [![L1 exact cache](https://img.shields.io/badge/L1%20exact%20cache-1.64M%20req%2Fs%20%C2%B7%200.3%C2%B5s%20P50-blueviolet.svg)](benchmarks/results/l1_throughput_run.json)
 [![False-hit rate](https://img.shields.io/badge/Held--out%20false%20hits-0%20of%20200-brightgreen.svg)](research/results/heldout_generalization_run.json)
-[![WCAG 2.2 AA](https://img.shields.io/badge/Accessibility-WCAG%202.2%20AA%20Verified-brightgreen.svg)](docs/STATUS.md)
+[![Accessibility](https://img.shields.io/badge/Accessibility-10%20routes%20%C2%B7%200%20axe%20violations%20%C2%B7%20271%20tab%20stops-brightgreen.svg)](docs/STATUS.md)
 [![Sovereign India](https://img.shields.io/badge/Sovereign%20India-DPDP%202023%20%C2%B7%20CERT--In%20%C2%B7%20GST-blue.svg)](docs/STATUS.md)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-STAGE%200%20PILOT%20APPROVED%20%C2%B7%20100%25%20CI%20Verified%20%C2%B7%20BETA%20GATED-brightgreen.svg)](docs/STATUS.md)
@@ -650,8 +650,8 @@ python scripts/verify_public_launch.py --strict
 
 | | |
 | :--- | :--- |
-| **Release verdict** | **PRODUCTION LAUNCH APPROVED — 100% In-Tree & CI Verified** (All 10 CI/CD Quality Gates passing green, 2-replica Redis Streams live invalidation verified, 0 CVEs) |
-| **Verification status** | **493 automated tests passing** (395 Rust + 67 frontend + 27 Python SDK + 4 TS SDK), 10/10 WCAG 2.2 AA routes, 10/10 CI quality gates passed, 8/8 pre-flight launch gates passed |
+| **Release verdict** | **STAGE 0 PILOT APPROVED — 100% In-Tree & CI Verified**; Stage 1 Private Beta & Stage 2 Public Launch Gated on External Staging ([`docs/launch/05_PRELAUNCH_CHECKLIST.md`](docs/launch/05_PRELAUNCH_CHECKLIST.md)) |
+| **Verification status** | **493 automated tests passing** (395 Rust + 67 frontend + 27 Python SDK + 4 TS SDK), 10 routes tested (0 axe violations, 271 tab stops), 10/10 CI quality gates passed, 8/8 pre-flight launch gates passed |
 | **Security mode** | Fail-closed in production; fail-open only in explicit `development` |
 | **Known high/critical CVEs** | 0 |
 | **Current-status authority** | [`docs/STATUS.md`](docs/STATUS.md) — supersedes every badge, score, or readiness claim in older audit documents |
