@@ -1208,6 +1208,7 @@ paths:
               type: object
               required:
                 - mutated_roots
+                - tenant_id
               properties:
                 mutated_roots:
                   type: array
@@ -1216,7 +1217,7 @@ paths:
                     type: string
                 tenant_id:
                   type: string
-                  description: Owning tenant
+                  description: Owning tenant. Required; roots not attributed to this tenant are refused.
                 max_depth:
                   type: integer
                   description: Traversal depth limit
@@ -1610,12 +1611,16 @@ paths:
               required:
                 - source_id
                 - cache_key
+                - tenant_id
               properties:
                 source_id:
                   type: string
                   format: uuid
                 cache_key:
                   type: string
+                tenant_id:
+                  type: string
+                  description: Owning tenant; required so causal invalidation can attribute these nodes
       responses:
         '200':
           description: Dependency lineage successfully recorded

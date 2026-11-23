@@ -258,6 +258,7 @@ async fn test_causal_blast_radius_and_real_time_invalidation() {
                         "id": "table::gst_slabs",
                         "label": "GST SAC Slabs",
                         "node_type": "table",
+                        "metadata": { "tenant_id": "enterprise-fintech" },
                     })
                     .to_string(),
                 ))
@@ -279,6 +280,7 @@ async fn test_causal_blast_radius_and_real_time_invalidation() {
                         "id": "func::calculate_igst",
                         "label": "calculate_igst()",
                         "node_type": "function",
+                        "metadata": { "tenant_id": "enterprise-fintech" },
                     })
                     .to_string(),
                 ))
@@ -300,6 +302,7 @@ async fn test_causal_blast_radius_and_real_time_invalidation() {
                         "id": "cache::invoice_summary_sac_998313",
                         "label": "Cached SAC Invoice Summary",
                         "node_type": "cache_entry",
+                        "metadata": { "tenant_id": "enterprise-fintech" },
                     })
                     .to_string(),
                 ))
@@ -524,4 +527,155 @@ async fn test_graph_community_detection_and_god_nodes() {
     let body: Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(body["status"], "extracted");
     assert_eq!(body["root_id"], "module::cluster_a_node_1");
+}
+
+// ---------------------------------------------------------------------------
+// Cross-tenant safety regressions (P0): tenant-scoped causal invalidation must
+// fail closed and must never purge another tenant's cache entries.
+// ---------------------------------------------------------------------------
+
+async fn post_json(app: &axum::Router, uri: &str, payload: Value) -> (StatusCode, Value) {
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header("content-type", "application/json")
+                .header("x-api-key", "sunborn-admin-key")
+                .body(Body::from(payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = res.status();
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    (status, body)
+}
+
+async fn add_tenant_node(app: &axum::Router, id: &str, node_type: &str, tenant: Option<&str>) {
+    let mut payload = json!({ "id": id, "label": id, "node_type": node_type });
+    if let Some(tenant) = tenant {
+        payload["metadata"] = json!({ "tenant_id": tenant });
+    }
+    let (status, _) = post_json(app, "/v1/graph/nodes", payload).await;
+    assert_eq!(status, StatusCode::OK, "failed to add node {id}");
+}
+
+async fn add_graph_edge(app: &axum::Router, source: &str, target: &str) {
+    let (status, _) = post_json(
+        app,
+        "/v1/graph/edges",
+        json!({ "source_id": source, "target_id": target, "relation": "depends_on" }),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "failed to link {source} -> {target}"
+    );
+}
+
+#[tokio::test]
+async fn test_causal_invalidation_is_tenant_isolated_and_fails_closed() {
+    let mut config = AppConfig::default();
+    config.server.host = "127.0.0.1".to_string();
+    config.server.port = 0;
+    config.cache.backend = "memory".to_string();
+    config.cache.vector_backend = "memory".to_string();
+    config.cache.graph_dependency_cache_enabled = true;
+
+    let state = AppState::new(config);
+    let app = create_router(state);
+
+    add_tenant_node(&app, "doc::tenant_a", "document", Some("tenant-a")).await;
+    add_tenant_node(
+        &app,
+        "cache::tenant_a_entry",
+        "cache_entry",
+        Some("tenant-a"),
+    )
+    .await;
+    add_graph_edge(&app, "cache::tenant_a_entry", "doc::tenant_a").await;
+
+    add_tenant_node(&app, "doc::tenant_b", "document", Some("tenant-b")).await;
+    add_tenant_node(
+        &app,
+        "cache::tenant_b_entry",
+        "cache_entry",
+        Some("tenant-b"),
+    )
+    .await;
+    add_graph_edge(&app, "cache::tenant_b_entry", "doc::tenant_b").await;
+
+    // A node with no tenant identity cannot be attributed to either tenant.
+    add_tenant_node(&app, "doc::unattributed", "document", None).await;
+    add_tenant_node(&app, "cache::unattributed", "cache_entry", None).await;
+    add_graph_edge(&app, "cache::unattributed", "doc::unattributed").await;
+
+    // 1. Tenant A invalidates only its own subtree.
+    let (status, body) = post_json(
+        &app,
+        "/v1/graph/invalidate",
+        json!({ "mutated_roots": ["doc::tenant_a"], "tenant_id": "tenant-a" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {body}");
+    assert_eq!(body["status"], "purged");
+    let affected = body["affected_cache_keys"].as_array().unwrap();
+    assert!(affected.iter().any(|k| k == "cache::tenant_a_entry"));
+    assert!(
+        !affected.iter().any(|k| k == "cache::tenant_b_entry"),
+        "tenant A's blast radius included tenant B's cache entry"
+    );
+    // `purged_keys` are cache keys with the graph's `cache::` prefix stripped.
+    let purged = body["purged_keys"].as_array().unwrap();
+    assert!(purged.iter().any(|k| k == "tenant_a_entry"));
+    assert!(!purged.iter().any(|k| k == "tenant_b_entry"));
+
+    // 2. A root owned by another tenant is refused before any purge.
+    let (status, body) = post_json(
+        &app,
+        "/v1/graph/invalidate",
+        json!({ "mutated_roots": ["doc::tenant_b"], "tenant_id": "tenant-a" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "body: {body}");
+
+    // 3. A root with missing tenant metadata is refused (fail closed).
+    let (status, _) = post_json(
+        &app,
+        "/v1/graph/invalidate",
+        json!({ "mutated_roots": ["doc::unattributed"], "tenant_id": "tenant-a" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // 4. Omitting tenant scope entirely is a request error, never an unscoped purge.
+    let (status, _) = post_json(
+        &app,
+        "/v1/graph/invalidate",
+        json!({ "mutated_roots": ["doc::tenant_a"] }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+
+    // 5. Blank/whitespace tenant_id is refused with FORBIDDEN (fail closed).
+    let (status, body) = post_json(
+        &app,
+        "/v1/graph/invalidate",
+        json!({ "mutated_roots": ["doc::tenant_a"], "tenant_id": "   " }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "body: {body}");
+
+    // 6. Non-existent root refused when tenant cannot be verified.
+    let (status, _) = post_json(
+        &app,
+        "/v1/graph/invalidate",
+        json!({ "mutated_roots": ["doc::ghost_node"], "tenant_id": "tenant-a" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
 }

@@ -232,7 +232,7 @@ The measured result is 0 false hits on 200 hard negatives. That is not the same 
 false-hit rate below 0.1%: the exact Clopper–Pearson 99.9% upper bound is 3.39%.
 Capacity and SLO documents must not convert an observed zero into a risk guarantee.
 The objective is "zero confirmed false hits, with the upper bound reported", and the
-number to improve is recall, which is 20% on the held-out set.
+number to improve is recall, which is 80.8% (97/120) on the held-out set.
 
 ---
 

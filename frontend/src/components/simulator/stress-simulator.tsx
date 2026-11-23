@@ -53,7 +53,7 @@ const SUBSYSTEM_FLEET_DATA: SubsystemFleetInfo[] = [
     name: "Multi-Tier Cache & Memory Storage",
     cratePath: "crates/sunborn-cache",
     testCount: "10 Passing Tests",
-    targetGate: "W-TinyLFU in-memory tier, DragonflyDB / Redis client, GDSF cost-aware eviction",
+    targetGate: "FinOps-GDSF in-memory tier, DragonflyDB / Redis client, cost-aware eviction",
     keyDeliverable: "Byte-bounded in-memory tiering with zero GC pauses and sub-0.5ms exact lookup",
     status: "Verified",
     accentColor: "from-blue-500 to-indigo-500",

@@ -50,9 +50,81 @@ jobs:
           grep -F "image: \"ghcr.io/sunborn/sunborn-gateway:${CHART_VERSION}\"" "${RENDERED}"
           grep -F "image: \"ghcr.io/sunborn/sunborn-frontend:${CHART_VERSION}\"" "${RENDERED}"
 
+  package-windows-desktop:
+    name: Build & Package Windows Desktop Distribution
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      # Required by actions/attest-build-provenance to issue a signed SLSA
+      # build-provenance attestation for the release artifact.
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
+
+      - name: Build & Package Desktop Distribution
+        shell: powershell
+        run: |
+          $ver = "${{ github.ref_name }}".TrimStart('v')
+          if (-not $ver) { $ver = "1.0.0" }
+          .\scripts\package-distribution.ps1 -Version $ver
+
+      - name: Verify Clean-Machine Installation & Smoke Test
+        shell: powershell
+        run: |
+          $distZip = Get-ChildItem target\dist\sunborn-desktop-*-windows-x64.zip | Select-Object -First 1
+          $testDir = "$env:TEMP\sunborn-clean-test"
+          Expand-Archive -Path $distZip.FullName -DestinationPath $testDir -Force
+          Push-Location $testDir
+          try {
+            $installProc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File .\install-sunborn.ps1 -Silent" -Wait -PassThru
+            if ($installProc.ExitCode -ne 0) {
+              throw "Installer exited with failure code: $($installProc.ExitCode)"
+            }
+            $targetBin = "$env:LOCALAPPDATA\Sunborn\bin\sunborn-gateway.exe"
+            if (-not (Test-Path $targetBin)) {
+              throw "Installed binary missing at $targetBin"
+            }
+            $ver = & $targetBin --version
+            Write-Host "Installed binary verified: $ver"
+            if ($LASTEXITCODE -ne 0) {
+              throw "sunborn-gateway --version failed with exit code $LASTEXITCODE"
+            }
+            $uninstallScript = "$env:LOCALAPPDATA\Sunborn\uninstall.ps1"
+            if (Test-Path $uninstallScript) {
+              $uninstProc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$uninstallScript`" -Silent -PurgeData" -Wait -PassThru
+              if ($uninstProc.ExitCode -ne 0) {
+                Write-Warning "Uninstaller exited with code: $($uninstProc.ExitCode)"
+              }
+            }
+          } finally {
+            Pop-Location
+            Remove-Item -Path $testDir -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Generate signed SLSA build provenance attestation
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: target/dist/sunborn-desktop-*-windows-x64.zip
+
+      - name: Upload Windows Desktop Release Asset
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4
+        with:
+          name: windows-desktop-package
+          path: |
+            target/dist/sunborn-desktop-*-windows-x64.zip
+            target/dist/SHA256SUMS.txt
+            target/dist/BUILD-METADATA.json
+            target/dist/sbom.cyclonedx.json
+
   build-and-publish:
     name: Build Containers, Package Helm Chart & Publish Release
-    needs: [verify-ci, verify-security, verify-release-chart]
+    needs: [verify-ci, verify-security, verify-release-chart, package-windows-desktop]
     runs-on: ubuntu-latest
     environment: release-approval
     permissions:
@@ -149,6 +221,13 @@ jobs:
             --app-version "${GITHUB_REF_NAME#v}" \
             --destination dist/helm
 
+      # --- Windows Desktop Package ---
+      - name: Download Windows Desktop Artifact
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
+        with:
+          name: windows-desktop-package
+          path: dist/desktop
+
       # --- GitHub Release ---
       - name: Create GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
@@ -158,6 +237,9 @@ jobs:
           prerelease: false
           files: |
             dist/helm/*.tgz
+            dist/desktop/*.zip
+            dist/desktop/*.txt
+            dist/desktop/*.json
             research/results/reproduction_certificate.json
             research/results/benchmark_run.json
             research/results/run_manifest.json

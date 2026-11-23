@@ -44,3 +44,7 @@ include = ["sunborn*"]
 
 [tool.setuptools.package-data]
 sunborn = ["py.typed"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

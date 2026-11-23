@@ -24,6 +24,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY apps ./apps
+COPY migrations ./migrations
+COPY research ./research
 
 # Stamp the build identity into the binary so GET /version and the
 # sunborn_build_info metric report the exact commit, not "unknown".

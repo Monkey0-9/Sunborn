@@ -24,6 +24,9 @@ data:
   DECISION_SIMILARITY_THRESHOLD: {{ .Values.env.DECISION_SIMILARITY_THRESHOLD | quote }}
   DECISION_MAX_RISK: {{ .Values.env.DECISION_MAX_RISK | quote }}
   EPOCH_LEASE_TTL_SECS: {{ .Values.env.EPOCH_LEASE_TTL_SECS | quote }}
+  SUNBORN_EXECUTION_STORE_PATH: {{ .Values.env.SUNBORN_EXECUTION_STORE_PATH | default "/var/lib/sunborn/execution.wal" | quote }}
+  SUNBORN_LEARNING_WAL_PATH: {{ .Values.env.SUNBORN_LEARNING_WAL_PATH | default "/var/lib/sunborn/learning.wal" | quote }}
+  SUNBORN_GRAPHIFY_STORE_PATH: {{ .Values.env.SUNBORN_GRAPHIFY_STORE_PATH | default "/var/lib/sunborn/graphify.json" | quote }}
   SUNBORN_KMS_PROVIDER: {{ .Values.env.SUNBORN_KMS_PROVIDER | default "aws-kms" | quote }}
   SUNBORN_AWS_KMS_KEY_ARN: {{ .Values.env.SUNBORN_AWS_KMS_KEY_ARN | default "" | quote }}
   SUNBORN_AWS_REGION: {{ .Values.env.SUNBORN_AWS_REGION | default "us-east-1" | quote }}

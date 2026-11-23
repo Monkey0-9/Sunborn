@@ -24,10 +24,19 @@ services:
       SUNBORN_VECTOR_BACKEND: "qdrant"
       QDRANT_URL: "${QDRANT_URL:-http://qdrant:6333}"
       SUNBORN_MASTER_KEK: "${SUNBORN_MASTER_KEK:?SUNBORN_MASTER_KEK must be set (32-byte 256-bit key)}"
+      # KMS / Hardware security provider: local-aead (32-byte key), aws-kms (requires AWS_KMS_KEY_ARN), or vault
+      SUNBORN_KMS_PROVIDER: "${SUNBORN_KMS_PROVIDER:-local-aead}"
+      AWS_KMS_KEY_ARN: "${AWS_KMS_KEY_ARN:-}"
+      AWS_REGION: "${AWS_REGION:-ap-south-1}"
       SUNBORN_ADMIN_KEY: "${SUNBORN_ADMIN_KEY:?SUNBORN_ADMIN_KEY must be set (minimum 16 characters)}"
       SUNBORN_LEARNING_HMAC_SECRET: "${SUNBORN_LEARNING_HMAC_SECRET:?SUNBORN_LEARNING_HMAC_SECRET must be set (minimum 16 characters)}"
       SUNBORN_LLM_ORIGIN_URL: "${SUNBORN_LLM_ORIGIN_URL:?SUNBORN_LLM_ORIGIN_URL must be configured for production LLM origin}"
       SUNBORN_EMBEDDING_URL: "${SUNBORN_EMBEDDING_URL:?SUNBORN_EMBEDDING_URL must be configured for production embeddings}"
+      SUNBORN_EXECUTION_STORE_PATH: "/var/lib/sunborn/execution.wal"
+      SUNBORN_LEARNING_WAL_PATH: "/var/lib/sunborn/learning.wal"
+      SUNBORN_GRAPHIFY_STORE_PATH: "/var/lib/sunborn/graphify.json"
+    volumes:
+      - sunborn_wal_prod:/var/lib/sunborn
     ports:
       - "127.0.0.1:8080:8080"
     healthcheck:
@@ -133,3 +142,5 @@ networks:
 volumes:
   pgdata_prod:
   qdrant_data_prod:
+  sunborn_wal_prod:
+    name: sunborn-wal-prod

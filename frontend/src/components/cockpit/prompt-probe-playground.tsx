@@ -31,7 +31,7 @@ export function PromptProbePlayground({
   );
   const [isExecuting, setIsExecuting] = useState(false);
   const [traceResult, setTraceResult] = useState<QueryTraceResult | null>({
-    tier: "Tier 1: Exact Match (W-TinyLFU / DragonflyDB)",
+    tier: "Tier 1: Exact Match (FinOps-GDSF / DragonflyDB)",
     latencyUs: 280,
     hit: true,
     avoidedTokens: 184,

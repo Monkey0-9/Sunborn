@@ -72,7 +72,7 @@ export function CanvasManifold({
     ];
 
     const labels = [
-      "W-TinyLFU",
+      "FinOps-GDSF",
       "DragonflyDB",
       "Qdrant HNSW",
       "Conformal Risk α≤0.001",

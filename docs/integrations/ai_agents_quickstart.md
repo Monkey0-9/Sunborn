@@ -139,7 +139,8 @@ def query_customer_crm(customer_id: str) -> dict:
 # 1st call: Miss -> executes real function and stores into Sunborn Execution Cache
 res1 = query_customer_crm("cust_98721")
 
-# 2nd call: Exact C4 Execution Hit -> returns in < 100 microseconds from Sunborn
+# 2nd call: exact execution-cache hit -> served without an upstream call
+# (published single-node benchmark: ~6 ms p50 over plaintext HTTP)
 res2 = query_customer_crm("cust_98721")
 assert res1 == res2
 ```

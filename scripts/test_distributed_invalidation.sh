@@ -68,6 +68,8 @@ trap 'fail "Command failed at line $LINENO"' ERR
 
 fail() {
     echo "FAIL: $*" >&2
+    echo "--- redis proxy log (tail) ---" >&2
+    tail -60 "${ROOT_DIR}/target/redis-proxy.log" >&2 2>/dev/null || true
     echo "--- replica A log (tail) ---" >&2
     tail -60 "${A_LOG}" >&2 2>/dev/null || true
     echo "--- replica B log (tail) ---" >&2
@@ -314,16 +316,23 @@ fi
 
 B_ENV=("${COMMON_ENV[@]}")
 if [ "${MODE}" = "replay" ]; then
-    python scripts/redis_tcp_proxy.py "${REPLAY_PROXY_PORT}" 56379 \
+    PYTHON_CMD="python3"
+    command -v python3 >/dev/null 2>&1 || PYTHON_CMD="python"
+    ${PYTHON_CMD} -u scripts/redis_tcp_proxy.py "${REPLAY_PROXY_PORT}" 56379 \
         >"${ROOT_DIR}/target/redis-proxy.log" 2>&1 &
     PROXY_PID=$!
     for _ in $(seq 1 40); do
-        if python -c "import socket; s=socket.create_connection(('127.0.0.1',${REPLAY_PROXY_PORT}),0.2); s.close()" 2>/dev/null; then
+        if ${PYTHON_CMD} -c "import socket; s=socket.create_connection(('127.0.0.1',${REPLAY_PROXY_PORT}),0.2); s.close()" 2>/dev/null; then
             break
+        fi
+        if ! kill -0 "${PROXY_PID}" 2>/dev/null; then
+            echo "Proxy process ${PROXY_PID} died prematurely:" >&2
+            cat "${ROOT_DIR}/target/redis-proxy.log" >&2 || true
+            fail "Redis replay proxy exited prematurely"
         fi
         sleep 0.25
     done
-    python -c "import socket; s=socket.create_connection(('127.0.0.1',${REPLAY_PROXY_PORT}),0.2); s.close()" \
+    ${PYTHON_CMD} -c "import socket; s=socket.create_connection(('127.0.0.1',${REPLAY_PROXY_PORT}),0.2); s.close()" \
         || fail "Redis replay proxy did not start on port ${REPLAY_PROXY_PORT}"
     B_ENV=()
     for item in "${COMMON_ENV[@]}"; do
@@ -476,7 +485,7 @@ assert a["content"] == b["content"], (a["content"], b["content"])
     curl -fsS -X POST \
         -H "x-api-key: ${ADMIN_KEY}" \
         -H "content-type: application/json" \
-        --data "{\"source_id\":\"${SOURCE_ID}\",\"cache_key\":\"${KEY_A}\"}" \
+        --data "{\"source_id\":\"${SOURCE_ID}\",\"cache_key\":\"${KEY_A}\",\"tenant_id\":\"${TENANT}\"}" \
         "http://127.0.0.1:${A_PORT}/v1/dependencies" >/dev/null \
         || fail "replica A dependency registration failed"
     INVALIDATION="$(curl -fsS -X POST \
@@ -534,7 +543,7 @@ if [ "${MODE}" = "replay" ]; then
     curl -fsS -X POST \
         -H "x-api-key: ${ADMIN_KEY}" \
         -H "content-type: application/json" \
-        --data "{\"source_id\":\"${SOURCE_ID}\",\"cache_key\":\"${KEY_A}\"}" \
+        --data "{\"source_id\":\"${SOURCE_ID}\",\"cache_key\":\"${KEY_A}\",\"tenant_id\":\"${TENANT}\"}" \
         "http://127.0.0.1:${A_PORT}/v1/dependencies" >/dev/null \
         || fail "replica A dependency registration failed"
     INVALIDATION="$(curl -fsS -X POST \
@@ -557,16 +566,23 @@ assert r["failed_cache_keys"] == [], r["failed_cache_keys"]
     echo "A's event is durable in Redis (XLEN=${STREAM_LEN}); B is still stale"
 
     echo "=== 7/7: reconnect B and assert the backlog replays ==="
-    python scripts/redis_tcp_proxy.py "${REPLAY_PROXY_PORT}" 56379 \
+    PYTHON_CMD="python3"
+    command -v python3 >/dev/null 2>&1 || PYTHON_CMD="python"
+    ${PYTHON_CMD} -u scripts/redis_tcp_proxy.py "${REPLAY_PROXY_PORT}" 56379 \
         >"${ROOT_DIR}/target/redis-proxy.log" 2>&1 &
     PROXY_PID=$!
     for _ in $(seq 1 40); do
-        if python -c "import socket; s=socket.create_connection(('127.0.0.1',${REPLAY_PROXY_PORT}),0.2); s.close()" 2>/dev/null; then
+        if ${PYTHON_CMD} -c "import socket; s=socket.create_connection(('127.0.0.1',${REPLAY_PROXY_PORT}),0.2); s.close()" 2>/dev/null; then
             break
+        fi
+        if ! kill -0 "${PROXY_PID}" 2>/dev/null; then
+            echo "Proxy process ${PROXY_PID} died prematurely on reconnect:" >&2
+            cat "${ROOT_DIR}/target/redis-proxy.log" >&2 || true
+            fail "Redis replay proxy exited prematurely on reconnect"
         fi
         sleep 0.25
     done
-    python -c "import socket; s=socket.create_connection(('127.0.0.1',${REPLAY_PROXY_PORT}),0.2); s.close()" \
+    ${PYTHON_CMD} -c "import socket; s=socket.create_connection(('127.0.0.1',${REPLAY_PROXY_PORT}),0.2); s.close()" \
         || fail "Redis replay proxy did not restart"
 
     LAST_CODE=""
@@ -602,7 +618,7 @@ echo "=== 5/7: record dependency on replica A only ==="
 curl -fsS -X POST \
     -H "x-api-key: ${ADMIN_KEY}" \
     -H "content-type: application/json" \
-    --data "{\"source_id\":\"${SOURCE_ID}\",\"cache_key\":\"${KEY_A}\"}" \
+    --data "{\"source_id\":\"${SOURCE_ID}\",\"cache_key\":\"${KEY_A}\",\"tenant_id\":\"${TENANT}\"}" \
     "http://127.0.0.1:${A_PORT}/v1/dependencies" >/dev/null \
     || fail "replica A dependency registration failed"
 

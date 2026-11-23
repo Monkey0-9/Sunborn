@@ -49,6 +49,8 @@ pub struct AppState {
     pub circuit_breaker: Arc<CircuitBreakerCache<MemoryExactCache>>,
     pub memory_cache: Arc<MemoryExactCache>,
     pub dragonfly_cache: Arc<sunborn_cache::DragonflyCacheStore>,
+    pub tiered_cache:
+        Option<Arc<sunborn_cache::TieredExactCache<sunborn_cache::DragonflyCacheStore>>>,
     pub vector_store: Arc<dyn sunborn_semantic::VectorStore>,
     pub memory_vector_store: Arc<MemoryVectorStore>,
     pub qdrant_store: Arc<sunborn_semantic::QdrantVectorStore>,
@@ -160,8 +162,12 @@ impl AppState {
             || std::env::var("SUNBORN_CACHE_BACKEND")
                 .map(|v| v.to_lowercase() == "dragonfly")
                 .unwrap_or(false);
+        let tiered_cache = Arc::new(sunborn_cache::TieredExactCache::with_stores(
+            memory_cache.clone(),
+            dragonfly_cache.clone(),
+        ));
         let selected_cache: Arc<dyn ExactCacheStore> = if is_dragonfly {
-            dragonfly_cache.clone()
+            tiered_cache.clone()
         } else {
             circuit_breaker.clone()
         };
@@ -358,13 +364,20 @@ impl AppState {
 
         let mut arbitrage_entries = Vec::new();
 
+        // An environment variable that is present but empty (a very common
+        // pattern in generated .env files, e.g. `OPENAI_API_KEY=`) must be
+        // treated as unset. `std::env::var` returns Ok("") for it, which
+        // otherwise registers a provider with an empty base URL and turns a
+        // harmless "no provider configured" into a 500 builder error.
+        let non_empty_env =
+            |name: &str| -> Option<String> { optional_env_value(std::env::var(name)) };
+
         // 1. OpenAI / vLLM / Ollama Provider
-        if let Ok(url) =
-            std::env::var("SUNBORN_LLM_ORIGIN_URL").or_else(|_| std::env::var("OPENAI_API_BASE"))
+        if let Some(url) =
+            non_empty_env("SUNBORN_LLM_ORIGIN_URL").or_else(|| non_empty_env("OPENAI_API_BASE"))
         {
-            let api_key = std::env::var("SUNBORN_LLM_ORIGIN_API_KEY")
-                .or_else(|_| std::env::var("OPENAI_API_KEY"))
-                .ok();
+            let api_key = non_empty_env("SUNBORN_LLM_ORIGIN_API_KEY")
+                .or_else(|| non_empty_env("OPENAI_API_KEY"));
             arbitrage_entries.push(crate::origin::provider::ArbitrageProviderEntry {
                 name: "openai-compatible".into(),
                 provider: Arc::new(crate::origin::provider::HttpLlmOriginProvider::new(
@@ -377,9 +390,9 @@ impl AppState {
         }
 
         // 2. Native Anthropic Messages Provider (Claude 3.5 Sonnet / Opus)
-        if let Ok(anthropic_key) = std::env::var("ANTHROPIC_API_KEY") {
-            let anthropic_url = std::env::var("ANTHROPIC_BASE_URL")
-                .unwrap_or_else(|_| "https://api.anthropic.com".to_string());
+        if let Some(anthropic_key) = non_empty_env("ANTHROPIC_API_KEY") {
+            let anthropic_url = non_empty_env("ANTHROPIC_BASE_URL")
+                .unwrap_or_else(|| "https://api.anthropic.com".to_string());
             arbitrage_entries.push(crate::origin::provider::ArbitrageProviderEntry {
                 name: "anthropic-claude".into(),
                 provider: Arc::new(crate::origin::anthropic::AnthropicMessagesProvider::new(
@@ -393,9 +406,9 @@ impl AppState {
         }
 
         // 3. Native Google Gemini Provider (Gemini 1.5 Pro / Flash)
-        if let Ok(gemini_key) = std::env::var("GEMINI_API_KEY") {
-            let gemini_url = std::env::var("GEMINI_BASE_URL")
-                .unwrap_or_else(|_| "https://generativelanguage.googleapis.com".to_string());
+        if let Some(gemini_key) = non_empty_env("GEMINI_API_KEY") {
+            let gemini_url = non_empty_env("GEMINI_BASE_URL")
+                .unwrap_or_else(|| "https://generativelanguage.googleapis.com".to_string());
             arbitrage_entries.push(crate::origin::provider::ArbitrageProviderEntry {
                 name: "google-gemini".into(),
                 provider: Arc::new(crate::origin::gemini::GeminiProvider::new(
@@ -409,9 +422,9 @@ impl AppState {
         }
 
         // 4. Native Sarvam AI Indic Sovereign Provider (sarvam-2b)
-        if let Ok(sarvam_key) = std::env::var("SARVAM_API_KEY") {
-            let sarvam_url = std::env::var("SARVAM_BASE_URL")
-                .unwrap_or_else(|_| "https://api.sarvam.ai/v1".to_string());
+        if let Some(sarvam_key) = non_empty_env("SARVAM_API_KEY") {
+            let sarvam_url = non_empty_env("SARVAM_BASE_URL")
+                .unwrap_or_else(|| "https://api.sarvam.ai/v1".to_string());
             arbitrage_entries.push(crate::origin::provider::ArbitrageProviderEntry {
                 name: "sarvam-indic".into(),
                 provider: Arc::new(crate::origin::sarvam::SarvamOriginProvider::new(
@@ -425,8 +438,8 @@ impl AppState {
         }
 
         // 5. Secondary failover provider if explicitly configured
-        if let Ok(failover_url) = std::env::var("SUNBORN_FAILOVER_ORIGIN_URL") {
-            let failover_key = std::env::var("SUNBORN_FAILOVER_ORIGIN_KEY").ok();
+        if let Some(failover_url) = non_empty_env("SUNBORN_FAILOVER_ORIGIN_URL") {
+            let failover_key = non_empty_env("SUNBORN_FAILOVER_ORIGIN_KEY");
             arbitrage_entries.push(crate::origin::provider::ArbitrageProviderEntry {
                 name: "failover-origin".into(),
                 provider: Arc::new(crate::origin::provider::HttpLlmOriginProvider::new(
@@ -533,6 +546,17 @@ impl AppState {
         };
 
         let graphify_graph = Arc::new(sunborn_invalidation::GraphifyKnowledgeGraph::new());
+        if let Ok(store_path) = std::env::var("SUNBORN_GRAPHIFY_STORE_PATH") {
+            match graphify_graph.hydrate_from_file(&store_path) {
+                Ok(count) if count > 0 => {
+                    tracing::info!(count, path = %store_path, "Hydrated Graphify knowledge graph from persistent store");
+                }
+                Ok(_) => {}
+                Err(err) => {
+                    tracing::warn!(error = %err, path = %store_path, "Could not hydrate Graphify graph from store");
+                }
+            }
+        }
 
         let graph_memory_cache = if is_graph_cache_enabled {
             let lineage_graph = Arc::new(CompressedLineageGraph::new());
@@ -692,6 +716,7 @@ impl AppState {
             circuit_breaker,
             memory_cache,
             dragonfly_cache,
+            tiered_cache: Some(tiered_cache),
             vector_store: selected_vector,
             memory_vector_store,
             qdrant_store,
@@ -753,12 +778,20 @@ impl AppState {
         this
     }
 
-    /// Returns true if DragonflyCacheStore is actively wired into the exact cache path.
+    /// Returns true if DragonflyCacheStore (either directly or via TieredExactCache L2) is actively wired into the exact cache path.
     pub fn is_dragonfly_cache_active(&self) -> bool {
-        Arc::ptr_eq(
+        if Arc::ptr_eq(
             &self.cache,
             &(self.dragonfly_cache.clone() as Arc<dyn ExactCacheStore>),
-        )
+        ) {
+            return true;
+        }
+        if let Some(ref tc) = self.tiered_cache {
+            if Arc::ptr_eq(&self.cache, &(tc.clone() as Arc<dyn ExactCacheStore>)) {
+                return true;
+            }
+        }
+        false
     }
 
     /// Returns true if PostgresDatabaseStore is actively wired into the persistence path.
@@ -1134,6 +1167,18 @@ impl AppState {
     }
 }
 
+/// Normalizes an optional environment value.
+///
+/// A variable that is present but empty or whitespace-only is treated as
+/// unset. Generated `.env` files commonly contain `OPENAI_API_KEY=`, and
+/// treating that as a configured provider produces an empty origin URL.
+fn optional_env_value(value: Result<String, std::env::VarError>) -> Option<String> {
+    value
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1260,6 +1305,20 @@ mod tests {
         assert_eq!(
             res.unwrap_err().code,
             sunborn_core::ErrorCode::ConfigurationError
+        );
+    }
+
+    #[test]
+    fn empty_or_whitespace_env_values_are_treated_as_unset() {
+        assert_eq!(optional_env_value(Ok(String::new())), None);
+        assert_eq!(optional_env_value(Ok("   ".to_string())), None);
+        assert_eq!(
+            optional_env_value(Ok(" https://api.openai.com/v1 ".to_string())),
+            Some("https://api.openai.com/v1".to_string())
+        );
+        assert_eq!(
+            optional_env_value(Err(std::env::VarError::NotPresent)),
+            None
         );
     }
 }

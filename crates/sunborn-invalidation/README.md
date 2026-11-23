@@ -5,7 +5,7 @@ Transitive dependency graph invalidation, Roaring Bitmap SIMD lineage propagatio
 ## Architecture
 
 1. **Transactional Outbox Event Processing**: Ingestion of data mutation events with deduplication and order preservation.
-2. **Roaring Bitmap SIMD Cascades**: Bit-parallel transitive closure invalidation performing millions of lineage checks in microseconds.
+2. **Roaring Bitmap Cascades**: Bit-parallel transitive closure invalidation over lineage graphs using compressed 64-bit Roaring Treemaps.
 3. **Multi-Source Watermarking**: Vector-clock causal fencing preventing stale cache writeback during distributed replication lag.
 
 ## Testing

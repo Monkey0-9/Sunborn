@@ -48,10 +48,17 @@ pub async fn trigger_invalidation(
     {
         Ok(report) => report,
         Err(err) => {
-            let _ = state
+            if let Err(mark_err) = state
                 .db
                 .mark_outbox_failed(outbox_id, &err.to_string())
-                .await;
+                .await
+            {
+                tracing::error!(
+                    outbox_id,
+                    error = %mark_err,
+                    "Outbox event could not be marked FAILED after purge failure; it stays PENDING for worker retry"
+                );
+            }
             return Err(AppError::from(err));
         }
     };
@@ -89,6 +96,9 @@ pub async fn trigger_invalidation(
 pub struct DependencyRecordRequest {
     pub source_id: Uuid,
     pub cache_key: String,
+    /// Owning tenant. Defaults to authenticated tenant context if omitted.
+    #[serde(default)]
+    pub tenant_id: String,
 }
 
 pub async fn record_dependency(
@@ -100,16 +110,63 @@ pub async fn record_dependency(
         .require_admin()
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
 
+    let tenant_id = if payload.tenant_id.trim().is_empty() {
+        if sec_ctx.tenant_id.0.trim().is_empty() {
+            "default-tenant".to_string()
+        } else {
+            sec_ctx.tenant_id.0.clone()
+        }
+    } else {
+        payload.tenant_id.trim().to_string()
+    };
+
     state
         .dependency_graph
         .record_dependency(payload.source_id, &payload.cache_key)
         .await
         .map_err(AppError::from)?;
 
+    // Also register in Graphify multi-relational knowledge graph, stamping both
+    // nodes with tenant identity so scoped invalidation can attribute them.
+    let source_str = payload.source_id.to_string();
+    if state.graphify_graph.get_node(&source_str).is_none() {
+        let doc_node = sunborn_invalidation::GraphifyNode::new(
+            source_str.clone(),
+            state.graphify_graph.next_numeric_id(),
+            format!("source::{}", source_str),
+            sunborn_invalidation::GraphifyNodeType::Document,
+        )
+        .with_metadata(json!({
+            "tenant_id": tenant_id,
+            "source_id": source_str,
+        }));
+        state.graphify_graph.add_node(doc_node);
+    }
+    if state.graphify_graph.get_node(&payload.cache_key).is_none() {
+        let cache_node = sunborn_invalidation::GraphifyNode::new(
+            payload.cache_key.clone(),
+            state.graphify_graph.next_numeric_id(),
+            payload.cache_key.clone(),
+            sunborn_invalidation::GraphifyNodeType::CacheEntry,
+        )
+        .with_metadata(json!({
+            "tenant_id": tenant_id,
+            "cache_key": payload.cache_key,
+        }));
+        state.graphify_graph.add_node(cache_node);
+    }
+    state.graphify_graph.link(
+        payload.cache_key.clone(),
+        source_str,
+        sunborn_invalidation::GraphifyRelation::DependsOn,
+    );
+    crate::handlers::graph::persist_graphify_if_configured(state.graphify_graph.clone());
+
     Ok(Json(json!({
         "status": "recorded",
         "source_id": payload.source_id,
-        "cache_key": payload.cache_key
+        "cache_key": payload.cache_key,
+        "tenant_id": tenant_id,
     })))
 }
 

@@ -53,7 +53,7 @@ export default function ExplorerPage() {
     {
       key: "sunborn:tenant-enterprise-fintech:app-risk-evaluator:gpt-4o:v1:a8f93e2b1c4d",
       model: "gpt-4o",
-      tier: "Exact (W-TinyLFU / DragonflyDB)",
+      tier: "Exact (FinOps-GDSF / DragonflyDB)",
       ttlRemaining: "3540s",
       hitCount: 42,
       encryption: "AES-256-GCM AEAD",
@@ -139,7 +139,7 @@ export default function ExplorerPage() {
       const tierName = data.sunborn_tier
         ? `Tier: ${data.sunborn_tier}`
         : isHit
-        ? "Tier 1: Exact Match (DragonflyDB / W-TinyLFU)"
+        ? "Tier 1: Exact Match (DragonflyDB / FinOps-GDSF)"
         : "Tier 4: Origin LLM Generation";
 
       const promptTokens = data.usage?.prompt_tokens ?? Math.ceil(prompt.length / 4);
