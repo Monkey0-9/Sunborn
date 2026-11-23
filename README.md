@@ -234,8 +234,10 @@ Stated here, once, so nobody has to discover it in diligence:
 - **A false-hit guarantee of α ≤ 0.001 is not established.** 200 hard negatives with zero observed false
   hits give an exact Clopper–Pearson 99.9% upper bound of **3.39%**. The measured claim is "0 false hits in
   200 negatives", not "0.1% risk". Establishing α ≤ 0.001 requires an order of magnitude more negatives.
-- **Recall is 20%, not 90%.** The guardrail is deliberately conservative: it reuses one prompt in five and
-  abstains on the rest. Savings scale with recall, and recall is the number to improve.
+- **Recall is 80.8% on this dataset, not a universal guarantee.** The guardrail reuses 97 of 120 equivalent
+  pairs and abstains on the remaining 23; it accepted 0 of 200 hard negatives. Savings scale with recall, and
+  recall is the number to improve. The dataset informed the verb-class normaliser, so this is regression
+  evidence rather than an unbiased holdout estimate (see the provenance caveat in §4).
 - **The comparative evaluation is a 25-query synthetic workload**, not a customer study. It shows which
   failure modes each architecture exhibits; it is not a sizing forecast.
 - **Latency and throughput figures are single-node measurements** on the hardware recorded in the artifact

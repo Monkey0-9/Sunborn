@@ -48,10 +48,17 @@ pub async fn trigger_invalidation(
     {
         Ok(report) => report,
         Err(err) => {
-            let _ = state
+            if let Err(mark_err) = state
                 .db
                 .mark_outbox_failed(outbox_id, &err.to_string())
-                .await;
+                .await
+            {
+                tracing::error!(
+                    outbox_id,
+                    error = %mark_err,
+                    "Outbox event could not be marked FAILED after purge failure; it stays PENDING for worker retry"
+                );
+            }
             return Err(AppError::from(err));
         }
     };
@@ -89,6 +96,9 @@ pub async fn trigger_invalidation(
 pub struct DependencyRecordRequest {
     pub source_id: Uuid,
     pub cache_key: String,
+    /// Owning tenant. Required so causal invalidation can attribute these
+    /// nodes to a tenant and refuse cross-tenant traversal.
+    pub tenant_id: String,
 }
 
 pub async fn record_dependency(
@@ -106,7 +116,8 @@ pub async fn record_dependency(
         .await
         .map_err(AppError::from)?;
 
-    // Also register in Graphify multi-relational knowledge graph
+    // Also register in Graphify multi-relational knowledge graph, stamping both
+    // nodes with tenant identity so scoped invalidation can attribute them.
     let source_str = payload.source_id.to_string();
     if state.graphify_graph.get_node(&source_str).is_none() {
         let doc_node = sunborn_invalidation::GraphifyNode::new(
@@ -114,7 +125,11 @@ pub async fn record_dependency(
             state.graphify_graph.next_numeric_id(),
             format!("source::{}", source_str),
             sunborn_invalidation::GraphifyNodeType::Document,
-        );
+        )
+        .with_metadata(json!({
+            "tenant_id": payload.tenant_id,
+            "source_id": source_str,
+        }));
         state.graphify_graph.add_node(doc_node);
     }
     if state.graphify_graph.get_node(&payload.cache_key).is_none() {
@@ -123,7 +138,11 @@ pub async fn record_dependency(
             state.graphify_graph.next_numeric_id(),
             payload.cache_key.clone(),
             sunborn_invalidation::GraphifyNodeType::CacheEntry,
-        );
+        )
+        .with_metadata(json!({
+            "tenant_id": payload.tenant_id,
+            "cache_key": payload.cache_key,
+        }));
         state.graphify_graph.add_node(cache_node);
     }
     state.graphify_graph.link(

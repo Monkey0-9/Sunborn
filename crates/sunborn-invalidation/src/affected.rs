@@ -6,7 +6,7 @@
 //! the exact blast radius of affected components and dependent cache records with full provenance.
 
 use crate::graphify_graph::GraphifyKnowledgeGraph;
-use crate::graphify_model::{GraphifyNodeType, GraphifyRelation};
+use crate::graphify_model::{GraphifyNode, GraphifyNodeType, GraphifyRelation};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashSet, VecDeque};
 
@@ -38,6 +38,11 @@ pub struct AffectedReport {
     pub max_depth_reached: usize,
     /// Total count of unique affected nodes
     pub total_affected: usize,
+    /// Roots rejected because tenant ownership could not be established.
+    /// Non-empty means the caller must treat the invalidation as refused
+    /// (fail closed) rather than as a partial success.
+    #[serde(default)]
+    pub rejected_roots: Vec<String>,
 }
 
 /// Traversal configuration for computing affected blast radius.
@@ -51,6 +56,21 @@ pub struct BlastRadiusConfig {
     pub include_cache_entries: bool,
     /// Optional tenant ID to scope traversal and affected assets
     pub tenant_id: Option<String>,
+}
+
+/// Fail-closed tenant visibility check.
+///
+/// A node is visible to a tenant only when it exists in the graph **and**
+/// carries an explicit `tenant_id` metadata value equal to the requested
+/// tenant. Missing nodes and nodes without tenant metadata are rejected: an
+/// absent identity is not evidence of ownership.
+fn tenant_visible(node: Option<&GraphifyNode>, required_tenant: &str) -> bool {
+    match node {
+        Some(node) => {
+            node.metadata.get("tenant_id").and_then(|v| v.as_str()) == Some(required_tenant)
+        }
+        None => false,
+    }
 }
 
 impl Default for BlastRadiusConfig {
@@ -79,8 +99,20 @@ pub fn compute_affected(
     // Queue holds: (node_id, current_depth)
     let mut queue: VecDeque<(String, usize)> = VecDeque::new();
 
+    let mut rejected_roots: Vec<String> = Vec::new();
+
     for &root in mutated_roots {
         let root_str = root.to_string();
+        // Validate root ownership before traversal. When a tenant scope is
+        // requested, a root that is absent or whose tenant metadata is missing
+        // or conflicting must not seed traversal: silently skipping it would
+        // report success while leaving stale entries reachable.
+        if let Some(ref required_tenant) = cfg.tenant_id {
+            if !tenant_visible(graph.get_node(&root_str).as_ref(), required_tenant) {
+                rejected_roots.push(root_str);
+                continue;
+            }
+        }
         if visited.insert(root_str.clone()) {
             queue.push_back((root_str, 0));
         }
@@ -120,16 +152,11 @@ pub fn compute_affected(
                 continue;
             }
 
-            // Enforce tenant_id scoping when configured
+            // Enforce tenant scoping fail-closed: a node with missing tenant
+            // metadata is not assumed to belong to the requested tenant.
             if let Some(ref required_tenant) = cfg.tenant_id {
-                if let Some(ref node) = dependent_node {
-                    if let Some(node_tenant) =
-                        node.metadata.get("tenant_id").and_then(|v| v.as_str())
-                    {
-                        if node_tenant != required_tenant.as_str() {
-                            continue;
-                        }
-                    }
+                if !tenant_visible(dependent_node.as_ref(), required_tenant) {
+                    continue;
                 }
             }
 
@@ -171,16 +198,10 @@ pub fn compute_affected(
                     continue;
                 }
 
-                // Enforce tenant_id scoping when configured
+                // Enforce tenant scoping fail-closed (see incoming-edge loop).
                 if let Some(ref required_tenant) = cfg.tenant_id {
-                    if let Some(ref node) = defined_node {
-                        if let Some(node_tenant) =
-                            node.metadata.get("tenant_id").and_then(|v| v.as_str())
-                        {
-                            if node_tenant != required_tenant.as_str() {
-                                continue;
-                            }
-                        }
+                    if !tenant_visible(defined_node.as_ref(), required_tenant) {
+                        continue;
                     }
                 }
 
@@ -213,6 +234,7 @@ pub fn compute_affected(
         affected_nodes: affected_hits,
         affected_cache_keys,
         max_depth_reached,
+        rejected_roots,
     }
 }
 
@@ -331,48 +353,143 @@ mod tests {
         assert!(report_no_cache.affected_cache_keys.is_empty());
     }
 
+    fn tenant_node(id: &str, n: u64, tenant: &str, kind: GraphifyNodeType) -> GraphifyNode {
+        let mut node = GraphifyNode::new(id, n, id, kind);
+        node.metadata = serde_json::json!({ "tenant_id": tenant });
+        node
+    }
+
     #[test]
     fn test_tenant_scoping() {
-        use crate::graphify_model::GraphifyNode;
-        use serde_json::json;
-
         let graph = GraphifyKnowledgeGraph::new();
-        let doc = GraphifyNode::new("doc::shared", 1, "shared.md", GraphifyNodeType::Document);
-        graph.add_node(doc);
 
-        let mut cache_a =
-            GraphifyNode::new("cache::entry_a", 2, "entry_a", GraphifyNodeType::CacheEntry);
-        cache_a.metadata = json!({ "tenant_id": "tenant-alpha" });
-        graph.add_node(cache_a);
+        graph.add_node(tenant_node(
+            "doc::shared_alpha",
+            1,
+            "tenant-alpha",
+            GraphifyNodeType::Document,
+        ));
+        graph.add_node(tenant_node(
+            "doc::shared_beta",
+            2,
+            "tenant-beta",
+            GraphifyNodeType::Document,
+        ));
+        graph.add_node(tenant_node(
+            "cache::entry_a",
+            3,
+            "tenant-alpha",
+            GraphifyNodeType::CacheEntry,
+        ));
+        graph.add_node(tenant_node(
+            "cache::entry_b",
+            4,
+            "tenant-beta",
+            GraphifyNodeType::CacheEntry,
+        ));
 
-        let mut cache_b =
-            GraphifyNode::new("cache::entry_b", 3, "entry_b", GraphifyNodeType::CacheEntry);
-        cache_b.metadata = json!({ "tenant_id": "tenant-beta" });
-        graph.add_node(cache_b);
-
-        graph.link("cache::entry_a", "doc::shared", GraphifyRelation::DependsOn);
-        graph.link("cache::entry_b", "doc::shared", GraphifyRelation::DependsOn);
+        graph.link(
+            "cache::entry_a",
+            "doc::shared_alpha",
+            GraphifyRelation::DependsOn,
+        );
+        graph.link(
+            "cache::entry_b",
+            "doc::shared_beta",
+            GraphifyRelation::DependsOn,
+        );
 
         // Scoped to tenant-alpha only
         let cfg_alpha = BlastRadiusConfig {
             tenant_id: Some("tenant-alpha".to_string()),
             ..Default::default()
         };
-        let report_alpha = compute_affected(&graph, &["doc::shared"], Some(cfg_alpha));
+        let report_alpha = compute_affected(&graph, &["doc::shared_alpha"], Some(cfg_alpha));
         assert_eq!(
             report_alpha.affected_cache_keys,
             vec!["cache::entry_a".to_string()]
         );
+        assert!(report_alpha.rejected_roots.is_empty());
 
         // Scoped to tenant-beta only
         let cfg_beta = BlastRadiusConfig {
             tenant_id: Some("tenant-beta".to_string()),
             ..Default::default()
         };
-        let report_beta = compute_affected(&graph, &["doc::shared"], Some(cfg_beta));
+        let report_beta = compute_affected(&graph, &["doc::shared_beta"], Some(cfg_beta));
         assert_eq!(
             report_beta.affected_cache_keys,
             vec!["cache::entry_b".to_string()]
         );
+        assert!(report_beta.rejected_roots.is_empty());
+    }
+
+    #[test]
+    fn test_tenant_scoping_fails_closed_on_missing_metadata() {
+        let graph = GraphifyKnowledgeGraph::new();
+
+        // Root has no tenant metadata: ownership cannot be established.
+        let untagged_doc = GraphifyNode::new(
+            "doc::untagged",
+            1,
+            "untagged.md",
+            GraphifyNodeType::Document,
+        );
+        graph.add_node(untagged_doc);
+
+        // Dependent has no tenant metadata: must not be purged under any scope.
+        let untagged_cache = GraphifyNode::new(
+            "cache::untagged",
+            2,
+            "untagged",
+            GraphifyNodeType::CacheEntry,
+        );
+        graph.add_node(untagged_cache);
+        graph.link(
+            "cache::untagged",
+            "doc::untagged",
+            GraphifyRelation::DependsOn,
+        );
+
+        let cfg = BlastRadiusConfig {
+            tenant_id: Some("tenant-alpha".to_string()),
+            ..Default::default()
+        };
+        let report = compute_affected(&graph, &["doc::untagged"], Some(cfg));
+
+        assert_eq!(report.rejected_roots, vec!["doc::untagged".to_string()]);
+        assert!(report.affected_cache_keys.is_empty());
+        assert_eq!(report.total_affected, 0);
+    }
+
+    #[test]
+    fn test_tenant_scoping_rejects_cross_tenant_root() {
+        let graph = GraphifyKnowledgeGraph::new();
+        graph.add_node(tenant_node(
+            "doc::beta_only",
+            1,
+            "tenant-beta",
+            GraphifyNodeType::Document,
+        ));
+        graph.add_node(tenant_node(
+            "cache::beta_only",
+            2,
+            "tenant-beta",
+            GraphifyNodeType::CacheEntry,
+        ));
+        graph.link(
+            "cache::beta_only",
+            "doc::beta_only",
+            GraphifyRelation::DependsOn,
+        );
+
+        let cfg = BlastRadiusConfig {
+            tenant_id: Some("tenant-alpha".to_string()),
+            ..Default::default()
+        };
+        let report = compute_affected(&graph, &["doc::beta_only"], Some(cfg));
+
+        assert_eq!(report.rejected_roots, vec!["doc::beta_only".to_string()]);
+        assert!(report.affected_cache_keys.is_empty());
     }
 }

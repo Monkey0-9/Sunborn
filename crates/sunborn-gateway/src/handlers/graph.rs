@@ -70,8 +70,8 @@ pub struct BlastRadiusPayload {
 #[derive(Debug, Deserialize)]
 pub struct CausalInvalidatePayload {
     pub mutated_roots: Vec<String>,
-    #[serde(default)]
-    pub tenant_id: Option<String>,
+    /// Owning tenant. Required: an unscoped invalidation cannot be proven safe.
+    pub tenant_id: String,
     #[serde(default)]
     pub max_depth: Option<usize>,
     #[serde(default)]
@@ -237,6 +237,14 @@ pub async fn invalidate_graph_causal(
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
 
     let start = Instant::now();
+    let tenant_str = payload.tenant_id.trim().to_string();
+    if tenant_str.is_empty() {
+        return Err(SunbornError::forbidden(
+            "tenant_id is required for causal invalidation; an unscoped purge is refused",
+        )
+        .into());
+    }
+
     let roots: Vec<&str> = payload.mutated_roots.iter().map(|s| s.as_str()).collect();
 
     let cfg = BlastRadiusConfig {
@@ -245,11 +253,24 @@ pub async fn invalidate_graph_causal(
             .allowed_relations
             .map(|rels| rels.into_iter().collect()),
         include_cache_entries: true,
-        tenant_id: payload.tenant_id.clone(),
+        tenant_id: Some(tenant_str.clone()),
     };
 
     // 1. Calculate multi-relational causal blast radius
     let report = compute_affected(&state.graphify_graph, &roots, Some(cfg));
+
+    // Fail closed before touching any durable state: a root we cannot attribute
+    // to the tenant must not be silently skipped, because the caller would read
+    // a success while stale entries survive.
+    if !report.rejected_roots.is_empty() {
+        return Err(SunbornError::forbidden(format!(
+            "refusing causal invalidation: {} root(s) are not owned by tenant '{}': {}",
+            report.rejected_roots.len(),
+            tenant_str,
+            report.rejected_roots.join(", ")
+        ))
+        .into());
+    }
 
     let mut purged_keys = Vec::new();
     let mut failed_keys = Vec::new();
@@ -273,10 +294,6 @@ pub async fn invalidate_graph_causal(
     }
 
     // 3. Durable-first ordering: persist PENDING outbox intent before modifying storage tiers
-    let tenant_str = payload
-        .tenant_id
-        .clone()
-        .unwrap_or_else(|| "system".to_string());
     let outbox_record = sunborn_db::models::OutboxRecord {
         id: 0,
         tenant_id: tenant_str.clone(),
@@ -319,11 +336,15 @@ pub async fn invalidate_graph_causal(
         }
     }
 
-    // 5. Purge from GraphMemoryCache if initialized
+    // 5. Purge from GraphMemoryCache if initialized. A failure here is a failed
+    //    purge and must be reported, not swallowed.
     if let Some(ref gmc) = state.graph_memory_cache {
         for raw_key in &report.affected_cache_keys {
             let key = raw_key.strip_prefix("cache::").unwrap_or(raw_key.as_str());
-            let _ = gmc.cache().delete(key).await;
+            if let Err(e) = gmc.cache().delete(key).await {
+                tracing::error!(key = %key, error = %e, "Graph memory cache delete failed during causal invalidation");
+                failed_keys.push((key.to_string(), format!("graph_memory: {e}")));
+            }
         }
     }
 
@@ -347,10 +368,17 @@ pub async fn invalidate_graph_causal(
             }
             Err(err) => {
                 tracing::error!(error = %err, "Cluster invalidation broadcast failed");
-                let _ = state
+                if let Err(mark_err) = state
                     .db
                     .mark_outbox_failed(outbox_id, &err.to_string())
-                    .await;
+                    .await
+                {
+                    tracing::error!(
+                        outbox_id,
+                        error = %mark_err,
+                        "Outbox event could not be marked FAILED; it stays PENDING for worker retry"
+                    );
+                }
                 if sunborn_core::is_production_mode() || state.cluster_transport_durable {
                     return Err(AppError::from(err));
                 }
@@ -370,7 +398,13 @@ pub async fn invalidate_graph_causal(
             "Partial failure: {} cache keys failed eviction",
             failed_keys.len()
         );
-        let _ = state.db.mark_outbox_failed(outbox_id, &err_msg).await;
+        if let Err(mark_err) = state.db.mark_outbox_failed(outbox_id, &err_msg).await {
+            tracing::error!(
+                outbox_id,
+                error = %mark_err,
+                "Outbox event could not be marked FAILED after partial purge; it stays PENDING and will be retried"
+            );
+        }
         if sunborn_core::is_production_mode() {
             return Err(SunbornError::cache(err_msg).into());
         }

@@ -49,7 +49,7 @@ re-run 2026-11-20 where the result changed.
       anonymous callers; 32/32 admin routes reject non-admin keys; 4/4 local control endpoints verified.
 - [x] TLA+ model checking: 3 configurations, no errors.
 - [x] Held-out evaluation counts asserted by a test: 0 false positives on 200 hard
-      negatives; recall 20%.
+      negatives; recall 80.8% (97/120).
 - [x] CycloneDX SBOM generated: 369 components.
 - [x] Documentation paths resolve under `scripts/verify_doc_paths.py --strict`.
 - [x] Local BYOK Runtime: 1-click installer, native OS encrypted credential vault, masked key previews, loopback isolation (`127.0.0.1:8080`).

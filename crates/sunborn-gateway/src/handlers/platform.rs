@@ -183,7 +183,12 @@ pub async fn get_cluster_sync_status(State(state): State<AppState>) -> impl Into
         "region": region,
         "status_observed_at": Utc::now().to_rfc3339(),
         "mode": if is_durable { "cluster_replicated" } else { "standalone_authoritative" },
-        "nodes_active": if is_durable { 2 } else { 1 },
+        // This process has no peer registry, so it can only attest to itself.
+        // Reporting a fixed 2 when a durable transport is configured would be
+        // fabricated topology: per-node region and RTT are not observed here.
+        "nodes_active": 1,
+        "nodes_active_scope": "local_process_only",
+        "replica_telemetry": "unavailable",
         "cluster_state": if is_durable { "healthy_cluster" } else { "single-node" },
         "vector_clock": vc,
         "anti_entropy_protocol": if is_durable { "redis-streams-vector-clock" } else { "single-node-epoch" },
