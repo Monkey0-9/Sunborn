@@ -38,6 +38,7 @@ __pycache__/
 htmlcov/
 
 # Tooling / editor
+.commandcode/
 .vscode/
 .trunk/out/
 .trunk/logs/

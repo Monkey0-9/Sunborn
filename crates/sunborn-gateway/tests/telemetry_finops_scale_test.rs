@@ -32,7 +32,12 @@ async fn test_finops_multi_model_frontier_telemetry() {
     let econ = &json["economics"];
 
     // Verify all frontier model families are represented in economics
-    assert!(econ["gpt4o_gross_cost_avoided_per_query_usd"].as_f64().unwrap() > 0.0);
+    assert!(
+        econ["gpt4o_gross_cost_avoided_per_query_usd"]
+            .as_f64()
+            .unwrap()
+            > 0.0
+    );
     assert!(econ["claude_cost_avoided_per_query_usd"].as_f64().unwrap() > 0.0);
     assert!(econ["grok_cost_avoided_per_query_usd"].as_f64().unwrap() > 0.0);
     assert!(econ["gemini_cost_avoided_per_query_usd"].as_f64().unwrap() > 0.0);
