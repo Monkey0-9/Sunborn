@@ -70,10 +70,12 @@ class MessageResponse:
         elif isinstance(raw_content, list):
             for item in raw_content:
                 if isinstance(item, dict):
-                    contents.append(ContentBlock(
-                        type=item.get("type", "text"),
-                        text=item.get("text", ""),
-                    ))
+                    contents.append(
+                        ContentBlock(
+                            type=item.get("type", "text"),
+                            text=item.get("text", ""),
+                        )
+                    )
                 elif isinstance(item, str):
                     contents.append(ContentBlock(type="text", text=item))
         self.content = contents
@@ -154,16 +156,8 @@ class Anthropic:
             or os.environ.get("ANTHROPIC_API_KEY")
             or "sunborn-local-dev-key"
         )
-        self.base_url = (
-            base_url
-            or os.environ.get("SUNBORN_BASE_URL")
-            or "http://localhost:8080/v1"
-        )
-        self.tenant_id = (
-            tenant_id
-            or os.environ.get("SUNBORN_TENANT_ID")
-            or "default-tenant"
-        )
+        self.base_url = base_url or os.environ.get("SUNBORN_BASE_URL") or "http://localhost:8080/v1"
+        self.tenant_id = tenant_id or os.environ.get("SUNBORN_TENANT_ID") or "default-tenant"
         self.timeout = timeout
         self.messages = MessagesResource(self)
 
@@ -188,9 +182,7 @@ class Anthropic:
         except urllib.error.URLError as err:
             raise SunbornConnectionError(f"Failed to connect to Sunborn Gateway at {url}: {err}") from err
 
-    def _post_stream(
-        self, url: str, payload: dict[str, Any], headers: dict[str, str]
-    ) -> Iterator[MessageStreamEvent]:
+    def _post_stream(self, url: str, payload: dict[str, Any], headers: dict[str, str]) -> Iterator[MessageStreamEvent]:
         body = _fast_dumps(payload)
         headers = dict(headers)
         headers["Accept"] = "text/event-stream"

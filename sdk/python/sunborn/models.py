@@ -96,9 +96,7 @@ def compute_context_digest(
             next_level: list[bytes] = []
             for i in range(0, len(current_hashes), 2):
                 chunk0 = current_hashes[i]
-                chunk1 = (
-                    current_hashes[i + 1] if i + 1 < len(current_hashes) else chunk0
-                )
+                chunk1 = current_hashes[i + 1] if i + 1 < len(current_hashes) else chunk0
                 h_node = hashlib.sha256()
                 h_node.update(b"sunborn:rag_node:")
                 h_node.update(chunk0)

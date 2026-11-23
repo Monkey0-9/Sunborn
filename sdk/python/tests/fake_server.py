@@ -82,9 +82,7 @@ class StubServer:
         self._server.daemon_threads = True
         self._server.requests = self.requests  # type: ignore[attr-defined]
         self._server.responder = self.responder  # type: ignore[attr-defined]
-        self._thread = threading.Thread(
-            target=self._server.serve_forever, name="sunborn-test-stub", daemon=True
-        )
+        self._thread = threading.Thread(target=self._server.serve_forever, name="sunborn-test-stub", daemon=True)
 
     @property
     def base_url(self) -> str:

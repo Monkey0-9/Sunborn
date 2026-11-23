@@ -59,10 +59,7 @@ class TestSunbornCLI(unittest.TestCase):
 
     @patch("sunborn.client.SunbornClient.chat_completion")
     def test_cli_bench(self, mock_chat):
-        mock_chat.return_value = {
-            "sunborn_cached": True,
-            "choices": [{"message": {"content": "benchmark hit"}}]
-        }
+        mock_chat.return_value = {"sunborn_cached": True, "choices": [{"message": {"content": "benchmark hit"}}]}
 
         with patch("sys.stdout", new=io.StringIO()) as fake_out:
             exit_code = main(["bench", "--requests", "5"])
@@ -93,12 +90,14 @@ class TestSunbornCLI(unittest.TestCase):
     @patch("urllib.request.urlopen")
     def test_cli_shred(self, mock_urlopen):
         mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({
-            "tenant_id": "corp-target",
-            "status": "shredded",
-            "shred_latency_nanos": 420000,
-            "verified_multi_store_erasure": True,
-        }).encode("utf-8")
+        mock_resp.read.return_value = json.dumps(
+            {
+                "tenant_id": "corp-target",
+                "status": "shredded",
+                "shred_latency_nanos": 420000,
+                "verified_multi_store_erasure": True,
+            }
+        ).encode("utf-8")
         mock_urlopen.return_value.__enter__.return_value = mock_resp
 
         with patch("sys.stdout", new=io.StringIO()) as fake_out:

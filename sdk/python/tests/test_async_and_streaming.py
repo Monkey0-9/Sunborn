@@ -54,29 +54,31 @@ class TestAsyncAndStreaming(unittest.TestCase):
         mock_resp = MagicMock()
         mock_resp.headers = {"Content-Type": "text/event-stream"}
         mock_resp.__iter__.return_value = [
-            b"data: " + json.dumps({
-                "id": "chunk-1",
-                "object": "chat.completion.chunk",
-                "created": 123456,
-                "model": "gpt-4o",
-                "choices": [{
-                    "index": 0,
-                    "delta": {"role": "assistant", "content": "Hello"},
-                    "finish_reason": None
-                }]
-            }).encode("utf-8") + b"\n\n",
-            b"data: " + json.dumps({
-                "id": "chunk-2",
-                "object": "chat.completion.chunk",
-                "created": 123456,
-                "model": "gpt-4o",
-                "choices": [{
-                    "index": 0,
-                    "delta": {"content": " world!"},
-                    "finish_reason": "stop"
-                }]
-            }).encode("utf-8") + b"\n\n",
-            b"data: [DONE]\n\n"
+            b"data: "
+            + json.dumps(
+                {
+                    "id": "chunk-1",
+                    "object": "chat.completion.chunk",
+                    "created": 123456,
+                    "model": "gpt-4o",
+                    "choices": [
+                        {"index": 0, "delta": {"role": "assistant", "content": "Hello"}, "finish_reason": None}
+                    ],
+                }
+            ).encode("utf-8")
+            + b"\n\n",
+            b"data: "
+            + json.dumps(
+                {
+                    "id": "chunk-2",
+                    "object": "chat.completion.chunk",
+                    "created": 123456,
+                    "model": "gpt-4o",
+                    "choices": [{"index": 0, "delta": {"content": " world!"}, "finish_reason": "stop"}],
+                }
+            ).encode("utf-8")
+            + b"\n\n",
+            b"data: [DONE]\n\n",
         ]
         mock_urlopen.return_value = mock_resp
 
@@ -101,7 +103,7 @@ class TestAsyncAndStreaming(unittest.TestCase):
         mock_resp.__iter__.return_value = [
             b'data: {"type": "content_block_delta", "delta": {"text": "Sunborn"}}\n\n',
             b'data: {"type": "content_block_delta", "delta": {"text": " Gateway"}}\n\n',
-            b"data: [DONE]\n\n"
+            b"data: [DONE]\n\n",
         ]
         mock_urlopen.return_value = mock_resp
 
@@ -122,26 +124,29 @@ class TestAsyncAndStreaming(unittest.TestCase):
         async def _run():
             with patch("urllib.request.urlopen") as mock_urlopen:
                 mock_resp = MagicMock()
-                mock_resp.read.return_value = json.dumps({
-                    "id": "chatcmpl-async",
-                    "object": "chat.completion",
-                    "created": 1677652288,
-                    "model": "gpt-4o",
-                    "sunborn_cached": True,
-                    "sunborn_tier": "c1_exact",
-                    "choices": [{
-                        "index": 0,
-                        "message": {"role": "assistant", "content": "Async success"},
-                        "finish_reason": "stop"
-                    }],
-                    "usage": {"total_tokens": 15}
-                }).encode("utf-8")
+                mock_resp.read.return_value = json.dumps(
+                    {
+                        "id": "chatcmpl-async",
+                        "object": "chat.completion",
+                        "created": 1677652288,
+                        "model": "gpt-4o",
+                        "sunborn_cached": True,
+                        "sunborn_tier": "c1_exact",
+                        "choices": [
+                            {
+                                "index": 0,
+                                "message": {"role": "assistant", "content": "Async success"},
+                                "finish_reason": "stop",
+                            }
+                        ],
+                        "usage": {"total_tokens": 15},
+                    }
+                ).encode("utf-8")
                 mock_urlopen.return_value.__enter__.return_value = mock_resp
 
                 client = AsyncOpenAI(api_key="test-key")
                 res = await client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[{"role": "user", "content": "test async"}]
+                    model="gpt-4o", messages=[{"role": "user", "content": "test async"}]
                 )
                 self.assertIsInstance(res, ChatCompletion)
                 self.assertEqual(res.choices[0].message.content, "Async success")
@@ -154,8 +159,10 @@ class TestAsyncAndStreaming(unittest.TestCase):
             # LangChain async
             lc_cache = SunbornLangChainCache(api_key="sk-test")
             lc_node_id, _, _ = lc_cache._plan("test prompt", "llm-str")
-            with patch.object(lc_cache.client, "plan_execution_dag") as mock_plan, \
-                 patch.object(lc_cache.client, "record_tool_result") as mock_record:
+            with (
+                patch.object(lc_cache.client, "plan_execution_dag") as mock_plan,
+                patch.object(lc_cache.client, "record_tool_result") as mock_record,
+            ):
                 mock_plan.return_value = {
                     "cached_nodes": 1,
                     "node_statuses": {
@@ -176,9 +183,11 @@ class TestAsyncAndStreaming(unittest.TestCase):
             li_cache = SunbornLlamaIndexCache(api_key="sk-test")
             tool_name = li_cache._tool_name("query key")
             node_id = f"node-{tool_name}"
-            with patch.object(li_cache.client, "plan_execution_dag") as mock_plan, \
-                 patch.object(li_cache.client, "record_tool_result") as mock_record, \
-                 patch.object(li_cache.client, "evict_execution") as mock_evict:
+            with (
+                patch.object(li_cache.client, "plan_execution_dag") as mock_plan,
+                patch.object(li_cache.client, "record_tool_result") as mock_record,
+                patch.object(li_cache.client, "evict_execution") as mock_evict,
+            ):
                 mock_plan.return_value = {
                     "cached_nodes": 1,
                     "node_statuses": {

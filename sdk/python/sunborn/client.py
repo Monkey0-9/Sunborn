@@ -98,20 +98,14 @@ class SunbornClient:
         payload: dict[str, Any],
         custom_headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        result: dict[str, Any] = self._transport.request(
-            "POST", path, payload, headers=custom_headers
-        )
+        result: dict[str, Any] = self._transport.request("POST", path, payload, headers=custom_headers)
         return result
 
     def _get(self, path: str, custom_headers: dict[str, str] | None = None) -> dict[str, Any]:
-        result: dict[str, Any] = self._transport.request(
-            "GET", path, None, headers=custom_headers
-        )
+        result: dict[str, Any] = self._transport.request("GET", path, None, headers=custom_headers)
         return result
 
-    def login(
-        self, client_id: str, client_secret: str, tenant_id: str | None = None
-    ) -> dict[str, Any]:
+    def login(self, client_id: str, client_secret: str, tenant_id: str | None = None) -> dict[str, Any]:
         """Authenticate against ``/v1/auth/login`` and adopt the returned token."""
         payload: dict[str, Any] = {
             "client_id": client_id,
@@ -424,17 +418,14 @@ def sunborn_tool(
                 node_id, plan_nodes = _build_plan(arguments)
 
                 try:
-                    eval_result = await asyncio.to_thread(
-                        sunborn.plan_execution_dag, plan_nodes
-                    )
+                    eval_result = await asyncio.to_thread(sunborn.plan_execution_dag, plan_nodes)
                     cached = _cached_output(eval_result, node_id)
                     if cached is not None:
                         return cached
                 except Exception as exc:
                     if policy == FallbackPolicy.FAIL_CLOSED:
                         raise RuntimeError(
-                            f"Sunborn Policy FAIL_CLOSED: execution plan query failed "
-                            f"for '{tool_name}': {exc}"
+                            f"Sunborn Policy FAIL_CLOSED: execution plan query failed for '{tool_name}': {exc}"
                         ) from exc
 
                 result = await fn(*args, **kwargs)
@@ -453,8 +444,7 @@ def sunborn_tool(
                 except Exception as exc:
                     if policy == FallbackPolicy.FAIL_CLOSED:
                         raise RuntimeError(
-                            f"Sunborn Policy FAIL_CLOSED: recording tool result failed "
-                            f"for '{tool_name}': {exc}"
+                            f"Sunborn Policy FAIL_CLOSED: recording tool result failed for '{tool_name}': {exc}"
                         ) from exc
 
                 return result
@@ -478,8 +468,7 @@ def sunborn_tool(
             except Exception as exc:
                 if policy == FallbackPolicy.FAIL_CLOSED:
                     raise RuntimeError(
-                        f"Sunborn Policy FAIL_CLOSED: execution plan query failed for "
-                        f"'{tool_name}': {exc}"
+                        f"Sunborn Policy FAIL_CLOSED: execution plan query failed for '{tool_name}': {exc}"
                     ) from exc
 
             result = fn(*args, **kwargs)
@@ -497,8 +486,7 @@ def sunborn_tool(
             except Exception as exc:
                 if policy == FallbackPolicy.FAIL_CLOSED:
                     raise RuntimeError(
-                        f"Sunborn Policy FAIL_CLOSED: recording tool result failed for "
-                        f"'{tool_name}': {exc}"
+                        f"Sunborn Policy FAIL_CLOSED: recording tool result failed for '{tool_name}': {exc}"
                     ) from exc
 
             return result

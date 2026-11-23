@@ -47,7 +47,9 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
     # 1. C-SIMD Accelerator status
     c_accel = is_c_accelerator_available()
-    print(f"[*] SIMD Accelerator:  {'[ENABLED] C-accelerated bitsets active' if c_accel else '[FALLBACK] Pure Python vectorized kernel active'}")
+    print(
+        f"[*] SIMD Accelerator:  {'[ENABLED] C-accelerated bitsets active' if c_accel else '[FALLBACK] Pure Python vectorized kernel active'}"
+    )
 
     # 2. Probe /health
     health_url = f"{clean_base}/health"
@@ -174,7 +176,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
     print(f"  Latency p90:          {p90:8.2f} ms")
     print(f"  Latency p99:          {p99:8.2f} ms")
     print(f"  Cache Hit Rate:       {hit_rate:8.1f}% ({hits}/{n})")
-    print(f"  Wilson 95% CI:        [{w_low*100:.1f}%, {w_high*100:.1f}%]")
+    print(f"  Wilson 95% CI:        [{w_low * 100:.1f}%, {w_high * 100:.1f}%]")
     print("=" * 60)
     return 0
 
@@ -256,7 +258,9 @@ def cmd_shred(args: argparse.Namespace) -> int:
             print("\n" + "=" * 60)
             print(f"  Shred Status:         {status.upper()}")
             print(f"  TDEK Zeroization:     {latency_ns:,} ns ({latency_ns / 1_000_000:.3f} ms)")
-            print(f"  Multi-Store Verified: {'[YES] 0 residuals verified across all 5 tiers' if verified else '[PARTIAL]'}")
+            print(
+                f"  Multi-Store Verified: {'[YES] 0 residuals verified across all 5 tiers' if verified else '[PARTIAL]'}"
+            )
             print(f"  Total Wall Time:      {elapsed_ms:.2f} ms")
             print("=" * 60)
             return 0 if (status == "shredded" and verified) else 1

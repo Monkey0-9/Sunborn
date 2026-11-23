@@ -66,6 +66,35 @@ if ($LASTEXITCODE -ne 0) { throw "Python SDK agent test failed" }
 & $PythonBin -m unittest discover -s sdk/python/tests -v
 if ($LASTEXITCODE -ne 0) { throw "Python SDK test suite failed" }
 
+Push-Location (Join-Path (Get-Location) "sdk/python")
+try {
+    & $PythonBin -m ruff --version 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        & $PythonBin -m ruff check .
+        if ($LASTEXITCODE -ne 0) { throw "Python ruff check failed" }
+        & $PythonBin -m ruff format --check .
+        if ($LASTEXITCODE -ne 0) { throw "Python ruff format check failed" }
+    } else {
+        Write-Host "  ruff not installed; CI enforces Python lint/format" -ForegroundColor Gray
+    }
+    & $PythonBin -m mypy --version 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        & $PythonBin -m mypy --config-file pyproject.toml
+        if ($LASTEXITCODE -ne 0) { throw "Python mypy check failed" }
+    } else {
+        Write-Host "  mypy not installed; CI enforces Python types" -ForegroundColor Gray
+    }
+    & $PythonBin -m pytest --version 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        & $PythonBin -m pytest tests test_sunborn_agent.py -q --cov=sunborn --cov-fail-under=80
+        if ($LASTEXITCODE -ne 0) { throw "Python SDK tests/coverage failed" }
+    } else {
+        Write-Host "  pytest not installed; CI enforces Python coverage" -ForegroundColor Gray
+    }
+} finally {
+    Pop-Location
+}
+
 Write-Host "[5/12] Validating OpenAPI 3.1 Specification Drift..." -ForegroundColor Yellow
 & $PythonBin scripts/check_openapi_drift.py
 if ($LASTEXITCODE -ne 0) { throw "OpenAPI drift check failed" }
@@ -101,7 +130,9 @@ Write-Host "[11/12] Generating deterministic CycloneDX SBOM..." -ForegroundColor
 & $PythonBin scripts/generate_sbom.py
 if ($LASTEXITCODE -ne 0) { throw "SBOM generation failed" }
 
-Write-Host "[12/12] Strict Documentation & Attestation CLI Verification..." -ForegroundColor Yellow
+Write-Host "[12/12] Strict Documentation, Hygiene & Attestation CLI Verification..." -ForegroundColor Yellow
+& $PythonBin scripts/check_repo_hygiene.py
+if ($LASTEXITCODE -ne 0) { throw "Repository hygiene check failed" }
 & $PythonBin scripts/verify_doc_paths.py --strict
 if ($LASTEXITCODE -ne 0) { throw "Strict doc path verification failed" }
 & $PythonBin scripts/check_launch_docs.py

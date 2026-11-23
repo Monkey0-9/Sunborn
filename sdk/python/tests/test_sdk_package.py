@@ -55,7 +55,9 @@ class TestSunbornPackage(unittest.TestCase):
         asyncio.run(_test())
 
     def test_exception_subclassing_and_rfc7807(self):
-        auth_err = SunbornAuthError("Invalid API key", status_code=401, problem_details={"type": "https://sunborn.ai/errors/unauthorized"})
+        auth_err = SunbornAuthError(
+            "Invalid API key", status_code=401, problem_details={"type": "https://sunborn.ai/errors/unauthorized"}
+        )
         self.assertIsInstance(auth_err, RuntimeError)
         self.assertIsInstance(auth_err, SunbornError)
         self.assertEqual(auth_err.status_code, 401)
@@ -100,6 +102,43 @@ class TestSunbornPackage(unittest.TestCase):
         self.assertEqual(fast_l2_norm([]), 0.0)
         self.assertEqual(fast_dot_product([], []), 0.0)
         self.assertEqual(fast_euclidean_distance([], []), 0.0)
+
+    def test_raise_for_status_exhaustive_mappings(self):
+        from sunborn.exceptions import (
+            SunbornServerError,
+            SunbornValidationError,
+            raise_for_status,
+        )
+
+        with self.assertRaises(SunbornAuthError):
+            raise_for_status(401, "unauthorized", {"detail": "token expired"})
+        with self.assertRaises(SunbornForbiddenError):
+            raise_for_status(403, "forbidden", {"detail": "access denied"})
+        with self.assertRaises(SunbornNotFoundError):
+            raise_for_status(404, "not found", {"detail": "resource missing"})
+        with self.assertRaises(SunbornRateLimitError) as ctx:
+            raise_for_status(429, "too many requests", {"detail": "rate limit", "retry_after": "12.5"})
+        self.assertEqual(ctx.exception.retry_after, 12.5)
+        with self.assertRaises(SunbornValidationError):
+            raise_for_status(400, "bad request", {"detail": "invalid json"})
+        with self.assertRaises(SunbornValidationError):
+            raise_for_status(422, "unprocessable", {"detail": "schema failure"})
+        with self.assertRaises(SunbornServerError):
+            raise_for_status(500, "internal error", {"detail": "db panic"})
+        with self.assertRaises(SunbornError):
+            raise_for_status(418, "teapot", {"detail": "short and stout"})
+
+    def test_json_dumps_loads_edge_cases(self):
+        from sunborn import _json
+
+        data = {"hello": "world", "num": 42}
+        encoded = _json.dumps(data)
+        self.assertIsInstance(encoded, bytes)
+        decoded = _json.loads(encoded)
+        self.assertEqual(decoded, data)
+
+        decoded_str = _json.loads('{"str": true}')
+        self.assertEqual(decoded_str, {"str": True})
 
 
 if __name__ == "__main__":

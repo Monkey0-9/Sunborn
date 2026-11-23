@@ -80,11 +80,13 @@ class ChatCompletion:
                 role=msg_dict.get("role", "assistant"),
                 content=msg_dict.get("content", ""),
             )
-            choices.append(ChatCompletionChoice(
-                index=c.get("index", i),
-                message=msg,
-                finish_reason=c.get("finish_reason", "stop"),
-            ))
+            choices.append(
+                ChatCompletionChoice(
+                    index=c.get("index", i),
+                    message=msg,
+                    finish_reason=c.get("finish_reason", "stop"),
+                )
+            )
         self.choices = choices
 
         usage_dict = raw.get("usage", {})
@@ -136,11 +138,13 @@ class ChatCompletionChunk:
                 role=delta_dict.get("role"),
                 content=delta_dict.get("content"),
             )
-            choices.append(ChatCompletionChunkChoice(
-                index=c.get("index", i),
-                delta=delta,
-                finish_reason=c.get("finish_reason"),
-            ))
+            choices.append(
+                ChatCompletionChunkChoice(
+                    index=c.get("index", i),
+                    delta=delta,
+                    finish_reason=c.get("finish_reason"),
+                )
+            )
         self.choices = choices
 
     def __repr__(self) -> str:
@@ -218,10 +222,7 @@ class OpenAI:
         timeout: float = 30.0,
     ) -> None:
         self.api_key = (
-            api_key
-            or os.environ.get("SUNBORN_API_KEY")
-            or os.environ.get("OPENAI_API_KEY")
-            or "sunborn-local-dev-key"
+            api_key or os.environ.get("SUNBORN_API_KEY") or os.environ.get("OPENAI_API_KEY") or "sunborn-local-dev-key"
         )
         self.base_url = (
             base_url
@@ -229,16 +230,8 @@ class OpenAI:
             or os.environ.get("OPENAI_BASE_URL")
             or "http://localhost:8080/v1"
         )
-        self.tenant_id = (
-            tenant_id
-            or os.environ.get("SUNBORN_TENANT_ID")
-            or "default-tenant"
-        )
-        self.application_id = (
-            application_id
-            or os.environ.get("SUNBORN_APPLICATION_ID")
-            or "default-app"
-        )
+        self.tenant_id = tenant_id or os.environ.get("SUNBORN_TENANT_ID") or "default-tenant"
+        self.application_id = application_id or os.environ.get("SUNBORN_APPLICATION_ID") or "default-app"
         self.timeout = timeout
         self.chat = ChatResource(self)
 
@@ -265,9 +258,7 @@ class OpenAI:
         except urllib.error.URLError as err:
             raise SunbornConnectionError(f"Failed to connect to Sunborn Gateway at {url}: {err}") from err
 
-    def _post_stream(
-        self, url: str, payload: dict[str, Any], headers: dict[str, str]
-    ) -> Iterator[ChatCompletionChunk]:
+    def _post_stream(self, url: str, payload: dict[str, Any], headers: dict[str, str]) -> Iterator[ChatCompletionChunk]:
         body = _fast_dumps(payload)
         headers = dict(headers)
         headers["Accept"] = "text/event-stream"
@@ -289,19 +280,19 @@ class OpenAI:
                 content = ""
                 if data.get("choices"):
                     content = data["choices"][0].get("message", {}).get("content", "")
-                yield ChatCompletionChunk({
-                    "id": data.get("id", "chunk-0"),
-                    "object": "chat.completion.chunk",
-                    "created": data.get("created", 0),
-                    "model": data.get("model", ""),
-                    "sunborn_cached": data.get("sunborn_cached", False),
-                    "sunborn_tier": data.get("sunborn_tier", "origin"),
-                    "choices": [{
-                        "index": 0,
-                        "delta": {"role": "assistant", "content": content},
-                        "finish_reason": "stop"
-                    }]
-                })
+                yield ChatCompletionChunk(
+                    {
+                        "id": data.get("id", "chunk-0"),
+                        "object": "chat.completion.chunk",
+                        "created": data.get("created", 0),
+                        "model": data.get("model", ""),
+                        "sunborn_cached": data.get("sunborn_cached", False),
+                        "sunborn_tier": data.get("sunborn_tier", "origin"),
+                        "choices": [
+                            {"index": 0, "delta": {"role": "assistant", "content": content}, "finish_reason": "stop"}
+                        ],
+                    }
+                )
                 return
 
             for line in response:

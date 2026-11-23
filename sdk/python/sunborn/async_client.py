@@ -95,22 +95,14 @@ class AsyncSunbornClient:
         payload: dict[str, Any],
         custom_headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        result: dict[str, Any] = await self._transport.request(
-            "POST", path, payload, headers=custom_headers
-        )
+        result: dict[str, Any] = await self._transport.request("POST", path, payload, headers=custom_headers)
         return result
 
-    async def _get(
-        self, path: str, custom_headers: dict[str, str] | None = None
-    ) -> dict[str, Any]:
-        result: dict[str, Any] = await self._transport.request(
-            "GET", path, None, headers=custom_headers
-        )
+    async def _get(self, path: str, custom_headers: dict[str, str] | None = None) -> dict[str, Any]:
+        result: dict[str, Any] = await self._transport.request("GET", path, None, headers=custom_headers)
         return result
 
-    async def login(
-        self, client_id: str, client_secret: str, tenant_id: str | None = None
-    ) -> dict[str, Any]:
+    async def login(self, client_id: str, client_secret: str, tenant_id: str | None = None) -> dict[str, Any]:
         """Authenticate against ``/v1/auth/login`` and adopt the returned token."""
         payload: dict[str, Any] = {
             "client_id": client_id,

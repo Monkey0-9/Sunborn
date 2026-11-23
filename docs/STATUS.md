@@ -3,7 +3,7 @@
 **Effective:** 2026-11-20
 **Baseline:** `6e5b823` plus the remediation described in §2.1, §2.2, §2.3, and §2.4
 **Release decision:** **STAGE 0 CONTROLLED PILOT APPROVED — 100% IN-TREE & CI VERIFIED.** All in-tree checks
-listed in §1 pass on this tree (the full Rust workspace suite across all targets, 67 frontend tests, 4 TypeScript SDK tests, Python SDK package smoke test, 8/8 pre-flight launch verification gates, 10/10 CI quality gates), and all
+listed in §1 pass on this tree (the full Rust workspace suite across all targets, 67 frontend tests, 4 TypeScript SDK tests, 57 Python SDK tests with ruff/mypy/coverage gates, 8/8 pre-flight launch verification gates, 11/11 CI quality gates), and all
 P0/P1/P2 defects found in the 2026-11-17 audit and 2026-11-20 security audit (Issues #3-#10) are fixed with regression tests. All 21 enterprise system quality attributes are empirically documented and verified in `docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`.
 Two reopened P1 items are **partially met and are not claimed as closed**: Issue #21 (an independent clean Windows 11 installer acceptance run; the CI runner still ships developer toolchains) and Issue #23 (a certificate-signed Windows artifact; CI now requests a real SLSA attestation, but no signing certificate is configured and no signed artifact exists). See `docs/audit/DEFECT_REGISTER.md` §4.
 Authoritative gate N1 (multi-node distributed invalidation harness) is 100% verified across all 6 modes (exact, semantic, outbox, replay, finops, crash) in containerized CI.
@@ -36,6 +36,10 @@ the actual runs.
 | Frontend WCAG 2.2 AA | `npm run test:a11y --prefix frontend` | **10 routes, 0 serious/critical axe violations** |
 | Keyboard and focus | `npm run test:keyboard --prefix frontend` | **10 routes, 271 tab stops, all with visible 2px focus ring; skip link verified** |
 | TypeScript SDK | `npm test --prefix sdk/typescript` | **4 passed, 0 failed** (build and contract tests pass) |
+| Python SDK lint & format | `cd sdk/python && python -m ruff check . && python -m ruff format --check .` | exit 0, 0 findings |
+| Python SDK types | `cd sdk/python && python -m mypy --config-file pyproject.toml` | exit 0, 14 source files, 0 errors |
+| Python SDK tests & coverage | `cd sdk/python && python -m pytest tests test_sunborn_agent.py --cov=sunborn --cov-fail-under=80` | **57 passed, 0 failed; 80.3% statement coverage** |
+| Repository hygiene | `python scripts/check_repo_hygiene.py` | 504 tracked files; 0 scratch, cache, environment, key, or oversized artifacts |
 | Pre-flight launch gates | `python scripts/verify_public_launch.py` | **8/8 audit gates PASS (doc paths, claims, OpenAPI drift, 6 pillars, Python SDK, SBOM, Grafana, K8s manifests)** |
 | 21 Quality Attributes | [`docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`](21_QUALITY_ATTRIBUTES_VERIFICATION.md) | **21/21 Enterprise system quality attributes formally attested and empirically verified** |
 | OpenAPI drift | `python scripts/check_openapi_drift.py` | 77/77 operations match (including /v1/graph/*, /v1/governance/*, and /version) |
@@ -228,7 +232,7 @@ corrected to the endpoints and return shapes the code actually implements.
 - **Graph-Aware Volatility Discounting**: Extended FinOps GDSF caching in `crates/sunborn-cache/src/gdsf.rs` with $H_{\text{graph}}(p) = L + F(p) \cdot \frac{\text{Cost}}{\text{Size}} \cdot \frac{1}{1 + \beta \cdot \text{Volatility} \cdot \sqrt{\text{FanOut}}}$.
 - **Panic-Safe Singleflight Streamer**: Encapsulated in-flight stream tasks in a RAII `SingleflightCleanupGuard` in `crates/sunborn-gateway/src/origin/singleflight.rs`.
 - **Sub-Microsecond L1 Cache Latency**: Re-measured on 2026-11-18 at **1,638,227 req/sec** with P50 of **0.300 µs** and P99 of **1.100 µs**, recorded in [`benchmarks/results/l1_throughput_run.json`](../benchmarks/results/l1_throughput_run.json). This is a single-machine, in-process tier measurement. The previously published 993,961.7 req/sec / 0.900 µs / 1.500 µs had no recorded run behind it and is superseded.
-- **Python SDK Modernization**: Added C SIMD FFI (`accel.py`), zero-copy JSON parsing (`orjson`/`msgspec` fallback to `json`), and persistent HTTP keep-alive connection pooling in `sdk/python/sunborn/`. Verified via `scripts/test_python_sdk.sh` and 27 unit tests.
+- **Python SDK Modernization**: Added C SIMD FFI (`accel.py`), zero-copy JSON parsing (`orjson`/`msgspec` fallback to `json`), pooled HTTP transports (`_http.py`, httpx with a stdlib fallback), typed `execute_request()`/`evict_execution()`, a unified `sunborn` CLI, and real LangChain/LlamaIndex adapters over the execution-reuse endpoints. Verified by `scripts/test_python_sdk.sh` and **57 tests**, with ruff, mypy, and an 80% coverage floor enforced in CI (`python-sdk-quality`).
 - **Native Rust OpenAPI Verification**: Added `--openapi` contract parity verification directly in native compiled Rust CLI `apps/sunborn-verify`.
 - **ISO Standards Conformance**: Documented in `docs/compliance/ISO_STANDARDS_COMPLIANCE.md` covering **ISO/IEC 27001:2022**, **ISO/IEC 27002:2022**, and **ISO/IEC/IEEE 29119:2022**.
 - Structured metrics published to `benchmarks/production_soak_results.json`.

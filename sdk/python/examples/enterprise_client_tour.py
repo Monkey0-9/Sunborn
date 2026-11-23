@@ -62,7 +62,9 @@ def run_tour(base_url: str, api_key: str, dry_run: bool):
     if dry_run:
         print("\n[DRY RUN] Executing synthetic verification of client methods...")
         # Verify context digest computation
-        digest = compute_context_digest("gpt-4o", system_prompt="Enterprise Underwriting Assistant", rag_chunk_ids=["doc_policy_2026_q3"])
+        digest = compute_context_digest(
+            "gpt-4o", system_prompt="Enterprise Underwriting Assistant", rag_chunk_ids=["doc_policy_2026_q3"]
+        )
         assert len(digest) == 64, "Expected valid sha256 hex string"
         print(f"   Deterministic context digest derivation: {digest[:24]}... (VERIFIED)")
 

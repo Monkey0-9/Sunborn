@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Python SDK quality & transport**: pooled httpx transport with a stdlib
+  fallback, typed `execute_request()` / `evict_execution()`, a real `sunborn`
+  CLI, and LangChain/LlamaIndex adapters backed by the `/v1/execution/*`
+  endpoints. 57 tests cover the loopback transport, retries, streaming
+  rejection, CLI behavior, and adapter payloads. CI enforces ruff, mypy, and an
+  80% coverage floor in the new `python-sdk-quality` job.
+- **Repository hygiene gate**: `scripts/check_repo_hygiene.py` fails when the
+  tracked tree contains caches, scratch files, `.env`/key material, or a file
+  over 5 MiB. It is wired into `scripts/verify.sh`, `scripts/verify.ps1`, and
+  the CI documentation job.
 - **Multi-relational Knowledge Graph & Blast-Radius Traversal**:
   Integrated `GraphifyKnowledgeGraph` (`crates/sunborn-invalidation/src/graphify_graph.rs`) with typed entities (`graphify_model.rs`), microsecond reverse blast-radius traversal (`affected.rs`), asynchronous LPA community clustering (`clustering.rs`), bottleneck/cycle analytics (`graph_analytics.rs`), and token-budgeted subgraph query engine (`query.rs`) into `GraphMemoryCache`.
 - **Public Launch Package & Free-Tier Quota Architecture**:
@@ -49,6 +59,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   requests across 16 concurrent workers and publishing `benchmarks/production_soak_results.json`.
 
 ### Fixed
+- **Python SDK contract & adapter correctness**: `/v1/execution/results` and
+  `/v1/execution/evict` in the OpenAPI contract now match the Rust request
+  structs and the admin-only eviction rule. The LangChain/LlamaIndex adapters
+  store the supplied generations and evict through the execution-reuse
+  endpoints instead of issuing placeholder chat calls and swallowing errors.
+- **Python SDK documentation truth**: the SDK README documents the fields
+  `execute_request()` actually returns (`content`, `tier`, `cached`, `usage`)
+  instead of `tokens_avoided`/`cost_savings_usd`, which the gateway does not emit.
+- **SBOM verification**: `scripts/generate_sbom.py` gained a real `--check`
+  mode and no longer prints "verified" when it could not read the existing
+  artifact; the deterministic SBOM metadata version now follows `Cargo.toml`.
 - **PostgreSQL advisory lock session isolation & startup serialization**:
   - Bound `pg_advisory_lock` and `pg_advisory_unlock` to a dedicated exclusive connection `lock_conn` acquired from `PgPool` during schema migration, ensuring lock acquisition and release operate on the exact same backend session. This eliminates the PostgreSQL notice `you don't own a lock of type ExclusiveLock`, prevents advisory lock leaks, and resolves the startup deadlock in `scripts/test_distributed_invalidation.sh`.
   - Implemented `pool_init_lock` double-checked locking in `PostgresDatabaseStore::get_pool` to serialize connection pool establishment and prevent concurrent in-process tasks from racing migrations.

@@ -66,8 +66,10 @@ with Sunborn(
         )
         print(f"Content: {response.content}")
         print(f"Cache Tier: {response.tier}")
-        print(f"Tokens Avoided: {response.tokens_avoided}")
-        print(f"Cost Savings (USD): ${response.cost_savings_usd:.4f}")
+        print(f"Cached: {response.cached}")
+        print(f"Tokens Used: {response.usage.get('total_tokens', 'n/a')}")
+        # FinOps savings are reported by the gateway, not inferred by the SDK:
+        # savings = client.get_finops_report()
     except AuthenticationError as e:
         print(f"Authentication failed: {e}")
     except SunbornError as e:

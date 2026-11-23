@@ -11,7 +11,8 @@ and refuses to serve it when the reuse cannot be proven safe.*
 [![Rust tests](https://img.shields.io/badge/Rust%20tests-395%20passing-brightgreen.svg)](docs/STATUS.md)
 [![Frontend tests](https://img.shields.io/badge/Frontend%20tests-67%20passing-brightgreen.svg)](docs/STATUS.md)
 [![TypeScript SDK](https://img.shields.io/badge/TypeScript%20SDK-4%20passing-brightgreen.svg)](docs/STATUS.md)
-[![CI/CD Quality Gates](https://img.shields.io/badge/CI%2FCD%20Gates-10%2F10%20Passing-brightgreen.svg)](https://github.com/Monkey0-9/Sunborn/actions)
+[![Python SDK](https://img.shields.io/badge/Python%20SDK-57%20passing%20%C2%B7%2080%25%20coverage-brightgreen.svg)](docs/STATUS.md)
+[![CI/CD Quality Gates](https://img.shields.io/badge/CI%2FCD%20Gates-11%2F11%20Passing-brightgreen.svg)](https://github.com/Monkey0-9/Sunborn/actions)
 [![Verification gates](https://img.shields.io/badge/Verification%20gates-12%2F12-brightgreen.svg)](scripts/verify.sh)
 [![Launch gates](https://img.shields.io/badge/Launch%20gates-8%2F8%20passing-brightgreen.svg)](scripts/verify_public_launch.py)
 [![L1 exact cache](https://img.shields.io/badge/L1%20exact%20cache-1.64M%20req%2Fs%20%C2%B7%200.3%C2%B5s%20P50-blueviolet.svg)](benchmarks/results/l1_throughput_run.json)
@@ -262,7 +263,7 @@ each artifact; the ratios between configurations travel better than the absolute
 | **Gateway stack, 16 concurrent workers** | 11,116.0 req/s · P50 1.368 ms · P99 2.398 ms over 10,000 requests · 0 failures | [`benchmarks/production_soak_results.json`](benchmarks/production_soak_results.json) |
 | **Guardrail benchmark, N = 320** | 97 correct reuses · **0 false hits on 200 hard negatives** · precision 100% [95% Wilson 96.2–100] · recall 80.8% [72.9–86.9] | [`research/results/heldout_generalization_run.json`](research/results/heldout_generalization_run.json) |
 | **Comparative evaluation, 25 queries** | 32.0% verified hit rate · 0.0% false hits · 0.0% stale reads · 31.97% net spend reduction | [`benchmarks/results/competitive_benchmark_run.json`](benchmarks/results/competitive_benchmark_run.json) |
-| **Test surface** | 395 Rust + 67 frontend + 4 TypeScript SDK + 27 Python tests · 10 routes with 0 serious/critical axe violations · 271 verified tab stops | [`docs/STATUS.md`](docs/STATUS.md) |
+| **Test surface** | 395 Rust + 67 frontend + 4 TypeScript SDK + 57 Python tests · 10 routes with 0 serious/critical axe violations · 271 verified tab stops | [`docs/STATUS.md`](docs/STATUS.md) |
 | **21 Enterprise Quality Attributes** | 21/21 verified with architectural invariants, formal proofs, and audit commands | [`docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`](docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md) |
 | **8 In-Tree Pre-Flight Launch Gates** | 8/8 automated gates verified passing in strict mode | [`scripts/verify_public_launch.py`](scripts/verify_public_launch.py) |
 | **Formal models** | 3 TLC configurations, no errors (2,245 / 601 / 21 states explored) | [`formal/`](formal/), [`scripts/run_tlaplus.sh`](scripts/run_tlaplus.sh) |
@@ -569,7 +570,7 @@ settled ledger row, zero dangling reservations).
 | **DPDP Act 2023 (India)** | Section 6 Notice & Consent management with salted SHA-256 zero-PII audit trail, Section 12(3) Right to Erasure / Right to be Forgotten with cryptographic purge across exact cache, vector memory, and lineage graph. Endpoints: `POST /v1/governance/dpdp/consent`, `POST /v1/governance/dpdp/erasure`, `GET /v1/governance/dpdp/audit`. |
 | **CERT-In Cyber Security Directions** | Rule 20(1) Annexure 1 incident logging format with NTP-synchronized microsecond timestamps, 6-hour reporting window format. Endpoint: `GET /v1/governance/cert-in/incidents`. |
 | **RBI Data Localization Directive** | Verified data residency in sovereign Indian cloud regions (`ap-south-1` Mumbai & `ap-south-2` Hyderabad), refusing off-shore data replication. Endpoint: `GET /v1/governance/rbi/localization`. |
-| **ISO/IEC/IEEE 29119** | Test process and evidence: 12-gate build pipeline, 8-gate launch verification, 493 automated tests (395 Rust + 67 frontend + 27 Python SDK + 4 TS SDK), TLA+ models. |
+| **ISO/IEC/IEEE 29119** | Test process and evidence: 12-gate build pipeline, 8-gate launch verification, 523 automated tests (395 Rust + 67 frontend + 57 Python SDK + 4 TS SDK), TLA+ models. |
 | **IEEE 1012 / 730 / 42010 / 754** | Verification and validation gate, zero-warning lint policy, as-built architecture description, strict floating-point edge handling with micro-unit ledger. |
 | **NIST SP 800-218 (SSDF)** | Deterministic CycloneDX SBOM (369 components), `cargo audit` in CI, pinned toolchain. |
 | **OWASP API Top 10 / ASVS L3** | Route-by-route authorization contract enforced in the build, CSRF origin pinning, path-traversal rejection, rate-limit lockout, STRIDE threat model in [`docs/security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md`](docs/security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md). |
@@ -655,7 +656,7 @@ bash scripts/verify.sh          # or: powershell -File scripts/verify.ps1
 [1/12]  Rust workspace tests & clippy ................ PASS  (395 tests, 0 warnings)
 [2/12]  Frontend production bundle ................... PASS  (Next.js 15)
 [3/12]  Frontend test suite .......................... PASS  (67 tests)
-[4/12]  Python SDK package & clean install ........... PASS  (27 tests)
+[4/12]  Python SDK package & clean install ........... PASS  (57 tests, ruff + mypy + coverage)
 [5/12]  OpenAPI 3.1 drift ............................ PASS  (77 operations matched)
 [6/12]  Helm chart lint & schema ..................... PASS (or via pre-flight if helm is absent)
 [7/12]  Multi-container stack pre-flight ............. PASS
@@ -712,7 +713,7 @@ python scripts/verify_public_launch.py --strict
 | | |
 | :--- | :--- |
 | **Release verdict** | **STAGE 0 PILOT APPROVED — 100% In-Tree & CI Verified**; Stage 1 Private Beta & Stage 2 Public Launch Gated on External Staging ([`docs/launch/05_PRELAUNCH_CHECKLIST.md`](docs/launch/05_PRELAUNCH_CHECKLIST.md)) |
-| **Verification status** | **493 automated tests passing** (395 Rust + 67 frontend + 27 Python SDK + 4 TS SDK), 10 routes tested (0 axe violations, 271 tab stops), 10/10 CI quality gates passed, 8/8 pre-flight launch gates passed |
+| **Verification status** | **523 automated tests passing** (395 Rust + 67 frontend + 57 Python SDK + 4 TS SDK), 10 routes tested (0 axe violations, 271 tab stops), 11/11 CI quality gates passed, 8/8 pre-flight launch gates passed |
 | **Security mode** | Fail-closed in production; fail-open only in explicit `development` |
 | **Known high/critical CVEs** | 0 |
 | **Current-status authority** | [`docs/STATUS.md`](docs/STATUS.md) — supersedes every badge, score, or readiness claim in older audit documents |

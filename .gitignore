@@ -63,7 +63,6 @@ linear_data.json
 system_inventory.md
 data/
 **/data/
-sbom.cyclonedx.json
 research/results/capacity_soak_report.json
 research/results/baseline_backup/
 

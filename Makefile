@@ -3,7 +3,7 @@ ifeq ($(OS),Windows_NT)
 PYTHON := python
 endif
 
-.PHONY: all build test check fmt lint run clean help docker-up docker-down brokers dev smoke test-frontend build-frontend test-sdk lint-helm verify-stack reproduce verify-all doctor config-check
+.PHONY: all build test check fmt lint run clean help docker-up docker-down brokers dev smoke test-frontend build-frontend test-sdk lint-python typecheck-python test-python verify-python hygiene lint-helm verify-stack reproduce verify-all doctor config-check
 
 all: check test
 
@@ -17,6 +17,11 @@ help:
 	@echo "  make test-frontend - Run frontend test suite (BFF + E2E)"
 	@echo "  make build-frontend- Build Next.js production bundle"
 	@echo "  make test-sdk      - Run Python SDK test suites (sync + async)"
+	@echo "  make lint-python   - Ruff lint and format check for the Python SDK"
+	@echo "  make typecheck-python - Mypy check for the Python SDK"
+	@echo "  make test-python   - Pytest with coverage floor for the Python SDK"
+	@echo "  make verify-python - Lint, typecheck, and test the Python SDK"
+	@echo "  make hygiene       - Fail if the tracked tree contains scratch/secrets"
 	@echo "  make lint-helm     - Run Helm chart lint and schema checks"
 	@echo "  make verify-stack  - Run multi-container live stack pre-flight"
 	@echo "  make reproduce     - Run research reproducibility suite"
@@ -46,6 +51,21 @@ test-sdk:
 	PYTHONPATH=sdk/python $(PYTHON) -m unittest sdk/python/test_sunborn_agent.py
 	PYTHONPATH=sdk/python $(PYTHON) -m unittest discover -s sdk/python/tests -v
 
+lint-python:
+	cd sdk/python && $(PYTHON) -m ruff check .
+	cd sdk/python && $(PYTHON) -m ruff format --check .
+
+typecheck-python:
+	cd sdk/python && $(PYTHON) -m mypy --config-file pyproject.toml
+
+test-python:
+	cd sdk/python && $(PYTHON) -m pytest tests test_sunborn_agent.py -q --cov=sunborn --cov-fail-under=80
+
+verify-python: lint-python typecheck-python test-python
+
+hygiene:
+	$(PYTHON) scripts/check_repo_hygiene.py
+
 lint-helm:
 	helm lint deploy/helm/sunborn --set secrets.existingSecret="ci-validation"
 
@@ -55,7 +75,7 @@ verify-stack:
 reproduce:
 	bash research/reproduce.sh
 
-verify-all: check test test-frontend build-frontend test-sdk lint-helm verify-stack reproduce
+verify-all: check test test-frontend build-frontend test-sdk verify-python hygiene lint-helm verify-stack reproduce
 
 check:
 	cargo check --workspace

@@ -75,12 +75,8 @@ class SunbornLangChainCache(BaseCache):
         self.ttl_secs = ttl_secs
         self.fail_closed = fail_closed
 
-    def _plan(
-        self, prompt: str, llm_string: str
-    ) -> tuple[str, dict[str, Any], list[dict[str, Any]]]:
-        cache_key = hashlib.sha256(
-            f"{prompt}\x00{llm_string}".encode()
-        ).hexdigest()
+    def _plan(self, prompt: str, llm_string: str) -> tuple[str, dict[str, Any], list[dict[str, Any]]]:
+        cache_key = hashlib.sha256(f"{prompt}\x00{llm_string}".encode()).hexdigest()
         arguments = {
             "cache_key": cache_key,
             "prompt": prompt,
@@ -123,9 +119,7 @@ class SunbornLangChainCache(BaseCache):
             return None
         return [Generation(text=text) for text in texts]
 
-    def update(
-        self, prompt: str, llm_string: str, return_val: Sequence[Generation]
-    ) -> None:
+    def update(self, prompt: str, llm_string: str, return_val: Sequence[Generation]) -> None:
         """Store the generations that were just produced."""
         if not return_val:
             return
@@ -152,14 +146,10 @@ class SunbornLangChainCache(BaseCache):
             if self.fail_closed:
                 raise
 
-    async def alookup(
-        self, prompt: str, llm_string: str
-    ) -> Sequence[Generation] | None:
+    async def alookup(self, prompt: str, llm_string: str) -> Sequence[Generation] | None:
         return await asyncio.to_thread(self.lookup, prompt, llm_string)
 
-    async def aupdate(
-        self, prompt: str, llm_string: str, return_val: Sequence[Generation]
-    ) -> None:
+    async def aupdate(self, prompt: str, llm_string: str, return_val: Sequence[Generation]) -> None:
         await asyncio.to_thread(self.update, prompt, llm_string, return_val)
 
     async def aclear(self, **kwargs: Any) -> None:

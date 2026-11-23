@@ -30,27 +30,24 @@ class TestOpenAIDropinClient(unittest.TestCase):
     @patch("urllib.request.urlopen")
     def test_chat_completions_create_success(self, mock_urlopen):
         mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({
-            "id": "chatcmpl-12345",
-            "object": "chat.completion",
-            "created": 1677652288,
-            "model": "gpt-4o",
-            "sunborn_cached": True,
-            "sunborn_tier": "c1_exact",
-            "choices": [{
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": "Semantic caching reduces latency by 90%."
-                },
-                "finish_reason": "stop"
-            }],
-            "usage": {
-                "prompt_tokens": 12,
-                "completion_tokens": 10,
-                "total_tokens": 22
+        mock_resp.read.return_value = json.dumps(
+            {
+                "id": "chatcmpl-12345",
+                "object": "chat.completion",
+                "created": 1677652288,
+                "model": "gpt-4o",
+                "sunborn_cached": True,
+                "sunborn_tier": "c1_exact",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "Semantic caching reduces latency by 90%."},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 12, "completion_tokens": 10, "total_tokens": 22},
             }
-        }).encode("utf-8")
+        ).encode("utf-8")
         mock_urlopen.return_value.__enter__.return_value = mock_resp
 
         client = OpenAI(api_key="sk-test", base_url="http://localhost:8080/v1")
@@ -78,15 +75,12 @@ class TestOpenAIDropinClient(unittest.TestCase):
             code=401,
             msg="Unauthorized",
             hdrs={},
-            fp=io.BytesIO(b'{"error": "Invalid API key"}')
+            fp=io.BytesIO(b'{"error": "Invalid API key"}'),
         )
         mock_urlopen.side_effect = err_401
         client = OpenAI()
         with self.assertRaises(SunbornAuthError):
-            client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "user", "content": "test"}]
-            )
+            client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": "test"}])
 
         # 429 Rate Limit
         err_429 = HTTPError(
@@ -94,14 +88,11 @@ class TestOpenAIDropinClient(unittest.TestCase):
             code=429,
             msg="Too Many Requests",
             hdrs={},
-            fp=io.BytesIO(b'{"error": "Rate limit exceeded"}')
+            fp=io.BytesIO(b'{"error": "Rate limit exceeded"}'),
         )
         mock_urlopen.side_effect = err_429
         with self.assertRaises(SunbornRateLimitError):
-            client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "user", "content": "test"}]
-            )
+            client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": "test"}])
 
 
 class TestAnthropicDropinClient(unittest.TestCase):
@@ -113,30 +104,24 @@ class TestAnthropicDropinClient(unittest.TestCase):
     @patch("urllib.request.urlopen")
     def test_messages_create_success(self, mock_urlopen):
         mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({
-            "id": "msg_01XFDUDYJgAACzvnptvVoYEL",
-            "type": "message",
-            "role": "assistant",
-            "model": "claude-3-5-sonnet-20241022",
-            "content": [{
-                "type": "text",
-                "text": "Hello! I am Claude through Sunborn Gateway."
-            }],
-            "stop_reason": "end_turn",
-            "sunborn_cached": True,
-            "sunborn_tier": "c1_exact",
-            "usage": {
-                "input_tokens": 15,
-                "output_tokens": 12
+        mock_resp.read.return_value = json.dumps(
+            {
+                "id": "msg_01XFDUDYJgAACzvnptvVoYEL",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-3-5-sonnet-20241022",
+                "content": [{"type": "text", "text": "Hello! I am Claude through Sunborn Gateway."}],
+                "stop_reason": "end_turn",
+                "sunborn_cached": True,
+                "sunborn_tier": "c1_exact",
+                "usage": {"input_tokens": 15, "output_tokens": 12},
             }
-        }).encode("utf-8")
+        ).encode("utf-8")
         mock_urlopen.return_value.__enter__.return_value = mock_resp
 
         client = Anthropic(api_key="sk-ant-test")
         msg = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            messages=[{"role": "user", "content": "Hello!"}],
-            max_tokens=100
+            model="claude-3-5-sonnet-20241022", messages=[{"role": "user", "content": "Hello!"}], max_tokens=100
         )
 
         self.assertIsInstance(msg, MessageResponse)

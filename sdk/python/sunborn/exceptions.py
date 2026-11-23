@@ -21,21 +21,25 @@ class SunbornError(RuntimeError):
 
 class SunbornConnectionError(ConnectionError, SunbornError):
     """Raised when the client cannot establish a network connection to Sunborn Gateway (inherits from ConnectionError)."""
+
     pass
 
 
 class SunbornAuthError(SunbornError):
     """Raised when credentials are missing, invalid, or expired (HTTP 401)."""
+
     pass
 
 
 class SunbornForbiddenError(SunbornError):
     """Raised when an operation lacks administrative or tenant privileges (HTTP 403)."""
+
     pass
 
 
 class SunbornNotFoundError(SunbornError):
     """Raised when a requested resource or cache entry does not exist (HTTP 404)."""
+
     pass
 
 
@@ -54,11 +58,13 @@ class SunbornRateLimitError(SunbornError):
 
 class SunbornValidationError(SunbornError):
     """Raised when request payload fails schema validation or boundary constraints (HTTP 400)."""
+
     pass
 
 
 class SunbornServerError(SunbornError):
     """Raised when Sunborn Gateway encounters an internal error (HTTP 5xx)."""
+
     pass
 
 

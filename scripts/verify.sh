@@ -67,10 +67,30 @@ echo "[3/12] Running Frontend & TypeScript SDK Test Suite..."
 "${NPM_BIN}" run build --prefix sdk/typescript
 "${NPM_BIN}" test --prefix sdk/typescript
 
-echo "[4/12] Running Python SDK Packaging & Clean Installation Verification..."
+echo "[4/12] Running Python SDK Packaging, Lint, Types & Tests..."
 bash scripts/test_python_sdk.sh
 PYTHONPATH=sdk/python "${PYTHON_BIN}" -m unittest sdk/python/test_sunborn_agent.py
 PYTHONPATH=sdk/python "${PYTHON_BIN}" -m unittest discover -s sdk/python/tests -v
+
+# Python quality gates are enforced in CI. Here they run when the tools are
+# installed locally and are skipped with an explicit note otherwise, so the
+# master pipeline never pretends a missing tool passed.
+if (cd sdk/python && "${PYTHON_BIN}" -m ruff --version >/dev/null 2>&1); then
+    (cd sdk/python && "${PYTHON_BIN}" -m ruff check .)
+    (cd sdk/python && "${PYTHON_BIN}" -m ruff format --check .)
+else
+    echo "  ℹ ruff not installed; CI enforces Python lint/format"
+fi
+if (cd sdk/python && "${PYTHON_BIN}" -m mypy --version >/dev/null 2>&1); then
+    (cd sdk/python && "${PYTHON_BIN}" -m mypy --config-file pyproject.toml)
+else
+    echo "  ℹ mypy not installed; CI enforces Python types"
+fi
+if (cd sdk/python && "${PYTHON_BIN}" -m pytest --version >/dev/null 2>&1); then
+    (cd sdk/python && "${PYTHON_BIN}" -m pytest tests test_sunborn_agent.py -q --cov=sunborn --cov-fail-under=80)
+else
+    echo "  ℹ pytest not installed; CI enforces Python coverage"
+fi
 
 echo "[5/12] Validating OpenAPI 3.1 Specification Drift..."
 "${PYTHON_BIN}" scripts/check_openapi_drift.py
@@ -100,7 +120,8 @@ echo "[10/12] Running Graph Storage & Causal Invalidation Policy Benchmark..."
 echo "[11/12] Generating deterministic CycloneDX SBOM..."
 "${PYTHON_BIN}" scripts/generate_sbom.py
 
-echo "[12/12] Strict Documentation & Attestation CLI Verification..."
+echo "[12/12] Strict Documentation, Hygiene & Attestation CLI Verification..."
+"${PYTHON_BIN}" scripts/check_repo_hygiene.py
 "${PYTHON_BIN}" scripts/verify_doc_paths.py --strict
 "${PYTHON_BIN}" scripts/check_launch_docs.py
 "${PYTHON_BIN}" scripts/check_runbook_endpoints.py

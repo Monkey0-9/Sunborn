@@ -23,9 +23,22 @@ _lib_paths_checked = []
 # Search for the compiled shared library in build target directories and standard locations
 _repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 _candidates = [
-    os.path.join(os.path.dirname(__file__), "sunborn_simd_accelerator.dll" if sys.platform == "win32" else "libsunborn_simd_accelerator.so"),
-    os.path.join(_repo_root, "target", "release", "sunborn_simd_accelerator.dll" if sys.platform == "win32" else "libsunborn_simd_accelerator.so"),
-    os.path.join(_repo_root, "target", "debug", "sunborn_simd_accelerator.dll" if sys.platform == "win32" else "libsunborn_simd_accelerator.so"),
+    os.path.join(
+        os.path.dirname(__file__),
+        "sunborn_simd_accelerator.dll" if sys.platform == "win32" else "libsunborn_simd_accelerator.so",
+    ),
+    os.path.join(
+        _repo_root,
+        "target",
+        "release",
+        "sunborn_simd_accelerator.dll" if sys.platform == "win32" else "libsunborn_simd_accelerator.so",
+    ),
+    os.path.join(
+        _repo_root,
+        "target",
+        "debug",
+        "sunborn_simd_accelerator.dll" if sys.platform == "win32" else "libsunborn_simd_accelerator.so",
+    ),
 ]
 
 for _path in _candidates:
@@ -34,16 +47,28 @@ for _path in _candidates:
         try:
             _c_lib = ctypes.CDLL(_path)
             # Setup signatures
-            _c_lib.sunborn_c_cosine_similarity.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_size_t]
+            _c_lib.sunborn_c_cosine_similarity.argtypes = [
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_size_t,
+            ]
             _c_lib.sunborn_c_cosine_similarity.restype = ctypes.c_float
 
-            _c_lib.sunborn_c_vector_dot_product.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_size_t]
+            _c_lib.sunborn_c_vector_dot_product.argtypes = [
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_size_t,
+            ]
             _c_lib.sunborn_c_vector_dot_product.restype = ctypes.c_float
 
             _c_lib.sunborn_c_vector_l2_norm.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_size_t]
             _c_lib.sunborn_c_vector_l2_norm.restype = ctypes.c_float
 
-            _c_lib.sunborn_c_vector_euclidean_distance.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_size_t]
+            _c_lib.sunborn_c_vector_euclidean_distance.argtypes = [
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.POINTER(ctypes.c_float),
+                ctypes.c_size_t,
+            ]
             _c_lib.sunborn_c_vector_euclidean_distance.restype = ctypes.c_float
             break
         except Exception:

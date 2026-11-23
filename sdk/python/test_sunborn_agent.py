@@ -59,9 +59,7 @@ class TestSunbornClient(unittest.TestCase):
         self.assertEqual(client1.base_url, "http://localhost:8080/v1")
         client1.close()
 
-        client2 = SunbornClient(
-            base_url="http://localhost:8080/v1/", api_key="test-key"
-        )
+        client2 = SunbornClient(base_url="http://localhost:8080/v1/", api_key="test-key")
         self.assertEqual(client2.base_url, "http://localhost:8080/v1")
         client2.close()
 
@@ -85,12 +83,8 @@ class TestSunbornClient(unittest.TestCase):
             self.assertEqual(res["choices"][0]["message"]["content"], "ok")
             request = server.last_request
             self.assertEqual(request.path, "/v1/chat/completions")
-            self.assertEqual(
-                request.headers.get("x-sunborn-cache-policy"), "allow-stochastic"
-            )
-            self.assertEqual(
-                request.headers.get("x-sunborn-context-digest"), "abcd1234efgh5678"
-            )
+            self.assertEqual(request.headers.get("x-sunborn-cache-policy"), "allow-stochastic")
+            self.assertEqual(request.headers.get("x-sunborn-context-digest"), "abcd1234efgh5678")
             self.assertEqual(request.headers.get("x-api-key"), "test-key")
             body = request.json()
             self.assertEqual(body["model"], "gpt-4o")
@@ -147,9 +141,7 @@ class TestSunbornClient(unittest.TestCase):
             self.assertEqual(request.json()["tool_name"], "langchain-cache")
 
     def test_error_handling_http_error(self):
-        with StubServer(
-            lambda _req: (401, {"detail": "invalid_api_key"})
-        ) as server:
+        with StubServer(lambda _req: (401, {"detail": "invalid_api_key"})) as server:
             with SunbornClient(base_url=server.base_url, api_key="bad-key") as client:
                 with self.assertRaises(SunbornAuthError) as ctx:
                     client.get_finops_report()
@@ -241,9 +233,7 @@ class TestSunbornClient(unittest.TestCase):
 
             async def run():
                 async with client:
-                    res = await client.chat_completion(
-                        model="gpt-4o", prompt="Async test"
-                    )
+                    res = await client.chat_completion(model="gpt-4o", prompt="Async test")
                     self.assertEqual(res["choices"][0]["message"]["content"], "ok")
                 self.assertTrue(client.is_closed)
 
@@ -266,16 +256,12 @@ class TestSunbornClient(unittest.TestCase):
 
             async def run():
                 async with client:
-                    res = await client.login(
-                        client_id="cid", client_secret="csecret"
-                    )
+                    res = await client.login(client_id="cid", client_secret="csecret")
                     self.assertEqual(res["access_token"], "token-123")
                     self.assertEqual(client.api_key, "token-123")
                     self.assertEqual(client.tenant_id, "t-1")
                     self.assertEqual(client.application_id, "app-1")
-                    chat = await client.chat_completion(
-                        model="gpt-4o", prompt="after login"
-                    )
+                    chat = await client.chat_completion(model="gpt-4o", prompt="after login")
                     self.assertEqual(chat["choices"][0]["message"]["content"], "ok")
 
             asyncio.run(run())
@@ -291,6 +277,12 @@ class TestSunbornClient(unittest.TestCase):
 
         cd4 = compute_context_digest("gpt-4o", "sys", ["chunk_a", "chunk_c"])
         self.assertNotEqual(cd1, cd4)
+
+    def test_compute_context_digest_without_system_or_chunks(self):
+        empty = compute_context_digest("gpt-4o")
+        self.assertEqual(len(empty), 64)
+        self.assertNotEqual(empty, compute_context_digest("gpt-4o", system_prompt="sys"))
+        self.assertNotEqual(empty, compute_context_digest("gpt-4o", rag_chunk_ids=["chunk"]))
 
 
 class TestSunbornToolDecorator(unittest.TestCase):
@@ -342,9 +334,7 @@ class TestSunbornToolDecorator(unittest.TestCase):
         client = MagicMock(spec=SunbornClient)
         client.plan_execution_dag.side_effect = RuntimeError("Network partition")
 
-        @sunborn_tool(
-            name="strict_tool", policy=FallbackPolicy.FAIL_CLOSED, client=client
-        )
+        @sunborn_tool(name="strict_tool", policy=FallbackPolicy.FAIL_CLOSED, client=client)
         def strict_calc():
             return 100
 
