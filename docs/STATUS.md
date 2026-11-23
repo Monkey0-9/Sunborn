@@ -3,7 +3,7 @@
 **Effective:** 2026-11-20
 **Baseline:** `6e5b823` plus the remediation described in §2.1, §2.2, §2.3, and §2.4
 **Release decision:** **STAGE 0 CONTROLLED PILOT APPROVED — 100% IN-TREE & CI VERIFIED.** All in-tree checks
-listed in §1 pass on this tree (395 Rust tests, 67 frontend tests, 4 TypeScript SDK tests, Python SDK package smoke test, 8/8 pre-flight launch verification gates, 10/10 CI quality gates), and all
+listed in §1 pass on this tree (the full Rust workspace suite across all targets, 67 frontend tests, 4 TypeScript SDK tests, Python SDK package smoke test, 8/8 pre-flight launch verification gates, 10/10 CI quality gates), and all
 P0/P1/P2 defects found in the 2026-11-17 audit and 2026-11-20 security audit (Issues #3-#10) are fixed with regression tests. All 21 enterprise system quality attributes are empirically documented and verified in `docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`.
 Two reopened P1 items are **partially met and are not claimed as closed**: Issue #21 (an independent clean Windows 11 installer acceptance run; the CI runner still ships developer toolchains) and Issue #23 (a certificate-signed Windows artifact; CI now requests a real SLSA attestation, but no signing certificate is configured and no signed artifact exists). See `docs/audit/DEFECT_REGISTER.md` §4.
 Authoritative gate N1 (multi-node distributed invalidation harness) is 100% verified across all 6 modes (exact, semantic, outbox, replay, finops, crash) in containerized CI.

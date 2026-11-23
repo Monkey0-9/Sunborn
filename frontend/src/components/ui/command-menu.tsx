@@ -254,7 +254,7 @@ export function CommandMenu() {
 
         {/* Footer */}
         <div className="px-4 py-2.5 border-t border-white/[0.08] bg-slate-950/80 flex items-center justify-between text-[11px] text-slate-400 font-mono">
-          <span>Sunborn FAANG Enterprise Navigation</span>
+          <span>Sunborn Enterprise Navigation</span>
           <div className="flex items-center gap-3">
             <span>
               <kbd className="px-1.5 py-0.5 rounded bg-white/[0.06] text-slate-400">↑↓</kbd> to
