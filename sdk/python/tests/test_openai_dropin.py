@@ -14,9 +14,9 @@ _sdk_root = str(Path(__file__).resolve().parent.parent)
 if _sdk_root not in sys.path:
     sys.path.insert(0, _sdk_root)
 
-from sunborn.openai import OpenAI, SunbornOpenAI, ChatCompletion
-from sunborn.anthropic import Anthropic, SunbornAnthropic, MessageResponse
+from sunborn.anthropic import Anthropic, MessageResponse, SunbornAnthropic
 from sunborn.exceptions import SunbornAuthError, SunbornRateLimitError, SunbornServerError
+from sunborn.openai import ChatCompletion, OpenAI, SunbornOpenAI
 
 
 class TestOpenAIDropinClient(unittest.TestCase):

@@ -77,7 +77,13 @@ class TestSunbornPackage(unittest.TestCase):
         self.assertEqual(len(digest1), 64)
 
     def test_c_simd_accel_functions(self):
-        from sunborn import fast_cosine_similarity, fast_dot_product, fast_l2_norm, fast_euclidean_distance, is_c_accelerator_available
+        from sunborn import (
+            fast_cosine_similarity,
+            fast_dot_product,
+            fast_euclidean_distance,
+            fast_l2_norm,
+            is_c_accelerator_available,
+        )
 
         v1 = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
         v2 = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]

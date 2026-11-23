@@ -27,11 +27,11 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import urllib.error
 import urllib.request
-from typing import Any, AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator
+from typing import Any, cast
 
 from .client import _fast_dumps, _fast_loads
 from .exceptions import SunbornConnectionError, raise_for_status
@@ -95,7 +95,7 @@ class ChatCompletion:
         )
 
     def __repr__(self) -> str:
-        content = self.choices[0].message.content if self.choices else ""
+        content = (self.choices[0].message.content or "") if self.choices else ""
         return f"ChatCompletion(id='{self.id}', model='{self.model}', cached={self.sunborn_cached}, tier='{self.sunborn_tier}', content='{content[:40]}...')"
 
 
@@ -204,7 +204,7 @@ class ChatResource:
 class OpenAI:
     """
     Drop-in OpenAI client compatible with `import openai; openai.OpenAI()`.
-    
+
     Routes seamlessly through Sunborn's high-speed Axum gateway with automatic
     semantic caching, FinOps token attribution, and causal graph invalidation.
     """
@@ -319,6 +319,14 @@ class OpenAI:
                         continue
 
 
+def _create_completion_sync(client: Any, **kwargs: Any) -> ChatCompletion:
+    return cast(ChatCompletion, client.chat.completions.create(**kwargs))
+
+
+def _stream_completion_sync(client: Any, **kwargs: Any) -> Iterator[ChatCompletionChunk]:
+    return cast(Iterator[ChatCompletionChunk], client.chat.completions.create(**kwargs))
+
+
 class AsyncChatCompletionsResource:
     def __init__(self, client: AsyncOpenAI) -> None:
         self._client = client
@@ -353,7 +361,8 @@ class AsyncChatCompletionsResource:
             )
 
         return await asyncio.to_thread(
-            self._client._sync_client.chat.completions.create,
+            _create_completion_sync,
+            self._client._sync_client,
             model=model,
             messages=messages,
             temperature=temperature,
@@ -369,7 +378,8 @@ class AsyncChatCompletionsResource:
 
     async def _stream_create(self, **kwargs: Any) -> AsyncIterator[ChatCompletionChunk]:
         sync_iter = await asyncio.to_thread(
-            self._client._sync_client.chat.completions.create,
+            _stream_completion_sync,
+            self._client._sync_client,
             stream=True,
             **kwargs,
         )
@@ -385,7 +395,7 @@ class AsyncChatResource:
 class AsyncOpenAI:
     """
     Drop-in AsyncOpenAI client compatible with `openai.AsyncOpenAI()`.
-    
+
     Provides non-blocking async execution for high-concurrency asyncio agent loops.
     """
 

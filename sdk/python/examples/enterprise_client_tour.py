@@ -88,7 +88,7 @@ def run_tour(base_url: str, api_key: str, dry_run: bool):
         print(f"   Request completed in {elapsed_ms:.2f} ms")
         print(f"   Model:     {resp.get('model', 'unknown')}")
         print(f"   Choices:   {len(resp.get('choices', []))}")
-        
+
         decision = resp.get("decision", {})
         cache_path = decision.get("cache_path", "none")
         print(f"   Gateway Decision Tier: {cache_path}")

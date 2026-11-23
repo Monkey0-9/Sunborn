@@ -13,6 +13,7 @@ sys.path.insert(0, _HERE)
 sys.path.insert(0, os.path.join(_HERE, "tests"))
 
 from fake_server import StubServer, json_response, sequence  # noqa: E402
+
 from sunborn_agent import (  # noqa: E402
     AsyncSunbornClient,
     FallbackPolicy,

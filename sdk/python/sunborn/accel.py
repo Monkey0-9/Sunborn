@@ -15,7 +15,7 @@ import ctypes
 import math
 import os
 import sys
-from typing import Sequence
+from collections.abc import Sequence
 
 _c_lib = None
 _lib_paths_checked = []
@@ -71,7 +71,7 @@ def fast_cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
     dot = 0.0
     norm_a = 0.0
     norm_b = 0.0
-    for x, y in zip(a[:n], b[:n]):
+    for x, y in zip(a[:n], b[:n], strict=True):
         dot += x * y
         norm_a += x * x
         norm_b += y * y
@@ -94,7 +94,7 @@ def fast_dot_product(a: Sequence[float], b: Sequence[float]) -> float:
         arr_b = c_arr_type(*b[:n])
         return float(_c_lib.sunborn_c_vector_dot_product(arr_a, arr_b, ctypes.c_size_t(n)))
 
-    return sum(x * y for x, y in zip(a[:n], b[:n]))
+    return sum(x * y for x, y in zip(a[:n], b[:n], strict=True))
 
 
 def fast_l2_norm(a: Sequence[float]) -> float:
@@ -123,4 +123,4 @@ def fast_euclidean_distance(a: Sequence[float], b: Sequence[float]) -> float:
         arr_b = c_arr_type(*b[:n])
         return float(_c_lib.sunborn_c_vector_euclidean_distance(arr_a, arr_b, ctypes.c_size_t(n)))
 
-    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a[:n], b[:n])))
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a[:n], b[:n], strict=True)))

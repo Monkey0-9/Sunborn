@@ -51,3 +51,34 @@ sunborn = ["py.typed"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = ["dist", "build", "*.egg-info"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "B", "UP"]
+# The formatter owns line length; E501 in lint would double-report it.
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test modules insert the SDK root on sys.path before importing it.
+"tests/*" = ["E402", "F401", "F841", "B011"]
+"examples/*" = ["E402"]
+"sunborn_agent.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["sunborn"]
+check_untyped_defs = true
+warn_unused_ignores = true
+no_implicit_optional = true
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["sunborn"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

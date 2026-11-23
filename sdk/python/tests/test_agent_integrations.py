@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from fake_server import StubServer, json_response  # noqa: E402
+
 from sunborn.client import SunbornClient  # noqa: E402
 from sunborn.integrations.langchain import Generation, SunbornLangChainCache  # noqa: E402
 from sunborn.integrations.llamaindex import SunbornLlamaIndexCache  # noqa: E402

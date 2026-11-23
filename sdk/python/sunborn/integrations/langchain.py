@@ -16,7 +16,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from ..client import SunbornClient
 
@@ -78,7 +79,7 @@ class SunbornLangChainCache(BaseCache):
         self, prompt: str, llm_string: str
     ) -> tuple[str, dict[str, Any], list[dict[str, Any]]]:
         cache_key = hashlib.sha256(
-            f"{prompt}\x00{llm_string}".encode("utf-8")
+            f"{prompt}\x00{llm_string}".encode()
         ).hexdigest()
         arguments = {
             "cache_key": cache_key,

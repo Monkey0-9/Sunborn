@@ -19,14 +19,6 @@ from .anthropic import (
 )
 from .async_client import AsyncSunbornClient
 from .client import SunbornAgentClient, SunbornClient, get_default_client, sunborn_tool
-from .openai import (
-    AsyncOpenAI,
-    AsyncSunbornOpenAI,
-    ChatCompletion,
-    ChatCompletionChunk,
-    OpenAI,
-    SunbornOpenAI,
-)
 from .exceptions import (
     SunbornAuthError,
     SunbornConnectionError,
@@ -43,6 +35,14 @@ from .models import (
     FallbackPolicy,
     ToolResultRecord,
     compute_context_digest,
+)
+from .openai import (
+    AsyncOpenAI,
+    AsyncSunbornOpenAI,
+    ChatCompletion,
+    ChatCompletionChunk,
+    OpenAI,
+    SunbornOpenAI,
 )
 
 __version__ = "1.0.0"

@@ -67,7 +67,7 @@ class SunbornClient:
             backoff_factor=backoff_factor,
         )
 
-    def __enter__(self) -> "SunbornClient":
+    def __enter__(self) -> SunbornClient:
         return self
 
     def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:

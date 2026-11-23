@@ -52,7 +52,7 @@ class AsyncSunbornClient:
             backoff_factor=backoff_factor,
         )
 
-    async def __aenter__(self) -> "AsyncSunbornClient":
+    async def __aenter__(self) -> AsyncSunbornClient:
         return self
 
     async def __aexit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:

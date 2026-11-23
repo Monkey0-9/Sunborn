@@ -27,11 +27,11 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import urllib.error
 import urllib.request
-from typing import Any, AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator
+from typing import Any, cast
 
 from .client import _fast_dumps, _fast_loads
 from .exceptions import SunbornConnectionError, raise_for_status
@@ -236,6 +236,14 @@ class Anthropic:
                         continue
 
 
+def _create_message_sync(client: Any, **kwargs: Any) -> MessageResponse:
+    return cast(MessageResponse, client.messages.create(**kwargs))
+
+
+def _stream_message_sync(client: Any, **kwargs: Any) -> Iterator[MessageStreamEvent]:
+    return cast(Iterator[MessageStreamEvent], client.messages.create(**kwargs))
+
+
 class AsyncMessagesResource:
     def __init__(self, client: AsyncAnthropic) -> None:
         self._client = client
@@ -262,7 +270,8 @@ class AsyncMessagesResource:
             )
 
         return await asyncio.to_thread(
-            self._client._sync_client.messages.create,
+            _create_message_sync,
+            self._client._sync_client,
             model=model,
             messages=messages,
             max_tokens=max_tokens,
@@ -274,7 +283,8 @@ class AsyncMessagesResource:
 
     async def _stream_create(self, **kwargs: Any) -> AsyncIterator[MessageStreamEvent]:
         sync_iter = await asyncio.to_thread(
-            self._client._sync_client.messages.create,
+            _stream_message_sync,
+            self._client._sync_client,
             stream=True,
             **kwargs,
         )

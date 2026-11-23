@@ -10,12 +10,16 @@ import json
 from typing import Any
 
 try:  # pragma: no cover - import-time capability probe
-    import orjson as _orjson
+    import orjson
+
+    _orjson: Any = orjson
 except ImportError:  # pragma: no cover
     _orjson = None
 
 try:  # pragma: no cover - import-time capability probe
-    import msgspec as _msgspec
+    import msgspec
+
+    _msgspec: Any = msgspec
 except ImportError:  # pragma: no cover
     _msgspec = None
 

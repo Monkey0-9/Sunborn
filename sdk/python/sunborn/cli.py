@@ -14,7 +14,6 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from typing import Any
 
 from .accel import is_c_accelerator_available
 from .client import SunbornClient, _fast_dumps, _fast_loads
@@ -150,7 +149,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
             latencies.append(latency)
             if resp.get("sunborn_cached"):
                 hits += 1
-        except Exception as e:
+        except Exception:
             latencies.append(args.timeout * 1000.0)
 
     total_time = time.time() - t_start

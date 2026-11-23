@@ -13,7 +13,7 @@ _sdk_root = str(Path(__file__).resolve().parent.parent)
 if _sdk_root not in sys.path:
     sys.path.insert(0, _sdk_root)
 
-from sunborn.cli import main, _wilson_score_interval
+from sunborn.cli import _wilson_score_interval, main
 
 
 class TestSunbornCLI(unittest.TestCase):

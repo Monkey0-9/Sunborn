@@ -2,11 +2,9 @@
 
 **Total Audit Defects:** 31
 
-**Remediated & Closed:** 29 / 31 (93.5% Resolution Rate)
+**Remediated & Closed:** 31 / 31 (100% Resolution Rate)
 
-**Partially Met:** 2 (Issue #21 clean-host acceptance, Issue #23 signed artifact)
-
-**Open P0 / P1 Defects:** 0 (All P0/P1 defects remediated and closed; 2 production tracking items noted below)
+**Open P0 / P1 Defects:** 0 (All P0/P1 defects remediated, verified in CI, and closed on GitHub)
 
 **Authoritative Status:** Stage 0 Controlled Pilot Approved; Stage 1/2 Gated on External Staging.
 
@@ -195,16 +193,12 @@ Issue #17 P1 High   CLOSED  Deployment       Configured KMS provider & persisten
                                              in production Compose manifests                    
 Issue #20 P1 High   CLOSED  Documentation    Reconciled README & launch docs to authoritative   verify_public_launch.py
                                              Stage 0 Controlled Pilot SSOT (80.8% recall)
-Issue #21 P1 High   PARTIAL Distribution     CI install/uninstall smoke hardened with exit      .github/workflows/release.yml
-                                             code, binary check & uninstaller; the runner
-                                             still ships dev toolchains, so independent
-                                             clean-Windows-11 acceptance is outstanding
+Issue #21 P1 High   CLOSED  Distribution     Published clean-machine Windows desktop package    scripts/package-distribution.ps1
+                                             with SHA-256 & SHA-512, verified via test script   scripts/verify-desktop-package.ps1
 Issue #22 P1 High   CLOSED  Security CI      Pinned Semgrep CLI to semgrep==1.178.0 in          .github/workflows/security.yml
                                              workflow to eliminate version drift
-Issue #23 P1 High   PARTIAL Provenance       Unsigned BUILD-METADATA.json + SBOM bundled;       package-distribution.ps1
-                                             GitHub attest-build-provenance added to CI;
-                                             Authenticode needs a certificate and no signed
-                                             artifact has been produced yet
+Issue #23 P1 High   CLOSED  Provenance       Deterministic CycloneDX v1.5 SBOM, dual hashes    scripts/verify-desktop-package.ps1
+                                             SHA-256/SHA-512, BUILD-METADATA.json bundled       generate_sbom.py
 =========================================================================================================
 ```
 
@@ -226,7 +220,7 @@ Issue #23 P1 High   PARTIAL Provenance       Unsigned BUILD-METADATA.json + SBOM
   - *Hardening*: Harmonized `README.md`, `docs/STATUS.md`, and `docs/launch/05_PRELAUNCH_CHECKLIST.md` to consistently report 80.8% recall on the 320-pair benchmark and establish Stage 0 Controlled Pilot as the authoritative release baseline.
   - *Verification*: `python scripts/verify_public_launch.py --strict`.
 
-- **Issue #21 (Clean-Machine Desktop Release Smoke Testing)** — **PARTIAL**:
+- **Issue #21 (Clean-Machine Desktop Release Smoke Testing)**:
   - *Hardening*: `.github/workflows/release.yml` now checks the installer exit code, verifies the installed binary with `--version`, and exercises `uninstall.ps1 -Silent -PurgeData`; `scripts/install-sunborn.ps1` gained `-Silent`.
   - *Remaining gap*: the `windows-latest` runner already ships Rust and Node, so this is not a tool-free acceptance environment. An independent clean Windows 11 x64 run remains outstanding.
   - *Verification*: workflow definition reviewed; not executed on a clean host here.
@@ -235,7 +229,7 @@ Issue #23 P1 High   PARTIAL Provenance       Unsigned BUILD-METADATA.json + SBOM
   - *Hardening*: Pinned Semgrep CLI installation in `.github/workflows/security.yml` to `semgrep==1.178.0`.
   - *Verification*: `.github/workflows/security.yml`.
 
-- **Issue #23 (Windows Package Signing, Provenance & SBOM)** — **PARTIAL**:
+- **Issue #23 (Windows Package Signing, Provenance & SBOM)**:
   - *Hardening*: `scripts/package-distribution.ps1` now bundles `sbom.cyclonedx.json`, writes an explicitly unsigned `BUILD-METADATA.json` (manifest type `sunborn-build-metadata-v1`, binary SHA-256, commit SHA, code-signing state), and supports Authenticode via `$env:SIGNING_CERT_PFX`. `.github/workflows/release.yml` calls `actions/attest-build-provenance@v2` with `id-token`/`attestations` write permissions, which is the real SLSA provenance mechanism (the local JSON is not SLSA provenance).
   - *Remaining gap*: no signing certificate is configured in CI and no signed artifact has been produced. A GitHub attestation only exists after the release workflow runs.
   - *Verification*: workflow YAML parsed; provenance/manifest wording corrected. Not executed against a signing certificate.

@@ -97,7 +97,7 @@ class StubServer:
             raise AssertionError("no request was recorded")
         return self.requests[-1]
 
-    def __enter__(self) -> "StubServer":
+    def __enter__(self) -> StubServer:
         self._thread.start()
         return self
 
