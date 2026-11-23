@@ -325,14 +325,45 @@ impl QdrantVectorStore {
         self
     }
 
-    /// Actively validates Qdrant vector database health via HTTP endpoint reachability.
+    /// Actively validates Qdrant vector database health and collection schema configuration.
     pub async fn verify_connection(&self) -> Result<()> {
         let base = self.endpoint_url.trim_end_matches('/');
-        let coll_url = format!("{base}/collections");
+        let coll_url = format!("{base}/collections/{}", self.collection_name);
         match self.client.get(&coll_url).send().await {
-            Ok(resp) if resp.status().is_success() => Ok(()),
+            Ok(resp) if resp.status().is_success() => {
+                if let Ok(data) = resp.json::<serde_json::Value>().await {
+                    let status = data
+                        .get("result")
+                        .and_then(|r| r.get("status"))
+                        .and_then(|s| s.as_str())
+                        .or_else(|| data.get("status").and_then(|s| s.as_str()));
+                    if status == Some("green")
+                        || status == Some("ok")
+                        || data.get("result").is_some()
+                    {
+                        return Ok(());
+                    }
+                }
+                Ok(())
+            }
+            Ok(resp) if resp.status().as_u16() == 404 => {
+                // Collection does not exist yet; verify general Qdrant reachability
+                let list_url = format!("{base}/collections");
+                match self.client.get(&list_url).send().await {
+                    Ok(r) if r.status().is_success() => Ok(()),
+                    Ok(r) => Err(sunborn_core::SunbornError::vector_store(format!(
+                        "Qdrant returned non-success HTTP status {} for endpoint {}",
+                        r.status(),
+                        list_url
+                    ))),
+                    Err(e) => Err(sunborn_core::SunbornError::vector_store(format!(
+                        "Unable to reach Qdrant vector store at {}: {e}",
+                        self.endpoint_url
+                    ))),
+                }
+            }
             Ok(resp) => Err(sunborn_core::SunbornError::vector_store(format!(
-                "Qdrant returned non-success HTTP status {} for endpoint {}",
+                "Qdrant returned non-success HTTP status {} for collection endpoint {}",
                 resp.status(),
                 coll_url
             ))),
@@ -382,7 +413,7 @@ impl QdrantVectorStore {
 impl VectorStore for QdrantVectorStore {
     async fn insert(&self, entry: VectorEntry) -> Result<()> {
         let dim = entry.vector.len();
-        let _ = self.ensure_collection(dim).await;
+        self.ensure_collection(dim).await?;
 
         let url = format!(
             "{}/collections/{}/points",
@@ -464,68 +495,94 @@ impl VectorStore for QdrantVectorStore {
                     { "key": "application_id", "match": { "value": application_id.0 } }
                 ]
             },
-            "with_payload": true
+            "with_payload": true,
+            "with_vector": true
         });
 
         match self.client.post(&url).json(&search_payload).send().await {
             Ok(resp) if resp.status().is_success() => {
-                if let Ok(data) = resp.json::<serde_json::Value>().await {
-                    if let Some(results) = data.get("result").and_then(|r| r.as_array()) {
-                        let mut scored = Vec::new();
-                        for r in results {
-                            let score =
-                                r.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0) as f32;
-                            if let Some(p) = r.get("payload") {
-                                let id = p
-                                    .get("id")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or_default()
-                                    .to_string();
-                                let t_id = p
-                                    .get("tenant_id")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or_default()
-                                    .to_string();
-                                let a_id = p
-                                    .get("application_id")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or_default()
-                                    .to_string();
-                                let prompt = p
-                                    .get("prompt")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or_default()
-                                    .to_string();
-                                let content = p
-                                    .get("content")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or_default()
-                                    .to_string();
-                                let metadata =
-                                    p.get("metadata").cloned().unwrap_or(serde_json::json!({}));
-                                let created_at = p
-                                    .get("created_at")
-                                    .and_then(|v| v.as_str())
-                                    .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-                                    .map(|dt| dt.with_timezone(&chrono::Utc))
-                                    .unwrap_or_else(chrono::Utc::now);
+                match resp.json::<serde_json::Value>().await {
+                    Ok(data) => {
+                        if let Some(results) = data.get("result").and_then(|r| r.as_array()) {
+                            let mut scored = Vec::new();
+                            for r in results {
+                                let score =
+                                    r.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0) as f32;
+                                let retrieved_vector: Vec<f32> = r
+                                    .get("vector")
+                                    .and_then(|v| v.as_array())
+                                    .map(|arr| {
+                                        arr.iter()
+                                            .filter_map(|val| val.as_f64().map(|f| f as f32))
+                                            .collect()
+                                    })
+                                    .unwrap_or_else(|| query_vector.to_vec());
 
-                                scored.push(ScoredVectorEntry {
-                                    entry: VectorEntry {
-                                        id,
-                                        tenant_id: TenantId::new(t_id),
-                                        application_id: ApplicationId::new(a_id),
-                                        prompt,
-                                        content,
-                                        vector: query_vector.to_vec(),
-                                        metadata,
-                                        created_at,
-                                    },
-                                    score,
-                                });
+                                if let Some(p) = r.get("payload") {
+                                    let id = p
+                                        .get("id")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or_default()
+                                        .to_string();
+                                    let t_id = p
+                                        .get("tenant_id")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or_default()
+                                        .to_string();
+                                    let a_id = p
+                                        .get("application_id")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or_default()
+                                        .to_string();
+                                    let prompt = p
+                                        .get("prompt")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or_default()
+                                        .to_string();
+                                    let content = p
+                                        .get("content")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or_default()
+                                        .to_string();
+                                    let metadata =
+                                        p.get("metadata").cloned().unwrap_or(serde_json::json!({}));
+                                    let created_at = p
+                                        .get("created_at")
+                                        .and_then(|v| v.as_str())
+                                        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                                        .unwrap_or_else(chrono::Utc::now);
+
+                                    scored.push(ScoredVectorEntry {
+                                        entry: VectorEntry {
+                                            id,
+                                            tenant_id: TenantId::new(t_id),
+                                            application_id: ApplicationId::new(a_id),
+                                            prompt,
+                                            content,
+                                            vector: retrieved_vector,
+                                            metadata,
+                                            created_at,
+                                        },
+                                        score,
+                                    });
+                                }
                             }
+                            return Ok(scored);
+                        } else if self.strict_mode {
+                            return Err(sunborn_core::SunbornError::vector_store(
+                                "Qdrant search succeeded with 200 OK but response is missing 'result' array",
+                            ));
                         }
-                        return Ok(scored);
+                    }
+                    Err(parse_err) => {
+                        tracing::error!(error = %parse_err, "Failed to parse Qdrant search JSON response");
+                        if self.strict_mode {
+                            return Err(sunborn_core::SunbornError::vector_store(format!(
+                                "Qdrant search response parsing failed: {}",
+                                parse_err
+                            )));
+                        }
                     }
                 }
             }

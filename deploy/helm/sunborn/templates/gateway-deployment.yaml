@@ -89,6 +89,8 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: wal
+              mountPath: /var/lib/sunborn
           livenessProbe:
             {{- toYaml .Values.gateway.livenessProbe | nindent 12 }}
           readinessProbe:
@@ -96,3 +98,10 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+        - name: wal
+          {{- if and .Values.gateway.persistence .Values.gateway.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-wal" (include "sunborn.fullname" .)) .Values.gateway.persistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}

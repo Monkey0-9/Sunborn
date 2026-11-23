@@ -302,7 +302,7 @@ export default function LearningControllerPage() {
                   <div className="text-lg font-bold text-slate-300">
                     {activePolicy?.weights?.eviction_staleness_weight?.toFixed(2) ?? "0.40"}
                   </div>
-                  <span className="text-[10px] text-slate-400">W-TinyLFU ratio</span>
+                  <span className="text-[10px] text-slate-400">FinOps-GDSF ratio</span>
                 </div>
                 <div className="p-3 rounded-lg bg-slate-900 border border-white/10 space-y-0.5">
                   <span className="text-[10px] text-slate-400">COST WEIGHT</span>

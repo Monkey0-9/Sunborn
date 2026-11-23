@@ -28,6 +28,16 @@ impl<L2: ExactCacheStore> TieredExactCache<L2> {
         }
     }
 
+    pub fn with_stores(l1: Arc<MemoryExactCache>, l2: Arc<L2>) -> Self {
+        Self {
+            l1,
+            l2,
+            l1_hits: Arc::new(AtomicU64::new(0)),
+            l2_hits: Arc::new(AtomicU64::new(0)),
+            misses: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
     pub fn stats(&self) -> (u64, u64, u64) {
         (
             self.l1_hits.load(Ordering::Relaxed),
@@ -49,9 +59,15 @@ impl<L2: ExactCacheStore> TieredExactCache<L2> {
 impl<L2: ExactCacheStore + Send + Sync> ExactCacheStore for TieredExactCache<L2> {
     async fn get(&self, key: &str) -> Result<Option<CacheEntry>> {
         // 1. Check L1 In-Process Cache
-        if let Ok(Some(entry)) = self.l1.get(key).await {
-            self.l1_hits.fetch_add(1, Ordering::Relaxed);
-            return Ok(Some(entry));
+        match self.l1.get(key).await {
+            Ok(Some(entry)) => {
+                self.l1_hits.fetch_add(1, Ordering::Relaxed);
+                return Ok(Some(entry));
+            }
+            Ok(None) => {}
+            Err(err) => {
+                tracing::warn!(key = %key, error = %err, "TieredExactCache: L1 get returned error; falling back to L2");
+            }
         }
 
         // 2. Check L2 Store
@@ -59,7 +75,9 @@ impl<L2: ExactCacheStore + Send + Sync> ExactCacheStore for TieredExactCache<L2>
             Ok(Some(entry)) => {
                 self.l2_hits.fetch_add(1, Ordering::Relaxed);
                 // Read-repair / populate L1 in background
-                let _ = self.l1.set(entry.clone()).await;
+                if let Err(err) = self.l1.set(entry.clone()).await {
+                    tracing::warn!(key = %key, error = %err, "TieredExactCache: L1 populate failed");
+                }
                 Ok(Some(entry))
             }
             Ok(None) => {
@@ -74,27 +92,54 @@ impl<L2: ExactCacheStore + Send + Sync> ExactCacheStore for TieredExactCache<L2>
     }
 
     async fn set(&self, entry: CacheEntry) -> Result<()> {
-        // Write-through: Update L2, then populate L1
+        // Write-through: Update L2 first (authoritative distributed store), then populate L1
         self.l2.set(entry.clone()).await?;
-        let _ = self.l1.set(entry).await;
+        if let Err(err) = self.l1.set(entry).await {
+            tracing::warn!(error = %err, "TieredExactCache: L1 write-through failed");
+            if sunborn_core::is_production_mode() {
+                return Err(err);
+            }
+        }
         Ok(())
     }
 
     async fn delete(&self, key: &str) -> Result<bool> {
-        let _ = self.l1.delete(key).await;
-        self.l2.delete(key).await
+        let l1_res = self.l1.delete(key).await;
+        if let Err(ref err) = l1_res {
+            tracing::error!(key = %key, error = %err, "TieredExactCache: L1 delete failed");
+        }
+        let l2_res = self.l2.delete(key).await;
+        if sunborn_core::is_production_mode() {
+            if let Err(err) = l1_res {
+                return Err(err);
+            }
+        }
+        let l2_deleted = l2_res?;
+        let l1_deleted = l1_res.unwrap_or(false);
+        Ok(l1_deleted || l2_deleted)
     }
 
     async fn exists(&self, key: &str) -> Result<bool> {
-        if self.l1.exists(key).await.unwrap_or(false) {
+        if let Ok(true) = self.l1.exists(key).await {
             return Ok(true);
         }
         self.l2.exists(key).await
     }
 
     async fn delete_by_prefix(&self, prefix: &str) -> Result<usize> {
-        let _ = self.l1.delete_by_prefix(prefix).await;
-        self.l2.delete_by_prefix(prefix).await
+        let l1_res = self.l1.delete_by_prefix(prefix).await;
+        if let Err(ref err) = l1_res {
+            tracing::error!(prefix = %prefix, error = %err, "TieredExactCache: L1 delete_by_prefix failed");
+        }
+        let l2_res = self.l2.delete_by_prefix(prefix).await;
+        if sunborn_core::is_production_mode() {
+            if let Err(err) = l1_res {
+                return Err(err);
+            }
+        }
+        let l2_count = l2_res?;
+        let l1_count = l1_res.unwrap_or(0);
+        Ok(l1_count.max(l2_count))
     }
 
     async fn count_by_prefix(&self, prefix: &str) -> Result<usize> {

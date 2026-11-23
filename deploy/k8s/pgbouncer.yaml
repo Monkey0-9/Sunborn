@@ -31,7 +31,7 @@ data:
     listen_addr = 0.0.0.0
     listen_port = 6432
     auth_type = scram-sha-256
-    auth_file = /etc/pgbouncer/userlist.txt
+    auth_file = /etc/pgbouncer-auth/userlist.txt
     pool_mode = transaction
 
     ; Client concurrency is cheap; server connections are not.

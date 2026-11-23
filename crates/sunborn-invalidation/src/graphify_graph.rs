@@ -223,6 +223,71 @@ impl GraphifyKnowledgeGraph {
         self.hash_to_nodes.clear();
         self.total_edges.store(0, Ordering::Relaxed);
     }
+
+    /// Returns a flat list of all edges currently present in the graph.
+    pub fn all_edges(&self) -> Vec<GraphifyEdge> {
+        let mut edges = Vec::with_capacity(self.edge_count());
+        for entry in self.outgoing_edges.iter() {
+            edges.extend(entry.value().clone());
+        }
+        edges
+    }
+
+    /// Captures a complete point-in-time snapshot of the knowledge graph.
+    pub fn snapshot(&self) -> GraphifySnapshot {
+        GraphifySnapshot {
+            nodes: self.all_nodes(),
+            edges: self.all_edges(),
+            timestamp: chrono::Utc::now(),
+        }
+    }
+
+    /// Hydrates this graph from a snapshot.
+    pub fn hydrate_from_snapshot(&self, snapshot: GraphifySnapshot) {
+        for node in snapshot.nodes {
+            self.add_node(node);
+        }
+        for edge in snapshot.edges {
+            self.add_edge(edge);
+        }
+    }
+
+    /// Persists the knowledge graph snapshot to a JSON file.
+    pub fn save_to_json(&self, path: impl AsRef<std::path::Path>) -> Result<(), std::io::Error> {
+        let snapshot = self.snapshot();
+        if let Some(parent) = path.as_ref().parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let data = serde_json::to_vec_pretty(&snapshot)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        std::fs::write(path, data)
+    }
+
+    /// Hydrates nodes and edges from a persisted JSON file if it exists.
+    /// Returns the number of nodes hydrated.
+    pub fn hydrate_from_file(
+        &self,
+        path: impl AsRef<std::path::Path>,
+    ) -> Result<usize, std::io::Error> {
+        let path = path.as_ref();
+        if !path.exists() {
+            return Ok(0);
+        }
+        let data = std::fs::read(path)?;
+        let snapshot: GraphifySnapshot = serde_json::from_slice(&data)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        let count = snapshot.nodes.len();
+        self.hydrate_from_snapshot(snapshot);
+        Ok(count)
+    }
+}
+
+/// Point-in-time serializable snapshot of the Graphify knowledge graph.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct GraphifySnapshot {
+    pub nodes: Vec<GraphifyNode>,
+    pub edges: Vec<GraphifyEdge>,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
 #[cfg(test)]
@@ -263,5 +328,32 @@ mod tests {
         assert!(removed.is_some());
         assert_eq!(graph.node_count(), 2);
         assert_eq!(graph.edge_count(), 0);
+    }
+
+    #[test]
+    fn test_graph_snapshot_and_file_roundtrip() {
+        let graph = GraphifyKnowledgeGraph::new();
+        graph.insert_node("file::lib.rs", "lib.rs", GraphifyNodeType::File);
+        graph.insert_node("func::serve", "serve()", GraphifyNodeType::Function);
+        graph.link("file::lib.rs", "func::serve", GraphifyRelation::Defines);
+
+        let temp_dir =
+            std::env::temp_dir().join(format!("sunborn_graph_test_{}", uuid::Uuid::new_v4()));
+        let file_path = temp_dir.join("graph.json");
+
+        graph.save_to_json(&file_path).expect("save should succeed");
+
+        let restored_graph = GraphifyKnowledgeGraph::new();
+        let hydrated_count = restored_graph
+            .hydrate_from_file(&file_path)
+            .expect("hydrate should succeed");
+
+        assert_eq!(hydrated_count, 2);
+        assert_eq!(restored_graph.node_count(), 2);
+        assert_eq!(restored_graph.edge_count(), 1);
+        assert!(restored_graph.get_node("file::lib.rs").is_some());
+        assert!(restored_graph.get_node("func::serve").is_some());
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

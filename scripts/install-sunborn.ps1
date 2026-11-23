@@ -152,9 +152,11 @@ try {
 if ($SmokeOk) {
     Write-Host "[+] Smoke test passed: gateway answered /health on 127.0.0.1:$SmokePort." -ForegroundColor Green
 } else {
-    Write-Host "[-] Smoke test did not get a healthy response. See $SmokeLog" -ForegroundColor Yellow
+    Write-Host "[-] Smoke test did not get a healthy response. See $SmokeLog" -ForegroundColor Red
     if (Test-Path $SmokeLog) { Get-Content $SmokeLog -Tail 15 }
-    Write-Host "[-] Run '$InstalledExe doctor' for a diagnosis." -ForegroundColor Yellow
+    Write-Host "[-] Run '$InstalledExe doctor' for a diagnosis." -ForegroundColor Red
+    Write-Error "Sunborn installation failed health smoke test. The installed binary did not respond healthy on /health. Aborting installation."
+    exit 1
 }
 
 Write-Host "`n==========================================================" -ForegroundColor Green

@@ -832,7 +832,20 @@ pub async fn execute_request_inner(
 
             match state.cache.set(entry.clone()).await {
                 Ok(_) => {
-                    // Stage 3: Bind into knowledge dependency graph and graph memory cache (P0-01)
+                    // Stage 3: Bind into knowledge dependency graph, graph memory cache, and Graphify multi-relational graph (P0-01)
+                    let cache_key_id = identity.key.clone();
+                    let cache_node = sunborn_invalidation::GraphifyNode::new(
+                        cache_key_id.clone(),
+                        state.graphify_graph.next_numeric_id(),
+                        identity.key.clone(),
+                        sunborn_invalidation::GraphifyNodeType::CacheEntry,
+                    )
+                    .with_metadata(json!({
+                        "tenant_id": sec_ctx.tenant_id.0,
+                        "cache_key": identity.key,
+                    }));
+                    state.graphify_graph.add_node(cache_node);
+
                     for snap in &req.dependency_snapshots {
                         if let Err(e) = state
                             .dependency_graph
@@ -846,7 +859,30 @@ pub async fn execute_request_inner(
                                 "Failed to record knowledge dependency edge"
                             );
                         }
+
+                        let source_str = snap.source_id.to_string();
+                        if state.graphify_graph.get_node(&source_str).is_none() {
+                            let doc_node = sunborn_invalidation::GraphifyNode::new(
+                                source_str.clone(),
+                                state.graphify_graph.next_numeric_id(),
+                                format!("doc::{}", source_str),
+                                sunborn_invalidation::GraphifyNodeType::Document,
+                            )
+                            .with_metadata(json!({
+                                "tenant_id": sec_ctx.tenant_id.0,
+                                "source_id": source_str,
+                            }));
+                            state.graphify_graph.add_node(doc_node);
+                        }
+                        state.graphify_graph.link(
+                            cache_key_id.clone(),
+                            source_str,
+                            sunborn_invalidation::GraphifyRelation::DependsOn,
+                        );
                     }
+                    crate::handlers::graph::persist_graphify_if_configured(
+                        state.graphify_graph.clone(),
+                    );
                     if let Some(ref gmc) = state.graph_memory_cache {
                         let source_ids: Vec<Uuid> = req
                             .dependency_snapshots

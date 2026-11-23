@@ -25,7 +25,7 @@ export const simulationEngine = {
     const avoidedTokens = isHit ? promptTokens + completionTokens : 0;
     const savedUsd = isHit ? +((avoidedTokens / 1000) * 0.03).toFixed(4) : 0;
 
-    let tier = "Tier 1: Exact Match (W-TinyLFU / DragonflyDB)";
+    let tier = "Tier 1: Exact Match (FinOps-GDSF / DragonflyDB)";
     let action = "VerifiedCacheHit";
     let conformalScore = 1.0;
     let latencyUs = 420; // 0.42 microseconds

@@ -6,14 +6,16 @@ use std::sync::Arc;
 use sunborn_core::{Result, SunbornError};
 use tokio::sync::RwLock;
 
-/// Cursor-based `SCAN` over the server keyspace. Avoids the O(N) blocking `KEYS`
-/// command, which can stall a production Dragonfly/Redis instance.
-async fn scan_pattern(
+/// Cursor-based streaming scan and delete over the server keyspace.
+/// Iterates in 1,000-key batches until cursor reaches 0 without truncating,
+/// deleting each chunk immediately to prevent memory ballooning and ensure
+/// zero stale entries are left behind.
+async fn scan_and_delete_pattern(
     conn: &mut redis::aio::ConnectionManager,
     pattern: &str,
-) -> redis::RedisResult<Vec<String>> {
+) -> redis::RedisResult<usize> {
     let mut cursor: u64 = 0;
-    let mut keys: Vec<String> = Vec::new();
+    let mut total_deleted: usize = 0;
     loop {
         let (next, batch): (u64, Vec<String>) = redis::cmd("SCAN")
             .arg(cursor)
@@ -23,14 +25,41 @@ async fn scan_pattern(
             .arg(1000)
             .query_async(conn)
             .await?;
-        keys.extend(batch);
-        // Bound the scan so a pathological keyspace cannot exhaust memory.
-        if next == 0 || keys.len() >= 100_000 {
+        if !batch.is_empty() {
+            let count: usize = conn.del(&batch).await.unwrap_or(batch.len());
+            total_deleted += count;
+        }
+        if next == 0 {
             break;
         }
         cursor = next;
     }
-    Ok(keys)
+    Ok(total_deleted)
+}
+
+/// Cursor-based streaming count over the server keyspace across all pages.
+async fn scan_and_count_pattern(
+    conn: &mut redis::aio::ConnectionManager,
+    pattern: &str,
+) -> redis::RedisResult<usize> {
+    let mut cursor: u64 = 0;
+    let mut total_count: usize = 0;
+    loop {
+        let (next, batch): (u64, Vec<String>) = redis::cmd("SCAN")
+            .arg(cursor)
+            .arg("MATCH")
+            .arg(pattern)
+            .arg("COUNT")
+            .arg(1000)
+            .query_async(conn)
+            .await?;
+        total_count += batch.len();
+        if next == 0 {
+            break;
+        }
+        cursor = next;
+    }
+    Ok(total_count)
 }
 
 /// Production DragonflyDB / Redis exact cache adapter implementing ExactCacheStore
@@ -242,16 +271,12 @@ impl ExactCacheStore for DragonflyCacheStore {
         let mut deleted_count = 0;
         if let Some(mut conn) = self.get_connection().await {
             let pattern = format!("{}*", prefix);
-            match scan_pattern(&mut conn, &pattern).await {
-                Ok(keys) => {
-                    if !keys.is_empty() {
-                        if let Ok(count) = conn.del::<_, usize>(&keys).await {
-                            deleted_count += count;
-                        }
-                    }
+            match scan_and_delete_pattern(&mut conn, &pattern).await {
+                Ok(count) => {
+                    deleted_count = count;
                 }
                 Err(err) => {
-                    tracing::error!(error = %err, "DragonflyDB keys scan failed");
+                    tracing::error!(error = %err, "DragonflyDB streaming delete_by_prefix failed");
                     if self.strict_mode {
                         return Err(sunborn_core::SunbornError::cache(format!(
                             "DragonflyDB delete_by_prefix failed: {}",
@@ -274,12 +299,12 @@ impl ExactCacheStore for DragonflyCacheStore {
         let mut df_count = 0;
         if let Some(mut conn) = self.get_connection().await {
             let pattern = format!("{}*", prefix);
-            match scan_pattern(&mut conn, &pattern).await {
-                Ok(keys) => {
-                    df_count = keys.len();
+            match scan_and_count_pattern(&mut conn, &pattern).await {
+                Ok(count) => {
+                    df_count = count;
                 }
                 Err(err) => {
-                    tracing::error!(error = %err, "DragonflyDB keys scan failed");
+                    tracing::error!(error = %err, "DragonflyDB streaming count_by_prefix failed");
                     if self.strict_mode {
                         return Err(sunborn_core::SunbornError::cache(format!(
                             "DragonflyDB count_by_prefix failed: {}",

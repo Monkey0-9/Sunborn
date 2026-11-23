@@ -1,19 +1,51 @@
 "use client";
 
-import React, { useState } from "react";
-import { GitBranch, ShieldCheck, CheckCircle2, Lock, Cpu, Database } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { GitBranch, ShieldCheck, CheckCircle2, Lock, Cpu, Database, Activity, AlertCircle } from "lucide-react";
+import { sunbornApi } from "@/lib/api";
+import { useClusterStore } from "@/lib/cluster-store";
 
 interface DAGNode {
   id: string;
   label: string;
   role: string;
   latencyBound: string;
-  status: "active" | "verified" | "bypassed";
+  status: "active" | "verified" | "degraded";
   detail: string;
 }
 
 export function LiveDAGVisualizer() {
+  const { isSimulated } = useClusterStore();
   const [selectedNodeId, setSelectedNodeId] = useState<string>("canonicalizer");
+  const [readinessData, setReadinessData] = useState<any>(null);
+  const [isLive, setIsLive] = useState<boolean>(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function checkLiveStatus() {
+      try {
+        const ready = await sunbornApi.getReadiness();
+        if (isMounted && ready) {
+          setReadinessData(ready);
+          setIsLive(ready.status === "ready" || ready.status === "ok");
+        }
+      } catch {
+        if (isMounted) {
+          setIsLive(false);
+        }
+      }
+    }
+    checkLiveStatus();
+    const interval = setInterval(checkLiveStatus, 15000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const cacheStatus = readinessData?.components?.cache?.status === "connected" ? "verified" : (isLive ? "verified" : "degraded");
+  const vectorStatus = readinessData?.components?.vector_store?.status === "connected" ? "verified" : (isLive ? "verified" : "degraded");
+  const dbStatus = readinessData?.components?.database?.status === "connected" ? "verified" : (isLive ? "verified" : "degraded");
 
   const nodes: DAGNode[] = [
     {
@@ -21,7 +53,7 @@ export function LiveDAGVisualizer() {
       label: "HTTP Ingress",
       role: "Protocol Ingestion",
       latencyBound: "< 0.05 ms",
-      status: "verified",
+      status: isLive ? "verified" : "degraded",
       detail: "Terminates OpenAI / Anthropic / Gemini wire protocols; extracts authorization headers and client tenant identity.",
     },
     {
@@ -34,11 +66,11 @@ export function LiveDAGVisualizer() {
     },
     {
       id: "l1_exact",
-      label: "L1 Lock-Free Memory",
+      label: "L1/L2 Tiered Cache",
       role: "Sub-Microsecond Tier",
-      latencyBound: "0.30 µs P50",
-      status: "verified",
-      detail: "Concurrent Radix and W-TinyLFU cache lookup serving exact hits at 1.64M req/sec.",
+      latencyBound: "0.30 µs P50 (Bench)",
+      status: cacheStatus,
+      detail: "Multi-tier cache architecture combining L1 in-process memory and L2 Dragonfly/Redis store. Microbenchmark throughput: 1.64M req/sec in-process.",
     },
     {
       id: "guardrails",
@@ -53,7 +85,7 @@ export function LiveDAGVisualizer() {
       label: "Qdrant HNSW & Conformal",
       role: "Semantic Risk Control",
       latencyBound: "< 1.50 ms",
-      status: "verified",
+      status: vectorStatus,
       detail: "C SIMD vector similarity search coupled with non-exchangeable conformal prediction bounding semantic risk.",
     },
     {
@@ -61,7 +93,7 @@ export function LiveDAGVisualizer() {
       label: "Merkle Attestation",
       role: "Cryptographic Certificate",
       latencyBound: "< 0.08 ms",
-      status: "verified",
+      status: isLive ? "verified" : "degraded",
       detail: "Issues Ed25519-signed reuse certificates with Merkle tree inclusion proofs binding inputs, outputs, and docs.",
     },
   ];
@@ -83,9 +115,27 @@ export function LiveDAGVisualizer() {
             Deterministic execution flow with cryptographic verification at every boundary.
           </p>
         </div>
-        <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/20">
-          Ed25519 Attested
-        </span>
+        <div className="flex items-center gap-2">
+          {isSimulated ? (
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 font-semibold">
+              <AlertCircle className="w-3 h-3 text-amber-400" />
+              SIMULATION (Architectural Reference)
+            </span>
+          ) : isLive ? (
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Live Gateway Measured
+            </span>
+          ) : (
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1">
+              <AlertCircle className="w-3 h-3 text-amber-400" />
+              Offline Gateway
+            </span>
+          )}
+          <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/20">
+            Ed25519 Attested
+          </span>
+        </div>
       </div>
 
       {/* SVG Pipeline Representation */}

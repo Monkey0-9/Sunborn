@@ -106,6 +106,33 @@ pub async fn record_dependency(
         .await
         .map_err(AppError::from)?;
 
+    // Also register in Graphify multi-relational knowledge graph
+    let source_str = payload.source_id.to_string();
+    if state.graphify_graph.get_node(&source_str).is_none() {
+        let doc_node = sunborn_invalidation::GraphifyNode::new(
+            source_str.clone(),
+            state.graphify_graph.next_numeric_id(),
+            format!("source::{}", source_str),
+            sunborn_invalidation::GraphifyNodeType::Document,
+        );
+        state.graphify_graph.add_node(doc_node);
+    }
+    if state.graphify_graph.get_node(&payload.cache_key).is_none() {
+        let cache_node = sunborn_invalidation::GraphifyNode::new(
+            payload.cache_key.clone(),
+            state.graphify_graph.next_numeric_id(),
+            payload.cache_key.clone(),
+            sunborn_invalidation::GraphifyNodeType::CacheEntry,
+        );
+        state.graphify_graph.add_node(cache_node);
+    }
+    state.graphify_graph.link(
+        payload.cache_key.clone(),
+        source_str,
+        sunborn_invalidation::GraphifyRelation::DependsOn,
+    );
+    crate::handlers::graph::persist_graphify_if_configured(state.graphify_graph.clone());
+
     Ok(Json(json!({
         "status": "recorded",
         "source_id": payload.source_id,

@@ -19,16 +19,38 @@ export function ClusterMeshStatus() {
   const { circuitBreaker, vectorEpoch: storeEpoch, isSimulated } = useClusterStore();
   const [epochNumber, setEpochNumber] = useState<number>(storeEpoch || 4192);
   const [clusterState, setClusterState] = useState<string>("HEALTHY_SYNCHRONIZED");
+  const [activeNodeId, setActiveNodeId] = useState<string>("gateway-primary-node-1");
+  const [activeRegion, setActiveRegion] = useState<string>("us-east-1");
+  const [isSingleNode, setIsSingleNode] = useState<boolean>(true);
 
   useEffect(() => {
     let isMounted = true;
     async function fetchCluster() {
       try {
-        const status = await sunbornApi.getClusterStatus();
-        if (isMounted && status) {
-          setEpochNumber(extractVectorClockEpoch(status.vector_clock));
-          if (status.cluster_state) {
-            setClusterState(status.cluster_state);
+        const [statusRes, syncRes] = await Promise.allSettled([
+          sunbornApi.getClusterStatus(),
+          sunbornApi.getClusterSyncStatus(),
+        ]);
+        if (isMounted) {
+          if (statusRes.status === "fulfilled" && statusRes.value) {
+            const status = statusRes.value;
+            setEpochNumber(extractVectorClockEpoch(status.vector_clock));
+            if (status.cluster_state) {
+              setClusterState(status.cluster_state);
+            }
+            if (status.node_id) {
+              setActiveNodeId(status.node_id);
+            }
+            if (status.region) {
+              setActiveRegion(status.region);
+            }
+          }
+          if (syncRes.status === "fulfilled" && syncRes.value) {
+            const sync = syncRes.value;
+            if (sync.cluster_state) {
+              setClusterState(sync.cluster_state);
+            }
+            setIsSingleNode(sync.nodes_active <= 1 || Boolean(sync.is_simulated_mesh));
           }
         }
       } catch {
@@ -45,33 +67,33 @@ export function ClusterMeshStatus() {
 
   const nodes: ClusterRegionNode[] = [
     {
-      id: "node-us-east-1a",
-      region: "us-east-1 (N. Virginia)",
-      role: "Authority Primary",
+      id: activeNodeId,
+      region: `${activeRegion} (Authoritative Gateway)`,
+      role: "Authority Primary (Live)",
       epoch: epochNumber,
       status: "LEADER",
       latencyMs: 0.2,
     },
     {
       id: "node-us-west-2b",
-      region: "us-west-2 (Oregon)",
-      role: "Edge Sentinel",
+      region: "us-west-2 (Simulated Replica)",
+      role: isSingleNode ? "Simulated Edge Sentinel" : "Edge Sentinel",
       epoch: epochNumber,
       status: "SYNCHRONIZED",
       latencyMs: 14.2,
     },
     {
       id: "node-eu-central-1a",
-      region: "eu-central-1 (Frankfurt)",
-      role: "GDPR Vault Replica",
+      region: "eu-central-1 (Simulated Replica)",
+      role: isSingleNode ? "Simulated GDPR Vault" : "GDPR Vault Replica",
       epoch: epochNumber,
       status: "SYNCHRONIZED",
       latencyMs: 38.6,
     },
     {
       id: "node-ap-northeast-1",
-      region: "ap-northeast-1 (Tokyo)",
-      role: "APAC Edge Accelerator",
+      region: "ap-northeast-1 (Simulated Replica)",
+      role: isSingleNode ? "Simulated APAC Edge" : "APAC Edge Accelerator",
       epoch: epochNumber,
       status: "ONLINE",
       latencyMs: 64.1,
@@ -112,6 +134,15 @@ export function ClusterMeshStatus() {
           {isSimulated && (
             <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-semibold">
               SIMULATION
+            </span>
+          )}
+          {isSingleNode ? (
+            <span className="px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/30 text-[10px] font-semibold">
+              Single-Node (Preview Mesh)
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-semibold">
+              Multi-Region Active
             </span>
           )}
           <span className="px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-white/10">

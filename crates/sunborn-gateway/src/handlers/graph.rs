@@ -7,6 +7,19 @@ use sunborn_invalidation::{
     GraphifyNodeType, GraphifyRelation, TraversalMode, CLUSTER_INVALIDATION_CHANNEL,
 };
 
+/// Persists the Graphify knowledge graph asynchronously to disk if `SUNBORN_GRAPHIFY_STORE_PATH` is configured.
+pub fn persist_graphify_if_configured(
+    graph: std::sync::Arc<sunborn_invalidation::GraphifyKnowledgeGraph>,
+) {
+    if let Ok(path) = std::env::var("SUNBORN_GRAPHIFY_STORE_PATH") {
+        tokio::task::spawn_blocking(move || {
+            if let Err(e) = graph.save_to_json(&path) {
+                tracing::warn!(error = %e, path = %path, "Failed to persist Graphify knowledge graph to disk");
+            }
+        });
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct AddNodePayload {
     pub id: String,
@@ -50,6 +63,8 @@ pub struct BlastRadiusPayload {
     pub allowed_relations: Option<Vec<GraphifyRelation>>,
     #[serde(default)]
     pub include_cache_entries: Option<bool>,
+    #[serde(default)]
+    pub tenant_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -95,6 +110,7 @@ pub async fn add_graph_node(
     }
 
     let allocated_numeric_id = state.graphify_graph.add_node(node);
+    persist_graphify_if_configured(state.graphify_graph.clone());
 
     Ok(Json(json!({
         "status": "created",
@@ -134,13 +150,16 @@ pub async fn delete_graph_node(
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
 
     match state.graphify_graph.remove_node(&id) {
-        Some(node) => Ok(Json(json!({
-            "status": "deleted",
-            "id": id,
-            "removed_node": node,
-            "total_nodes": state.graphify_graph.node_count(),
-            "total_edges": state.graphify_graph.edge_count(),
-        }))),
+        Some(node) => {
+            persist_graphify_if_configured(state.graphify_graph.clone());
+            Ok(Json(json!({
+                "status": "deleted",
+                "id": id,
+                "removed_node": node,
+                "total_nodes": state.graphify_graph.node_count(),
+                "total_edges": state.graphify_graph.edge_count(),
+            })))
+        }
         None => Err(SunbornError::new(
             sunborn_core::ErrorCode::CacheMiss,
             format!("Node with id '{id}' not found"),
@@ -176,6 +195,7 @@ pub async fn add_graph_edge(
     }
 
     state.graphify_graph.add_edge(edge);
+    persist_graphify_if_configured(state.graphify_graph.clone());
 
     Ok(Json(json!({
         "status": "linked",
@@ -199,6 +219,7 @@ pub async fn calculate_graph_blast_radius(
             .allowed_relations
             .map(|rels| rels.into_iter().collect()),
         include_cache_entries: payload.include_cache_entries.unwrap_or(true),
+        tenant_id: payload.tenant_id,
     };
 
     let report = compute_affected(&state.graphify_graph, &roots, Some(cfg));
@@ -224,6 +245,7 @@ pub async fn invalidate_graph_causal(
             .allowed_relations
             .map(|rels| rels.into_iter().collect()),
         include_cache_entries: true,
+        tenant_id: payload.tenant_id.clone(),
     };
 
     // 1. Calculate multi-relational causal blast radius
@@ -232,43 +254,25 @@ pub async fn invalidate_graph_causal(
     let mut purged_keys = Vec::new();
     let mut failed_keys = Vec::new();
 
-    // 2. Fence root assets: bump epochs and advance watermarks
+    // 2. Fence root assets: bump epochs and advance watermarks (fail-closed on lease/epoch failure)
+    let mut highest_epoch = 1u64;
+    let mut valid_source_uuids = Vec::new();
     for root in &payload.mutated_roots {
         if let Ok(uuid) = Uuid::parse_str(root) {
-            let _ = state.epoch_lease_manager.bump_epoch(uuid).await;
+            valid_source_uuids.push(uuid);
+            let bumped = state
+                .epoch_lease_manager
+                .bump_epoch(uuid)
+                .await
+                .map_err(AppError::from)?;
+            if bumped > highest_epoch {
+                highest_epoch = bumped;
+            }
         }
         state.watermark_fencer.advance_watermark(root);
     }
 
-    // 3. Purge affected cache keys across L1 exact memory cache and vector store
-    for key in &report.affected_cache_keys {
-        let mut key_failed = false;
-
-        if let Err(e) = state.cache.delete(key).await {
-            tracing::error!(key = %key, error = %e, "L1 cache delete failed during causal invalidation");
-            failed_keys.push((key.clone(), format!("exact_cache: {e}")));
-            key_failed = true;
-        }
-
-        if let Err(e) = state.vector_store.delete(key).await {
-            tracing::error!(key = %key, error = %e, "Vector store delete failed during causal invalidation");
-            failed_keys.push((key.clone(), format!("vector_store: {e}")));
-            key_failed = true;
-        }
-
-        if !key_failed {
-            purged_keys.push(key.clone());
-        }
-    }
-
-    // 4. Purge from GraphMemoryCache if initialized
-    if let Some(ref gmc) = state.graph_memory_cache {
-        for key in &report.affected_cache_keys {
-            let _ = gmc.cache().delete(key).await;
-        }
-    }
-
-    // 5. Durable outbox audit recording
+    // 3. Durable-first ordering: persist PENDING outbox intent before modifying storage tiers
     let tenant_str = payload
         .tenant_id
         .clone()
@@ -282,29 +286,98 @@ pub async fn invalidate_graph_causal(
         payload: json!({
             "mutated_roots": payload.mutated_roots,
             "affected_count": report.total_affected,
-            "purged_cache_keys": purged_keys,
-            "failed_keys": failed_keys,
+            "affected_cache_keys": report.affected_cache_keys,
         }),
-        status: "PROCESSED".to_string(),
+        status: "PENDING".to_string(),
         created_at: Utc::now(),
     };
-    let _ = state.db.insert_outbox_event(outbox_record).await;
+    let outbox_id = state
+        .db
+        .insert_outbox_event(outbox_record)
+        .await
+        .map_err(AppError::from)?;
 
-    // 6. Cluster invalidation broadcast
+    // 4. Purge affected cache keys across exact cache and vector store
+    for raw_key in &report.affected_cache_keys {
+        let key = raw_key.strip_prefix("cache::").unwrap_or(raw_key.as_str());
+        let mut key_failed = false;
+
+        if let Err(e) = state.cache.delete(key).await {
+            tracing::error!(key = %key, error = %e, "Cache delete failed during causal invalidation");
+            failed_keys.push((key.to_string(), format!("exact_cache: {e}")));
+            key_failed = true;
+        }
+
+        if let Err(e) = state.vector_store.delete(key).await {
+            tracing::error!(key = %key, error = %e, "Vector store delete failed during causal invalidation");
+            failed_keys.push((key.to_string(), format!("vector_store: {e}")));
+            key_failed = true;
+        }
+
+        if !key_failed {
+            purged_keys.push(key.to_string());
+        }
+    }
+
+    // 5. Purge from GraphMemoryCache if initialized
+    if let Some(ref gmc) = state.graph_memory_cache {
+        for raw_key in &report.affected_cache_keys {
+            let key = raw_key.strip_prefix("cache::").unwrap_or(raw_key.as_str());
+            let _ = gmc.cache().delete(key).await;
+        }
+    }
+
+    // 6. Cluster invalidation broadcast with real epoch and source IDs
+    let mut cluster_broadcast_sent = false;
     if let Some(transport) = state.orchestrator.cluster_transport() {
         let msg = sunborn_invalidation::ClusterInvalidationMessage {
             message_id: Uuid::new_v4(),
             origin_pod_id: "sunborn-gateway".to_string(),
             tenant_id: TenantId::new(tenant_str.clone()),
             mutated_doc_hashes: Vec::new(),
-            mutated_source_ids: Vec::new(),
+            mutated_source_ids: valid_source_uuids,
             mutated_cache_keys: purged_keys.clone(),
-            monotonic_epoch: 1,
+            monotonic_epoch: highest_epoch,
             timestamp: Utc::now(),
             stream_id: String::new(),
         };
-        let _ = transport.publish(CLUSTER_INVALIDATION_CHANNEL, &msg).await;
+        match transport.publish(CLUSTER_INVALIDATION_CHANNEL, &msg).await {
+            Ok(_) => {
+                cluster_broadcast_sent = true;
+            }
+            Err(err) => {
+                tracing::error!(error = %err, "Cluster invalidation broadcast failed");
+                let _ = state
+                    .db
+                    .mark_outbox_failed(outbox_id, &err.to_string())
+                    .await;
+                if sunborn_core::is_production_mode() || state.cluster_transport_durable {
+                    return Err(AppError::from(err));
+                }
+            }
+        }
     }
+
+    // 7. Acknowledge outbox status after purges and broadcast succeed
+    if failed_keys.is_empty() {
+        state
+            .db
+            .mark_outbox_processed(outbox_id)
+            .await
+            .map_err(AppError::from)?;
+    } else {
+        let err_msg = format!(
+            "Partial failure: {} cache keys failed eviction",
+            failed_keys.len()
+        );
+        let _ = state.db.mark_outbox_failed(outbox_id, &err_msg).await;
+        if sunborn_core::is_production_mode() {
+            return Err(SunbornError::cache(err_msg).into());
+        }
+    }
+
+    // 8. Snapshot Graphify graph if durable path configured
+    persist_graphify_if_configured(state.graphify_graph.clone());
 
     let elapsed_ms = start.elapsed().as_millis() as u64;
 
@@ -318,6 +391,9 @@ pub async fn invalidate_graph_causal(
 
     Ok(Json(json!({
         "status": if failed_keys.is_empty() { "purged" } else { "partially_purged" },
+        "outbox_id": outbox_id,
+        "bumped_epoch": highest_epoch,
+        "cluster_broadcast_sent": cluster_broadcast_sent,
         "mutated_roots": payload.mutated_roots,
         "max_depth_reached": report.max_depth_reached,
         "total_affected_nodes": report.total_affected,

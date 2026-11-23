@@ -49,6 +49,8 @@ pub struct BlastRadiusConfig {
     pub allowed_relations: Option<HashSet<GraphifyRelation>>,
     /// Whether to include cache entries in the traversal
     pub include_cache_entries: bool,
+    /// Optional tenant ID to scope traversal and affected assets
+    pub tenant_id: Option<String>,
 }
 
 impl Default for BlastRadiusConfig {
@@ -57,6 +59,7 @@ impl Default for BlastRadiusConfig {
             max_depth: 16,
             allowed_relations: None,
             include_cache_entries: true,
+            tenant_id: None,
         }
     }
 }
@@ -105,16 +108,35 @@ pub fn compute_affected(
             }
 
             let dependent_id = edge.source_id.clone();
+            let dependent_node = graph.get_node(&dependent_id);
+            let is_cache_entry = if let Some(ref node) = dependent_node {
+                node.node_type == GraphifyNodeType::CacheEntry
+            } else {
+                dependent_id.starts_with("cache::")
+            };
+
+            // Enforce include_cache_entries filter
+            if is_cache_entry && !cfg.include_cache_entries {
+                continue;
+            }
+
+            // Enforce tenant_id scoping when configured
+            if let Some(ref required_tenant) = cfg.tenant_id {
+                if let Some(ref node) = dependent_node {
+                    if let Some(node_tenant) =
+                        node.metadata.get("tenant_id").and_then(|v| v.as_str())
+                    {
+                        if node_tenant != required_tenant.as_str() {
+                            continue;
+                        }
+                    }
+                }
+            }
+
             if visited.insert(dependent_id.clone()) {
                 if next_depth > max_depth_reached {
                     max_depth_reached = next_depth;
                 }
-
-                let is_cache_entry = if let Some(node) = graph.get_node(&dependent_id) {
-                    node.node_type == GraphifyNodeType::CacheEntry
-                } else {
-                    dependent_id.starts_with("cache::")
-                };
 
                 if is_cache_entry {
                     affected_cache_keys.push(dependent_id.clone());
@@ -137,9 +159,38 @@ pub fn compute_affected(
         for edge in graph.get_outgoing_edges(&current_id) {
             if edge.relation == GraphifyRelation::Defines {
                 let defined_id = edge.target_id.clone();
+                let defined_node = graph.get_node(&defined_id);
+                let is_cache_entry = if let Some(ref node) = defined_node {
+                    node.node_type == GraphifyNodeType::CacheEntry
+                } else {
+                    defined_id.starts_with("cache::")
+                };
+
+                // Enforce include_cache_entries filter
+                if is_cache_entry && !cfg.include_cache_entries {
+                    continue;
+                }
+
+                // Enforce tenant_id scoping when configured
+                if let Some(ref required_tenant) = cfg.tenant_id {
+                    if let Some(ref node) = defined_node {
+                        if let Some(node_tenant) =
+                            node.metadata.get("tenant_id").and_then(|v| v.as_str())
+                        {
+                            if node_tenant != required_tenant.as_str() {
+                                continue;
+                            }
+                        }
+                    }
+                }
+
                 if visited.insert(defined_id.clone()) {
                     if next_depth > max_depth_reached {
                         max_depth_reached = next_depth;
+                    }
+
+                    if is_cache_entry {
+                        affected_cache_keys.push(defined_id.clone());
                     }
 
                     affected_hits.push(AffectedHit {
@@ -245,5 +296,83 @@ mod tests {
         // Should terminate without loop, visiting b
         assert_eq!(report.total_affected, 1);
         assert_eq!(report.affected_nodes[0].node_id, "func::b");
+    }
+
+    #[test]
+    fn test_include_cache_entries_filtering() {
+        let graph = GraphifyKnowledgeGraph::new();
+        graph.insert_node("doc::spec", "spec.md", GraphifyNodeType::Document);
+        graph.insert_node(
+            "cache::spec_summary",
+            "spec_summary",
+            GraphifyNodeType::CacheEntry,
+        );
+        graph.link(
+            "cache::spec_summary",
+            "doc::spec",
+            GraphifyRelation::DependsOn,
+        );
+
+        // When include_cache_entries is true (default)
+        let report_with_cache = compute_affected(&graph, &["doc::spec"], None);
+        assert_eq!(report_with_cache.total_affected, 1);
+        assert_eq!(
+            report_with_cache.affected_cache_keys,
+            vec!["cache::spec_summary".to_string()]
+        );
+
+        // When include_cache_entries is false
+        let cfg = BlastRadiusConfig {
+            include_cache_entries: false,
+            ..Default::default()
+        };
+        let report_no_cache = compute_affected(&graph, &["doc::spec"], Some(cfg));
+        assert_eq!(report_no_cache.total_affected, 0);
+        assert!(report_no_cache.affected_cache_keys.is_empty());
+    }
+
+    #[test]
+    fn test_tenant_scoping() {
+        use crate::graphify_model::GraphifyNode;
+        use serde_json::json;
+
+        let graph = GraphifyKnowledgeGraph::new();
+        let doc = GraphifyNode::new("doc::shared", 1, "shared.md", GraphifyNodeType::Document);
+        graph.add_node(doc);
+
+        let mut cache_a =
+            GraphifyNode::new("cache::entry_a", 2, "entry_a", GraphifyNodeType::CacheEntry);
+        cache_a.metadata = json!({ "tenant_id": "tenant-alpha" });
+        graph.add_node(cache_a);
+
+        let mut cache_b =
+            GraphifyNode::new("cache::entry_b", 3, "entry_b", GraphifyNodeType::CacheEntry);
+        cache_b.metadata = json!({ "tenant_id": "tenant-beta" });
+        graph.add_node(cache_b);
+
+        graph.link("cache::entry_a", "doc::shared", GraphifyRelation::DependsOn);
+        graph.link("cache::entry_b", "doc::shared", GraphifyRelation::DependsOn);
+
+        // Scoped to tenant-alpha only
+        let cfg_alpha = BlastRadiusConfig {
+            tenant_id: Some("tenant-alpha".to_string()),
+            ..Default::default()
+        };
+        let report_alpha = compute_affected(&graph, &["doc::shared"], Some(cfg_alpha));
+        assert_eq!(
+            report_alpha.affected_cache_keys,
+            vec!["cache::entry_a".to_string()]
+        );
+
+        // Scoped to tenant-beta only
+        let cfg_beta = BlastRadiusConfig {
+            tenant_id: Some("tenant-beta".to_string()),
+            ..Default::default()
+        };
+        let report_beta = compute_affected(&graph, &["doc::shared"], Some(cfg_beta));
+        assert_eq!(
+            report_beta.affected_cache_keys,
+            vec!["cache::entry_b".to_string()]
+        );
     }
 }

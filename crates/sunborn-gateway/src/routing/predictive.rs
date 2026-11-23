@@ -68,10 +68,12 @@ impl PredictivePrefetchEngine {
         for (action, &count) in destinations {
             let confidence = count as f64 / total_count as f64;
             if confidence >= self.min_confidence_threshold {
+                // Dynamic estimated savings based on historical transition affinity and confidence
+                let estimated_savings_ms = (confidence * 450.0).clamp(100.0, 800.0) as u64;
                 predictions.push(PrefetchPrediction {
                     predicted_action: action.clone(),
                     confidence_score: (confidence * 1000.0).round() / 1000.0,
-                    estimated_savings_ms: 350,
+                    estimated_savings_ms,
                 });
             }
         }

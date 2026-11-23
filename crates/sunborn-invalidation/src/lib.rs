@@ -50,7 +50,7 @@ pub use graph_analytics::{
     compute_node_metrics, detect_god_nodes, find_dependency_cycles, GodNodeReport,
 };
 pub use graph_cache::{deterministic_hash_64, GraphCacheStats, GraphMemoryCache};
-pub use graphify_graph::GraphifyKnowledgeGraph;
+pub use graphify_graph::{GraphifyKnowledgeGraph, GraphifySnapshot};
 pub use graphify_model::{
     GraphifyConfidence, GraphifyEdge, GraphifyNode, GraphifyNodeType, GraphifyRelation,
 };

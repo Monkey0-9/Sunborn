@@ -35,6 +35,11 @@ gateway:
     enabled: true
     minAvailable: 1
 
+  persistence:
+    enabled: true
+    size: 10Gi
+    existingClaim: ""
+
   # Unified security context: mapped automatically to PodSecurityContext (runAsNonRoot/runAsUser/runAsGroup)
   # and Container SecurityContext (allowPrivilegeEscalation/readOnlyRootFilesystem/capabilities).
   securityContext:
@@ -166,6 +171,9 @@ env:
   DECISION_SIMILARITY_THRESHOLD: "0.85"
   DECISION_MAX_RISK: "0.05"
   EPOCH_LEASE_TTL_SECS: "60"
+  SUNBORN_EXECUTION_STORE_PATH: "/var/lib/sunborn/execution.wal"
+  SUNBORN_LEARNING_WAL_PATH: "/var/lib/sunborn/learning.wal"
+  SUNBORN_GRAPHIFY_STORE_PATH: "/var/lib/sunborn/graphify.json"
   # Production requires a remote KMS/HSM. The chart deliberately has no local
   # software-key fallback: provide an AWS KMS key ARN (or set the provider to
   # vault and supply VAULT_ADDR/VAULT_TOKEN) before installing.

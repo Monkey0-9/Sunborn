@@ -90,3 +90,13 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 2
             failureThreshold: 2
+          volumeMounts:
+            - name: sunborn-wal
+              mountPath: /var/lib/sunborn
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: sunborn-wal
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

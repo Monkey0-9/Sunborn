@@ -558,7 +558,7 @@ export function Header() {
                       <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">ACTIVE</span>
                     </div>
                     <div className="text-[11px] text-slate-400">
-                      W-TinyLFU RAM + DragonflyDB (P99: Sub-ms target).
+                      FinOps-GDSF RAM + DragonflyDB (P99: Sub-ms target).
                     </div>
                   </div>
 

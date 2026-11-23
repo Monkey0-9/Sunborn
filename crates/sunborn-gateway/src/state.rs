@@ -49,6 +49,8 @@ pub struct AppState {
     pub circuit_breaker: Arc<CircuitBreakerCache<MemoryExactCache>>,
     pub memory_cache: Arc<MemoryExactCache>,
     pub dragonfly_cache: Arc<sunborn_cache::DragonflyCacheStore>,
+    pub tiered_cache:
+        Option<Arc<sunborn_cache::TieredExactCache<sunborn_cache::DragonflyCacheStore>>>,
     pub vector_store: Arc<dyn sunborn_semantic::VectorStore>,
     pub memory_vector_store: Arc<MemoryVectorStore>,
     pub qdrant_store: Arc<sunborn_semantic::QdrantVectorStore>,
@@ -160,8 +162,12 @@ impl AppState {
             || std::env::var("SUNBORN_CACHE_BACKEND")
                 .map(|v| v.to_lowercase() == "dragonfly")
                 .unwrap_or(false);
+        let tiered_cache = Arc::new(sunborn_cache::TieredExactCache::with_stores(
+            memory_cache.clone(),
+            dragonfly_cache.clone(),
+        ));
         let selected_cache: Arc<dyn ExactCacheStore> = if is_dragonfly {
-            dragonfly_cache.clone()
+            tiered_cache.clone()
         } else {
             circuit_breaker.clone()
         };
@@ -533,6 +539,17 @@ impl AppState {
         };
 
         let graphify_graph = Arc::new(sunborn_invalidation::GraphifyKnowledgeGraph::new());
+        if let Ok(store_path) = std::env::var("SUNBORN_GRAPHIFY_STORE_PATH") {
+            match graphify_graph.hydrate_from_file(&store_path) {
+                Ok(count) if count > 0 => {
+                    tracing::info!(count, path = %store_path, "Hydrated Graphify knowledge graph from persistent store");
+                }
+                Ok(_) => {}
+                Err(err) => {
+                    tracing::warn!(error = %err, path = %store_path, "Could not hydrate Graphify graph from store");
+                }
+            }
+        }
 
         let graph_memory_cache = if is_graph_cache_enabled {
             let lineage_graph = Arc::new(CompressedLineageGraph::new());
@@ -692,6 +709,7 @@ impl AppState {
             circuit_breaker,
             memory_cache,
             dragonfly_cache,
+            tiered_cache: Some(tiered_cache),
             vector_store: selected_vector,
             memory_vector_store,
             qdrant_store,
@@ -753,12 +771,20 @@ impl AppState {
         this
     }
 
-    /// Returns true if DragonflyCacheStore is actively wired into the exact cache path.
+    /// Returns true if DragonflyCacheStore (either directly or via TieredExactCache L2) is actively wired into the exact cache path.
     pub fn is_dragonfly_cache_active(&self) -> bool {
-        Arc::ptr_eq(
+        if Arc::ptr_eq(
             &self.cache,
             &(self.dragonfly_cache.clone() as Arc<dyn ExactCacheStore>),
-        )
+        ) {
+            return true;
+        }
+        if let Some(ref tc) = self.tiered_cache {
+            if Arc::ptr_eq(&self.cache, &(tc.clone() as Arc<dyn ExactCacheStore>)) {
+                return true;
+            }
+        }
+        false
     }
 
     /// Returns true if PostgresDatabaseStore is actively wired into the persistence path.

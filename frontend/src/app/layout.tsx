@@ -79,7 +79,7 @@ export default function RootLayout({
                 <div className="space-y-2">
                   <div className="text-[11px] font-bold uppercase tracking-wider text-slate-300">Architecture Tiers</div>
                   <ul className="space-y-1 text-slate-400 text-[11px]">
-                    <li>• Tier 0/1: In-Memory W-TinyLFU + DragonflyDB</li>
+                    <li>• Tier 0/1: In-Memory FinOps-GDSF + DragonflyDB</li>
                     <li>• Tier 2: Qdrant Vector Conformal Search</li>
                     <li>• Tier 3: Deterministic Agent Execution DAG</li>
                     <li>• Tier 4: PostgreSQL Outbox Write-Behind</li>
