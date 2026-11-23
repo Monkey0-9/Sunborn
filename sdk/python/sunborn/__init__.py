@@ -9,8 +9,10 @@ from .accel import (
     fast_l2_norm,
     is_c_accelerator_available,
 )
+from .anthropic import Anthropic, SunbornAnthropic
 from .async_client import AsyncSunbornClient
 from .client import SunbornAgentClient, SunbornClient, get_default_client, sunborn_tool
+from .openai import OpenAI, SunbornOpenAI
 from .exceptions import (
     SunbornAuthError,
     SunbornConnectionError,
@@ -42,6 +44,10 @@ BadRequestError = SunbornValidationError
 ServerError = SunbornServerError
 
 __all__ = [
+    "OpenAI",
+    "SunbornOpenAI",
+    "Anthropic",
+    "SunbornAnthropic",
     "Sunborn",
     "SunbornClient",
     "AsyncSunborn",

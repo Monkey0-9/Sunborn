@@ -93,6 +93,49 @@ async def main():
 asyncio.run(main())
 ```
 
+### Drop-in OpenAI & Anthropic Clients
+
+Switch existing OpenAI and Anthropic workloads to Sunborn with zero code rewrites:
+
+```python
+# Drop-in OpenAI Client
+from sunborn.openai import OpenAI
+
+client = OpenAI()
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "What is semantic caching?"}],
+)
+print(response.choices[0].message.content)
+print(f"Cached: {response.sunborn_cached}")
+
+# Drop-in Anthropic Client
+from sunborn.anthropic import Anthropic
+
+ant_client = Anthropic()
+msg = ant_client.messages.create(
+    model="claude-3-5-sonnet-20241022",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Explain causal invalidation."}],
+)
+print(msg.content[0].text)
+```
+
+### Agent Frameworks: LangChain & LlamaIndex
+
+```python
+# LangChain Global Cache
+from langchain.globals import set_llm_cache
+from sunborn.integrations.langchain import SunbornLangChainCache
+
+set_llm_cache(SunbornLangChainCache())
+
+# LlamaIndex Cache
+from sunborn.integrations.llamaindex import SunbornLlamaIndexCache
+
+cache = SunbornLlamaIndexCache()
+```
+
 ---
 
 ## 4. Exception Hierarchy
