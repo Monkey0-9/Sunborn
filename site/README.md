@@ -9,6 +9,12 @@ separate from the operator dashboard in `frontend/`.
 - `/playground/` lets visitors send prompts and watch the cache decide: exact
   hit, semantic hit, or refuse an unsafe reuse.
 
+The look (pixel-mosaic panels, serif headlines, mono labels, hairline frame)
+comes from the MIT-licensed "Tessel Agent Landing" template, adapted in
+`src/components/tessel/tessel.tsx`. Sunborn's pages compose its sections in
+`src/components/sunborn/`. Motion uses GSAP with ScrollTrigger and is turned
+off under `prefers-reduced-motion`.
+
 ## Develop
 
 ```bash
