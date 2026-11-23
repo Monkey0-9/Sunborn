@@ -58,6 +58,49 @@ Copy-Item -Path (Join-Path $PSScriptRoot "sunborn-desktop.ps1") -Destination (Jo
 Copy-Item -Path (Join-Path $PSScriptRoot "sunborn-desktop.bat") -Destination (Join-Path $StageDir "sunborn-desktop.bat") -Force
 Copy-Item -Path (Join-Path $ProjectRoot "README.md") -Destination (Join-Path $StageDir "README.md") -Force
 Copy-Item -Path (Join-Path $ProjectRoot "LICENSE") -Destination (Join-Path $StageDir "LICENSE") -Force
+if (Test-Path (Join-Path $ProjectRoot "sbom.cyclonedx.json")) {
+    Copy-Item -Path (Join-Path $ProjectRoot "sbom.cyclonedx.json") -Destination (Join-Path $StageDir "sbom.cyclonedx.json") -Force
+    Copy-Item -Path (Join-Path $ProjectRoot "sbom.cyclonedx.json") -Destination (Join-Path $OutputDir "sbom.cyclonedx.json") -Force
+}
+
+# Optional code-signing for production release distribution
+if ($env:SIGNING_CERT_PFX -and (Test-Path $env:SIGNING_CERT_PFX)) {
+    Write-Host "Signing executable with release certificate..." -ForegroundColor Cyan
+    $certPass = if ($env:SIGNING_CERT_PASSWORD) { ConvertTo-SecureString $env:SIGNING_CERT_PASSWORD -AsPlainText -Force } else { $null }
+    $cert = Get-PfxCertificate -FilePath $env:SIGNING_CERT_PFX
+    Set-AuthenticodeSignature -FilePath (Join-Path $StageDir "bin\sunborn-gateway.exe") -Certificate $cert -TimestampServer "http://timestamp.digicert.com"
+}
+
+# Generate build provenance metadata
+$gitCommit = "unknown"
+try {
+    $gitCommit = (& git rev-parse HEAD 2>$null).Trim()
+} catch {}
+
+$BinSha256 = (Get-FileHash -Path (Join-Path $StageDir "bin\sunborn-gateway.exe") -Algorithm SHA256).Hash.ToLower()
+
+$Provenance = [ordered]@{
+    product = "Sunborn Desktop BYOK Gateway"
+    version = $Version
+    target = "windows-x64"
+    build_date_utc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    commit_sha = $gitCommit
+    binary = @{
+        name = "sunborn-gateway.exe"
+        sha256 = $BinSha256
+        architecture = "x86_64"
+        os = "windows"
+    }
+    supply_chain = @{
+        slsa_level = "SLSA-Build-Level-2"
+        builder = "GitHub Actions / Microsoft Windows Server"
+        sbom = "sbom.cyclonedx.json"
+        verification_guidance = "Verify Authenticode via Get-AuthenticodeSignature or check SHA256SUMS.txt"
+    }
+}
+$ProvenanceJson = ($Provenance | ConvertTo-Json -Depth 5)
+Set-Content -Path (Join-Path $StageDir "PROVENANCE.json") -Value $ProvenanceJson -Encoding UTF8
+Set-Content -Path (Join-Path $OutputDir "PROVENANCE.json") -Value $ProvenanceJson -Encoding UTF8
 
 # Create convenient 1-click Install.bat for non-technical users
 $BatContent = @"

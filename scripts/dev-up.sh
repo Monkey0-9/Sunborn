@@ -52,12 +52,13 @@ SUNBORN_LEARNING_HMAC_SECRET=a0b1c2d3e4f5a0b1c2d3e4f5a0b1c2d3e4f5a0b1c2d3e4f5a0b
 SUNBORN_CERTIFICATE_SIGNING_KEY=a0b1c2d3e4f5a0b1c2d3e4f5a0b1c2d3e4f5a0b1c2d3e4f5a0b1c2d3e4f5a0b1
 SUNBORN_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 
-# Leave provider keys empty to use the built-in mock origin. Add a real
-# key and SUNBORN_LLM_ORIGIN_URL when you want live upstream calls.
-SUNBORN_LLM_ORIGIN_URL=
-OPENAI_API_KEY=
-SUNBORN_EMBEDDING_URL=
-SUNBORN_EMBEDDING_API_KEY=
+# Leave provider keys commented out to use the built-in mock origin. A
+# present-but-empty value is treated as unset by the gateway. Uncomment and
+# fill these in for live upstream calls.
+# SUNBORN_LLM_ORIGIN_URL=https://api.openai.com/v1
+# OPENAI_API_KEY=sk-...
+# SUNBORN_EMBEDDING_URL=https://api.openai.com/v1/embeddings
+# SUNBORN_EMBEDDING_API_KEY=sk-...
 SUNBORN_EMBEDDING_MODEL=text-embedding-3-small
 EOF
   echo "Wrote $ENV_FILE (development values)."

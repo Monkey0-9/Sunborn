@@ -660,4 +660,22 @@ async fn test_causal_invalidation_is_tenant_isolated_and_fails_closed() {
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+
+    // 5. Blank/whitespace tenant_id is refused with FORBIDDEN (fail closed).
+    let (status, body) = post_json(
+        &app,
+        "/v1/graph/invalidate",
+        json!({ "mutated_roots": ["doc::tenant_a"], "tenant_id": "   " }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "body: {body}");
+
+    // 6. Non-existent root refused when tenant cannot be verified.
+    let (status, _) = post_json(
+        &app,
+        "/v1/graph/invalidate",
+        json!({ "mutated_roots": ["doc::ghost_node"], "tenant_id": "tenant-a" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
 }

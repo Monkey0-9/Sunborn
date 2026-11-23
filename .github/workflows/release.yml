@@ -78,7 +78,26 @@ jobs:
           Expand-Archive -Path $distZip.FullName -DestinationPath $testDir -Force
           Push-Location $testDir
           try {
-            .\install-sunborn.ps1 -Silent
+            $installProc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File .\install-sunborn.ps1 -Silent" -Wait -PassThru
+            if ($installProc.ExitCode -ne 0) {
+              throw "Installer exited with failure code: $($installProc.ExitCode)"
+            }
+            $targetBin = "$env:LOCALAPPDATA\Sunborn\bin\sunborn-gateway.exe"
+            if (-not (Test-Path $targetBin)) {
+              throw "Installed binary missing at $targetBin"
+            }
+            $ver = & $targetBin --version
+            Write-Host "Installed binary verified: $ver"
+            if ($LASTEXITCODE -ne 0) {
+              throw "sunborn-gateway --version failed with exit code $LASTEXITCODE"
+            }
+            $uninstallScript = "$env:LOCALAPPDATA\Sunborn\uninstall.ps1"
+            if (Test-Path $uninstallScript) {
+              $uninstProc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$uninstallScript`" -Silent -PurgeData" -Wait -PassThru
+              if ($uninstProc.ExitCode -ne 0) {
+                Write-Warning "Uninstaller exited with code: $($uninstProc.ExitCode)"
+              }
+            }
           } finally {
             Pop-Location
             Remove-Item -Path $testDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -91,6 +110,8 @@ jobs:
           path: |
             target/dist/sunborn-desktop-*-windows-x64.zip
             target/dist/SHA256SUMS.txt
+            target/dist/PROVENANCE.json
+            target/dist/sbom.cyclonedx.json
 
   build-and-publish:
     name: Build Containers, Package Helm Chart & Publish Release
@@ -209,6 +230,7 @@ jobs:
             dist/helm/*.tgz
             dist/desktop/*.zip
             dist/desktop/*.txt
+            dist/desktop/*.json
             research/results/reproduction_certificate.json
             research/results/benchmark_run.json
             research/results/run_manifest.json

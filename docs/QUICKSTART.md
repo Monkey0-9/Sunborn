@@ -129,11 +129,23 @@ gateway with that wiring:
 make dev            # or: bash scripts/dev-up.sh
 ```
 
-Open a second terminal for the control plane:
+Verify the request path end to end (origin miss → exact cache hit) in a second
+terminal:
+
+```bash
+make smoke
+```
+
+Then start the control plane:
 
 ```bash
 npm --prefix frontend run dev
 ```
+
+`/ready` may report `503` with `status: degraded` when no LLM provider key is
+configured. That is expected: cache, database, and vector store are connected,
+but the origin is unavailable until you set a provider key. `make smoke` works
+against the built-in mock origin.
 
 `make dev` is safe to re-run: it reuses the Docker volumes and the existing
 `.env.local`. Stop the brokers with `make docker-down`. If Docker is not

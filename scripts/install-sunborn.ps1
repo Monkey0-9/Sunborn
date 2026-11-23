@@ -10,7 +10,8 @@
 param(
     [string]$TargetDir = "$env:LOCALAPPDATA\Sunborn",
     [switch]$SkipBuild = $false,
-    [switch]$LaunchAfterInstall = $false
+    [switch]$LaunchAfterInstall = $false,
+    [switch]$Silent = $false
 )
 
 $ErrorActionPreference = "Stop"

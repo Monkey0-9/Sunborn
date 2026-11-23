@@ -3,7 +3,7 @@ ifeq ($(OS),Windows_NT)
 PYTHON := python
 endif
 
-.PHONY: all build test check fmt lint run clean help docker-up docker-down brokers dev test-frontend build-frontend test-sdk lint-helm verify-stack reproduce verify-all doctor config-check
+.PHONY: all build test check fmt lint run clean help docker-up docker-down brokers dev smoke test-frontend build-frontend test-sdk lint-helm verify-stack reproduce verify-all doctor config-check
 
 all: check test
 
@@ -26,6 +26,7 @@ help:
 	@echo "  make run           - Run the sunborn-gateway service"
 	@echo "  make brokers       - Start Postgres, Dragonfly and Qdrant only"
 	@echo "  make dev           - Wire brokers, generate .env.local, and run the gateway"
+	@echo "  make smoke         - Verify origin miss to exact cache hit against a running gateway"
 	@echo "  make docker-up     - Start local dependencies via Docker Compose"
 	@echo "  make docker-down   - Stop local dependencies"
 
@@ -79,6 +80,9 @@ brokers:
 
 dev:
 	bash scripts/dev-up.sh
+
+smoke:
+	bash scripts/dev-smoke.sh
 
 docker-up:
 	docker compose -f deploy/docker-compose.yml up -d

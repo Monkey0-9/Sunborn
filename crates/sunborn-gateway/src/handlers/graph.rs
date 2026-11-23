@@ -395,7 +395,7 @@ pub async fn invalidate_graph_causal(
             .map_err(AppError::from)?;
     } else {
         let err_msg = format!(
-            "Partial failure: {} cache keys failed eviction",
+            "Partial failure: {} cache keys failed eviction during causal invalidation",
             failed_keys.len()
         );
         if let Err(mark_err) = state.db.mark_outbox_failed(outbox_id, &err_msg).await {
@@ -404,10 +404,13 @@ pub async fn invalidate_graph_causal(
                 error = %mark_err,
                 "Outbox event could not be marked FAILED after partial purge; it stays PENDING and will be retried"
             );
+            return Err(SunbornError::database(format!(
+                "{err_msg}; additionally failed to transition outbox state: {mark_err}"
+            ))
+            .into());
         }
-        if sunborn_core::is_production_mode() {
-            return Err(SunbornError::cache(err_msg).into());
-        }
+        // Fail closed in ALL execution modes: partial purge is NEVER reported as success
+        return Err(SunbornError::cache(err_msg).into());
     }
 
     // 8. Snapshot Graphify graph if durable path configured

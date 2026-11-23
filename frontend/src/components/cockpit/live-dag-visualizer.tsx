@@ -112,19 +112,19 @@ export function LiveDAGVisualizer() {
             Execution Pipeline & Merkle DAG
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Deterministic execution flow with cryptographic verification at every boundary.
+            Architectural SLA design target bounds. Live request latency is measured in the Telemetry ribbon.
           </p>
         </div>
         <div className="flex items-center gap-2">
           {isSimulated ? (
             <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 font-semibold">
               <AlertCircle className="w-3 h-3 text-amber-400" />
-              SIMULATION (Architectural Reference)
+              SPECIFICATION TARGETS
             </span>
           ) : isLive ? (
             <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Live Gateway Measured
+              SLA Bound Targets
             </span>
           ) : (
             <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1">
@@ -159,7 +159,7 @@ export function LiveDAGVisualizer() {
                     Step 0{index + 1}
                   </span>
                   <span className="text-xs font-semibold mt-0.5">{node.label}</span>
-                  <span className="text-[9px] font-mono text-cyan-400 mt-1">{node.latencyBound}</span>
+                  <span className="text-[9px] font-mono text-cyan-400 mt-1">SLA {node.latencyBound}</span>
                 </button>
                 {index < nodes.length - 1 && (
                   <div className="text-slate-600 font-mono text-xs px-1 select-none" aria-hidden="true">
@@ -180,7 +180,7 @@ export function LiveDAGVisualizer() {
             <span className="font-semibold text-white">{selectedNode.label}</span>
             <span className="text-slate-400 font-mono">({selectedNode.role})</span>
           </div>
-          <span className="text-cyan-400 font-mono font-medium">{selectedNode.latencyBound}</span>
+          <span className="text-cyan-400 font-mono font-medium">Target: {selectedNode.latencyBound}</span>
         </div>
         <p className="mt-2 text-slate-300 font-sans leading-relaxed text-[12px]">
           {selectedNode.detail}

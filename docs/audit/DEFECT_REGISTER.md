@@ -1,7 +1,7 @@
-# Master Defect Register (Remediation Tracking D-01 through D-12 and Issues #3 through #22)
+# Master Defect Register (Remediation Tracking D-01 through D-12 and Issues #3 through #23)
 
-**Total Audit Defects:** 30  
-**Remediated & Closed:** 30 / 30 (100% Resolution Rate)  
+**Total Audit Defects:** 31  
+**Remediated & Closed:** 31 / 31 (100% Resolution Rate)  
 **Open P0 / P1 Defects:** 0  
 **Authoritative Status:** Stage 0 Controlled Pilot Approved; Stage 1/2 Gated on External Staging.
 
@@ -170,3 +170,60 @@ Issue #22 P1 High   CLOSED  Security CI      Upgraded Semgrep SAST action, resol
   - *Root Cause*: Deprecated Semgrep GitHub Action crashed with `ValueError: invalid rule severity value: MEDIUM` and masked errors.
   - *Remediation*: Modernized `.github/workflows/security.yml` to run official Semgrep CLI with `--error`, output SARIF reports, upload artifacts, and verify fixture detection in `scripts/test_semgrep_gate.py`.
   - *Verification*: `python scripts/test_semgrep_gate.py`.
+
+---
+
+## 4. Reopened Audit & Release Hardening Defect Ledger (Issues #13, #16, #17, #20, #21, #22, and #23)
+
+```
+=========================================================================================================
+                          SUNBORN REOPENED AUDIT REMEDIATION LEDGER (PHASE 4)
+=========================================================================================================
+ID        Severity  Status  Component        Summary & Remediation                              Verified Test
+---------------------------------------------------------------------------------------------------------
+Issue #13 P0 Crit   CLOSED  Invalidation     Fail-closed causal invalidation on partial purge   graphify_causal_invalidation_test
+                                             and DB error; mandatory tenant_id validation
+Issue #16 P1 High   CLOSED  Telemetry        Eradicated synthetic cluster topology & latency;   live-dag-visualizer.tsx
+                                             live SSE stream & explicit SLA target badges       cluster-mesh-status.tsx
+Issue #17 P1 High   CLOSED  Deployment       Configured KMS provider & persistent WAL storage   docker-compose.prod.yml
+                                             in production Compose manifests                    
+Issue #20 P1 High   CLOSED  Documentation    Reconciled README & launch docs to authoritative   verify_public_launch.py
+                                             Stage 0 Controlled Pilot SSOT (80.8% recall)
+Issue #21 P1 High   CLOSED  Distribution     Hardened clean-machine installer smoke test with   .github/workflows/release.yml
+                                             exit code checks, binary test & uninstaller
+Issue #22 P1 High   CLOSED  Security CI      Pinned Semgrep CLI to semgrep==1.178.0 in          .github/workflows/security.yml
+                                             workflow to eliminate version drift
+Issue #23 P1 High   CLOSED  Provenance       Added PROVENANCE.json (SLSA Level 2), SBOM, and    package-distribution.ps1
+                                             Authenticode signing support to Windows release
+=========================================================================================================
+```
+
+### Detailed Phase 4 Hardening Summaries:
+
+- **Issue #13 (Fail-Closed Causal Invalidation & Invalidation Error Handling)**:
+  - *Hardening*: Enforced mandatory non-empty `tenant_id` on `CausalInvalidatePayload`. Partial cache key eviction failures and outbox update failures now fail closed in ALL execution modes with explicit `500` / `AppError` and transition the outbox event to `FAILED` for background retry.
+  - *Verification*: `crates/sunborn-gateway/tests/graphify_causal_invalidation_test.rs`.
+
+- **Issue #16 (Live Cockpit Telemetry & Disclosures)**:
+  - *Hardening*: Eradicated hardcoded 4-region RTTs (`14.2ms`, `38.6ms`, `64.1ms`) from `cluster-mesh-status.tsx`. Added live SSE cluster status with explicit `UNAVAILABLE` / `PARTIAL` labels for unmeasured peers. Updated `live-dag-visualizer.tsx` to badge latency numbers as design/SLA targets, not live measured telemetry.
+  - *Verification*: `npm test --prefix frontend` (67/67 passed).
+
+- **Issue #17 (Production Compose KMS & WAL Storage)**:
+  - *Hardening*: Added `SUNBORN_KMS_PROVIDER`, `AWS_KMS_KEY_ARN`, and `AWS_REGION` options to `deploy/docker-compose.prod.yml` alongside persistent WAL volume mounts (`/var/lib/sunborn`).
+  - *Verification*: `scripts/check_k8s_manifests.py`.
+
+- **Issue #20 (Documentation & Research Claim Reconciliation)**:
+  - *Hardening*: Harmonized `README.md`, `docs/STATUS.md`, and `docs/launch/05_PRELAUNCH_CHECKLIST.md` to consistently report 80.8% recall on the 320-pair benchmark and establish Stage 0 Controlled Pilot as the authoritative release baseline.
+  - *Verification*: `python scripts/verify_public_launch.py --strict`.
+
+- **Issue #21 (Clean-Machine Desktop Release Smoke Testing)**:
+  - *Hardening*: Updated `.github/workflows/release.yml` to check `$installProc.ExitCode -eq 0`, verify `$targetBin --version`, test `uninstall.ps1 -Silent -PurgeData`, and added `[switch]$Silent = $false` to `scripts/install-sunborn.ps1`.
+  - *Verification*: `scripts/install-sunborn.ps1` and GitHub Actions release workflow.
+
+- **Issue #22 (Pinned Semgrep SAST Version)**:
+  - *Hardening*: Pinned Semgrep CLI installation in `.github/workflows/security.yml` to `semgrep==1.178.0`.
+  - *Verification*: `.github/workflows/security.yml`.
+
+- **Issue #23 (Windows Package Signing, Provenance & SBOM)**:
+  - *Hardening*: Updated `scripts/package-distribution.ps1` to generate `PROVENANCE.json` (SLSA Level 2 build metadata including binary SHA-256 and commit SHA), bundle `sbom.cyclonedx.json`, support Authenticode signing via `$env:SIGNING_CERT_PFX`, and updated `.github/workflows/release.yml` to upload and publish provenance alongside the release zip.
+  - *Verification*: `powershell -File scripts/package-distribution.ps1 -SkipBuild`.
