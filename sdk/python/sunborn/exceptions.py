@@ -2,7 +2,7 @@
 Sunborn SDK Exception Hierarchy mapping RFC 7807 Problem Details.
 """
 
-from typing import Any
+from typing import Any, NoReturn
 
 
 class SunbornError(RuntimeError):
@@ -72,7 +72,11 @@ ServerError = SunbornServerError
 ConfigurationError = SunbornValidationError
 
 
-def raise_for_status(status_code: int, response_text: str, problem_details: dict[str, Any] | None = None):
+def raise_for_status(
+    status_code: int,
+    response_text: str,
+    problem_details: dict[str, Any] | None = None,
+) -> NoReturn:
     """Maps HTTP status codes to typed Sunborn SDK exceptions."""
     details = problem_details or {}
     detail_msg = details.get("detail", response_text)
@@ -80,16 +84,21 @@ def raise_for_status(status_code: int, response_text: str, problem_details: dict
 
     if status_code == 401:
         raise SunbornAuthError(msg, status_code=401, problem_details=details)
-    elif status_code == 403:
+    if status_code == 403:
         raise SunbornForbiddenError(msg, status_code=403, problem_details=details)
-    elif status_code == 404:
+    if status_code == 404:
         raise SunbornNotFoundError(msg, status_code=404, problem_details=details)
-    elif status_code == 429:
-        retry_after = float(details.get("retry_after", 1.0))
+    if status_code == 429:
+        raw_retry_after = details.get("retry_after")
+        try:
+            retry_after = float(raw_retry_after) if raw_retry_after is not None else None
+        except (TypeError, ValueError):
+            retry_after = None
         raise SunbornRateLimitError(msg, retry_after=retry_after, problem_details=details)
-    elif status_code == 400:
-        raise SunbornValidationError(msg, status_code=400, problem_details=details)
-    elif status_code >= 500:
+    if status_code == 400 or status_code == 422:
+        raise SunbornValidationError(msg, status_code=status_code, problem_details=details)
+    if status_code >= 500:
         raise SunbornServerError(msg, status_code=status_code, problem_details=details)
-    elif status_code >= 400:
+    if status_code >= 400:
         raise SunbornError(msg, status_code=status_code, problem_details=details)
+    raise SunbornError(msg, status_code=status_code, problem_details=details)

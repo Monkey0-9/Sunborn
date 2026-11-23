@@ -145,11 +145,9 @@ SUNBORN_QDRANT_QUANTIZATION=false \
   sunborn-gateway
 ```
 
-Cost ceilings are per process. `SUNBORN_MAX_SPEND_PER_WINDOW_USD` (default
-$100 per rolling 60 s) plus the per-tenant ceilings bound one replica; a
-fleet-wide cap is therefore approximately `replicas × window cap`, not a single
-global number. If you need a hard global daily budget, enforce it at the edge or
-in the billing layer — the gateway does not aggregate spend across pods.
+Cost ceilings depend on the storage backend:
+- **Durable PostgreSQL Mode (`SUNBORN_DB_BACKEND=postgres`)**: Spend enforcement is cluster-wide and fleet-synchronized using PostgreSQL advisory locks on `finops_spend_ledgers`. Committed spend across all replicas is aggregated and bounded against tenant and global ceilings.
+- **In-Memory Development Mode (`SUNBORN_DB_BACKEND=memory`)**: Cost ceilings (`SUNBORN_MAX_SPEND_PER_WINDOW_USD`, default $100 per rolling 60 s) are enforced per process; fleet-wide capacity in this mode scales as approximately `replicas × window cap`. Production deployments requiring strict global spend caps should always run in durable PostgreSQL mode.
 
 ---
 

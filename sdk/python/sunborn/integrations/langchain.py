@@ -1,7 +1,10 @@
 """
-LangChain Semantic Cache Integration for Sunborn Gateway.
+LangChain cache integration backed by Sunborn's execution-reuse endpoints.
 
-Allows seamless plug-and-play caching for any LangChain LLM or ChatModel:
+``update`` stores the returned generations; ``lookup`` asks the gateway's
+execution planner whether that exact generation is already memoized. Nothing is
+fabricated when the gateway is unavailable: the cache abstains unless
+``fail_closed`` is set.
 
     from langchain.globals import set_llm_cache
     from sunborn.integrations.langchain import SunbornLangChainCache
@@ -11,34 +14,46 @@ Allows seamless plug-and-play caching for any LangChain LLM or ChatModel:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from typing import Any, Sequence
 
 from ..client import SunbornClient
-from ..models import CachePolicy
 
-# Optional BaseCache import to avoid hard dependency on langchain-core
-try:
+try:  # Optional dependency: the adapter works without langchain installed.
     from langchain_core.caches import BaseCache
     from langchain_core.outputs import Generation
 except ImportError:
+
     class BaseCache:  # type: ignore[no-redef]
-        """Stub BaseCache when langchain-core is not installed."""
-        pass
+        """Placeholder for ``langchain_core.caches.BaseCache``."""
 
     class Generation:  # type: ignore[no-redef]
-        """Stub Generation when langchain-core is not installed."""
+        """Placeholder for ``langchain_core.outputs.Generation``."""
+
         def __init__(self, text: str, **kwargs: Any) -> None:
             self.text = text
 
 
+_TOOL_NAME = "langchain-cache"
+_TOOL_VERSION = "1"
+
+
+def _texts_from_output(output: Any) -> list[str] | None:
+    if isinstance(output, dict):
+        texts = output.get("texts")
+        if isinstance(texts, list):
+            return [str(item) for item in texts]
+        return None
+    if isinstance(output, list):
+        return [str(item) for item in output]
+    if isinstance(output, str):
+        return [output]
+    return None
+
+
 class SunbornLangChainCache(BaseCache):
-    """
-    High-Performance LangChain Cache backed by Sunborn Gateway.
-    
-    Provides sub-millisecond exact caching and calibrated semantic hit resolution,
-    slashing LLM costs and latency while preserving deterministic safety.
-    """
+    """LangChain ``BaseCache`` implementation using Sunborn execution reuse."""
 
     def __init__(
         self,
@@ -47,7 +62,8 @@ class SunbornLangChainCache(BaseCache):
         api_key: str | None = None,
         tenant_id: str = "default-tenant",
         application_id: str = "langchain-agent",
-        cache_policy: str = CachePolicy.DEFAULT,
+        ttl_secs: int | None = None,
+        fail_closed: bool = False,
     ) -> None:
         self.client = client or SunbornClient(
             base_url=base_url,
@@ -55,49 +71,95 @@ class SunbornLangChainCache(BaseCache):
             tenant_id=tenant_id,
             application_id=application_id,
         )
-        self.cache_policy = cache_policy
+        self.ttl_secs = ttl_secs
+        self.fail_closed = fail_closed
 
-    def _make_key(self, prompt: str, llm_string: str) -> str:
-        h = hashlib.sha256()
-        h.update(prompt.encode("utf-8"))
-        h.update(b"::")
-        h.update(llm_string.encode("utf-8"))
-        return f"lc::{h.hexdigest()}"
+    def _plan(
+        self, prompt: str, llm_string: str
+    ) -> tuple[str, dict[str, Any], list[dict[str, Any]]]:
+        cache_key = hashlib.sha256(
+            f"{prompt}\x00{llm_string}".encode("utf-8")
+        ).hexdigest()
+        arguments = {
+            "cache_key": cache_key,
+            "prompt": prompt,
+            "llm_string": llm_string,
+        }
+        node_id = f"node-{_TOOL_NAME}-{cache_key[:16]}"
+        node = {
+            "id": node_id,
+            "name": _TOOL_NAME,
+            "dependencies": [],
+            "is_deterministic": True,
+            "effect": "PureDeterministic"
+            if self.ttl_secs is None
+            else {"TimeSensitiveNonDeterministic": {"max_ttl_secs": self.ttl_secs}},
+            "tool_call": {
+                "tool_name": _TOOL_NAME,
+                "tool_version": _TOOL_VERSION,
+                "arguments": arguments,
+                "context_hash": None,
+            },
+        }
+        return node_id, arguments, [node]
 
     def lookup(self, prompt: str, llm_string: str) -> Sequence[Generation] | None:
-        """Look up the prompt in Sunborn gateway cache."""
+        """Return cached generations, or ``None`` on a miss."""
+        node_id, _arguments, nodes = self._plan(prompt, llm_string)
         try:
-            resp = self.client.chat_completion(
-                prompt=prompt,
-                model="langchain-cached",
-            )
-            if resp.get("sunborn_cached") and resp.get("choices"):
-                content = resp["choices"][0].get("message", {}).get("content", "")
-                if content:
-                    return [Generation(text=content)]
-            return None
+            evaluation = self.client.plan_execution_dag(nodes)
         except Exception:
+            if self.fail_closed:
+                raise
             return None
 
-    def update(self, prompt: str, llm_string: str, return_val: Sequence[Generation]) -> None:
-        """Update Sunborn gateway cache with new generation output."""
+        status = (evaluation.get("node_statuses") or {}).get(node_id) or {}
+        if status.get("status") != "Cached":
+            return None
+        details = status.get("details") or {}
+        texts = _texts_from_output(details.get("output"))
+        if texts is None:
+            return None
+        return [Generation(text=text) for text in texts]
+
+    def update(
+        self, prompt: str, llm_string: str, return_val: Sequence[Generation]
+    ) -> None:
+        """Store the generations that were just produced."""
         if not return_val:
             return
+        _node_id, arguments, _nodes = self._plan(prompt, llm_string)
+        texts = [generation.text for generation in return_val]
         try:
-            self.client.chat_completion(
-                prompt=prompt,
-                model="langchain-cached",
+            self.client.record_tool_result(
+                tool_name=_TOOL_NAME,
+                tool_version=_TOOL_VERSION,
+                arguments=arguments,
+                output={"texts": texts},
+                execution_latency_ms=0,
+                ttl_secs=self.ttl_secs,
             )
         except Exception:
-            pass
+            if self.fail_closed:
+                raise
 
     def clear(self, **kwargs: Any) -> None:
-        """Clear cache for current tenant."""
+        """Evict every entry recorded by this adapter (administrative endpoint)."""
         try:
-            self.client.invalidate_graph_rtc(
-                mutated_doc_hashes=[],
-                mutated_source_ids=[],
-                tenant_id=self.client.tenant_id,
-            )
+            self.client.evict_execution(tool_name=_TOOL_NAME)
         except Exception:
-            pass
+            if self.fail_closed:
+                raise
+
+    async def alookup(
+        self, prompt: str, llm_string: str
+    ) -> Sequence[Generation] | None:
+        return await asyncio.to_thread(self.lookup, prompt, llm_string)
+
+    async def aupdate(
+        self, prompt: str, llm_string: str, return_val: Sequence[Generation]
+    ) -> None:
+        await asyncio.to_thread(self.update, prompt, llm_string, return_val)
+
+    async def aclear(self, **kwargs: Any) -> None:
+        await asyncio.to_thread(self.clear, **kwargs)

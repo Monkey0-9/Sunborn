@@ -1,20 +1,38 @@
+"""SDK tests exercising the real HTTP transport against a loopback stub."""
+
 import asyncio
 import datetime
 import os
 import sys
 import unittest
-import urllib.error
 import uuid
 from unittest.mock import MagicMock, patch
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sunborn_agent import (
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _HERE)
+sys.path.insert(0, os.path.join(_HERE, "tests"))
+
+from fake_server import StubServer, json_response, sequence  # noqa: E402
+from sunborn_agent import (  # noqa: E402
     AsyncSunbornClient,
     FallbackPolicy,
+    SunbornAuthError,
     SunbornClient,
+    SunbornConnectionError,
     compute_context_digest,
     sunborn_tool,
 )
+
+OPENAI_BODY = {
+    "id": "chatcmpl-1",
+    "object": "chat.completion",
+    "created": 1,
+    "model": "gpt-4o",
+    "sunborn_cached": True,
+    "sunborn_tier": "exact",
+    "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}}],
+    "usage": {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3},
+}
 
 
 class TestSunbornClient(unittest.TestCase):
@@ -33,84 +51,248 @@ class TestSunbornClient(unittest.TestCase):
         self.assertEqual(client.api_key, "key-test-123")
         self.assertEqual(client.tenant_id, "tenant-alpha")
         self.assertEqual(client.application_id, "app-1")
+        client.close()
 
     def test_client_init_normalizes_base_url(self):
         client1 = SunbornClient(base_url="http://localhost:8080", api_key="test-key")
         self.assertEqual(client1.base_url, "http://localhost:8080/v1")
+        client1.close()
 
         client2 = SunbornClient(
             base_url="http://localhost:8080/v1/", api_key="test-key"
         )
         self.assertEqual(client2.base_url, "http://localhost:8080/v1")
+        client2.close()
 
-    @patch("sunborn_agent.urllib.request.urlopen")
-    def test_chat_completion_request_payload_full_options(self, mock_urlopen):
-        mock_response = MagicMock()
-        mock_response.read.return_value = (
-            b'{"choices": [{"message": {"content": "ok"}}]}'
-        )
-        mock_response.__enter__.return_value = mock_response
-        mock_urlopen.return_value = mock_response
+    def test_chat_completion_request_payload_full_options(self):
+        with StubServer(lambda _req: json_response(OPENAI_BODY)) as server:
+            with SunbornClient(base_url=server.base_url, api_key="test-key") as client:
+                res = client.chat_completion(
+                    model="gpt-4o",
+                    prompt="Hello Sunborn",
+                    system_prompt="You are helpful.",
+                    temperature=0.7,
+                    top_p=0.9,
+                    max_tokens=256,
+                    stop=["\n", "User:"],
+                    seed=42,
+                    response_format={"type": "json_object"},
+                    allow_stochastic=True,
+                    context_digest="abcd1234efgh5678",
+                )
 
-        client = SunbornClient(api_key="test-key")
-        res = client.chat_completion(
-            model="gpt-4o",
-            prompt="Hello Sunborn",
-            system_prompt="You are helpful.",
-            temperature=0.7,
-            top_p=0.9,
-            max_tokens=256,
-            stop=["\n", "User:"],
-            seed=42,
-            response_format={"type": "json_object"},
-            allow_stochastic=True,
-            context_digest="abcd1234efgh5678",
-        )
-        self.assertIn("choices", res)
-        self.assertEqual(res["choices"][0]["message"]["content"], "ok")
+            self.assertEqual(res["choices"][0]["message"]["content"], "ok")
+            request = server.last_request
+            self.assertEqual(request.path, "/v1/chat/completions")
+            self.assertEqual(
+                request.headers.get("x-sunborn-cache-policy"), "allow-stochastic"
+            )
+            self.assertEqual(
+                request.headers.get("x-sunborn-context-digest"), "abcd1234efgh5678"
+            )
+            self.assertEqual(request.headers.get("x-api-key"), "test-key")
+            body = request.json()
+            self.assertEqual(body["model"], "gpt-4o")
+            self.assertEqual(body["temperature"], 0.7)
+            self.assertEqual(body["top_p"], 0.9)
+            self.assertEqual(body["max_tokens"], 256)
+            self.assertEqual(body["stop"], ["\n", "User:"])
+            self.assertEqual(body["seed"], 42)
+            self.assertEqual(body["messages"][0]["role"], "system")
 
-        # Verify request call arguments
-        req = mock_urlopen.call_args[0][0]
-        self.assertEqual(req.headers.get("X-sunborn-cache-policy"), "allow-stochastic")
-        self.assertEqual(
-            req.headers.get("X-sunborn-context-digest"), "abcd1234efgh5678"
-        )
+    def test_execute_request_returns_typed_response(self):
+        with StubServer(lambda _req: json_response(OPENAI_BODY)) as server:
+            with SunbornClient(base_url=server.base_url, api_key="test-key") as client:
+                response = client.execute_request("Explain caching.")
 
-    @patch("sunborn_agent.urllib.request.urlopen")
-    def test_anthropic_messages_payload(self, mock_urlopen):
-        mock_response = MagicMock()
-        mock_response.read.return_value = (
-            b'{"id": "msg_1", "content": [{"type": "text", "text": "hello"}]}'
-        )
-        mock_response.__enter__.return_value = mock_response
-        mock_urlopen.return_value = mock_response
+            self.assertEqual(response.content, "ok")
+            self.assertTrue(response.cached)
+            self.assertEqual(response.tier, "exact")
+            self.assertEqual(response.model, "gpt-4o")
+            self.assertEqual(response.usage["total_tokens"], 3)
+            self.assertEqual(response.raw["id"], "chatcmpl-1")
 
-        client = SunbornClient(api_key="test-key")
-        res = client.create_message(
-            model="claude-3-5-sonnet-20241022",
-            messages=[{"role": "user", "content": "Hi"}],
-            system="System instructions",
-            max_tokens=500,
-            temperature=0.2,
-            stop_sequences=["STOP"],
+    def test_anthropic_messages_payload(self):
+        body = {"id": "msg_1", "content": [{"type": "text", "text": "hello"}]}
+        with StubServer(lambda _req: json_response(body)) as server:
+            with SunbornClient(base_url=server.base_url, api_key="test-key") as client:
+                res = client.create_message(
+                    model="claude-3-5-sonnet-20241022",
+                    messages=[{"role": "user", "content": "Hi"}],
+                    system="System instructions",
+                    max_tokens=500,
+                    temperature=0.2,
+                    stop_sequences=["STOP"],
+                )
+
+            self.assertEqual(res["id"], "msg_1")
+            request = server.last_request
+            self.assertEqual(request.path, "/v1/messages")
+            payload = request.json()
+            self.assertEqual(payload["system"], "System instructions")
+            self.assertEqual(payload["max_tokens"], 500)
+            self.assertEqual(payload["stop_sequences"], ["STOP"])
+
+    def test_evict_execution_requires_selector_and_sends_tool_name(self):
+        with StubServer(lambda _req: json_response({"evicted_count": 3})) as server:
+            with SunbornClient(base_url=server.base_url, api_key="admin") as client:
+                with self.assertRaises(ValueError):
+                    client.evict_execution()
+                result = client.evict_execution(tool_name="langchain-cache")
+
+            self.assertEqual(result["evicted_count"], 3)
+            request = server.last_request
+            self.assertEqual(request.path, "/v1/execution/evict")
+            self.assertEqual(request.json()["tool_name"], "langchain-cache")
+
+    def test_error_handling_http_error(self):
+        with StubServer(
+            lambda _req: (401, {"detail": "invalid_api_key"})
+        ) as server:
+            with SunbornClient(base_url=server.base_url, api_key="bad-key") as client:
+                with self.assertRaises(SunbornAuthError) as ctx:
+                    client.get_finops_report()
+            self.assertIn("401", str(ctx.exception))
+            self.assertIn("invalid_api_key", str(ctx.exception))
+
+    def test_error_handling_connection_error(self):
+        client = SunbornClient(
+            base_url="http://127.0.0.1:1",
+            api_key="key",
+            max_retries=0,
+            timeout=0.5,
         )
-        self.assertEqual(res["id"], "msg_1")
-        self.assertEqual(res["content"][0]["text"], "hello")
+        with self.assertRaises(SunbornConnectionError):
+            client.get_finops_report()
+        client.close()
+
+    def test_retry_on_server_error_then_success(self):
+        responder = sequence(
+            (503, {"detail": "busy"}),
+            (200, {"status": "ok"}),
+        )
+        with StubServer(responder) as server:
+            with SunbornClient(
+                base_url=server.base_url,
+                api_key="test-key",
+                max_retries=2,
+                backoff_factor=0.0,
+            ) as client:
+                result = client.get_finops_report()
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(len(server.requests), 2)
+
+    def test_empty_response_decoding(self):
+        with StubServer(lambda _req: (200, None)) as server:
+            with SunbornClient(base_url=server.base_url, api_key="test-key") as client:
+                self.assertEqual(client._get("empty/endpoint"), {})
+
+    def test_closed_client_get_raises(self):
+        client = SunbornClient(base_url="http://127.0.0.1:1", api_key="test-key")
+        client.close()
+        self.assertTrue(client.is_closed)
+        with self.assertRaises(RuntimeError):
+            client._get("finops/report")
+
+    def test_graph_caching_sdk_methods(self):
+        def responder(request):
+            if "lineage" in request.path:
+                return json_response(
+                    {
+                        "key": "test-key-1",
+                        "is_cached": True,
+                        "upstream_source_ids": ["00000000-0000-0000-0000-000000000001"],
+                    }
+                )
+            if "invalidate" in request.path:
+                return json_response({"status": "invalidated", "evicted_records": 1})
+            return json_response(
+                {
+                    "node_count": 10,
+                    "edge_count": 25,
+                    "cached_entries": 100,
+                    "max_capacity": 65536,
+                    "invalidated_records": 2,
+                    "hits": 80,
+                    "misses": 20,
+                }
+            )
+
+        with StubServer(responder) as server:
+            with SunbornClient(base_url=server.base_url, api_key="test-key") as client:
+                stats = client.get_graph_stats()
+                lineage = client.get_graph_lineage("test-key-1")
+                inv = client.invalidate_graph_rtc(
+                    source_ids=["00000000-0000-0000-0000-000000000001"],
+                    doc_hashes=[12345],
+                )
+
+            self.assertEqual(stats["node_count"], 10)
+            self.assertTrue(lineage["is_cached"])
+            self.assertEqual(inv["status"], "invalidated")
+            self.assertEqual(server.requests[-1].json()["doc_hashes"], [12345])
+
+    def test_async_sunborn_client(self):
+        with StubServer(lambda _req: json_response(OPENAI_BODY)) as server:
+            client = AsyncSunbornClient(base_url=server.base_url, api_key="test-key")
+            self.assertEqual(client.base_url, f"{server.base_url}/v1")
+
+            async def run():
+                async with client:
+                    res = await client.chat_completion(
+                        model="gpt-4o", prompt="Async test"
+                    )
+                    self.assertEqual(res["choices"][0]["message"]["content"], "ok")
+                self.assertTrue(client.is_closed)
+
+            asyncio.run(run())
+
+    def test_async_sunborn_client_login(self):
+        def responder(request):
+            if request.path.endswith("/auth/login"):
+                return json_response(
+                    {
+                        "access_token": "token-123",
+                        "tenant_id": "t-1",
+                        "application_id": "app-1",
+                    }
+                )
+            return json_response(OPENAI_BODY)
+
+        with StubServer(responder) as server:
+            client = AsyncSunbornClient(base_url=server.base_url, api_key="init-key")
+
+            async def run():
+                async with client:
+                    res = await client.login(
+                        client_id="cid", client_secret="csecret"
+                    )
+                    self.assertEqual(res["access_token"], "token-123")
+                    self.assertEqual(client.api_key, "token-123")
+                    self.assertEqual(client.tenant_id, "t-1")
+                    self.assertEqual(client.application_id, "app-1")
+                    chat = await client.chat_completion(
+                        model="gpt-4o", prompt="after login"
+                    )
+                    self.assertEqual(chat["choices"][0]["message"]["content"], "ok")
+
+            asyncio.run(run())
 
     def test_compute_context_digest_parity(self):
         cd1 = compute_context_digest("gpt-4o", "sys", ["chunk_b", "chunk_a"])
         cd2 = compute_context_digest("gpt-4o", "sys", ["chunk_a", "chunk_b"])
-        # Invariant: Merkle root over sorted chunk IDs must produce identical digest regardless of input order
         self.assertEqual(cd1, cd2)
         self.assertEqual(len(cd1), 64)
 
-        # Invariant: Different model or chunk must change digest
         cd3 = compute_context_digest("gpt-4o-mini", "sys", ["chunk_a", "chunk_b"])
         self.assertNotEqual(cd1, cd3)
 
         cd4 = compute_context_digest("gpt-4o", "sys", ["chunk_a", "chunk_c"])
         self.assertNotEqual(cd1, cd4)
 
+
+class TestSunbornToolDecorator(unittest.TestCase):
     def test_tool_decorator_cached_hit(self):
         client = MagicMock(spec=SunbornClient)
         client.plan_execution_dag.return_value = {
@@ -177,8 +359,7 @@ class TestSunbornClient(unittest.TestCase):
         def lax_calc():
             return 200
 
-        result = lax_calc()
-        self.assertEqual(result, 200)
+        self.assertEqual(lax_calc(), 200)
 
     def test_tool_decorator_complex_types(self):
         client = MagicMock(spec=SunbornClient)
@@ -191,10 +372,9 @@ class TestSunbornClient(unittest.TestCase):
         def process_record(u_id, dt):
             return f"{u_id}-{dt.year}"
 
-        u = uuid.uuid4()
         now = datetime.datetime.now()
-        out = process_record(u, now)
-        self.assertEqual(out, f"{u}-{now.year}")
+        unique = uuid.uuid4()
+        self.assertEqual(process_record(unique, now), f"{unique}-{now.year}")
 
     def test_tool_decorator_non_deterministic(self):
         client = MagicMock(spec=SunbornClient)
@@ -206,65 +386,6 @@ class TestSunbornClient(unittest.TestCase):
         self.assertEqual(random_action(), 999)
         client.plan_execution_dag.assert_not_called()
         client.record_tool_result.assert_not_called()
-
-    @patch("sunborn_agent.urllib.request.urlopen")
-    def test_error_handling_http_error(self, mock_urlopen):
-        err = urllib.error.HTTPError(
-            "http://localhost:8080/v1/fail",
-            401,
-            "Unauthorized",
-            {},
-            MagicMock(read=lambda: b'{"error":"invalid_api_key"}'),
-        )
-        mock_urlopen.side_effect = err
-
-        client = SunbornClient(api_key="bad-key")
-        with self.assertRaises(RuntimeError) as ctx:
-            client.get_finops_report()
-        self.assertIn("401", str(ctx.exception))
-        self.assertIn("invalid_api_key", str(ctx.exception))
-
-    @patch("sunborn_agent.urllib.request.urlopen")
-    def test_error_handling_connection_error(self, mock_urlopen):
-        err = urllib.error.URLError("Connection refused")
-        mock_urlopen.side_effect = err
-
-        client = SunbornClient(api_key="key")
-        with self.assertRaises(ConnectionError) as ctx:
-            client.get_finops_report()
-        self.assertIn("Failed to connect", str(ctx.exception))
-
-    @patch("sunborn_agent.urllib.request.urlopen")
-    def test_async_sunborn_client(self, mock_urlopen):
-        mock_response = MagicMock()
-        mock_response.read.return_value = (
-            b'{"choices": [{"message": {"content": "async_ok"}}]}'
-        )
-        mock_response.__enter__.return_value = mock_response
-        mock_urlopen.return_value = mock_response
-
-        client = AsyncSunbornClient(api_key="test-key")
-        self.assertEqual(client.api_key, "test-key")
-        self.assertEqual(client.base_url, "http://localhost:8080/v1")
-        self.assertEqual(client.tenant_id, "default-tenant")
-        self.assertEqual(client.application_id, "default-app")
-
-        res = asyncio.run(client.chat_completion(model="gpt-4o", prompt="Async test"))
-        self.assertEqual(res["choices"][0]["message"]["content"], "async_ok")
-
-    @patch("sunborn_agent.urllib.request.urlopen")
-    def test_async_sunborn_client_login(self, mock_urlopen):
-        mock_response = MagicMock()
-        mock_response.read.return_value = b'{"access_token": "token-123", "tenant_id": "t-1", "application_id": "app-1"}'
-        mock_response.__enter__.return_value = mock_response
-        mock_urlopen.return_value = mock_response
-
-        client = AsyncSunbornClient(api_key="init-key")
-        res = asyncio.run(client.login(client_id="cid", client_secret="csecret"))
-        self.assertEqual(res["access_token"], "token-123")
-        self.assertEqual(client.api_key, "token-123")
-        self.assertEqual(client.tenant_id, "t-1")
-        self.assertEqual(client.application_id, "app-1")
 
     def test_async_tool_decorator_cached_hit(self):
         client = MagicMock(spec=SunbornClient)
@@ -287,8 +408,7 @@ class TestSunbornClient(unittest.TestCase):
             async def async_compute(x):
                 return x * 4
 
-            val = asyncio.run(async_compute(21))
-            self.assertEqual(val, 84)
+            self.assertEqual(asyncio.run(async_compute(21)), 84)
             client.record_tool_result.assert_not_called()
 
     def test_async_tool_decorator_miss_executes_and_records(self):
@@ -302,70 +422,12 @@ class TestSunbornClient(unittest.TestCase):
         async def async_mult(a, b):
             return a * b
 
-        val = asyncio.run(async_mult(6, 7))
-        self.assertEqual(val, 42)
+        self.assertEqual(asyncio.run(async_mult(6, 7)), 42)
         client.record_tool_result.assert_called_once()
         _, kwargs = client.record_tool_result.call_args
         self.assertEqual(kwargs["tool_name"], "async_multiply")
         self.assertEqual(kwargs["output"], 42)
         self.assertEqual(kwargs["ttl_secs"], 60)
-
-    @patch("sunborn_agent.urllib.request.urlopen")
-    def test_empty_response_decoding(self, mock_urlopen):
-        mock_response = MagicMock()
-        mock_response.read.return_value = b""
-        mock_response.__enter__.return_value = mock_response
-        mock_urlopen.return_value = mock_response
-
-        client = SunbornClient(api_key="test-key")
-        res = client._get("empty/endpoint")
-        self.assertEqual(res, {})
-
-    @patch("sunborn_agent.urllib.request.urlopen")
-    def test_graph_caching_sdk_methods(self, mock_urlopen):
-        mock_response = MagicMock()
-        mock_response.read.return_value = b'{"node_count": 10, "edge_count": 25, "cached_entries": 100, "max_capacity": 65536, "invalidated_records": 2, "hits": 80, "misses": 20}'
-        mock_response.__enter__.return_value = mock_response
-        mock_urlopen.return_value = mock_response
-
-        client = SunbornClient(api_key="test-key")
-        stats = client.get_graph_stats()
-        self.assertEqual(stats["node_count"], 10)
-        self.assertEqual(stats["edge_count"], 25)
-
-        # Lineage check
-        mock_response.read.return_value = b'{"key": "test-key-1", "is_cached": true, "upstream_source_ids": ["00000000-0000-0000-0000-000000000001"]}'
-        lineage = client.get_graph_lineage("test-key-1")
-        self.assertTrue(lineage["is_cached"])
-        self.assertEqual(lineage["upstream_source_ids"][0], "00000000-0000-0000-0000-000000000001")
-
-        # Invalidation check
-        mock_response.read.return_value = b'{"status": "invalidated", "evicted_records": 1}'
-        inv = client.invalidate_graph_rtc(source_ids=["00000000-0000-0000-0000-000000000001"], doc_hashes=[12345])
-        self.assertEqual(inv["status"], "invalidated")
-        self.assertEqual(inv["evicted_records"], 1)
-
-    @patch("sunborn_agent.urllib.request.urlopen")
-    def test_async_graph_caching_sdk_methods(self, mock_urlopen):
-        mock_response = MagicMock()
-        mock_response.read.return_value = b'{"node_count": 5, "edge_count": 12, "cached_entries": 50, "max_capacity": 65536, "invalidated_records": 0, "hits": 45, "misses": 5}'
-        mock_response.__enter__.return_value = mock_response
-        mock_urlopen.return_value = mock_response
-
-        async def run_async():
-            async with AsyncSunbornClient(api_key="test-key") as client:
-                stats = await client.get_graph_stats()
-                self.assertEqual(stats["node_count"], 5)
-
-                mock_response.read.return_value = b'{"key": "test-key-2", "is_cached": false, "upstream_source_ids": []}'
-                lineage = await client.get_graph_lineage("test-key-2")
-                self.assertFalse(lineage["is_cached"])
-
-                mock_response.read.return_value = b'{"status": "invalidated", "evicted_records": 0}'
-                inv = await client.invalidate_graph_rtc(doc_hashes=[999])
-                self.assertEqual(inv["evicted_records"], 0)
-
-        asyncio.run(run_async())
 
 
 if __name__ == "__main__":

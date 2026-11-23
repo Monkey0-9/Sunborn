@@ -315,7 +315,7 @@ A stage with an unsigned required function is not authorized.
 | OpenAPI contract | [`docs/api/openapi.yaml`](../api/openapi.yaml) |
 | Threat model | [`docs/security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md`](../security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md) |
 | Compliance mappings | [`docs/compliance/ISO_STANDARDS_COMPLIANCE.md`](../compliance/ISO_STANDARDS_COMPLIANCE.md) |
-| Supply chain | [`sbom.cyclonedx.json`](../../sbom.cyclonedx.json) |
+| Supply chain | [`scripts/generate_sbom.py`](../../scripts/generate_sbom.py) (generates `sbom.cyclonedx.json`) |
 | Deployment defaults | [`deploy/helm/sunborn/values.yaml`](../../deploy/helm/sunborn/values.yaml) |
 | Launch plan | [`01_LAUNCH_PLAN.md`](01_LAUNCH_PLAN.md) |
 | Free-tier design | [`02_FREE_TIER_ARCHITECTURE.md`](02_FREE_TIER_ARCHITECTURE.md) |

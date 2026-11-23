@@ -133,10 +133,14 @@ if (Test-Path $ZipFilePath) {
 }
 Compress-Archive -Path "$StageDir\*" -DestinationPath $ZipFilePath -CompressionLevel Optimal
 
-# 4. Generate SHA-256 checksum
+# 4. Generate cryptographic checksums (SHA-256 and SHA-512)
 $Sha256 = (Get-FileHash -Path $ZipFilePath -Algorithm SHA256).Hash.ToLower()
 $ShaPath = Join-Path $OutputDir "SHA256SUMS.txt"
 Set-Content -Path $ShaPath -Value "$Sha256  $ZipFileName" -Encoding UTF8
+
+$Sha512 = (Get-FileHash -Path $ZipFilePath -Algorithm SHA512).Hash.ToLower()
+$ShaPath512 = Join-Path $OutputDir "SHA512SUMS.txt"
+Set-Content -Path $ShaPath512 -Value "$Sha512  $ZipFileName" -Encoding UTF8
 
 # 5. Cleanup stage directory
 Remove-Item -Path (Join-Path $OutputDir "stage") -Recurse -Force

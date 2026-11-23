@@ -43,16 +43,16 @@ export function LiveDAGVisualizer() {
     };
   }, []);
 
-  const cacheStatus = readinessData?.components?.cache?.status === "connected" ? "verified" : (isLive ? "verified" : "degraded");
-  const vectorStatus = readinessData?.components?.vector_store?.status === "connected" ? "verified" : (isLive ? "verified" : "degraded");
-  const dbStatus = readinessData?.components?.database?.status === "connected" ? "verified" : (isLive ? "verified" : "degraded");
+  const cacheStatus = !isLive ? "degraded" : (readinessData?.components?.cache?.status === "connected" ? "verified" : "degraded");
+  const vectorStatus = !isLive ? "degraded" : (readinessData?.components?.vector_store?.status === "connected" ? "verified" : "degraded");
+  const dbStatus = !isLive ? "degraded" : (readinessData?.components?.database?.status === "connected" ? "verified" : "degraded");
 
   const nodes: DAGNode[] = [
     {
       id: "ingress",
       label: "HTTP Ingress",
       role: "Protocol Ingestion",
-      latencyBound: "< 0.05 ms",
+      latencyBound: "Target: < 0.05 ms",
       status: isLive ? "verified" : "degraded",
       detail: "Terminates OpenAI / Anthropic / Gemini wire protocols; extracts authorization headers and client tenant identity.",
     },
@@ -60,15 +60,15 @@ export function LiveDAGVisualizer() {
       id: "canonicalizer",
       label: "RFC 8785 Canonicalizer",
       role: "Deterministic Digest",
-      latencyBound: "< 0.10 µs",
-      status: "active",
+      latencyBound: "Target: < 0.10 µs",
+      status: isLive ? "active" : "degraded",
       detail: "Normalizes Unicode NFC, removes nondeterministic JSON whitespace, and executes cryptographic SHA-256 digest creation.",
     },
     {
       id: "l1_exact",
       label: "L1/L2 Tiered Cache",
       role: "Sub-Microsecond Tier",
-      latencyBound: "0.30 µs P50 (Bench)",
+      latencyBound: "Bench: 0.30 µs P50",
       status: cacheStatus,
       detail: "Multi-tier cache architecture combining L1 in-process memory and L2 Dragonfly/Redis store. Microbenchmark throughput: 1.64M req/sec in-process.",
     },
@@ -76,15 +76,15 @@ export function LiveDAGVisualizer() {
       id: "guardrails",
       label: "AST Polarity Guardrails",
       role: "Structural Anti-Hallucination",
-      latencyBound: "< 0.20 ms",
-      status: "verified",
+      latencyBound: "Target: < 0.20 ms",
+      status: isLive ? "verified" : "degraded",
       detail: "Evaluates numeric shifts, antonyms, and negation inversions, guaranteeing 0 false positives across hard traps.",
     },
     {
       id: "semantic_hnsw",
       label: "Qdrant HNSW & Conformal",
       role: "Semantic Risk Control",
-      latencyBound: "< 1.50 ms",
+      latencyBound: "Target: < 1.50 ms",
       status: vectorStatus,
       detail: "C SIMD vector similarity search coupled with non-exchangeable conformal prediction bounding semantic risk.",
     },
@@ -92,7 +92,7 @@ export function LiveDAGVisualizer() {
       id: "merkle_proof",
       label: "Merkle Attestation",
       role: "Cryptographic Certificate",
-      latencyBound: "< 0.08 ms",
+      latencyBound: "Target: < 0.08 ms",
       status: isLive ? "verified" : "degraded",
       detail: "Issues Ed25519-signed reuse certificates with Merkle tree inclusion proofs binding inputs, outputs, and docs.",
     },
@@ -127,9 +127,9 @@ export function LiveDAGVisualizer() {
               SLA Bound Targets
             </span>
           ) : (
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3 text-amber-400" />
-              Offline Gateway
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/30 flex items-center gap-1 font-semibold">
+              <AlertCircle className="w-3 h-3 text-rose-400" />
+              OFFLINE / UNAVAILABLE
             </span>
           )}
           <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/20">

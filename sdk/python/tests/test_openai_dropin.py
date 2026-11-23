@@ -4,9 +4,15 @@ Unit tests for Sunborn drop-in OpenAI and Anthropic clients.
 
 import io
 import json
+import sys
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError
+
+_sdk_root = str(Path(__file__).resolve().parent.parent)
+if _sdk_root not in sys.path:
+    sys.path.insert(0, _sdk_root)
 
 from sunborn.openai import OpenAI, SunbornOpenAI, ChatCompletion
 from sunborn.anthropic import Anthropic, SunbornAnthropic, MessageResponse

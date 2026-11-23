@@ -9,10 +9,24 @@ from .accel import (
     fast_l2_norm,
     is_c_accelerator_available,
 )
-from .anthropic import Anthropic, SunbornAnthropic
+from .anthropic import (
+    Anthropic,
+    AsyncAnthropic,
+    AsyncSunbornAnthropic,
+    MessageResponse,
+    MessageStreamEvent,
+    SunbornAnthropic,
+)
 from .async_client import AsyncSunbornClient
 from .client import SunbornAgentClient, SunbornClient, get_default_client, sunborn_tool
-from .openai import OpenAI, SunbornOpenAI
+from .openai import (
+    AsyncOpenAI,
+    AsyncSunbornOpenAI,
+    ChatCompletion,
+    ChatCompletionChunk,
+    OpenAI,
+    SunbornOpenAI,
+)
 from .exceptions import (
     SunbornAuthError,
     SunbornConnectionError,
@@ -46,8 +60,16 @@ ServerError = SunbornServerError
 __all__ = [
     "OpenAI",
     "SunbornOpenAI",
+    "AsyncOpenAI",
+    "AsyncSunbornOpenAI",
+    "ChatCompletion",
+    "ChatCompletionChunk",
     "Anthropic",
     "SunbornAnthropic",
+    "AsyncAnthropic",
+    "AsyncSunbornAnthropic",
+    "MessageResponse",
+    "MessageStreamEvent",
     "Sunborn",
     "SunbornClient",
     "AsyncSunborn",

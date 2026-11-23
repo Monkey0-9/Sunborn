@@ -73,6 +73,7 @@ jobs:
           $ver = "${{ github.ref_name }}".TrimStart('v')
           if (-not $ver) { $ver = "1.0.0" }
           .\scripts\package-distribution.ps1 -Version $ver
+          .\scripts\verify-desktop-package.ps1 -DistDir target\dist -Version $ver
 
       - name: Verify Clean-Machine Installation & Smoke Test
         shell: powershell
@@ -119,6 +120,7 @@ jobs:
           path: |
             target/dist/sunborn-desktop-*-windows-x64.zip
             target/dist/SHA256SUMS.txt
+            target/dist/SHA512SUMS.txt
             target/dist/BUILD-METADATA.json
             target/dist/sbom.cyclonedx.json
 

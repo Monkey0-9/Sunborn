@@ -1666,7 +1666,7 @@ paths:
   /v1/execution/results:
     post:
       summary: Record Intermediate Tool Result
-      description: Caches deterministic tool result under tenant and tool signature with TTL bounding.
+      description: Caches a deterministic tool result under the tenant and tool signature with TTL bounding. Mirrors `RecordToolResultRequest` in `crates/sunborn-gateway/src/handlers/execution.rs`.
       tags:
         - Execution
       security:
@@ -1682,8 +1682,11 @@ paths:
                 - tenant_id
                 - application_id
                 - tool_name
-                - tool_arguments
-                - tool_result
+                - tool_version
+                - arguments
+                - output
+                - is_error
+                - execution_latency_ms
               properties:
                 tenant_id:
                   type: string
@@ -1691,15 +1694,44 @@ paths:
                   type: string
                 tool_name:
                   type: string
-                tool_arguments:
-                  type: object
-                tool_result:
+                tool_version:
                   type: string
+                arguments:
+                  type: object
+                  description: Tool arguments, preserved as arbitrary JSON.
+                output:
+                  description: Tool output, preserved as arbitrary JSON.
+                is_error:
+                  type: boolean
+                execution_latency_ms:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                context_hash:
+                  type: string
+                  nullable: true
                 ttl_secs:
                   type: integer
+                  format: int64
+                  minimum: 0
+                  nullable: true
       responses:
         '200':
           description: Tool result cached
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - signature
+                  - status
+                properties:
+                  signature:
+                    type: string
+                  status:
+                    type: string
+                    enum:
+                      - stored
         '401':
           description: Unauthorized
         '403':
@@ -1708,7 +1740,7 @@ paths:
   /v1/execution/evict:
     post:
       summary: Evict Tool Execution Cache
-      description: Evicts cached tool results by tool name or specific execution signature.
+      description: Administrative endpoint. Evicts cached tool results by tool name or specific execution signature; one of `tool_name` or `signature` is required.
       tags:
         - Execution
       security:
@@ -1734,10 +1766,23 @@ paths:
       responses:
         '200':
           description: Tool cache entries evicted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  evicted:
+                    type: integer
+                    description: Present when evicting by signature.
+                  evicted_count:
+                    type: integer
+                    description: Present when evicting by tool name.
         '401':
           description: Unauthorized
         '403':
-          description: Tenant boundary violation
+          description: Administrative privileges required
+        '422':
+          description: Neither tool_name nor signature supplied
 
   /v1/shadow/evaluate:
     post:

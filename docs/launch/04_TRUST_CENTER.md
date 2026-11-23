@@ -207,7 +207,7 @@ against a framework. It does not mean certified, audited, or attested.
 | ISO/IEC 27001:2022 | Control-mapping self-assessment | [`docs/compliance/ISO_STANDARDS_COMPLIANCE.md`](../compliance/ISO_STANDARDS_COMPLIANCE.md) | No ISMS certificate and no accredited audit |
 | ISO/IEC 27002:2022 | Control mapping | same | Not a certification |
 | ISO/IEC/IEEE 29119 | Test-process mapping | same, plus [`scripts/verify.sh`](../../scripts/verify.sh) | Not an accredited test-process certification |
-| NIST SP 800-218 (SSDF) | Practices mapped; SBOM and dependency audit in CI | [`sbom.cyclonedx.json`](../../sbom.cyclonedx.json), [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) | Not an SSDF attestation |
+| NIST SP 800-218 (SSDF) | Practices mapped; SBOM and dependency audit in CI | [`scripts/generate_sbom.py`](../../scripts/generate_sbom.py) (generates `sbom.cyclonedx.json`), [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) | Not an SSDF attestation |
 | OWASP ASVS 4.0 Level 3 | Internal control mapping and adversarial tests | [`docs/security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md`](../security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md) | Not an external ASVS assessment |
 | OWASP API Top 10 | Route authorization contract, rate limits, input handling | [`crates/sunborn-gateway/tests/route_contract_parity_test.rs`](../../crates/sunborn-gateway/tests/route_contract_parity_test.rs) | Not a pen-test result |
 | WCAG 2.2 AA | 10 control-plane routes; 0 serious/critical axe violations; keyboard audit | [`docs/STATUS.md`](../STATUS.md) section 1 | A control-plane audit, not a full product accessibility certification |
@@ -292,7 +292,7 @@ A reviewer can verify the core claims without contacting the project:
       and confirm it says "self-assessment", not "certified".
 - [ ] Run `bash scripts/verify.sh` and confirm the gates that were skipped are named.
 - [ ] Run `python scripts/verify_doc_paths.py --strict`.
-- [ ] Inspect [`sbom.cyclonedx.json`](../../sbom.cyclonedx.json) for the dependency
+- [ ] Inspect the generated `sbom.cyclonedx.json` (run [`scripts/generate_sbom.py`](../../scripts/generate_sbom.py)) for the dependency
       inventory.
 - [ ] Confirm the release verdict in [`docs/STATUS.md`](../STATUS.md) is still
       CONDITIONAL GO — controlled pilot.

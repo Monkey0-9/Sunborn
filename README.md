@@ -140,13 +140,16 @@ Repeat the request: the second query is served from the L1 exact cache in under 
 
 ### 2.2 Bring Your Own Key (BYOK) for commercial frontier models
 
-Sunborn acts as an intelligent, cost-arbitrating proxy for your existing commercial API accounts. Configure your personal or enterprise keys in a local `.env` file:
+Sunborn acts as an intelligent, cost-arbitrating proxy for your existing commercial API accounts.
 
-```env
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-GEMINI_API_KEY=AIza...
-GROK_API_KEY=xai-...
+- **Desktop Users (Default & Secure)**: The 1-click launcher (`scripts/sunborn-desktop.ps1`) prompts for your API keys securely on first launch and seals them inside the OS-native AES-256-GCM encrypted local vault (`%LOCALAPPDATA%\Sunborn\vault.enc`). Plaintext keys are never written to disk.
+- **Developer / Server Environments (Optional)**: For automated CI or local terminal runs, keys can alternatively be supplied via environment variables or a local `.env` file (see [`.env.example`](.env.example)):
+
+```bash
+export OPENAI_API_KEY="sk-..."
+export ANTHROPIC_API_KEY="sk-ant-..."
+export GEMINI_API_KEY="AIza..."
+export GROK_API_KEY="xai-..."
 ```
 
 Point any standard SDK (OpenAI Python/Node, Anthropic SDK, Google GenAI) to `http://localhost:8080`. Sunborn normalizes provider wire protocols, enforces spend ceilings with 64-bit micro-unit precision, and returns verified cache hits without incurring API vendor token charges.
@@ -266,7 +269,7 @@ each artifact; the ratios between configurations travel better than the absolute
 | **Contract parity** | 57/57 OpenAPI operations · all 54 router paths classified, 45/45 reject anonymous callers | [`docs/api/openapi.yaml`](docs/api/openapi.yaml) |
 | **Enterprise evaluation** | All 6 pillars verified (exact cache, AST guardrails, causal graph, FinOps, Merkle DAG, health) | [`scripts/client_showcase.py`](scripts/client_showcase.py) |
 | **Systems architecture** | Defense-in-depth, formal TLA+ bounds, SOC 2 / ISO 27001 control mapping (self-assessment, not certification) | [`docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md`](docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md) |
-| **Supply chain** | CycloneDX v1.5 SBOM, 369 components, zero known high/critical CVEs | [`sbom.cyclonedx.json`](sbom.cyclonedx.json) |
+| **Supply chain** | CycloneDX v1.5 SBOM, 369 components, zero known high/critical CVEs | [`scripts/generate_sbom.py`](scripts/generate_sbom.py) (generates `sbom.cyclonedx.json`) |
 
 Reproduce all of it:
 

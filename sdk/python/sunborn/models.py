@@ -39,6 +39,24 @@ class ToolResultRecord:
     is_error: bool = False
 
 
+@dataclass
+class ExecutionResponse:
+    """Typed result of a cached execution request.
+
+    The fields mirror what the gateway actually returns from
+    ``/v1/chat/completions``. The SDK deliberately does not invent savings
+    figures the gateway does not emit; FinOps accounting lives on
+    ``/v1/finops/report``.
+    """
+
+    content: str
+    tier: str
+    cached: bool
+    model: str
+    usage: dict[str, Any] = field(default_factory=dict)
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
 def compute_context_digest(
     model_id: str,
     system_prompt: str | None = None,

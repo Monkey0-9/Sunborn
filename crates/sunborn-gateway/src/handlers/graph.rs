@@ -379,9 +379,8 @@ pub async fn invalidate_graph_causal(
                         "Outbox event could not be marked FAILED; it stays PENDING for worker retry"
                     );
                 }
-                if sunborn_core::is_production_mode() || state.cluster_transport_durable {
-                    return Err(AppError::from(err));
-                }
+                // Fail closed on publish failure across all modes: outbox remains FAILED/PENDING for DLQ retry
+                return Err(AppError::from(err));
             }
         }
     }
