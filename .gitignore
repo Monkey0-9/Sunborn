@@ -80,5 +80,6 @@ research/results/baseline_backup/
 docs/superpowers/
 *.ipynb
 .freebuff/
+.local/
 
 
