@@ -4,14 +4,14 @@
 
 ### A distributed semantic execution gateway for frontier LLM traffic
 
-*One place in the request path that decides, in microseconds, whether an answer already exists —
-and refuses to serve it when the reuse cannot be proven safe.*
+_One place in the request path that decides, in microseconds, whether an answer already exists —
+and refuses to serve it when the reuse cannot be proven safe._
 
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-blue.svg?logo=rust&logoColor=white)](Cargo.toml)
 [![Rust tests](https://img.shields.io/badge/Rust%20tests-395%20passing-brightgreen.svg)](docs/STATUS.md)
 [![Frontend tests](https://img.shields.io/badge/Frontend%20tests-67%20passing-brightgreen.svg)](docs/STATUS.md)
 [![TypeScript SDK](https://img.shields.io/badge/TypeScript%20SDK-4%20passing-brightgreen.svg)](docs/STATUS.md)
-[![Python SDK](https://img.shields.io/badge/Python%20SDK-57%20passing%20%C2%B7%2080%25%20coverage-brightgreen.svg)](docs/STATUS.md)
+[![Python SDK](https://img.shields.io/badge/Python%20SDK-65%20passing%20%C2%B7%2080%25%20coverage-brightgreen.svg)](docs/STATUS.md)
 [![CI/CD Quality Gates](https://img.shields.io/badge/CI%2FCD%20Gates-11%2F11%20Passing-brightgreen.svg)](https://github.com/Monkey0-9/Sunborn/actions)
 [![Verification gates](https://img.shields.io/badge/Verification%20gates-12%2F12-brightgreen.svg)](scripts/verify.sh)
 [![Launch gates](https://img.shields.io/badge/Launch%20gates-8%2F8%20passing-brightgreen.svg)](scripts/verify_public_launch.py)
@@ -41,7 +41,7 @@ and refuses to serve it when the reuse cannot be proven safe.*
 Applications built on frontier language models spend most of their GPU budget recomputing answers they
 have already produced. Caching those answers is easy; **caching them responsibly is the hard part**, because
 a conventional string cache misses almost everything and a naive vector cache happily returns the answer to
-a *different question* — a negated one, a numerically shifted one, one about a different entity.
+a _different question_ — a negated one, a numerically shifted one, one about a different entity.
 
 Sunborn sits between your application and the model providers as a single HTTP ingress. It canonicalizes
 each request, serves an exact repeat from memory in under a microsecond, and for anything semantically close
@@ -71,16 +71,16 @@ Request ──▶ Canonicalize ──▶ Auth / FinOps ──▶ Exact cache ─
 
 ### 1.1 Competitive Architecture: How Sunborn Compares
 
-| Feature / Capability | Cloud Edge Proxies (V8) | Hosted SaaS Gateways | Generic Python Proxies | **Sunborn** |
-| :--- | :--- | :--- | :--- | :--- |
-| **Core Architecture** | JavaScript / V8 Workers | Node.js / Python Proxy | Python Proxy | **Systems Rust + compressed Roaring bitmaps (no GC)** |
-| **Exact Cache Hit Latency** | 25ms – 80ms (Cloud WAN) | 40ms – 120ms (Cloud) | 5ms – 15ms (Redis) | **In-process lookup < 1 µs; end-to-end HTTP p50 ~6 ms (published single-node benchmark)** |
-| **Semantic Hallucination Defense** | None (Naive exact only) | Naive vector distance threshold | Naive vector cosine | **Structural AST Guardrails + Conformal Risk Bounds** |
-| **Negation & Number Invariance** | Returns False Hits | Returns False Hits | Returns False Hits | **0 false hits at 80.8% recall on the 320-pair held-out set (measured; not an open-domain guarantee)** |
-| **Causal Blast-Radius Invalidation** | Manual / TTL only | Basic key purge | TTL only | **Multi-relational knowledge graph + Roaring bitmaps** |
-| **Zero-Cloud Air-Gapped BYOK** | No (Vendor hosted) | Cloud / Self-hosted Node | Self-hosted Python | **BYOK desktop installers (Windows; Unix/macOS shell script)** |
-| **Python Ecosystem Drop-in** | Manual URL override | Proprietary SDK wrapper | Basic wrapper | **Drop-in `from sunborn.openai import OpenAI` + agent-framework cache adapters** |
-| **Sovereign Regulatory Posture** | US / EU vendor edge | US Cloud edge | Generic self-host | **Designed for India data-residency deployments; compliance is deployment-specific** |
+| Feature / Capability                 | Cloud Edge Proxies (V8) | Hosted SaaS Gateways            | Generic Python Proxies | **Sunborn**                                                                                            |
+| :----------------------------------- | :---------------------- | :------------------------------ | :--------------------- | :----------------------------------------------------------------------------------------------------- |
+| **Core Architecture**                | JavaScript / V8 Workers | Node.js / Python Proxy          | Python Proxy           | **Systems Rust + compressed Roaring bitmaps (no GC)**                                                  |
+| **Exact Cache Hit Latency**          | 25ms – 80ms (Cloud WAN) | 40ms – 120ms (Cloud)            | 5ms – 15ms (Redis)     | **In-process lookup < 1 µs; end-to-end HTTP p50 ~6 ms (published single-node benchmark)**              |
+| **Semantic Hallucination Defense**   | None (Naive exact only) | Naive vector distance threshold | Naive vector cosine    | **Structural AST Guardrails + Conformal Risk Bounds**                                                  |
+| **Negation & Number Invariance**     | Returns False Hits      | Returns False Hits              | Returns False Hits     | **0 false hits at 80.8% recall on the 320-pair held-out set (measured; not an open-domain guarantee)** |
+| **Causal Blast-Radius Invalidation** | Manual / TTL only       | Basic key purge                 | TTL only               | **Multi-relational knowledge graph + Roaring bitmaps**                                                 |
+| **Zero-Cloud Air-Gapped BYOK**       | No (Vendor hosted)      | Cloud / Self-hosted Node        | Self-hosted Python     | **BYOK desktop installers (Windows; Unix/macOS shell script)**                                         |
+| **Python Ecosystem Drop-in**         | Manual URL override     | Proprietary SDK wrapper         | Basic wrapper          | **Drop-in `from sunborn.openai import OpenAI` + agent-framework cache adapters**                       |
+| **Sovereign Regulatory Posture**     | US / EU vendor edge     | US Cloud edge                   | Generic self-host      | **Designed for India data-residency deployments; compliance is deployment-specific**                   |
 
 ---
 
@@ -93,9 +93,11 @@ Sunborn is engineered to be **100% operational on a local workstation with zero 
 Sunborn provides a packaged desktop installation experience for individual developers and non-technical end users:
 
 **Windows PowerShell 1-Click Installer:**
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/install-sunborn.ps1
 ```
+
 - Deploys binary into `%LOCALAPPDATA%\Sunborn\bin\sunborn-gateway.exe`
 - Creates Windows Desktop shortcut and Start Menu shortcut ("Sunborn AI Gateway")
 - Configures OS-native AES-256-GCM encrypted credential vault (`%LOCALAPPDATA%\Sunborn\vault.enc`)
@@ -103,15 +105,18 @@ powershell -ExecutionPolicy Bypass -File scripts/install-sunborn.ps1
 - Registers uninstaller in Windows Add/Remove Programs
 
 **Linux / macOS:**
+
 ```bash
 bash scripts/install-sunborn.sh
 ```
 
 **1-Click Desktop Launcher:**
 Double-click the **Sunborn AI Gateway** desktop shortcut, or run:
+
 ```powershell
 powershell -File scripts/sunborn-desktop.ps1
 ```
+
 The gateway binds strictly to loopback (`127.0.0.1:8080`) to prevent unauthorized network access and launches the local control cockpit in your default browser.
 
 ### 2.2 Standalone developer in-memory mode (zero cloud cost)
@@ -187,12 +192,14 @@ make docker-up
 ```
 
 Verify cluster readiness:
+
 ```bash
 curl http://localhost:8080/ready
 # {"status":"ready","database":"postgres","cache":"dragonfly","vector":"qdrant"}
 ```
 
 Management commands:
+
 ```bash
 make docker-status   # Inspect container health & live gateway telemetry
 make docker-down     # Gracefully stop containers (preserves database volumes)
@@ -211,6 +218,7 @@ python scripts/client_showcase.py --self-test
 Integrate Sunborn into existing Python AI and agent stacks with zero code refactoring:
 
 #### Drop-in OpenAI Client Replacement:
+
 ```python
 from sunborn.openai import OpenAI
 
@@ -227,6 +235,7 @@ print(f"Cached: {response.sunborn_cached} via tier: {response.sunborn_tier}")
 ```
 
 #### Drop-in Anthropic Messages Client:
+
 ```python
 from sunborn.anthropic import Anthropic
 
@@ -240,6 +249,7 @@ print(message.content[0].text)
 ```
 
 #### Python Agent Framework Caching:
+
 ```python
 # Universal Agent Pipeline Cache
 from sunborn.integrations import SunbornAgentCache, SunbornIndexCache
@@ -255,13 +265,13 @@ Full configuration reference: [`.env.example`](.env.example) · [Quickstart guid
 
 ## 3. The problem Sunborn addresses
 
-| Strategy | Why it fails in production |
-| :--- | :--- |
-| **String cache** (Redis, Memcached) | Conversational prompts almost never repeat byte-for-byte. Formatting, framing, and whitespace changes erase the hit rate. |
-| **Naive vector cache** (cosine ≥ τ) | Cosine similarity cannot distinguish *"authorize the transaction"* from *"prohibit the transaction"*. In our evaluation this pattern reused the wrong answer on **52.0%** of adversarial queries and returned stale data on **83.3%** of reads after a source document changed. |
-| **No cache** | Every repeat pays full frontier-model latency and token cost. |
+| Strategy                            | Why it fails in production                                                                                                                                                                                                                                                      |
+| :---------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **String cache** (Redis, Memcached) | Conversational prompts almost never repeat byte-for-byte. Formatting, framing, and whitespace changes erase the hit rate.                                                                                                                                                       |
+| **Naive vector cache** (cosine ≥ τ) | Cosine similarity cannot distinguish _"authorize the transaction"_ from _"prohibit the transaction"_. In our evaluation this pattern reused the wrong answer on **52.0%** of adversarial queries and returned stale data on **83.3%** of reads after a source document changed. |
+| **No cache**                        | Every repeat pays full frontier-model latency and token cost.                                                                                                                                                                                                                   |
 
-Sunborn's premise is that semantic reuse is a *risk control* problem, not a similarity-search problem.
+Sunborn's premise is that semantic reuse is a _risk control_ problem, not a similarity-search problem.
 Similarity proposes a candidate; independent checks decide whether it may be served.
 
 ---
@@ -272,22 +282,22 @@ Every figure below was produced by a checked-in artifact in this repository. The
 file that contains it — not a marketing page. These are single-machine numbers from the hardware named in
 each artifact; the ratios between configurations travel better than the absolute values do.
 
-| Property | Result | Evidence |
-| :--- | :--- | :--- |
-| **L1 cache get, sequential** | 2,543,687 req/s · P99 1 µs (1 µs timer, so sub-microsecond reads report as 0) | [`benchmarks/results/gateway_performance_run.json`](benchmarks/results/gateway_performance_run.json) |
-| **L1 mixed get/insert** | 1,638,227 req/s · P50 0.300 µs · P99 1.100 µs | [`benchmarks/results/l1_throughput_run.json`](benchmarks/results/l1_throughput_run.json) |
-| **Gateway stack, release, sequential** | 13,241.1 req/s · P50 0.070 ms · P99 0.166 ms over 5,000 requests | [`benchmarks/results/gateway_performance_run.json`](benchmarks/results/gateway_performance_run.json) |
-| **Gateway stack, 16 concurrent workers** | 11,116.0 req/s · P50 1.368 ms · P99 2.398 ms over 10,000 requests · 0 failures | [`benchmarks/production_soak_results.json`](benchmarks/production_soak_results.json) |
-| **Guardrail benchmark, N = 320** | 97 correct reuses · **0 false hits on 200 hard negatives** · precision 100% [95% Wilson 96.2–100] · recall 80.8% [72.9–86.9] | [`research/results/heldout_generalization_run.json`](research/results/heldout_generalization_run.json) |
-| **Comparative evaluation, 25 queries** | 32.0% verified hit rate · 0.0% false hits · 0.0% stale reads · 31.97% net spend reduction | [`benchmarks/results/competitive_benchmark_run.json`](benchmarks/results/competitive_benchmark_run.json) |
-| **Test surface** | 395 Rust + 67 frontend + 4 TypeScript SDK + 57 Python tests · 10 routes with 0 serious/critical axe violations · 271 verified tab stops | [`docs/STATUS.md`](docs/STATUS.md) |
-| **21 Enterprise Quality Attributes** | 21/21 verified with architectural invariants, formal proofs, and audit commands | [`docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`](docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md) |
-| **8 In-Tree Pre-Flight Launch Gates** | 8/8 automated gates verified passing in strict mode | [`scripts/verify_public_launch.py`](scripts/verify_public_launch.py) |
-| **Formal models** | 3 TLC configurations, no errors (2,245 / 601 / 21 states explored) | [`formal/`](formal/), [`scripts/run_tlaplus.sh`](scripts/run_tlaplus.sh) |
-| **Contract parity** | 57/57 OpenAPI operations · all 54 router paths classified, 45/45 reject anonymous callers | [`docs/api/openapi.yaml`](docs/api/openapi.yaml) |
-| **Enterprise evaluation** | All 6 pillars verified (exact cache, AST guardrails, causal graph, FinOps, Merkle DAG, health) | [`scripts/client_showcase.py`](scripts/client_showcase.py) |
-| **Systems architecture** | Defense-in-depth, formal TLA+ bounds, SOC 2 / ISO 27001 control mapping (self-assessment, not certification) | [`docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md`](docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md) |
-| **Supply chain** | CycloneDX v1.5 SBOM, 369 components, zero known high/critical CVEs | [`scripts/generate_sbom.py`](scripts/generate_sbom.py) (generates `sbom.cyclonedx.json`) |
+| Property                                 | Result                                                                                                                                  | Evidence                                                                                                 |
+| :--------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------- |
+| **L1 cache get, sequential**             | 2,543,687 req/s · P99 1 µs (1 µs timer, so sub-microsecond reads report as 0)                                                           | [`benchmarks/results/gateway_performance_run.json`](benchmarks/results/gateway_performance_run.json)     |
+| **L1 mixed get/insert**                  | 1,638,227 req/s · P50 0.300 µs · P99 1.100 µs                                                                                           | [`benchmarks/results/l1_throughput_run.json`](benchmarks/results/l1_throughput_run.json)                 |
+| **Gateway stack, release, sequential**   | 13,241.1 req/s · P50 0.070 ms · P99 0.166 ms over 5,000 requests                                                                        | [`benchmarks/results/gateway_performance_run.json`](benchmarks/results/gateway_performance_run.json)     |
+| **Gateway stack, 16 concurrent workers** | 11,116.0 req/s · P50 1.368 ms · P99 2.398 ms over 10,000 requests · 0 failures                                                          | [`benchmarks/production_soak_results.json`](benchmarks/production_soak_results.json)                     |
+| **Guardrail benchmark, N = 320**         | 97 correct reuses · **0 false hits on 200 hard negatives** · precision 100% [95% Wilson 96.2–100] · recall 80.8% [72.9–86.9]            | [`research/results/heldout_generalization_run.json`](research/results/heldout_generalization_run.json)   |
+| **Comparative evaluation, 25 queries**   | 32.0% verified hit rate · 0.0% false hits · 0.0% stale reads · 31.97% net spend reduction                                               | [`benchmarks/results/competitive_benchmark_run.json`](benchmarks/results/competitive_benchmark_run.json) |
+| **Test surface**                         | 395 Rust + 67 frontend + 4 TypeScript SDK + 65 Python tests · 10 routes with 0 serious/critical axe violations · 271 verified tab stops | [`docs/STATUS.md`](docs/STATUS.md)                                                                       |
+| **21 Enterprise Quality Attributes**     | 21/21 verified with architectural invariants, formal proofs, and audit commands                                                         | [`docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`](docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md)               |
+| **8 In-Tree Pre-Flight Launch Gates**    | 8/8 automated gates verified passing in strict mode                                                                                     | [`scripts/verify_public_launch.py`](scripts/verify_public_launch.py)                                     |
+| **Formal models**                        | 3 TLC configurations, no errors (2,245 / 601 / 21 states explored)                                                                      | [`formal/`](formal/), [`scripts/run_tlaplus.sh`](scripts/run_tlaplus.sh)                                 |
+| **Contract parity**                      | 57/57 OpenAPI operations · all 54 router paths classified, 45/45 reject anonymous callers                                               | [`docs/api/openapi.yaml`](docs/api/openapi.yaml)                                                         |
+| **Enterprise evaluation**                | All 6 pillars verified (exact cache, AST guardrails, causal graph, FinOps, Merkle DAG, health)                                          | [`scripts/client_showcase.py`](scripts/client_showcase.py)                                               |
+| **Systems architecture**                 | Defense-in-depth, formal TLA+ bounds, SOC 2 / ISO 27001 control mapping (self-assessment, not certification)                            | [`docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md`](docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md)                     |
+| **Supply chain**                         | CycloneDX v1.5 SBOM, 369 components, zero known high/critical CVEs                                                                      | [`scripts/generate_sbom.py`](scripts/generate_sbom.py) (generates `sbom.cyclonedx.json`)                 |
 
 Reproduce all of it:
 
@@ -379,15 +389,15 @@ flowchart TD
 
 Sunborn strictly separates the high-throughput, low-latency request processing path from administrative and analytical operations:
 
-| Attribute | Request Data Plane (`sunborn-gateway`) | Administrative Control Plane (`frontend`) |
-| :--- | :--- | :--- |
-| **Primary Technology** | Rust 1.80+, Tokio, Axum, C SIMD | Next.js 15 App Router, React 19, TypeScript |
-| **Ingress Port** | `:8080` (HTTP/1.1 & HTTP/2 streaming) | `:3000` (HTTP/HTTPS web cockpit) |
-| **Latency Budget** | In-process overhead: sub-microsecond to sub-millisecond (excludes client, network, and origin; end-to-end HTTP p50 ~6 ms in the published benchmark) | Interactive web response (<100 ms) |
-| **Database Access** | Direct async SQLx connection pool, prepared queries | **Strictly indirect via authenticated BFF proxy**; zero raw DB access |
-| **Cryptographic Role** | Envelope encryption (AES-256-GCM), HMAC/Ed25519 signing | Session cookie verification, CSRF origin pinning, key ceremony display |
-| **Failure Policy** | Fail-closed in `production` mode | Deterministic offline simulation fallback with persistent warning banner |
-| **Core Invariants** | Zero unclassified endpoints, zero heap-clone scoring | WCAG 2.2 AA target; 0 axe violation groups on the checked routes (automated check, not full manual conformance) |
+| Attribute              | Request Data Plane (`sunborn-gateway`)                                                                                                               | Administrative Control Plane (`frontend`)                                                                       |
+| :--------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------- |
+| **Primary Technology** | Rust 1.80+, Tokio, Axum, C SIMD                                                                                                                      | Next.js 15 App Router, React 19, TypeScript                                                                     |
+| **Ingress Port**       | `:8080` (HTTP/1.1 & HTTP/2 streaming)                                                                                                                | `:3000` (HTTP/HTTPS web cockpit)                                                                                |
+| **Latency Budget**     | In-process overhead: sub-microsecond to sub-millisecond (excludes client, network, and origin; end-to-end HTTP p50 ~6 ms in the published benchmark) | Interactive web response (<100 ms)                                                                              |
+| **Database Access**    | Direct async SQLx connection pool, prepared queries                                                                                                  | **Strictly indirect via authenticated BFF proxy**; zero raw DB access                                           |
+| **Cryptographic Role** | Envelope encryption (AES-256-GCM), HMAC/Ed25519 signing                                                                                              | Session cookie verification, CSRF origin pinning, key ceremony display                                          |
+| **Failure Policy**     | Fail-closed in `production` mode                                                                                                                     | Deterministic offline simulation fallback with persistent warning banner                                        |
+| **Core Invariants**    | Zero unclassified endpoints, zero heap-clone scoring                                                                                                 | WCAG 2.2 AA target; 0 axe violation groups on the checked routes (automated check, not full manual conformance) |
 
 **Scale-out model.** Gateway replicas are stateless; all cross-replica state is external. Tenant budgets are
 enforced cluster-wide through PostgreSQL advisory transaction locks, invalidation propagates over Redis
@@ -405,7 +415,7 @@ RFC 8785 JSON canonicalization, SHA-256 digest, in-memory Greedy Dual Size Frequ
 byte budget. Measured at the figures in §4. Eviction is extended with graph awareness so that entries
 depending on volatile, high-fan-out documents are evicted earlier than their popularity alone would suggest:
 
-$$H_{\text{graph}}(p) = L + F(p)\cdot\frac{\text{Cost}}{\text{Size}}\cdot
+$$ H_{\text{graph}}(p) = L + F(p)\cdot\frac{\text{Cost}}{\text{Size}}\cdot
 \frac{1}{1 + \beta\cdot\text{Volatility}\cdot\sqrt{\text{FanOut}}}$$
 
 ### Tier 2 — semantic vector store
@@ -438,7 +448,7 @@ The Sunborn Control Plane (`frontend/`) is a Next.js 15 App Router cockpit engin
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ [🏢 Executive Cockpit]  [💻 Developer Sandbox]        GW: ACTIVE · EPOCH: #4192  │
+│ [Executive Cockpit]   [Developer Sandbox]            GW: ACTIVE · EPOCH: #4192   │
 ├──────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                  │
 │  PROMPT PROBE SANDBOX                LIVE CLUSTER TELEMETRY (MULTI-REGION MESH)  │
@@ -446,7 +456,7 @@ The Sunborn Control Plane (`frontend/`) is a Next.js 15 App Router cockpit engin
 │  ┌──────────────────────────────────┐ │ us-east-1    │ eu-central-1 │ ap-se-1  │ │
 │  │ "Explain quantum entanglement"   │ │ PRIMARY AUTH │ EDGE POP     │ EDGE POP │ │
 │  └──────────────────────────────────┘ │ Epoch #4192  │ Epoch #4189  │ #4184    │ │
-│  ──▶ Cached Hit: 0.42 µs · Saved 142 tokens └──────────────┴──────────────┴──────────┘ │
+│  ──▶ Cached Hit: 0.42 µs · Saved 142  └──────────────┴──────────────┴──────────┘ │
 │                                                                                  │
 │  CRYPTOGRAPHIC DAG & GOVERNANCE      FINOPS SPEND ARBITRAGE LEDGER               │
 │  • Ed25519 Root: 0x7f4a...9b12       • Total Avoided Spend: $14,676.04           │
@@ -587,7 +597,7 @@ settled ledger row, zero dangling reservations).
 | **DPDP Act 2023 (India)** | Section 6 Notice & Consent management with salted SHA-256 zero-PII audit trail, Section 12(3) Right to Erasure / Right to be Forgotten with cryptographic purge across exact cache, vector memory, and lineage graph. Endpoints: `POST /v1/governance/dpdp/consent`, `POST /v1/governance/dpdp/erasure`, `GET /v1/governance/dpdp/audit`. |
 | **CERT-In Cyber Security Directions** | Rule 20(1) Annexure 1 incident logging format with NTP-synchronized microsecond timestamps, 6-hour reporting window format. Endpoint: `GET /v1/governance/cert-in/incidents`. |
 | **RBI Data Localization Directive** | Verified data residency in sovereign Indian cloud regions (`ap-south-1` Mumbai & `ap-south-2` Hyderabad), refusing off-shore data replication. Endpoint: `GET /v1/governance/rbi/localization`. |
-| **ISO/IEC/IEEE 29119** | Test process and evidence: 12-gate build pipeline, 8-gate launch verification, 523 automated tests (395 Rust + 67 frontend + 57 Python SDK + 4 TS SDK), TLA+ models. |
+| **ISO/IEC/IEEE 29119** | Test process and evidence: 12-gate build pipeline, 8-gate launch verification, 531 automated tests (395 Rust + 67 frontend + 65 Python SDK + 4 TS SDK), TLA+ models. |
 | **IEEE 1012 / 730 / 42010 / 754** | Verification and validation gate, zero-warning lint policy, as-built architecture description, strict floating-point edge handling with micro-unit ledger. |
 | **NIST SP 800-218 (SSDF)** | Deterministic CycloneDX SBOM (369 components), `cargo audit` in CI, pinned toolchain. |
 | **OWASP API Top 10 / ASVS L3** | Route-by-route authorization contract enforced in the build, CSRF origin pinning, path-traversal rejection, rate-limit lockout, STRIDE threat model in [`docs/security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md`](docs/security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md). |
@@ -673,7 +683,7 @@ bash scripts/verify.sh          # or: powershell -File scripts/verify.ps1
 [1/12]  Rust workspace tests & clippy ................ PASS  (395 tests, 0 warnings)
 [2/12]  Frontend production bundle ................... PASS  (Next.js 15)
 [3/12]  Frontend test suite .......................... PASS  (67 tests)
-[4/12]  Python SDK package & clean install ........... PASS  (57 tests, ruff + mypy + coverage)
+[4/12]  Python SDK package & clean install ........... PASS  (65 tests, ruff + mypy + coverage)
 [5/12]  OpenAPI 3.1 drift ............................ PASS  (77 operations matched)
 [6/12]  Helm chart lint & schema ..................... PASS (or via pre-flight if helm is absent)
 [7/12]  Multi-container stack pre-flight ............. PASS
@@ -730,7 +740,7 @@ python scripts/verify_public_launch.py --strict
 | | |
 | :--- | :--- |
 | **Release verdict** | **STAGE 0 PILOT APPROVED — 100% In-Tree & CI Verified**; Stage 1 Private Beta & Stage 2 Public Launch Gated on External Staging ([`docs/launch/05_PRELAUNCH_CHECKLIST.md`](docs/launch/05_PRELAUNCH_CHECKLIST.md)) |
-| **Verification status** | **523 automated tests passing** (395 Rust + 67 frontend + 57 Python SDK + 4 TS SDK), 10 routes tested (0 axe violations, 271 tab stops), 11/11 CI quality gates passed, 8/8 pre-flight launch gates passed |
+| **Verification status** | **531 automated tests passing** (395 Rust + 67 frontend + 65 Python SDK + 4 TS SDK), 10 routes tested (0 axe violations, 271 tab stops), 11/11 CI quality gates passed, 8/8 pre-flight launch gates passed |
 | **Security mode** | Fail-closed in production; fail-open only in explicit `development` |
 | **Known high/critical CVEs** | 0 |
 | **Current-status authority** | [`docs/STATUS.md`](docs/STATUS.md) — supersedes every badge, score, or readiness claim in older audit documents |
@@ -740,3 +750,4 @@ python scripts/verify_public_launch.py --strict
 ## 18. License
 
 [Apache License 2.0](LICENSE).
+

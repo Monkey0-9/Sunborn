@@ -26,6 +26,25 @@ class TestSunbornCLI(unittest.TestCase):
         self.assertEqual(low_zero, 0.0)
         self.assertEqual(high_zero, 0.0)
 
+    def test_cli_help_and_subcommands_help(self):
+        for subcmd in [[], ["doctor"], ["bench"], ["finops"], ["shred"]]:
+            with patch("sys.stdout", new=io.StringIO()) as fake_out:
+                if not subcmd:
+                    # Root help
+                    with self.assertRaises(SystemExit) as cm:
+                        main(["--help"])
+                    self.assertEqual(cm.exception.code, 0)
+                    out = fake_out.getvalue()
+                    self.assertIn("Sunborn Enterprise", out)
+                    self.assertIn("doctor", out)
+                    self.assertIn("bench", out)
+                else:
+                    with self.assertRaises(SystemExit) as cm:
+                        main(subcmd + ["--help"])
+                    self.assertEqual(cm.exception.code, 0)
+                    out = fake_out.getvalue()
+                    self.assertIn(f"usage: sunborn {subcmd[0]}", out)
+
     def test_cli_version(self):
         with patch("sys.stdout", new=io.StringIO()) as fake_out:
             with self.assertRaises(SystemExit) as cm:

@@ -141,6 +141,24 @@ from sunborn.integrations.llamaindex import SunbornLlamaIndexCache
 cache = SunbornLlamaIndexCache()
 ```
 
+### Developer & Ops CLI (`sunborn`)
+
+The package registers the `sunborn` command-line utility for local diagnostics, performance benchmarking, and FinOps cost governance:
+
+```bash
+# Gateway connectivity & SIMD health diagnosis
+sunborn doctor --url http://127.0.0.1:8080/v1
+
+# Synthetic benchmark with Wilson 95% confidence intervals
+sunborn bench --requests 50 --model gpt-4o
+
+# Live token avoidance & FinOps cost report
+sunborn finops --tenant tenant-enterprise-alpha
+
+# Instant cryptographic shredding (GDPR / DPDP zeroization)
+sunborn shred --tenant-id tenant-enterprise-alpha --admin-key $ADMIN_KEY --quorum-key $QUORUM_KEY
+```
+
 ---
 
 ## 4. Exception Hierarchy

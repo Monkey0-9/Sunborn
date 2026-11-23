@@ -286,7 +286,7 @@ def main(argv: list[str] | None = None) -> int:
     p_doctor.add_argument("--timeout", type=float, default=5.0, help="Probe timeout in seconds")
 
     # bench
-    p_bench = subparsers.add_parser("bench", help="Run latency benchmark with Wilson 95% confidence intervals")
+    p_bench = subparsers.add_parser("bench", help="Run latency benchmark with Wilson 95%% confidence intervals")
     p_bench.add_argument("--url", default=None, help="Sunborn Gateway URL")
     p_bench.add_argument("--key", default=None, help="Sunborn API key")
     p_bench.add_argument("--tenant", default=None, help="Tenant identifier")
