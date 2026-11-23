@@ -55,6 +55,10 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+      # Required by actions/attest-build-provenance to issue a signed SLSA
+      # build-provenance attestation for the release artifact.
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -103,6 +107,11 @@ jobs:
             Remove-Item -Path $testDir -Recurse -Force -ErrorAction SilentlyContinue
           }
 
+      - name: Generate signed SLSA build provenance attestation
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: target/dist/sunborn-desktop-*-windows-x64.zip
+
       - name: Upload Windows Desktop Release Asset
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4
         with:
@@ -110,7 +119,7 @@ jobs:
           path: |
             target/dist/sunborn-desktop-*-windows-x64.zip
             target/dist/SHA256SUMS.txt
-            target/dist/PROVENANCE.json
+            target/dist/BUILD-METADATA.json
             target/dist/sbom.cyclonedx.json
 
   build-and-publish:

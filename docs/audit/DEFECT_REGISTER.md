@@ -1,8 +1,13 @@
 # Master Defect Register (Remediation Tracking D-01 through D-12 and Issues #3 through #23)
 
-**Total Audit Defects:** 31  
-**Remediated & Closed:** 31 / 31 (100% Resolution Rate)  
-**Open P0 / P1 Defects:** 0  
+**Total Audit Defects:** 31
+
+**Remediated & Closed:** 29 / 31 (93.5% Resolution Rate)
+
+**Partially Met:** 2 (Issue #21 clean-host acceptance, Issue #23 signed artifact)
+
+**Open P0 Defects:** 0 · **Open P1 Defects:** 0 (2 partially met, tracked below)
+
 **Authoritative Status:** Stage 0 Controlled Pilot Approved; Stage 1/2 Gated on External Staging.
 
 ---
@@ -183,47 +188,54 @@ ID        Severity  Status  Component        Summary & Remediation              
 ---------------------------------------------------------------------------------------------------------
 Issue #13 P0 Crit   CLOSED  Invalidation     Fail-closed causal invalidation on partial purge   graphify_causal_invalidation_test
                                              and DB error; mandatory tenant_id validation
-Issue #16 P1 High   CLOSED  Telemetry        Eradicated synthetic cluster topology & latency;   live-dag-visualizer.tsx
-                                             live SSE stream & explicit SLA target badges       cluster-mesh-status.tsx
+Issue #16 P1 High   CLOSED  Telemetry        Removed synthetic regions/RTTs; explicit          live-dag-visualizer.tsx
+                                             LIVE/PARTIAL/UNAVAILABLE labels; DAG bounds      cluster-mesh-status.tsx
+                                             re-labeled as SLA design targets
 Issue #17 P1 High   CLOSED  Deployment       Configured KMS provider & persistent WAL storage   docker-compose.prod.yml
                                              in production Compose manifests                    
 Issue #20 P1 High   CLOSED  Documentation    Reconciled README & launch docs to authoritative   verify_public_launch.py
                                              Stage 0 Controlled Pilot SSOT (80.8% recall)
-Issue #21 P1 High   CLOSED  Distribution     Hardened clean-machine installer smoke test with   .github/workflows/release.yml
-                                             exit code checks, binary test & uninstaller
+Issue #21 P1 High   PARTIAL Distribution     CI install/uninstall smoke hardened with exit      .github/workflows/release.yml
+                                             code, binary check & uninstaller; the runner
+                                             still ships dev toolchains, so independent
+                                             clean-Windows-11 acceptance is outstanding
 Issue #22 P1 High   CLOSED  Security CI      Pinned Semgrep CLI to semgrep==1.178.0 in          .github/workflows/security.yml
                                              workflow to eliminate version drift
-Issue #23 P1 High   CLOSED  Provenance       Added PROVENANCE.json (SLSA Level 2), SBOM, and    package-distribution.ps1
-                                             Authenticode signing support to Windows release
+Issue #23 P1 High   PARTIAL Provenance       Unsigned BUILD-METADATA.json + SBOM bundled;       package-distribution.ps1
+                                             GitHub attest-build-provenance added to CI;
+                                             Authenticode needs a certificate and no signed
+                                             artifact has been produced yet
 =========================================================================================================
 ```
 
 ### Detailed Phase 4 Hardening Summaries:
 
 - **Issue #13 (Fail-Closed Causal Invalidation & Invalidation Error Handling)**:
-  - *Hardening*: Enforced mandatory non-empty `tenant_id` on `CausalInvalidatePayload`. Partial cache key eviction failures and outbox update failures now fail closed in ALL execution modes with explicit `500` / `AppError` and transition the outbox event to `FAILED` for background retry.
-  - *Verification*: `crates/sunborn-gateway/tests/graphify_causal_invalidation_test.rs`.
+  - *Hardening*: Mandatory non-empty `tenant_id` on `CausalInvalidatePayload` (blank → 403, absent → 422). Traversal rejects nodes with missing or conflicting tenant identity, and roots are validated before any epoch bump, outbox write, or purge (cross-tenant root → 403). A failed `GraphMemoryCache` delete is recorded in `failed_keys`, and a failed `mark_outbox_failed` is logged while leaving the event PENDING for retry. Production returns an error on partial purge; non-production returns the explicit `partially_purged` status, never a clean success.
+  - *Verification*: `crates/sunborn-gateway/tests/graphify_causal_invalidation_test.rs` (4 assertions including cross-tenant 403 and missing-scope 422); live run against the broker-wired gateway returned 200/403/422 as expected.
 
-- **Issue #16 (Live Cockpit Telemetry & Disclosures)**:
-  - *Hardening*: Eradicated hardcoded 4-region RTTs (`14.2ms`, `38.6ms`, `64.1ms`) from `cluster-mesh-status.tsx`. Added live SSE cluster status with explicit `UNAVAILABLE` / `PARTIAL` labels for unmeasured peers. Updated `live-dag-visualizer.tsx` to badge latency numbers as design/SLA targets, not live measured telemetry.
-  - *Verification*: `npm test --prefix frontend` (67/67 passed).
+- **Issue #16 (Cockpit Telemetry & Disclosures)**:
+  - *Hardening*: Removed the hardcoded 4-region topology and RTTs (`14.2ms`, `38.6ms`, `64.1ms`) from `cluster-mesh-status.tsx`; the panel now renders only the gateway-attested node and an explicit `PARTIAL` peer-count card when peers exist, with RTT shown as `unavailable`. `/v1/cluster/sync/status` reports `nodes_active: 1`, `nodes_active_scope: local_process_only`, and `replica_telemetry: unavailable` instead of a fabricated count. `live-dag-visualizer.tsx` labels its bounds as SLA design targets rather than live measurements.
+  - *Verification*: `npm test --prefix frontend` (67/67 passed); live `/v1/cluster/sync/status` returned the new fields.
 
 - **Issue #17 (Production Compose KMS & WAL Storage)**:
-  - *Hardening*: Added `SUNBORN_KMS_PROVIDER`, `AWS_KMS_KEY_ARN`, and `AWS_REGION` options to `deploy/docker-compose.prod.yml` alongside persistent WAL volume mounts (`/var/lib/sunborn`).
-  - *Verification*: `scripts/check_k8s_manifests.py`.
+  - *Hardening*: Added `SUNBORN_KMS_PROVIDER`, `AWS_KMS_KEY_ARN`, and `AWS_REGION` options to `deploy/docker-compose.prod.yml`. The pre-existing persistent WAL mount (`sunborn_wal_prod:/var/lib/sunborn`) is retained for `execution.wal`, `learning.wal`, and `graphify.json`.
+  - *Verification*: `docker compose -f deploy/docker-compose.prod.yml config -q` with all required production variables set (executed locally, exit 0).
 
 - **Issue #20 (Documentation & Research Claim Reconciliation)**:
   - *Hardening*: Harmonized `README.md`, `docs/STATUS.md`, and `docs/launch/05_PRELAUNCH_CHECKLIST.md` to consistently report 80.8% recall on the 320-pair benchmark and establish Stage 0 Controlled Pilot as the authoritative release baseline.
   - *Verification*: `python scripts/verify_public_launch.py --strict`.
 
-- **Issue #21 (Clean-Machine Desktop Release Smoke Testing)**:
-  - *Hardening*: Updated `.github/workflows/release.yml` to check `$installProc.ExitCode -eq 0`, verify `$targetBin --version`, test `uninstall.ps1 -Silent -PurgeData`, and added `[switch]$Silent = $false` to `scripts/install-sunborn.ps1`.
-  - *Verification*: `scripts/install-sunborn.ps1` and GitHub Actions release workflow.
+- **Issue #21 (Clean-Machine Desktop Release Smoke Testing)** — **PARTIAL**:
+  - *Hardening*: `.github/workflows/release.yml` now checks the installer exit code, verifies the installed binary with `--version`, and exercises `uninstall.ps1 -Silent -PurgeData`; `scripts/install-sunborn.ps1` gained `-Silent`.
+  - *Remaining gap*: the `windows-latest` runner already ships Rust and Node, so this is not a tool-free acceptance environment. An independent clean Windows 11 x64 run remains outstanding.
+  - *Verification*: workflow definition reviewed; not executed on a clean host here.
 
 - **Issue #22 (Pinned Semgrep SAST Version)**:
   - *Hardening*: Pinned Semgrep CLI installation in `.github/workflows/security.yml` to `semgrep==1.178.0`.
   - *Verification*: `.github/workflows/security.yml`.
 
-- **Issue #23 (Windows Package Signing, Provenance & SBOM)**:
-  - *Hardening*: Updated `scripts/package-distribution.ps1` to generate `PROVENANCE.json` (SLSA Level 2 build metadata including binary SHA-256 and commit SHA), bundle `sbom.cyclonedx.json`, support Authenticode signing via `$env:SIGNING_CERT_PFX`, and updated `.github/workflows/release.yml` to upload and publish provenance alongside the release zip.
-  - *Verification*: `powershell -File scripts/package-distribution.ps1 -SkipBuild`.
+- **Issue #23 (Windows Package Signing, Provenance & SBOM)** — **PARTIAL**:
+  - *Hardening*: `scripts/package-distribution.ps1` now bundles `sbom.cyclonedx.json`, writes an explicitly unsigned `BUILD-METADATA.json` (manifest type `sunborn-build-metadata-v1`, binary SHA-256, commit SHA, code-signing state), and supports Authenticode via `$env:SIGNING_CERT_PFX`. `.github/workflows/release.yml` calls `actions/attest-build-provenance@v2` with `id-token`/`attestations` write permissions, which is the real SLSA provenance mechanism (the local JSON is not SLSA provenance).
+  - *Remaining gap*: no signing certificate is configured in CI and no signed artifact has been produced. A GitHub attestation only exists after the release workflow runs.
+  - *Verification*: workflow YAML parsed; provenance/manifest wording corrected. Not executed against a signing certificate.

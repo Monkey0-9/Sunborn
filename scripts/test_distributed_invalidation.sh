@@ -485,7 +485,7 @@ assert a["content"] == b["content"], (a["content"], b["content"])
     curl -fsS -X POST \
         -H "x-api-key: ${ADMIN_KEY}" \
         -H "content-type: application/json" \
-        --data "{\"source_id\":\"${SOURCE_ID}\",\"cache_key\":\"${KEY_A}\"}" \
+        --data "{\"source_id\":\"${SOURCE_ID}\",\"cache_key\":\"${KEY_A}\",\"tenant_id\":\"${TENANT}\"}" \
         "http://127.0.0.1:${A_PORT}/v1/dependencies" >/dev/null \
         || fail "replica A dependency registration failed"
     INVALIDATION="$(curl -fsS -X POST \
@@ -543,7 +543,7 @@ if [ "${MODE}" = "replay" ]; then
     curl -fsS -X POST \
         -H "x-api-key: ${ADMIN_KEY}" \
         -H "content-type: application/json" \
-        --data "{\"source_id\":\"${SOURCE_ID}\",\"cache_key\":\"${KEY_A}\"}" \
+        --data "{\"source_id\":\"${SOURCE_ID}\",\"cache_key\":\"${KEY_A}\",\"tenant_id\":\"${TENANT}\"}" \
         "http://127.0.0.1:${A_PORT}/v1/dependencies" >/dev/null \
         || fail "replica A dependency registration failed"
     INVALIDATION="$(curl -fsS -X POST \
@@ -618,7 +618,7 @@ echo "=== 5/7: record dependency on replica A only ==="
 curl -fsS -X POST \
     -H "x-api-key: ${ADMIN_KEY}" \
     -H "content-type: application/json" \
-    --data "{\"source_id\":\"${SOURCE_ID}\",\"cache_key\":\"${KEY_A}\"}" \
+    --data "{\"source_id\":\"${SOURCE_ID}\",\"cache_key\":\"${KEY_A}\",\"tenant_id\":\"${TENANT}\"}" \
     "http://127.0.0.1:${A_PORT}/v1/dependencies" >/dev/null \
     || fail "replica A dependency registration failed"
 

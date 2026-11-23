@@ -79,12 +79,22 @@ try {
 
 $BinSha256 = (Get-FileHash -Path (Join-Path $StageDir "bin\sunborn-gateway.exe") -Algorithm SHA256).Hash.ToLower()
 
-$Provenance = [ordered]@{
+$BuilderName = if ($env:GITHUB_ACTIONS -eq "true") { "GitHub Actions" } else { "local build" }
+
+# This is an unsigned, self-described build manifest. It is NOT SLSA
+# provenance: a SLSA attestation must be issued and signed by a trusted
+# builder. The release workflow does that separately with GitHub's
+# actions/attest-build-provenance; this file only records reproducible build
+# inputs (commit, binary digest) next to the artifact.
+$BuildMetadata = [ordered]@{
+    manifest_type = "sunborn-build-metadata-v1"
+    signed = $false
     product = "Sunborn Desktop BYOK Gateway"
     version = $Version
     target = "windows-x64"
     build_date_utc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     commit_sha = $gitCommit
+    builder = $BuilderName
     binary = @{
         name = "sunborn-gateway.exe"
         sha256 = $BinSha256
@@ -92,15 +102,15 @@ $Provenance = [ordered]@{
         os = "windows"
     }
     supply_chain = @{
-        slsa_level = "SLSA-Build-Level-2"
-        builder = "GitHub Actions / Microsoft Windows Server"
         sbom = "sbom.cyclonedx.json"
-        verification_guidance = "Verify Authenticode via Get-AuthenticodeSignature or check SHA256SUMS.txt"
+        slsa_attestation = "not embedded; issued by CI via actions/attest-build-provenance when the release workflow runs"
+        code_signing = if ($env:SIGNING_CERT_PFX) { "Authenticode attempted with the configured certificate" } else { "not signed (SIGNING_CERT_PFX was not provided)" }
+        verification_guidance = "Check SHA256SUMS.txt; when signed, verify Authenticode with Get-AuthenticodeSignature; when available, verify the GitHub artifact attestation with 'gh attestation verify'"
     }
 }
-$ProvenanceJson = ($Provenance | ConvertTo-Json -Depth 5)
-Set-Content -Path (Join-Path $StageDir "PROVENANCE.json") -Value $ProvenanceJson -Encoding UTF8
-Set-Content -Path (Join-Path $OutputDir "PROVENANCE.json") -Value $ProvenanceJson -Encoding UTF8
+$MetadataJson = ($BuildMetadata | ConvertTo-Json -Depth 5)
+Set-Content -Path (Join-Path $StageDir "BUILD-METADATA.json") -Value $MetadataJson -Encoding UTF8
+Set-Content -Path (Join-Path $OutputDir "BUILD-METADATA.json") -Value $MetadataJson -Encoding UTF8
 
 # Create convenient 1-click Install.bat for non-technical users
 $BatContent = @"

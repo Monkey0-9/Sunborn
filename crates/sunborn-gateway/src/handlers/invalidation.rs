@@ -96,8 +96,8 @@ pub async fn trigger_invalidation(
 pub struct DependencyRecordRequest {
     pub source_id: Uuid,
     pub cache_key: String,
-    /// Owning tenant. Required so causal invalidation can attribute these
-    /// nodes to a tenant and refuse cross-tenant traversal.
+    /// Owning tenant. Defaults to authenticated tenant context if omitted.
+    #[serde(default)]
     pub tenant_id: String,
 }
 
@@ -109,6 +109,16 @@ pub async fn record_dependency(
     sec_ctx
         .require_admin()
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
+    let tenant_id = if payload.tenant_id.trim().is_empty() {
+        if sec_ctx.tenant_id.0.trim().is_empty() {
+            "default-tenant".to_string()
+        } else {
+            sec_ctx.tenant_id.0.clone()
+        }
+    } else {
+        payload.tenant_id.trim().to_string()
+    };
 
     state
         .dependency_graph
@@ -127,7 +137,7 @@ pub async fn record_dependency(
             sunborn_invalidation::GraphifyNodeType::Document,
         )
         .with_metadata(json!({
-            "tenant_id": payload.tenant_id,
+            "tenant_id": tenant_id,
             "source_id": source_str,
         }));
         state.graphify_graph.add_node(doc_node);
@@ -140,7 +150,7 @@ pub async fn record_dependency(
             sunborn_invalidation::GraphifyNodeType::CacheEntry,
         )
         .with_metadata(json!({
-            "tenant_id": payload.tenant_id,
+            "tenant_id": tenant_id,
             "cache_key": payload.cache_key,
         }));
         state.graphify_graph.add_node(cache_node);
@@ -155,7 +165,8 @@ pub async fn record_dependency(
     Ok(Json(json!({
         "status": "recorded",
         "source_id": payload.source_id,
-        "cache_key": payload.cache_key
+        "cache_key": payload.cache_key,
+        "tenant_id": tenant_id,
     })))
 }
 

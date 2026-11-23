@@ -319,7 +319,8 @@ async fn test_vs003_vs004_semantic_cache_and_invalidation_slice() {
                 .body(Body::from(
                     serde_json::json!({
                         "source_id": source_id,
-                        "cache_key": cache_key
+                        "cache_key": cache_key,
+                        "tenant_id": "tenant-corp-1"
                     })
                     .to_string(),
                 ))
