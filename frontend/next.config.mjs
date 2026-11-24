@@ -31,6 +31,7 @@ const contentSecurityPolicy = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: 'standalone',
   outputFileTracingRoot: __dirname,
   poweredByHeader: false,
   async headers() {

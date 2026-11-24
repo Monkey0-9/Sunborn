@@ -211,7 +211,8 @@ pub async fn calculate_graph_blast_radius(
     State(state): State<AppState>,
     Json(payload): Json<BlastRadiusPayload>,
 ) -> Result<Json<AffectedReport>, AppError> {
-    let roots: Vec<&str> = payload.mutated_roots.iter().map(|s| s.as_str()).collect();
+    let graph = state.graphify_graph.clone();
+    let roots_owned: Vec<String> = payload.mutated_roots.clone();
 
     let cfg = BlastRadiusConfig {
         max_depth: payload.max_depth.unwrap_or(16),
@@ -222,7 +223,13 @@ pub async fn calculate_graph_blast_radius(
         tenant_id: payload.tenant_id,
     };
 
-    let report = compute_affected(&state.graphify_graph, &roots, Some(cfg));
+    let report = tokio::task::spawn_blocking(move || {
+        let roots_ref: Vec<&str> = roots_owned.iter().map(|s| s.as_str()).collect();
+        compute_affected(&graph, &roots_ref, Some(cfg))
+    })
+    .await
+    .map_err(|e| SunbornError::internal(format!("Graph blast radius task failed: {e}")))?;
+
     Ok(Json(report))
 }
 
@@ -245,7 +252,8 @@ pub async fn invalidate_graph_causal(
         .into());
     }
 
-    let roots: Vec<&str> = payload.mutated_roots.iter().map(|s| s.as_str()).collect();
+    let graph = state.graphify_graph.clone();
+    let roots_owned: Vec<String> = payload.mutated_roots.clone();
 
     let cfg = BlastRadiusConfig {
         max_depth: payload.max_depth.unwrap_or(16),
@@ -256,8 +264,13 @@ pub async fn invalidate_graph_causal(
         tenant_id: Some(tenant_str.clone()),
     };
 
-    // 1. Calculate multi-relational causal blast radius
-    let report = compute_affected(&state.graphify_graph, &roots, Some(cfg));
+    // 1. Calculate multi-relational causal blast radius off the Tokio worker thread
+    let report = tokio::task::spawn_blocking(move || {
+        let roots_ref: Vec<&str> = roots_owned.iter().map(|s| s.as_str()).collect();
+        compute_affected(&graph, &roots_ref, Some(cfg))
+    })
+    .await
+    .map_err(|e| SunbornError::internal(format!("Graph causal invalidation task failed: {e}")))?;
 
     // Fail closed before touching any durable state: a root we cannot attribute
     // to the tenant must not be silently skipped, because the caller would read

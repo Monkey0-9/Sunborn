@@ -4,10 +4,43 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 
+#[derive(Default, Clone)]
+pub struct SingleflightHistory {
+    chunks: Vec<Bytes>,
+    total_bytes: usize,
+}
+
+impl SingleflightHistory {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn len(&self) -> usize {
+        self.chunks.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.chunks.is_empty()
+    }
+
+    pub fn total_bytes(&self) -> usize {
+        self.total_bytes
+    }
+
+    pub fn get(&self, index: usize) -> Option<Bytes> {
+        self.chunks.get(index).cloned()
+    }
+
+    pub fn push(&mut self, chunk: Bytes) {
+        self.total_bytes = self.total_bytes.saturating_add(chunk.len());
+        self.chunks.push(chunk);
+    }
+}
+
 #[derive(Clone)]
 struct InFlightStream {
     tx: broadcast::Sender<Result<Bytes, String>>,
-    history: Arc<RwLock<Vec<Bytes>>>,
+    history: Arc<RwLock<SingleflightHistory>>,
 }
 
 type InFlightMap = Arc<RwLock<HashMap<[u8; 32], InFlightStream>>>;
@@ -15,14 +48,14 @@ type InFlightMap = Arc<RwLock<HashMap<[u8; 32], InFlightStream>>>;
 /// Replay-capable receiver that catches up from historical chunks if a follower
 /// connects mid-stream or experiences `RecvError::Lagged`.
 pub struct ReplayStreamReceiver {
-    history: Arc<RwLock<Vec<Bytes>>>,
+    history: Arc<RwLock<SingleflightHistory>>,
     receiver: broadcast::Receiver<Result<Bytes, String>>,
     cursor: usize,
 }
 
 impl ReplayStreamReceiver {
     pub fn new(
-        history: Arc<RwLock<Vec<Bytes>>>,
+        history: Arc<RwLock<SingleflightHistory>>,
         receiver: broadcast::Receiver<Result<Bytes, String>>,
     ) -> Self {
         Self {
@@ -38,8 +71,7 @@ impl ReplayStreamReceiver {
         // 1. Drain any pending historical chunks first
         {
             let hist = self.history.read().await;
-            if self.cursor < hist.len() {
-                let chunk = hist[self.cursor].clone();
+            if let Some(chunk) = hist.get(self.cursor) {
                 self.cursor += 1;
                 return Ok(Ok(chunk));
             }
@@ -56,8 +88,7 @@ impl ReplayStreamReceiver {
                     // Stalled or slow follower lagged behind broadcast buffer!
                     // Seamlessly replay missed chunks directly from the in-memory history log
                     let hist = self.history.read().await;
-                    if self.cursor < hist.len() {
-                        let chunk = hist[self.cursor].clone();
+                    if let Some(chunk) = hist.get(self.cursor) {
                         self.cursor += 1;
                         return Ok(Ok(chunk));
                     }
@@ -66,8 +97,7 @@ impl ReplayStreamReceiver {
                 Err(broadcast::error::RecvError::Closed) => {
                     // Check if any remaining chunks were added before closure
                     let hist = self.history.read().await;
-                    if self.cursor < hist.len() {
-                        let chunk = hist[self.cursor].clone();
+                    if let Some(chunk) = hist.get(self.cursor) {
                         self.cursor += 1;
                         return Ok(Ok(chunk));
                     }
@@ -86,14 +116,14 @@ pub const MAX_SINGLEFLIGHT_HISTORY_CHUNKS: usize = 4096;
 #[derive(Clone)]
 pub struct SingleflightSender {
     tx: broadcast::Sender<Result<Bytes, String>>,
-    history: Arc<RwLock<Vec<Bytes>>>,
+    history: Arc<RwLock<SingleflightHistory>>,
 }
 
 impl SingleflightSender {
     pub async fn send(&self, item: Result<Bytes, String>) {
         if let Ok(ref bytes) = item {
             let mut hist = self.history.write().await;
-            let current_bytes: usize = hist.iter().map(|b| b.len()).sum();
+            let current_bytes = hist.total_bytes();
             if current_bytes.saturating_add(bytes.len()) <= MAX_SINGLEFLIGHT_HISTORY_BYTES
                 && hist.len() < MAX_SINGLEFLIGHT_HISTORY_CHUNKS
             {
@@ -171,7 +201,7 @@ impl SingleflightStreamer {
         }
 
         let (tx, rx) = broadcast::channel(256);
-        let history = Arc::new(RwLock::new(Vec::new()));
+        let history = Arc::new(RwLock::new(SingleflightHistory::new()));
         let stream_entry = InFlightStream {
             tx: tx.clone(),
             history: Arc::clone(&history),

@@ -88,6 +88,23 @@ export interface SunbornConfig {
   backoffFactor?: number;
 }
 
+export interface ChatCompletionChunkChoice {
+  index: number;
+  delta: {
+    role?: string;
+    content?: string;
+  };
+  finish_reason: string | null;
+}
+
+export interface ChatCompletionChunk {
+  id: string;
+  object: string;
+  created: number;
+  model: string;
+  choices: ChatCompletionChunkChoice[];
+}
+
 export interface GatewayHealth {
   service: string;
   status: string;

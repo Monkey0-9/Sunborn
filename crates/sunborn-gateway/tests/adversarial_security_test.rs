@@ -744,7 +744,39 @@ async fn test_adversarial_crypto_shred_post_condition_enforcement() {
         "Active tenant key must encrypt payloads successfully"
     );
 
-    // 2. Admin issues cryptographic shredding
+    // 2. Unilateral shred without secondary quorum is rejected with 403 when quorum is enforced
+    std::env::set_var("SUNBORN_ADMIN_QUORUM_REQUIRED", "true");
+    let res_unilateral = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/governance/shred")
+                .header("content-type", "application/json")
+                .header("x-api-key", "sunborn-admin-key")
+                .body(Body::from(
+                    serde_json::to_vec(&serde_json::json!({
+                        "tenant_id": shred_tenant
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res_unilateral.status(), StatusCode::FORBIDDEN);
+
+    // Register distinct secondary administrator for quorum authorization
+    let secondary_admin = "sunborn-admin-key-secondary";
+    state.api_key_registry.register_key(
+        secondary_admin,
+        TenantId::new("admin-tenant-sec"),
+        ApplicationId::new("admin-app-sec"),
+        vec!["*".to_string()],
+        true,
+    );
+
+    // Dual-admin quorum authorized cryptographic shredding
     let res_shred = app
         .clone()
         .oneshot(
@@ -753,6 +785,7 @@ async fn test_adversarial_crypto_shred_post_condition_enforcement() {
                 .uri("/v1/governance/shred")
                 .header("content-type", "application/json")
                 .header("x-api-key", "sunborn-admin-key")
+                .header("x-quorum-admin-key", secondary_admin)
                 .body(Body::from(
                     serde_json::to_vec(&serde_json::json!({
                         "tenant_id": shred_tenant
@@ -777,6 +810,7 @@ async fn test_adversarial_crypto_shred_post_condition_enforcement() {
         enc_after.is_err(),
         "Shredded tenant encryption must fail because DEK was permanently zeroized"
     );
+    std::env::remove_var("SUNBORN_ADMIN_QUORUM_REQUIRED");
 }
 
 #[tokio::test]

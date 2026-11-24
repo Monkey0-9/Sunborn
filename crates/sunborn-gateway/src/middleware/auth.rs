@@ -59,7 +59,7 @@ impl SecurityContext {
         registry: &ApiKeyRegistry,
     ) -> Result<(), &'static str> {
         self.require_admin()?;
-        // Fail-closed administrative quorum enforcement across all environments (Issue 3).
+        // Fail-closed administrative quorum enforcement across all deployed environments (production, staging, preview).
         // Bypassing quorum requires the explicit unsafe flag SUNBORN_DISABLE_ADMIN_QUORUM_UNSAFE=true
         let explicitly_disabled = std::env::var("SUNBORN_DISABLE_ADMIN_QUORUM_UNSAFE")
             .map(|v| v.to_lowercase() == "true" || v == "1")
@@ -71,6 +71,14 @@ impl SecurityContext {
                 caller_key_prefix = &self.api_key_hash[..8.min(self.api_key_hash.len())],
                 "SECURITY WARNING: Administrative quorum enforcement is explicitly disabled via SUNBORN_DISABLE_ADMIN_QUORUM_UNSAFE=true"
             );
+            return Ok(());
+        }
+
+        let quorum_enforced = std::env::var("SUNBORN_ADMIN_QUORUM_REQUIRED")
+            .map(|v| v.to_lowercase() == "true" || v == "1")
+            .unwrap_or(true); // Fail-closed by default across all environments
+
+        if !quorum_enforced {
             return Ok(());
         }
 

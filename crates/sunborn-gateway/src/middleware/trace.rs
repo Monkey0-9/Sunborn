@@ -8,13 +8,18 @@ use tracing::Instrument;
 use uuid::Uuid;
 
 pub static X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
+pub static TRACEPARENT: HeaderName = HeaderName::from_static("traceparent");
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RequestId(pub String);
 
-/// Distributed tracing middleware: ensures every request has a validated or generated `x-request-id`.
-/// Injects `x-request-id` into request extensions, attaches it to the tracing span,
-/// and guarantees its presence in response headers across all HTTP status codes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Traceparent(pub String);
+
+/// Distributed tracing middleware: ensures every request has a validated or generated `x-request-id`
+/// and propagates W3C `traceparent` headers across microservices (Issue #37).
+/// Injects `x-request-id` and `traceparent` into request extensions, attaches them to tracing spans,
+/// and guarantees their presence in response headers across all HTTP status codes.
 pub async fn request_id_middleware(mut req: Request, next: Next) -> Response {
     let request_id = req
         .headers()
@@ -30,7 +35,17 @@ pub async fn request_id_middleware(mut req: Request, next: Next) -> Response {
         .map(|s| s.to_string())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
 
+    let traceparent_opt = req
+        .headers()
+        .get(&TRACEPARENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| s.len() == 55 && s.starts_with("00-"));
+
     req.extensions_mut().insert(RequestId(request_id.clone()));
+    if let Some(ref tp) = traceparent_opt {
+        req.extensions_mut().insert(Traceparent(tp.clone()));
+    }
 
     // Hardened header security bounds against Slowloris / Memory Exhaustion DoS:
     // Individual header field limit: 16 KB (16,384 bytes)
@@ -74,6 +89,12 @@ pub async fn request_id_middleware(mut req: Request, next: Next) -> Response {
         response
             .headers_mut()
             .insert(X_REQUEST_ID.clone(), header_val);
+    }
+
+    if let Some(ref tp) = traceparent_opt {
+        if let Ok(tp_val) = HeaderValue::from_str(tp) {
+            response.headers_mut().insert(TRACEPARENT.clone(), tp_val);
+        }
     }
 
     response

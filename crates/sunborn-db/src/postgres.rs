@@ -274,8 +274,30 @@ impl PostgresDatabaseStore {
             }
         }
 
+        let max_connections = std::env::var("DATABASE_MAX_CONNECTIONS")
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(20);
+        let min_connections = std::env::var("DATABASE_MIN_CONNECTIONS")
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(5);
+        let idle_timeout = std::env::var("DATABASE_IDLE_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .map(Duration::from_secs)
+            .unwrap_or(Duration::from_secs(600));
+        let max_lifetime = std::env::var("DATABASE_MAX_LIFETIME_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .map(Duration::from_secs)
+            .unwrap_or(Duration::from_secs(1800));
+
         match PgPoolOptions::new()
-            .max_connections(20)
+            .max_connections(max_connections)
+            .min_connections(min_connections)
+            .idle_timeout(Some(idle_timeout))
+            .max_lifetime(Some(max_lifetime))
             .acquire_timeout(Duration::from_secs(2))
             .connect(&self.connection_url)
             .await

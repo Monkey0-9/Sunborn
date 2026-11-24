@@ -96,6 +96,10 @@ spec:
             - name: tmp
               mountPath: /tmp
       volumes:
+        # Development / ephemeral fallback: emptyDir.
+        # Production Invariant: In high-resilience production environments, replace emptyDir
+        # with a PersistentVolumeClaim (e.g. sunborn-wal-pvc) or StatefulSet volumeClaimTemplates
+        # to ensure WAL crash-durability across node rescheduling events (Issue #40).
         - name: sunborn-wal
           emptyDir: {}
         - name: tmp

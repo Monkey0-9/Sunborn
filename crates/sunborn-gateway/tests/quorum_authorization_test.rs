@@ -50,7 +50,8 @@ async fn test_adversarial_dual_admin_quorum_authorization_enforcement() {
     state.circuit_breaker.reset().await;
     std::env::remove_var("SUNBORN_DISABLE_ADMIN_QUORUM_UNSAFE");
 
-    // 2. Strict dual-admin quorum authorization is now fail-closed by default across all environments
+    // 2. Strict dual-admin quorum authorization is now fail-closed across all deployed environments
+    std::env::set_var("SUNBORN_ADMIN_QUORUM_REQUIRED", "true");
 
     // Case A: Missing quorum header on high-consequence operation
     let res = app

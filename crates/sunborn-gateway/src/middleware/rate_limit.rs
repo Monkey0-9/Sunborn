@@ -250,6 +250,16 @@ fn set_rate_headers(
 /// effective ceiling is the configured rate multiplied by the replica count. It is
 /// a brute-force brake, not a cluster-wide quota; tenant quotas remain the
 /// cluster-wide mechanism.
+fn is_trusted_proxy(ip: &std::net::IpAddr) -> bool {
+    if ip.is_loopback() {
+        return true;
+    }
+    match ip {
+        std::net::IpAddr::V4(v4) => v4.is_private() || v4.is_link_local(),
+        std::net::IpAddr::V6(v6) => v6.is_loopback(),
+    }
+}
+
 pub async fn pre_auth_rate_limit_middleware(req: Request, next: Next) -> Response {
     if req
         .extensions()
@@ -273,9 +283,25 @@ pub async fn pre_auth_rate_limit_middleware(req: Request, next: Next) -> Respons
         return next.run(req).await;
     };
 
+    // If the immediate peer is a trusted ingress/reverse proxy (e.g. cluster-local
+    // or RFC 1918 private IP), extract client IP from CF-Connecting-IP, X-Real-IP,
+    // or X-Forwarded-For to prevent throttling the entire ingress proxy (Issue #31).
+    let effective_ip = if is_trusted_proxy(&peer_ip) {
+        req.headers()
+            .get("cf-connecting-ip")
+            .or_else(|| req.headers().get("x-real-ip"))
+            .or_else(|| req.headers().get("x-forwarded-for"))
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.split(',').next().map(|p| p.trim().to_string()))
+            .and_then(|ip_str| ip_str.parse::<std::net::IpAddr>().ok())
+            .unwrap_or(peer_ip)
+    } else {
+        peer_ip
+    };
+
     // Loopback traffic (local benchmark runners, self-probes, sidecars) is trusted
     // from an anti-bruteforce perspective and must not be choked by the pre-auth limiter.
-    if peer_ip.is_loopback() {
+    if effective_ip.is_loopback() {
         return next.run(req).await;
     }
 
@@ -287,7 +313,9 @@ pub async fn pre_auth_rate_limit_middleware(req: Request, next: Next) -> Respons
         return next.run(req).await;
     }
 
-    let status = pre_auth_limiter().check_status(&peer_ip.to_string()).await;
+    let status = pre_auth_limiter()
+        .check_status(&effective_ip.to_string())
+        .await;
     if status.allowed {
         return next.run(req).await;
     }

@@ -1,4 +1,5 @@
 import {
+  ChatCompletionChunk,
   ChatCompletionRequest,
   ChatCompletionResponse,
   GatewayHealth,
@@ -124,6 +125,71 @@ export class SunbornClient {
       },
       body: JSON.stringify(request),
     });
+  }
+
+  /**
+   * Dispatches a streaming chat completion request (Server-Sent Events) through Sunborn.
+   * Emits chunks token-by-token as they are streamed from origin or cached replay.
+   */
+  public async *chatCompletionStream(
+    request: ChatCompletionRequest
+  ): AsyncIterable<ChatCompletionChunk> {
+    const url = `${this.baseUrl}/v1/chat/completions`;
+    const headers: Record<string, string> = {
+      "User-Agent": "Sunborn-TypeScript-SDK/1.0.0",
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+    };
+    if (this.apiKey) {
+      headers["x-api-key"] = this.apiKey;
+    }
+
+    const payload = { ...request, stream: true };
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new SunbornError(response.status, `Streaming request failed: ${errText}`, `HTTP_${response.status}`);
+    }
+
+    if (!response.body) {
+      throw new SunbornError(500, "Response body is null for streaming request", "EMPTY_STREAM");
+    }
+
+    const reader = (response.body as any).getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith(":")) continue;
+          if (trimmed.startsWith("data: ")) {
+            const dataStr = trimmed.slice(6).trim();
+            if (dataStr === "[DONE]") return;
+            try {
+              const chunk = JSON.parse(dataStr) as ChatCompletionChunk;
+              yield chunk;
+            } catch {
+              // Ignore unparseable control frames
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
   }
 
   /**

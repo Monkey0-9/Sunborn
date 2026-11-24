@@ -266,3 +266,19 @@ The local working tree on `main` contains untracked production crates (`crates/s
 - `origin/main` matches the local tree with 100% clean `git status`.
 - Fresh clone test reproduces all 8 launch verification gates and workspace tests.
 ```
+
+---
+
+# Phase 5: Comprehensive FAANG Architectural & Scalability Audit Issues (Issues #31 through #40)
+
+> **Filed & Active on [`Monkey0-9/Sunborn`](https://github.com/Monkey0-9/Sunborn)**:
+> - [Issue #31](https://github.com/Monkey0-9/Sunborn/issues/31): `[P1][Security/Networking] Pre-Auth Rate Limiting Collapses Behind Ingress Proxies Without Trusted Proxy Header Extraction`
+> - [Issue #32](https://github.com/Monkey0-9/Sunborn/issues/32): `[P1][Performance/Concurrency] Algorithmic O(N^2) Byte Recalculation in Singleflight Stream History Lock`
+> - [Issue #33](https://github.com/Monkey0-9/Sunborn/issues/33): `[P1][Distributed Systems] Gateway Pods Lack Cluster Invalidation Subscriber for Multi-Pod L1 Memory Cache Synchronization`
+> - [Issue #34](https://github.com/Monkey0-9/Sunborn/issues/34): `[P1][Scalability/Database] Disaster Recovery & Rebuild Engine Uses O(N^2) OFFSET-Based Pagination for Large-Scale Database Scans`
+> - [Issue #35](https://github.com/Monkey0-9/Sunborn/issues/35): `[P2][Async Concurrency] CPU-Intensive Multi-Hop Graph Invalidation & Blast Radius Blocks Tokio Worker Thread`
+> - [Issue #36](https://github.com/Monkey0-9/Sunborn/issues/36): `[P2][Container/Infra] Frontend Dockerfile Copies Full node_modules & Omits Next.js Standalone Build Optimization`
+> - [Issue #37](https://github.com/Monkey0-9/Sunborn/issues/37): `[P2][Observability] Distributed Tracing Missing W3C Trace Context (traceparent) Propagation to Upstream Origin Providers`
+> - [Issue #38](https://github.com/Monkey0-9/Sunborn/issues/38): `[P2][SDK Parity] TypeScript SDK Lacks Streaming SSE Generator & Covers Only 3 of 77 OpenAPI Operations`
+> - [Issue #39](https://github.com/Monkey0-9/Sunborn/issues/39): `[P2][Database Resilience] PostgreSQL Connection Pool Lacks Configurable Pool Bounds, Max Lifetime, and Idle Timeouts`
+> - [Issue #40](https://github.com/Monkey0-9/Sunborn/issues/40): `[P2][Infrastructure/State] Kubernetes Gateway Deployment Mounts Ephemeral emptyDir Volume for Write-Ahead Log`
