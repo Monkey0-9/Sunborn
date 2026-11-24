@@ -74,9 +74,17 @@ impl SecurityContext {
             return Ok(());
         }
 
+        let is_prod = sunborn_core::is_production_mode();
+        let is_deployed = std::env::var("SUNBORN_ENV")
+            .map(|e| {
+                let e = e.to_lowercase();
+                e == "staging" || e == "pre-prod" || e == "preproduction" || e == "preview"
+            })
+            .unwrap_or(false);
+
         let quorum_enforced = std::env::var("SUNBORN_ADMIN_QUORUM_REQUIRED")
             .map(|v| v.to_lowercase() == "true" || v == "1")
-            .unwrap_or(true); // Fail-closed by default across all environments
+            .unwrap_or(is_prod || is_deployed);
 
         if !quorum_enforced {
             return Ok(());
