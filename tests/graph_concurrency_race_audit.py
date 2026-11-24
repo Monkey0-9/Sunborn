@@ -122,7 +122,7 @@ def test_circular_dependency_handling():
     print("  [✓] PASSED: Circular dependency correctly detected and rejected.")
 
 def test_concurrent_invalidation_stress():
-    print("[Test 3] Concurrent Multi-Threaded Invalidation vs Read-Through Stress (500 threads)...")
+    print("[Test 3] Concurrent Multi-Threaded Invalidation vs Read-Through Stress (100 threads)...")
     epoch_mgr = EpochLeaseManagerSimulator()
     cache = CausalCacheSimulator(epoch_mgr)
     doc_id = "doc_shared_policy"

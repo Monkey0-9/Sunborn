@@ -4,8 +4,8 @@ Standalone command-line applications and administrative utilities for the Sunbor
 
 ## Applications
 
-- **`sunborn-rebuild`**: Offline vector index reconstruction, graph re-indexing, and transactional WAL replay utility.
-- **`sunborn-verify`**: Standalone verification tool for evaluating cryptographic reproducibility certificates, Merkle proofs, and tenant isolation invariants without running the full gateway.
+- **[`sunborn-rebuild`](./sunborn-rebuild/)**: Offline vector index reconstruction, graph re-indexing, and transactional WAL replay utility.
+- **[`sunborn-verify`](./sunborn-verify/)**: Standalone verification tool for evaluating cryptographic reproducibility certificates, Ed25519 attestations, and OpenAPI contract parity without running the full gateway.
 
 ## Usage
 

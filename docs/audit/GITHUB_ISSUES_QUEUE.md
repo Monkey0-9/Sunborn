@@ -1,6 +1,6 @@
 # Sunborn Public Launch — GitHub Issues Queue (Phase 4: Extreme-Scale Hardening)
 
-> **Context**: Generated during the comprehensive FAANG-level pre-launch architecture audit prior to public release to millions of global users.
+> **Context**: Generated during the comprehensive architecture and scalability audit prior to multi-replica staging release.
 > **Implementation Status**: **ALL 6 ISSUES REMEDIATED AND TESTED IN-TREE**.
 > - Issue 1 (Singleflight Memory Bounds): Remediated in `crates/sunborn-gateway/src/origin/singleflight.rs`.
 > - Issue 2 (Multilingual Token Heuristic): Remediated in `crates/sunborn-gateway/src/handlers/llm.rs`.
@@ -53,7 +53,7 @@ impl SingleflightSender {
 - Each incoming chunk from the origin LLM is indefinitely stored in heap memory until the origin task completes.
 - Additionally, `SingleflightCleanupGuard::drop` spawns an asynchronous tokio task via `handle.spawn` to remove the stream from `InFlightMap`. Under thread-pool saturation or task queue congestion, delayed execution of this spawned future leaves closed streams registered in the in-flight map.
 
-## Scale Impact at Millions of Concurrent Users
+## Scale Impact Under High-Concurrency Multi-Replica Workloads
 1. **Unbounded Heap Exhaustion (OOM)**: Long-context generations (e.g. 100k token synthesis, large code generation, or multi-turn reasoning traces) can emit tens of megabytes per stream. With multiple concurrent requests coalescing, in-flight memory balloons uncontrollably.
 2. **Denial-of-Service Vector**: A malicious or slow client requesting an unusually large output can exhaust gateway memory, causing pod evictions by Kubernetes OOMKiller.
 3. **Delayed Map Eviction**: Spawning a background task inside `drop` risks race conditions where late followers attach to terminating streams.
@@ -96,7 +96,7 @@ let completion_tokens = (resp_envelope.content.len() / 4).max(1) as u32;
 ```
 - In `crates/sunborn-gateway/src/origin/provider.rs`, the origin LLM returns exact `prompt_tokens` and `completion_tokens` in `OriginExecutionResult`, but these authoritative counts are discarded when generating the outer `ChatCompletionResponse`.
 
-## Scale Impact at Millions of Concurrent Users
+## Scale Impact Under High-Concurrency Multi-Replica Workloads
 1. **Non-ASCII & Multilingual Skew**: For Indic languages (Hindi, Tamil, Telugu, Bengali), CJK, Cyrillic, and Arabic, a single character often decomposes into 2 to 4 tokens. Estimating `char_len / 4` undercounts token consumption by up to **400%**.
 2. **FinOps & Spend Ledger Distortion**: Tenant spend ceilings and daily quotas are undercharged for non-English users, allowing quota exhaustion or financial arbitrage attacks against upstream API spend.
 3. **Client Contract Violation**: Downstream clients and SDKs rely on token counts for context window accounting and cost tracking; returning arbitrary `(len / 4)` estimates breaks client-side rate limiting and billing reconciliation.
@@ -140,7 +140,7 @@ let quorum_enforced = std::env::var("SUNBORN_ADMIN_QUORUM_REQUIRED")
 ```
 - If an enterprise deploys to a staging, pre-production, or preview cluster where `SUNBORN_ENV` is set to anything other than `production` (or left unset), the quorum check succeeds with only a single admin key.
 
-## Scale Impact at Millions of Concurrent Users
+## Scale Impact Under High-Concurrency Multi-Replica Workloads
 1. **Unilateral Key Shredding**: A single compromised administrator credential or misconfigured CI/CD pipeline script can trigger `POST /v1/tenants/:id/shred`, permanently and irrevocably zeroizing tenant TDEK encryption keys and destroying petabytes of cached knowledge graph data.
 2. **Zero-Trust Violation**: Enterprise SOC 2 Type II, ISO 27001, and Indian DPDP/CERT-In guidelines mandate dual-authorization (two-person rule) for irreversible cryptographic destruction.
 
@@ -183,7 +183,7 @@ async fn delete(&self, key: &str) -> Result<bool> {
 ```
 - If Redis Streams encounters network latency, consumer group lag, or transient partition, peer pods serve stale answers from process-local L1 RAM for up to 3600 seconds.
 
-## Scale Impact at Millions of Concurrent Users
+## Scale Impact Under High-Concurrency Multi-Replica Workloads
 1. **Read-After-Write Inconsistency**: A user mutates a document on Pod 1 (purging Pod 1's L1 and L2). A subsequent user request hitting Pod 2 via round-robin load balancing immediately hits Pod 2's local L1, returning stale/invalidated answers.
 2. **Regulatory & Privacy Risk**: When an enterprise user requests document erasure or permission revoking, stale answers continue being emitted from peer pods.
 
@@ -219,7 +219,7 @@ The repository contains a standalone Next.js public showcase site and playground
 - `.github/workflows/ci.yml`: defines jobs `backend-verification`, `documentation-verification`, `frontend-verification`, `sdk-python-verification`, `sdk-typescript-verification`. No job exists for `site/`.
 - `site/package.json`: defines `npm run lint` (`tsc --noEmit`), `npm run build`, and `npm test` (`node --test tests/*.test.mjs`).
 
-## Scale Impact at Millions of Concurrent Users
+## Scale Impact Under High-Concurrency Multi-Replica Workloads
 1. **Broken Visitor Experience**: External contributors and developers testing the showcase site locally encounter broken commands.
 2. **Silent Breakages**: Code drift in `site/` is not caught by CI, risking broken public showcase deployments on GitHub Pages or Vercel.
 
@@ -254,7 +254,7 @@ The local working tree on `main` contains untracked production crates (`crates/s
 - `git status` reports untracked production folders despite them being registered in `Cargo.toml`.
 - `sbom.cyclonedx.json` was updated, but the underlying source files were not committed in git history.
 
-## Scale Impact at Millions of Concurrent Users
+## Scale Impact Under High-Concurrency Multi-Replica Workloads
 1. **Broken Build from Source**: Anyone cloning `origin/main` directly from GitHub will encounter build failures because `Cargo.toml` references `crates/sunborn-economics` and `crates/sunborn-learning`, which were not pushed to `origin/main`.
 2. **Provenance Disconnection**: Cryptographic SBOM and SLSA attestations require all artifacts to be committed with immutable git commit SHAs.
 
@@ -269,7 +269,7 @@ The local working tree on `main` contains untracked production crates (`crates/s
 
 ---
 
-# Phase 5: Comprehensive FAANG Architectural & Scalability Audit Issues (Issues #31 through #40)
+# Phase 5: Comprehensive Enterprise Architectural & Scalability Audit Issues (Issues #31 through #40)
 
 > **Filed & Active on [`Monkey0-9/Sunborn`](https://github.com/Monkey0-9/Sunborn)**:
 > - [Issue #31](https://github.com/Monkey0-9/Sunborn/issues/31): `[P1][Security/Networking] Pre-Auth Rate Limiting Collapses Behind Ingress Proxies Without Trusted Proxy Header Extraction`

@@ -1,4 +1,4 @@
-# Sunborn TypeScript SDK
+# Sunborn TypeScript SDK (`@sunborn/sdk`)
 
 Enterprise-grade TypeScript and JavaScript SDK for the Sunborn Deterministic AI Inference & Invalidation Platform.
 
@@ -13,6 +13,8 @@ npm install @sunborn/sdk
 ---
 
 ## Quickstart
+
+### Chat Completion
 
 ```typescript
 import { SunbornClient } from "@sunborn/sdk";
@@ -44,11 +46,26 @@ async function main() {
 main().catch(console.error);
 ```
 
+### Streaming SSE Responses
+
+```typescript
+async function streamExample() {
+  for await (const chunk of client.chatCompletionStream({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: "Explain Byzantine fault tolerance." }],
+  })) {
+    const text = chunk.choices[0]?.delta?.content || "";
+    process.stdout.write(text);
+  }
+}
+```
+
 ---
 
 ## Features
 
 - **Multi-Tier Cache Transparency:** Full inspection of exact hash hits (`c0_exact`, `c1_exact`), conformal semantic hits (`c2_semantic`), and fail-safe abstentions.
+- **Async Streaming Iterators:** Native `AsyncIterable` streaming support (`chatCompletionStream`) consuming Server-Sent Events (SSE) chunks without latency overhead.
 - **Fail-Closed Reliability:** Native translation of RFC 7807 problem details into typed `SunbornError` instances.
-- **Automatic Jittered Retries:** Built-in exponential backoff for rate limits (`429`) with `Retry-After` header respect.
+- **Automatic Jittered Retries:** Built-in exponential backoff for rate limits (`429`) and transient errors with `Retry-After` header respect.
 - **Zero-Dependency Core:** Lightweight, standard ESM using native `fetch` and `AbortController`.

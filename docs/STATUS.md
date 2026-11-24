@@ -27,7 +27,7 @@ the actual runs.
 |---|---|---|
 | Formatting | `cargo fmt --all -- --check` | exit 0 |
 | Workspace compile | `cargo check --workspace --all-targets` | exit 0, no warnings |
-| Rust tests | `cargo test --workspace --all-targets` | **395 passed, 0 failed** (52 suites, exit 0; re-run 2026-11-21) |
+| Rust tests | `cargo test --workspace --all-targets` | **431 passed, 0 failed** (52 suites, exit 0; verified in-tree) |
 | Lints | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | exit 0, no warnings |
 | Epoch fencing model | `bash scripts/run_tlaplus.sh` | TLC: 2,245 states, 512 distinct, no error |
 | Outbox safety model | same | TLC: 601 states, 134 distinct, no error |
@@ -39,7 +39,7 @@ the actual runs.
 | Python SDK lint & format | `cd sdk/python && python -m ruff check . && python -m ruff format --check .` | exit 0, 0 findings |
 | Python SDK types | `cd sdk/python && python -m mypy --config-file pyproject.toml` | exit 0, 14 source files, 0 errors |
 | Python SDK tests & coverage | `cd sdk/python && python -m pytest tests test_sunborn_agent.py --cov=sunborn --cov-fail-under=80` | **65 passed, 0 failed; 80.0% statement coverage** |
-| Repository hygiene | `python scripts/check_repo_hygiene.py` | 504 tracked files; 0 scratch, cache, environment, key, or oversized artifacts |
+| Repository hygiene | `python scripts/check_repo_hygiene.py` | 587 tracked files; 0 scratch, cache, environment, key, or oversized artifacts |
 | Pre-flight launch gates | `python scripts/verify_public_launch.py` | **8/8 audit gates PASS (doc paths, claims, OpenAPI drift, 6 pillars, Python SDK, SBOM, Grafana, K8s manifests)** |
 | 21 Quality Attributes | [`docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`](21_QUALITY_ATTRIBUTES_VERIFICATION.md) | **21/21 Enterprise system quality attributes formally attested and empirically verified** |
 | OpenAPI drift | `python scripts/check_openapi_drift.py` | 77/77 operations match (including /v1/graph/*, /v1/governance/*, and /version) |

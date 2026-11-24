@@ -82,6 +82,7 @@ with Sunborn(
 import asyncio
 from sunborn import AsyncSunborn
 
+
 async def main():
     async with AsyncSunborn(
         base_url="http://127.0.0.1:8080",
@@ -94,6 +95,7 @@ async def main():
             model="gpt-4o",
         )
         print(f"Tier: {response.tier} | Cached: {response.cached}")
+
 
 asyncio.run(main())
 ```

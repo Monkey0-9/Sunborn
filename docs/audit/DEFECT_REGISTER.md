@@ -4,6 +4,8 @@
 
 **Remediated & Verified In-Tree:** 47 / 47 (100% Phase 1, Phase 2, Phase 3, Phase 4, and Phase 5 Hardening)
 
+**Open P0 / P1 Defects:** 0
+
 **Active External/Staging Scaling Issues:** 0 (All 47 In-Tree Architectural, Security, Concurrency, and Scale Defects Closed)
 
 **Authoritative Status:** Stage 0 Controlled Pilot Approved; Phase 4 & Phase 5 Extreme-Scale Hardening Verified; Full In-Tree Code Cleanliness & Production Hardening Complete.
@@ -293,11 +295,11 @@ Issue #30 P1 High   CLOSED  Supply Chain     Tracked all research crates, benchm
 
 ---
 
-## 6. Comprehensive FAANG Architectural & Scalability Defect Ledger (Issues #31 through #40)
+## 6. Comprehensive Enterprise Architectural & Scalability Defect Ledger (Issues #31 through #40)
 
 ```
 =========================================================================================================
-                          SUNBORN FAANG ARCHITECTURE & SCALE DEFECT LEDGER (PHASE 5)
+                        SUNBORN ENTERPRISE ARCHITECTURE & SCALE DEFECT LEDGER (PHASE 5)
 =========================================================================================================
 ID        Severity  Status    Component        Summary & Remediation                              Verified Test / URL
 ---------------------------------------------------------------------------------------------------------
@@ -305,10 +307,10 @@ Issue #31 P1 High   RESOLVED  Security/Net     Pre-auth rate limiting extraction
                                                IP behind trusted proxies (CF/X-Real-IP/XFF)       https://github.com/Monkey0-9/Sunborn/issues/31
 Issue #32 P1 High   RESOLVED  Concurrency      O(1) SingleflightHistory stream byte accounting    cargo check -p sunborn-gateway
                                                eliminating O(N^2) loop inside async write lock    https://github.com/Monkey0-9/Sunborn/issues/32
-Issue #33 P1 High   OPEN      Distributed      Gateway cluster subscriber for multi-pod L1 memory https://github.com/Monkey0-9/Sunborn/issues/33
-                                               cache synchronization via Redis Streams
-Issue #34 P1 High   OPEN      Database/Scale   Cursor-based keyset pagination for multi-million   https://github.com/Monkey0-9/Sunborn/issues/34
-                                               row PostgreSQL disaster recovery rebuild scans
+Issue #33 P1 High   RESOLVED  Distributed      Gateway cluster subscriber for multi-pod L1 memory sunborn-invalidation::cluster_sync
+                                               cache synchronization via Redis Streams            https://github.com/Monkey0-9/Sunborn/issues/33
+Issue #34 P1 High   RESOLVED  Database/Scale   Cursor-based keyset pagination for high-volume     crates/sunborn-db::postgres,
+                                               PostgreSQL disaster recovery rebuild scans         apps/sunborn-rebuild/src/main.rs
 Issue #35 P2 Med    RESOLVED  Async/Perf       Offload CPU-intensive graph blast radius traversal tokio::task::spawn_blocking
                                                from Tokio worker thread to blocking thread pool   https://github.com/Monkey0-9/Sunborn/issues/35
 Issue #36 P2 Med    RESOLVED  Container/Infra  Next.js standalone output & minimal Dockerfile     npm run build --prefix frontend

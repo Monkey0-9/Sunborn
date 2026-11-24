@@ -36,7 +36,7 @@ re-run 2026-11-20 where the result changed.
 
 - [x] `cargo fmt --all -- --check` exits 0.
 - [x] `cargo check --workspace --all-targets` exits 0 with no warnings.
-- [x] `cargo test --workspace --all-targets`: 395 passed, 0 failed, 52 suites.
+- [x] `cargo test --workspace --all-targets`: 431 passed, 0 failed, 52 suites.
 - [x] `cargo clippy --workspace --all-targets --all-features -- -D warnings` exits 0 with no warnings.
 - [x] Frontend production build succeeds.
 - [x] Frontend tests: 67 passed, 0 failed (WCAG 2.2 AA accessibility, BFF security, CSRF protection, 6 E2E browser workflows).

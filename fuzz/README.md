@@ -1,15 +1,19 @@
 # Sunborn Fuzzing Suite (`fuzz/`)
 
-Coverage-guided fuzzing targets utilizing `cargo-fuzz` and LLVM libFuzzer to test Sunborn parser boundaries, tokenizers, and canonicalization routines.
+Coverage-guided fuzzing targets utilizing `cargo-fuzz` and LLVM libFuzzer to test Sunborn parser boundaries, tokenizers, and canonicalization routines against adversarial inputs.
 
-## Targets
+## Fuzz Targets
 
-- **`fuzz_canonicalize`**: Tests RFC 8785 JSON canonicalization against arbitrary byte inputs.
-- **`fuzz_merkle`**: Tests Merkle DAG deserialization and digest generation against malformed trees.
-- **`fuzz_pcsr`**: Tests PCSR certificate parsing and cryptographic boundary validation.
+- **`fuzz_canonicalize`** (`fuzz/fuzz_targets/fuzz_canonicalize.rs`): Tests RFC 8785 JSON Canonicalization Scheme (JCS) and Unicode NFC normalization against arbitrary and malformed byte streams to ensure crash freedom and deterministic canonicalization.
 
 ## Running Fuzzers
 
+Fuzz targets require the nightly Rust compiler and `cargo-fuzz`:
+
 ```bash
-cargo fuzz run fuzz_canonicalize
+# Install cargo-fuzz if not already installed
+cargo install cargo-fuzz
+
+# Run fuzz target
+cargo +nightly fuzz run fuzz_canonicalize -- -max_total_time=60
 ```
