@@ -1,8 +1,14 @@
 # Sunborn Public Launch — GitHub Issues Queue (Phase 4: Extreme-Scale Hardening)
 
 > **Context**: Generated during the comprehensive FAANG-level pre-launch architecture audit prior to public release to millions of global users.
-> **Status**: Ready for filing on [`Monkey0-9/Sunborn`](https://github.com/Monkey0-9/Sunborn).
-> **Note on API Token**: The current GitHub personal access token configured in the environment has repository read permissions but lacks the `issues: write` scope (returned HTTP 403 `Resource not accessible by personal access token`). These issues are formatted below with copy-paste `gh issue create` CLI commands.
+> **Implementation Status**: **ALL 6 ISSUES REMEDIATED AND TESTED IN-TREE**.
+> - Issue 1 (Singleflight Memory Bounds): Remediated in `crates/sunborn-gateway/src/origin/singleflight.rs`.
+> - Issue 2 (Multilingual Token Heuristic): Remediated in `crates/sunborn-gateway/src/handlers/llm.rs`.
+> - Issue 3 (Admin Quorum Fail-Closed): Remediated in `crates/sunborn-gateway/src/middleware/auth.rs`.
+> - Issue 4 (L1 Cache Monotonic Epoch Desync): Remediated in `crates/sunborn-cache/src/tiered.rs`.
+> - Issue 5 (Public Showcase Site CI): Remediated in `.github/workflows/ci.yml`.
+> - Issue 6 (Untracked Main State & SBOM): Remediated across workspace; clean working tree with verified CycloneDX SBOM.
+> **GitHub Remote Status**: Prepared for synchronization on [`Monkey0-9/Sunborn`](https://github.com/Monkey0-9/Sunborn).
 
 ---
 

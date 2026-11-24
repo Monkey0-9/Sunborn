@@ -59,12 +59,18 @@ impl SecurityContext {
         registry: &ApiKeyRegistry,
     ) -> Result<(), &'static str> {
         self.require_admin()?;
-        let is_prod = sunborn_core::is_production_mode();
-        let quorum_enforced = std::env::var("SUNBORN_ADMIN_QUORUM_REQUIRED")
+        // Fail-closed administrative quorum enforcement across all environments (Issue 3).
+        // Bypassing quorum requires the explicit unsafe flag SUNBORN_DISABLE_ADMIN_QUORUM_UNSAFE=true
+        let explicitly_disabled = std::env::var("SUNBORN_DISABLE_ADMIN_QUORUM_UNSAFE")
             .map(|v| v.to_lowercase() == "true" || v == "1")
-            .unwrap_or(is_prod); // Defaults to true in production mode!
+            .unwrap_or(false);
 
-        if !quorum_enforced {
+        if explicitly_disabled {
+            tracing::warn!(
+                tenant_id = %self.tenant_id.0,
+                caller_key_prefix = &self.api_key_hash[..8.min(self.api_key_hash.len())],
+                "SECURITY WARNING: Administrative quorum enforcement is explicitly disabled via SUNBORN_DISABLE_ADMIN_QUORUM_UNSAFE=true"
+            );
             return Ok(());
         }
 

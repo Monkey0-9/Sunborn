@@ -78,6 +78,10 @@ impl ReplayStreamReceiver {
     }
 }
 
+/// Maximum buffer capacity for stream replay history to protect against memory exhaustion (Issue 1)
+pub const MAX_SINGLEFLIGHT_HISTORY_BYTES: usize = 2 * 1024 * 1024; // 2 MB ceiling
+pub const MAX_SINGLEFLIGHT_HISTORY_CHUNKS: usize = 4096;
+
 /// A wrapper around broadcast::Sender that records chunks into the history log.
 #[derive(Clone)]
 pub struct SingleflightSender {
@@ -89,7 +93,18 @@ impl SingleflightSender {
     pub async fn send(&self, item: Result<Bytes, String>) {
         if let Ok(ref bytes) = item {
             let mut hist = self.history.write().await;
-            hist.push(bytes.clone());
+            let current_bytes: usize = hist.iter().map(|b| b.len()).sum();
+            if current_bytes.saturating_add(bytes.len()) <= MAX_SINGLEFLIGHT_HISTORY_BYTES
+                && hist.len() < MAX_SINGLEFLIGHT_HISTORY_CHUNKS
+            {
+                hist.push(bytes.clone());
+            } else if hist.len() < MAX_SINGLEFLIGHT_HISTORY_CHUNKS {
+                tracing::warn!(
+                    current_bytes,
+                    chunk_len = bytes.len(),
+                    "Singleflight stream history exceeded 2MB ceiling; shedding historical catch-up"
+                );
+            }
         }
         let _ = self.tx.send(item);
     }

@@ -32,7 +32,8 @@ async fn test_adversarial_dual_admin_quorum_authorization_enforcement() {
         true,
     );
 
-    // 1. Without SUNBORN_ADMIN_QUORUM_REQUIRED set, single admin can trip chaos
+    // 1. When explicitly bypassed with SUNBORN_DISABLE_ADMIN_QUORUM_UNSAFE, single admin can trip chaos
+    std::env::set_var("SUNBORN_DISABLE_ADMIN_QUORUM_UNSAFE", "true");
     let res = app
         .clone()
         .oneshot(
@@ -47,9 +48,9 @@ async fn test_adversarial_dual_admin_quorum_authorization_enforcement() {
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     state.circuit_breaker.reset().await;
+    std::env::remove_var("SUNBORN_DISABLE_ADMIN_QUORUM_UNSAFE");
 
-    // 2. Enable strict dual-admin quorum authorization
-    std::env::set_var("SUNBORN_ADMIN_QUORUM_REQUIRED", "true");
+    // 2. Strict dual-admin quorum authorization is now fail-closed by default across all environments
 
     // Case A: Missing quorum header on high-consequence operation
     let res = app

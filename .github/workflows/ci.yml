@@ -131,6 +131,29 @@ jobs:
           npm run build --prefix sdk/typescript
           npm test --prefix sdk/typescript
 
+  site-verification:
+    name: Public Showcase Site Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Install Site Dependencies
+        working-directory: site
+        run: npm ci --audit=false
+
+      - name: Type Check & Lint Site
+        working-directory: site
+        run: npm run lint
+
+      - name: Run Site Unit Tests
+        working-directory: site
+        run: npm test
+
   research-reproducibility:
     name: IEEE/ACM Scientific Reproducibility Gate
     runs-on: ubuntu-latest

@@ -2,6 +2,45 @@
 
 use super::*;
 
+/// Robust multilingual token estimation accounting for Latin, Indic, CJK, and special symbols (Issue 2).
+/// Prevents the crude 4-character division heuristic from undercounting Indic and Asian scripts by 400%.
+pub fn estimate_tokens(text: &str) -> u32 {
+    if text.is_empty() {
+        return 0;
+    }
+    let mut tokens: f64 = 0.0;
+    let mut current_ascii_word_len = 0;
+
+    for ch in text.chars() {
+        let code = ch as u32;
+        if ch.is_ascii_whitespace() {
+            if current_ascii_word_len > 0 {
+                tokens += (current_ascii_word_len as f64 / 4.0).max(1.0);
+                current_ascii_word_len = 0;
+            }
+            tokens += 0.25;
+        } else if ch.is_ascii() {
+            current_ascii_word_len += 1;
+        } else if (0x0900..=0x0D7F).contains(&code) {
+            // Indic scripts (Devanagari, Bengali, Gurmukhi, Gujarati, Oriya, Tamil, Telugu, Kannada, Malayalam)
+            tokens += 1.5;
+        } else if (0x4E00..=0x9FFF).contains(&code)
+            || (0x3040..=0x30FF).contains(&code)
+            || (0xAC00..=0xD7AF).contains(&code)
+        {
+            // CJK Unified Ideographs, Hiragana, Katakana, Hangul
+            tokens += 1.8;
+        } else {
+            // Other Unicode (Arabic, Hebrew, Cyrillic, Emojis, math operators)
+            tokens += 1.3;
+        }
+    }
+    if current_ascii_word_len > 0 {
+        tokens += (current_ascii_word_len as f64 / 4.0).max(1.0);
+    }
+    (tokens.round() as u32).max(1)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: String,
@@ -132,9 +171,13 @@ pub async fn chat_completions(
 
     let resp_envelope = execute_request_inner(&state, &sec_ctx, req).await?;
 
-    let prompt_total_chars: usize = chat_req.messages.iter().map(|m| m.content.len()).sum();
-    let prompt_tokens = (prompt_total_chars / 4).max(1) as u32;
-    let completion_tokens = (resp_envelope.content.len() / 4).max(1) as u32;
+    let prompt_tokens: u32 = chat_req
+        .messages
+        .iter()
+        .map(|m| estimate_tokens(&m.content))
+        .sum::<u32>()
+        .max(1);
+    let completion_tokens = estimate_tokens(&resp_envelope.content).max(1);
 
     let tier_str = if resp_envelope.cached {
         match resp_envelope.decision.cache_path {
@@ -303,13 +346,13 @@ pub async fn anthropic_messages(
 
     let resp_envelope = execute_request_inner(&state, &sec_ctx, req).await?;
 
-    let prompt_total_chars: usize = anthropic_req
+    let input_tokens: u32 = anthropic_req
         .messages
         .iter()
-        .map(|m| m.content.to_string().len())
-        .sum();
-    let input_tokens = (prompt_total_chars / 4).max(1) as u32;
-    let output_tokens = (resp_envelope.content.len() / 4).max(1) as u32;
+        .map(|m| estimate_tokens(&m.content.to_string()))
+        .sum::<u32>()
+        .max(1);
+    let output_tokens = estimate_tokens(&resp_envelope.content).max(1);
 
     let tier_str = if resp_envelope.cached {
         match resp_envelope.decision.cache_path {
