@@ -1,0 +1,22 @@
+[package]
+name = "sunborn-threat"
+description = "Adversarial cache security, threat intelligence, and poisoning defense engine for Sunborn"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+sunborn-core = { path = "../sunborn-core" }
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+sha2.workspace = true
+hex.workspace = true
+dashmap.workspace = true
+regex.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

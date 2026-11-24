@@ -12,6 +12,7 @@ members = [
     "crates/sunborn-proof",
     "crates/sunborn-freshness",
     "crates/sunborn-effects",
+    "crates/sunborn-threat",
     "apps/sunborn-rebuild",
     "apps/sunborn-verify",
 ]
