@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Classification of computational effects and side-effect guarantees for execution nodes.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum EffectClass {
     /// Pure deterministic transformation without external dependencies or state.
     /// Reusable whenever inputs match.
@@ -19,13 +19,8 @@ pub enum EffectClass {
     /// NEVER blindly replayed or reused.
     NonIdempotentMutation,
     /// Unclassified or unknown external tool. Fails safe by abstaining from reuse.
+    #[default]
     UnknownAbstain,
-}
-
-impl Default for EffectClass {
-    fn default() -> Self {
-        EffectClass::UnknownAbstain
-    }
 }
 
 impl EffectClass {

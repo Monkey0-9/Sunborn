@@ -51,7 +51,7 @@ To preserve empirical integrity and prevent confabulation of offline research ar
 
 1. **Frozen Dataset vs. Live Production**:
    - `SemanticCacheBench` ($N = 124$ queries across 8 semantic categories, SHA-256 fingerprint: `61a0794c51d312d441bbeaf5ea8e3b9d1958186307606fa177093cc90bce534b`) and `SemanticCacheBench-T` ($N = 19$ stateful mutation scenarios) represent **frozen experimental evaluation suites**.
-   - The static artifact records 0 B3 false hits on 124 queries, with 15 B3 hits. The temporal artifact records 0 B3 hits and 0 B3 false hits on 19 scenarios, so it provides no evidence of useful temporal reuse. These finite observations do not establish mathematical or production-wide guarantees.
+   - The static artifact records 0 B3 false hits on 124 queries, with 15 B3 hits. The temporal artifact records **2 B3 hits** (KM-002 and PU-002) and **0 B3 false hits** on 19 scenarios, i.e. a 10.53% hit rate (95% CI 2.94-31.39) at 100% precision (95% CI 34.24-100) and 33.33% recall (2 of 6 safely reusable scenarios). The same artifact's naive-cosine baseline takes 3 hits on the same 19 scenarios, all of them false. These are 2 correctly reused scenarios out of 19; they are not evidence of broad temporal generalization. These finite observations do not establish mathematical or production-wide guarantees.
    - These offline benchmarks do **NOT** claim an uncalibrated zero false-hit rate on arbitrary, unseen production traffic without runtime conformal calibration.
 
 2. **Synthetic Cost Model Demarcation**:

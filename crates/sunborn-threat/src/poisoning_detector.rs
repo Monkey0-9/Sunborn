@@ -35,7 +35,11 @@ impl AdmissionCheckResult {
         }
     }
 
-    pub fn quarantined(category: impl Into<String>, anomaly_score: f32, reason: impl Into<String>) -> Self {
+    pub fn quarantined(
+        category: impl Into<String>,
+        anomaly_score: f32,
+        reason: impl Into<String>,
+    ) -> Self {
         Self {
             admitted: false,
             flagged_for_quarantine: true,

@@ -31,6 +31,7 @@ impl ProofCertificate {
     pub const CURRENT_VERSION: u32 = 1;
 
     /// Computes canonical length-prefixed Merkle root over all PCSR fields with domain separation.
+    #[allow(clippy::too_many_arguments)]
     pub fn compute_merkle_root(
         certificate_id: &Uuid,
         certificate_version: u32,

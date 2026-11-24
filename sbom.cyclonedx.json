@@ -1,7 +1,7 @@
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
-  "serialNumber": "urn:uuid:8595583b-efc0-5049-b8bd-a9ecc4f6542e",
+  "serialNumber": "urn:uuid:82176f38-f86f-5100-b09c-a406f96e703a",
   "version": 1,
   "metadata": {
     "component": {
@@ -2078,10 +2078,34 @@
     },
     {
       "type": "library",
+      "bom-ref": "pkg:cargo/sunborn-economics@1.0.0",
+      "name": "sunborn-economics",
+      "version": "1.0.0",
+      "purl": "pkg:cargo/sunborn-economics@1.0.0",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:cargo/sunborn-effects@1.0.0",
+      "name": "sunborn-effects",
+      "version": "1.0.0",
+      "purl": "pkg:cargo/sunborn-effects@1.0.0",
+      "scope": "required"
+    },
+    {
+      "type": "library",
       "bom-ref": "pkg:cargo/sunborn-execution@1.0.0",
       "name": "sunborn-execution",
       "version": "1.0.0",
       "purl": "pkg:cargo/sunborn-execution@1.0.0",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:cargo/sunborn-freshness@1.0.0",
+      "name": "sunborn-freshness",
+      "version": "1.0.0",
+      "purl": "pkg:cargo/sunborn-freshness@1.0.0",
       "scope": "required"
     },
     {
@@ -2110,6 +2134,22 @@
     },
     {
       "type": "library",
+      "bom-ref": "pkg:cargo/sunborn-learning@1.0.0",
+      "name": "sunborn-learning",
+      "version": "1.0.0",
+      "purl": "pkg:cargo/sunborn-learning@1.0.0",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:cargo/sunborn-proof@1.0.0",
+      "name": "sunborn-proof",
+      "version": "1.0.0",
+      "purl": "pkg:cargo/sunborn-proof@1.0.0",
+      "scope": "required"
+    },
+    {
+      "type": "library",
       "bom-ref": "pkg:cargo/sunborn-rebuild@1.0.0",
       "name": "sunborn-rebuild",
       "version": "1.0.0",
@@ -2122,6 +2162,14 @@
       "name": "sunborn-semantic",
       "version": "1.0.0",
       "purl": "pkg:cargo/sunborn-semantic@1.0.0",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:cargo/sunborn-threat@1.0.0",
+      "name": "sunborn-threat",
+      "version": "1.0.0",
+      "purl": "pkg:cargo/sunborn-threat@1.0.0",
       "scope": "required"
     },
     {

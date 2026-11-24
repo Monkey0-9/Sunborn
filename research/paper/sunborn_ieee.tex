@@ -11,8 +11,11 @@
 
 \begin{document}
 
-\title{Sunborn: Deterministic Equivalence, Multi-Tier Semantic Caching, and Partial Execution Reuse for Agentic RAG Systems}
+\title{Sunborn: Proof-Carrying Semantic Reuse and Effect-Aware Execution Infrastructure for AI Systems}
 
+% NOTE(authors): replace this block with the real author names, verified
+% affiliations, and a contact address before submission. Do not submit with a
+% placeholder laboratory or an invented institution.
 \author{\IEEEauthorblockN{Sunborn Research Team}
 \IEEEauthorblockA{\textit{Distributed Systems \& AI Infrastructure Lab} \\
 San Francisco, CA, USA \\
@@ -59,6 +62,43 @@ Sunborn categorizes execution candidates into hierarchical equivalence classes:
     \end{align}
     If any ancestor is \texttt{SideEffectingMutator}, no downstream node in that causal cone may be memoized across runs unless pinned by an idempotency token.
 \end{itemize}
+
+\section{Proof-Carrying Semantic Reuse (PCSR)}
+Similarity is evidence of relatedness, not a proof of correctness. Sunborn therefore attaches a structured, verifiable reuse certificate to every served result. A certificate is the tuple
+\begin{equation}
+\pi = (\tau, \alpha, \mu, \rho_c, \rho_s, \delta, \gamma, \phi, \xi, \sigma)
+\end{equation}
+where $\tau$ is the tenant identity, $\alpha$ the application identity, $\mu$ the model fingerprint, $\rho_c$ the context digest, $\rho_s$ the system-prompt digest, $\delta$ the dependency root, $\gamma$ the policy version, $\phi$ the freshness evidence, $\xi$ the execution digest, and $\sigma$ the signature.
+
+\subsection{Integrity Binding}
+The integrity root is a length-prefixed Merkle digest with tenant domain separation:
+\begin{equation}
+R(\pi) = H\big(\text{dom}(\tau) \parallel \tau \parallel \alpha \parallel \mu \parallel \rho_c \parallel \rho_s \parallel \delta \parallel \gamma \parallel \phi \parallel \xi\big)
+\end{equation}
+Domain separation makes cross-tenant reuse of a certificate computationally infeasible even when every other field coincides, because $\tau$ is committed before the remaining material and the domain tag is derived from it.
+
+\subsection{Verification}
+A verifier recomputes $R(\pi)$, checks $\sigma$ over $R(\pi)$ under the issuer's key, and rejects the result on any mismatch. Because the check depends only on $\pi$ and the public key, it can be performed without trusting the cache server that produced $\pi$.
+
+\subsection{What the Certificate Does Not Prove}
+We are explicit about the boundary. A valid certificate proves \emph{integrity} (the evidence was not altered) and \emph{binding} (the evidence belongs to this tenant, application, context, and dependency root). It does not prove that the underlying answer is semantically correct. Correctness is the responsibility of the semantic and structural stages; the certificate makes their decision auditable, not true by construction.
+
+\section{Causal Freshness and Temporal Validity}
+Time-to-live is insufficient for AI workloads: an answer can be well inside its TTL and still be wrong because a policy document, permission set, configuration, or model version moved. Sunborn evaluates a five-dimensional freshness predicate
+\begin{equation}
+F(q,t) = f(D_t, P_t, A_t, M_t, E_t)
+\end{equation}
+over document version $D_t$, permission version $P_t$, application configuration $A_t$, model version $M_t$, and dependency epoch $E_t$.
+
+\subsection{Reuse Rule}
+Let $v(q)$ be the freshness vector pinned when $q$ was computed. A cached result is reusable at epoch $t$ only if
+\begin{equation}
+F(q,t) = 1 \iff D_t = D_{v} \land P_t = P_{v} \land A_t = A_{v} \land M_t = M_{v} \land (t \le E_{\max}).
+\end{equation}
+The predicate fails closed: an unknown document or an unregistered state is treated as stale. This is a conservative rule, and it is deliberately so --- a false miss costs a recomputation, whereas a false hit costs correctness.
+
+\subsection{Selective Invalidation}
+Because the predicate is evaluated per dependency root rather than per global epoch, advancing one document retires only the results pinned to it. Unrelated entries remain reusable, which is what separates causal invalidation from a coarse cache flush.
 
 \section{Systems Hardening \& Eviction Mechanics}
 \subsection{Cost-Aware Greedy-Dual-Size-Frequency (GDSF) Eviction}

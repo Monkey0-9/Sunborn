@@ -57,17 +57,16 @@ impl CausalEvaluationResult {
 }
 
 /// Policy for decaying temporal confidence over time.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub enum ConfidenceDecayPolicy {
+    #[default]
     None,
-    Linear { ttl_seconds: u64 },
-    Exponential { lambda: f32 },
-}
-
-impl Default for ConfidenceDecayPolicy {
-    fn default() -> Self {
-        ConfidenceDecayPolicy::None
-    }
+    Linear {
+        ttl_seconds: u64,
+    },
+    Exponential {
+        lambda: f32,
+    },
 }
 
 /// Thread-safe multi-dimensional temporal validity engine.
@@ -98,8 +97,10 @@ impl TemporalValidityEngine {
             entry.document_version = version;
             entry.epoch += 1;
         } else {
-            let mut state = TemporalState::default();
-            state.document_version = version;
+            let state = TemporalState {
+                document_version: version,
+                ..Default::default()
+            };
             self.states.insert(id, state);
         }
     }

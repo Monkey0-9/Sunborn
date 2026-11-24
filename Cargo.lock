@@ -2831,6 +2831,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "sunborn-economics"
+version = "1.0.0"
+dependencies = [
+ "chrono",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sunborn-core",
+ "thiserror",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "sunborn-effects"
+version = "1.0.0"
+dependencies = [
+ "chrono",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sunborn-core",
+ "sunborn-freshness",
+ "sunborn-proof",
+ "thiserror",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "sunborn-execution"
 version = "1.0.0"
 dependencies = [
@@ -2845,6 +2877,23 @@ dependencies = [
  "sunborn-identity",
  "thiserror",
  "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "sunborn-freshness"
+version = "1.0.0"
+dependencies = [
+ "chrono",
+ "dashmap",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sunborn-core",
+ "sunborn-proof",
+ "thiserror",
  "tracing",
  "uuid",
 ]
@@ -2926,6 +2975,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "sunborn-learning"
+version = "1.0.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "sunborn-proof"
+version = "1.0.0"
+dependencies = [
+ "chrono",
+ "ed25519-dalek",
+ "hex",
+ "rand_core 0.6.4",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sunborn-core",
+ "thiserror",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "sunborn-rebuild"
 version = "1.0.0"
 dependencies = [
@@ -2961,6 +3037,23 @@ dependencies = [
  "sunborn-identity",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "sunborn-threat"
+version = "1.0.0"
+dependencies = [
+ "chrono",
+ "dashmap",
+ "hex",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sunborn-core",
+ "thiserror",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

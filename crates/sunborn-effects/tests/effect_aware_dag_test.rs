@@ -50,11 +50,7 @@ fn test_multi_level_pure_dag_is_wholly_reusable() {
     dag.add_node(DAGNode::new("step2", EffectClass::Pure).with_dep("step1"));
     dag.add_node(DAGNode::new("step3", EffectClass::Pure).with_dep("step2"));
     dag.add_node(
-        DAGNode::new(
-            "step4",
-            EffectClass::ExternalMutableRead { ttl_secs: 300 },
-        )
-        .with_dep("step3"),
+        DAGNode::new("step4", EffectClass::ExternalMutableRead { ttl_secs: 300 }).with_dep("step3"),
     );
 
     let planner = SubgraphPlanner::new();

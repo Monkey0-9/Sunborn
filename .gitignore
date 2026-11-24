@@ -5,6 +5,10 @@
 # TLA+ toolkit (fetched by scripts/run_tlaplus.sh) and TLC scratch output
 /formal/tla2tools.jar
 /formal/*.tmp
+states/
+**/states/
+*.st
+*.fp
 *.rs.bk
 dist/
 build/

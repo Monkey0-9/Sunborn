@@ -1,0 +1,20 @@
+[package]
+name = "sunborn-economics"
+description = "Real FinOps economic accounting, net utility optimization, and multi-provider pricing engine for Sunborn"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+sunborn-core = { path = "../sunborn-core" }
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+sha2.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

@@ -16,7 +16,11 @@ impl EmbeddingAnomalyDetector {
     ) -> f32 {
         let max_len = original_len.max(candidate_len) as f32;
         let min_len = original_len.min(candidate_len) as f32;
-        let length_ratio = if max_len > 0.0 { min_len / max_len } else { 1.0 };
+        let length_ratio = if max_len > 0.0 {
+            min_len / max_len
+        } else {
+            1.0
+        };
 
         // High similarity with massive length discrepancy indicates injected payload
         if similarity > 0.90 && length_ratio < 0.5 {
