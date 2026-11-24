@@ -140,19 +140,24 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let batch_size = 500;
-    let mut offset = 0;
+    let mut cursor: Option<(chrono::DateTime<chrono::Utc>, String)> = None;
+    let mut total_scanned = 0;
     let mut exact_reconstructed = 0;
     let mut vector_reconstructed = 0;
     let mut unverified_skipped = 0;
 
     loop {
-        let batch = db.scan_cache_entries(batch_size, offset).await?;
+        let batch = db
+            .scan_cache_entries_cursor(batch_size, cursor.clone())
+            .await?;
         if batch.is_empty() {
             break;
         }
 
-        let batch_count = batch.len();
-        offset += batch_count;
+        total_scanned += batch.len();
+        if let Some(last) = batch.last() {
+            cursor = Some((last.created_at, last.key.clone()));
+        }
 
         for record in batch {
             // Trust Monotonicity Invariant: Validate cryptographic attestation before admission
@@ -256,7 +261,7 @@ async fn main() -> anyhow::Result<()> {
         }
 
         info!(
-            scanned = offset,
+            scanned = total_scanned,
             exact_reconstructed,
             vector_reconstructed,
             unverified_skipped,
@@ -265,7 +270,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     info!(
-        total_scanned = offset,
+        total_scanned,
         exact_reconstructed,
         vector_reconstructed,
         "Disaster Recovery & Derived Store Rebuild Completed Successfully. 0% Data Loss."

@@ -605,6 +605,7 @@ impl AppState {
                         transport.clone(),
                         gmc.clone(),
                     )
+                    .with_exact_cache(selected_cache.clone())
                     .with_vector_store(selected_vector.clone())
                     .with_epoch_manager(epoch_lease_manager.clone()),
                 );

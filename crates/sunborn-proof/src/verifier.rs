@@ -37,8 +37,9 @@ impl IndependentVerifier {
             return VerificationOutcome::SignatureMismatch;
         }
 
-        // Step 3: Check temporal expiry window
-        if Utc::now() > cert.expires_at {
+        // Step 3: Check temporal expiry window with 5s distributed clock skew tolerance
+        let clock_skew_tolerance = chrono::Duration::seconds(5);
+        if Utc::now() > cert.expires_at + clock_skew_tolerance {
             return VerificationOutcome::ExpiredEpoch;
         }
 

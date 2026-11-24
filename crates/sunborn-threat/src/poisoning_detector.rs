@@ -70,7 +70,17 @@ impl PoisoningDetector {
     }
 
     pub fn contains_injection_payload(&self, text: &str) -> bool {
-        self.injection_regex.is_match(text)
+        // Hardened: Bound regex evaluation against Slowloris / ReDoS exhaustion on oversized inputs
+        let eval_slice = if text.len() > 65536 {
+            let mut end = 65536;
+            while end > 0 && !text.is_char_boundary(end) {
+                end -= 1;
+            }
+            &text[..end]
+        } else {
+            text
+        };
+        self.injection_regex.is_match(eval_slice)
     }
 }
 

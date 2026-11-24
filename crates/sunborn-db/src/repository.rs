@@ -54,6 +54,13 @@ pub trait DatabaseStore: Send + Sync {
         limit: usize,
         offset: usize,
     ) -> Result<Vec<DurableCacheRecord>>;
+    async fn scan_cache_entries_cursor(
+        &self,
+        limit: usize,
+        _cursor: Option<(chrono::DateTime<chrono::Utc>, String)>,
+    ) -> Result<Vec<DurableCacheRecord>> {
+        self.scan_cache_entries(limit, 0).await
+    }
     async fn count_cache_entries(&self) -> Result<usize>;
     async fn count_tenant_entries(&self, tenant_id: &str) -> Result<usize>;
     async fn delete_tenant_data(&self, tenant_id: &str) -> Result<usize>;
@@ -253,6 +260,29 @@ impl DatabaseStore for MemoryDatabaseStore {
         entries.sort_by_key(|a| a.created_at);
         let paged = entries.into_iter().skip(offset).take(limit).collect();
         Ok(paged)
+    }
+
+    async fn scan_cache_entries_cursor(
+        &self,
+        limit: usize,
+        cursor: Option<(chrono::DateTime<chrono::Utc>, String)>,
+    ) -> Result<Vec<DurableCacheRecord>> {
+        let cache = self.cache_entries.read().await;
+        let mut entries: Vec<DurableCacheRecord> = cache.values().cloned().collect();
+        entries.sort_by(|a, b| {
+            b.created_at
+                .cmp(&a.created_at)
+                .then_with(|| b.key.cmp(&a.key))
+        });
+        let filtered: Vec<DurableCacheRecord> = match cursor {
+            Some((cur_time, cur_key)) => entries
+                .into_iter()
+                .filter(|e| (e.created_at, &e.key) < (cur_time, &cur_key))
+                .take(limit)
+                .collect(),
+            None => entries.into_iter().take(limit).collect(),
+        };
+        Ok(filtered)
     }
 
     async fn count_cache_entries(&self) -> Result<usize> {

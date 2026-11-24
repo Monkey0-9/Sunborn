@@ -23,6 +23,7 @@ use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use sunborn_cache::ExactCacheStore;
 use sunborn_core::{Result, SunbornError, TenantId};
 use sunborn_semantic::VectorStore;
 use tokio::sync::broadcast;
@@ -405,6 +406,7 @@ pub struct DistributedGraphSyncEngine {
     pod_id: String,
     transport: Arc<dyn ClusterBroadcastTransport>,
     graph_cache: Arc<GraphMemoryCache>,
+    exact_cache: Option<Arc<dyn ExactCacheStore>>,
     vector_store: Option<Arc<dyn VectorStore>>,
     epoch_manager: Option<Arc<EpochLeaseManager>>,
     messages_published: AtomicU64,
@@ -423,6 +425,7 @@ impl DistributedGraphSyncEngine {
             pod_id: pod_id.into(),
             transport,
             graph_cache,
+            exact_cache: None,
             vector_store: None,
             epoch_manager: None,
             messages_published: AtomicU64::new(0),
@@ -430,6 +433,11 @@ impl DistributedGraphSyncEngine {
             echoes_suppressed: AtomicU64::new(0),
             records_invalidated: AtomicU64::new(0),
         }
+    }
+
+    pub fn with_exact_cache(mut self, exact_cache: Arc<dyn ExactCacheStore>) -> Self {
+        self.exact_cache = Some(exact_cache);
+        self
     }
 
     pub fn with_vector_store(mut self, vector_store: Arc<dyn VectorStore>) -> Self {
@@ -546,6 +554,11 @@ impl DistributedGraphSyncEngine {
         // path when the peer does not share the origin's dependency graph.
         if !cache_keys.is_empty() {
             total_affected += self.graph_cache.delete_cache_keys(cache_keys).await?;
+            if let Some(ref exact_cache) = self.exact_cache {
+                for key in cache_keys {
+                    let _ = exact_cache.delete(key).await;
+                }
+            }
             if let Some(ref vector_store) = self.vector_store {
                 for key in cache_keys {
                     vector_store.delete(key).await?;

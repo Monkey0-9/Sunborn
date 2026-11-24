@@ -2051,6 +2051,81 @@ impl DatabaseStore for PostgresDatabaseStore {
         self.fallback_store.scan_cache_entries(limit, offset).await
     }
 
+    async fn scan_cache_entries_cursor(
+        &self,
+        limit: usize,
+        cursor: Option<(chrono::DateTime<chrono::Utc>, String)>,
+    ) -> Result<Vec<DurableCacheRecord>> {
+        if let Some(pool) = self.get_pool().await {
+            let res = match cursor.as_ref() {
+                Some((cursor_time, cursor_key)) => {
+                    sqlx::query(
+                        "SELECT key, tenant_id, application_id, model, policy_version, hash, prompt_canonical, content, hit_count, created_at, expires_at, last_accessed_at, certificate_json
+                         FROM durable_cache_entries
+                         WHERE (created_at, key) < ($1, $2)
+                         ORDER BY created_at DESC, key DESC LIMIT $3",
+                    )
+                    .bind(cursor_time)
+                    .bind(cursor_key)
+                    .bind(limit as i64)
+                    .fetch_all(&pool)
+                    .await
+                }
+                None => {
+                    sqlx::query(
+                        "SELECT key, tenant_id, application_id, model, policy_version, hash, prompt_canonical, content, hit_count, created_at, expires_at, last_accessed_at, certificate_json
+                         FROM durable_cache_entries
+                         ORDER BY created_at DESC, key DESC LIMIT $1",
+                    )
+                    .bind(limit as i64)
+                    .fetch_all(&pool)
+                    .await
+                }
+            };
+            match res {
+                Ok(rows) => {
+                    let entries: Vec<DurableCacheRecord> = rows
+                        .into_iter()
+                        .map(|row| {
+                            let hit_count: i64 = row.get("hit_count");
+                            DurableCacheRecord {
+                                key: row.get("key"),
+                                tenant_id: row.get("tenant_id"),
+                                application_id: row.get("application_id"),
+                                model: row.get("model"),
+                                policy_version: row.get("policy_version"),
+                                hash: row.get("hash"),
+                                prompt_canonical: row.get("prompt_canonical"),
+                                content: row.get("content"),
+                                hit_count: hit_count as u64,
+                                created_at: row.get("created_at"),
+                                expires_at: row.get("expires_at"),
+                                last_accessed_at: row.get("last_accessed_at"),
+                                certificate_json: row.get("certificate_json"),
+                            }
+                        })
+                        .collect();
+                    return Ok(entries);
+                }
+                Err(err) => {
+                    tracing::error!(error = %err, "PostgreSQL scan_cache_entries_cursor failed");
+                    if self.strict_durability {
+                        return Err(sunborn_core::SunbornError::database(format!(
+                            "PostgreSQL scan_cache_entries_cursor failed: {err}"
+                        )));
+                    }
+                }
+            }
+        } else if self.strict_durability {
+            return Err(sunborn_core::SunbornError::database(
+                "PostgreSQL connection pool unavailable; fail-closed durability enforced",
+            ));
+        }
+        self.fallback_store
+            .scan_cache_entries_cursor(limit, cursor)
+            .await
+    }
+
     async fn count_cache_entries(&self) -> Result<usize> {
         if let Some(pool) = self.get_pool().await {
             match sqlx::query("SELECT COUNT(*) as count FROM durable_cache_entries")
