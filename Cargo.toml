@@ -9,6 +9,7 @@ members = [
     "crates/sunborn-invalidation",
     "crates/sunborn-db",
     "crates/sunborn-execution",
+    "crates/sunborn-proof",
     "apps/sunborn-rebuild",
     "apps/sunborn-verify",
 ]
