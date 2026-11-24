@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+description = "Safe continuous calibration, dual-shadow feedback, and drift monitoring engine for Sunborn"
+
 
 [dependencies]
 serde = { workspace = true }
