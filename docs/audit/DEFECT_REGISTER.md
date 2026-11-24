@@ -1,12 +1,12 @@
-# Master Defect Register (Remediation Tracking D-01 through D-12 and Issues #3 through #23)
+# Master Defect Register (Remediation Tracking D-01 through D-12 and Issues #3 through #30)
 
-**Total Audit Defects:** 31
+**Total Audit Defects:** 37
 
-**Remediated & Closed:** 31 / 31 (100% Resolution Rate)
+**Remediated & Closed:** 31 / 37 (Phase 1, Phase 2, Phase 3 Closed)
 
-**Open P0 / P1 Defects:** 0 (All P0/P1 defects remediated, verified in CI, and closed on GitHub)
+**Open P1 Defects (Phase 4 Public Launch Hardening):** 6 (Issues #25 through #30 active on GitHub)
 
-**Authoritative Status:** Stage 0 Controlled Pilot Approved; Stage 1/2 Gated on External Staging.
+**Authoritative Status:** Stage 0 Controlled Pilot Approved; Stage 1/2 Gated on External Staging & Phase 4 Remediation.
 
 ---
 
@@ -233,3 +233,29 @@ Issue #23 P1 High   CLOSED  Provenance       Deterministic CycloneDX v1.5 SBOM, 
   - *Hardening*: `scripts/package-distribution.ps1` now bundles `sbom.cyclonedx.json`, writes an explicitly unsigned `BUILD-METADATA.json` (manifest type `sunborn-build-metadata-v1`, binary SHA-256, commit SHA, code-signing state), and supports Authenticode via `$env:SIGNING_CERT_PFX`. `.github/workflows/release.yml` calls `actions/attest-build-provenance@v2` with `id-token`/`attestations` write permissions, which is the real SLSA provenance mechanism (the local JSON is not SLSA provenance).
   - *Remaining gap*: no signing certificate is configured in CI and no signed artifact has been produced. A GitHub attestation only exists after the release workflow runs.
   - *Verification*: workflow YAML parsed; provenance/manifest wording corrected. Not executed against a signing certificate.
+
+---
+
+## 4. Public Launch Extreme-Scale Defect Ledger (Issues #25 through #30)
+
+```
+=========================================================================================================
+                          SUNBORN PUBLIC LAUNCH HARDENING DEFECT LEDGER (PHASE 4)
+=========================================================================================================
+ID        Severity  Status  Component        Summary & Remediation Target                       GitHub Issue
+---------------------------------------------------------------------------------------------------------
+Issue #25 P1 High   OPEN    Concurrency/DoS  Bound in-flight stream history buffer in           #25
+                                             SingleflightSender; prevent heap exhaustion OOM
+Issue #26 P1 High   OPEN    FinOps           Eliminate crude char/4 heuristic; pass native BPE  #26
+                                             tokens to prevent multilingual FinOps undercharge
+Issue #27 P1 High   OPEN    Security/Gov     Fail-closed admin quorum across all environments;  #27
+                                             prevent unilateral cryptographic key shredding
+Issue #28 P1 High   OPEN    Distributed      Enforce monotonic epoch check on L1 cache hits;    #28
+                                             prevent multi-pod desynchronization under lag
+Issue #29 P1 High   OPEN    Release/CI       Add dedicated 'site-verification' job in CI for    #29
+                                             public showcase site in site/
+Issue #30 P1 High   OPEN    Supply Chain     Resolve 4 GitHub Dependabot supply-chain           #30
+                                             vulnerabilities on default branch
+=========================================================================================================
+```
+
