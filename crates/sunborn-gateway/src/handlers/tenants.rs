@@ -129,6 +129,10 @@ pub async fn crypto_shred_tenant(
         .learning_store
         .purge_tenant(&tenant)
         .map_err(AppError::from)?;
+    let _clusters_purged = state.paraphrase_clusters.purge_tenant(&tenant);
+    state
+        .temporal_engine
+        .bump_permission_version(AppState::tenant_permission_scope_uuid(&payload.tenant_id));
     let _credentials_revoked = state.api_key_registry.revoke_tenant_keys(&tenant);
     state.quota_ledger.remove_tenant(&payload.tenant_id).await;
 

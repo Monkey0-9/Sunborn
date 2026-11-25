@@ -277,6 +277,9 @@ pub async fn revoke_api_credential(
     if let Some(tenant_id) = payload.tenant_id {
         let tid = TenantId::new(&tenant_id);
         let revoked_in_mem = state.api_key_registry.revoke_tenant_keys(&tid);
+        state
+            .temporal_engine
+            .bump_permission_version(AppState::tenant_permission_scope_uuid(&tenant_id));
         let db_revoked = state
             .postgres_db
             .revoke_tenant_credentials(&tenant_id)
@@ -339,6 +342,9 @@ pub async fn rotate_api_credential(
 
     // 1. Revoke old credential in-memory and in durable storage
     state.api_key_registry.revoke_key_hash(&old_hash);
+    state
+        .temporal_engine
+        .bump_permission_version(AppState::tenant_permission_scope_uuid(&payload.tenant_id));
     state
         .postgres_db
         .revoke_api_credential(&old_hash)

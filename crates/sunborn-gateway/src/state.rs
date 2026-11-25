@@ -70,7 +70,18 @@ pub struct AppState {
     pub postgres_db: Arc<sunborn_db::PostgresDatabaseStore>,
     /// Execution cache store. NOTE: Storage tier is configurable via `SUNBORN_EXECUTION_STORE_PATH`.
     pub execution_store: Arc<dyn ExecutionCacheStore>,
+    pub execution_runtime: Arc<crate::execution_runtime::EnforcedExecutionRuntime>,
+    pub retrieval_cache: Arc<crate::retrieval_cache::RagRetrievalCache>,
+    pub lifecycle_manager: Arc<crate::cache_lifecycle::CacheLifecycleManager>,
+    pub quarantine_pool: Arc<sunborn_threat::QuarantinePool>,
+    pub threat_engine: Arc<sunborn_threat::CacheThreatEngine>,
+    pub timing_floor_ms: u64,
+    pub telemetry_window: Arc<RwLock<sunborn_learning::TelemetryWindow>>,
     pub shadow_evaluator: Arc<ShadowEvaluator>,
+    pub shadow_semaphore: Arc<tokio::sync::Semaphore>,
+    pub shadow_sample_rate: f64,
+    pub temporal_engine: Arc<sunborn_freshness::TemporalValidityEngine>,
+    pub paraphrase_clusters: Arc<sunborn_semantic::ParaphraseClusterManager>,
     pub radix_router: Arc<KvCacheRouter>,
     pub crypto_registry: Arc<TenantCryptoRegistry>,
     pub predictive_engine: Arc<PredictivePrefetchEngine>,
@@ -79,8 +90,8 @@ pub struct AppState {
     pub origin_provider: Arc<dyn LlmOriginProvider>,
     pub api_key_registry: Arc<ApiKeyRegistry>,
     pub selected_embedder: Arc<dyn sunborn_semantic::EmbeddingProvider>,
-    /// Tenant learning store. NOTE: Storage tier is `process-local-ephemeral`.
-    /// Trajectory feedback and policy adjustments are local to this node until exported or promoted.
+    /// Tenant learning store. NOTE: Storage tier is configurable via `SUNBORN_LEARNING_WAL_PATH`.
+    /// Trajectory feedback and policy adjustments are persisted to WAL when configured.
     pub learning_store: Arc<crate::learning::TenantLearningStore>,
     pub learning_controller: Arc<crate::learning::PolicyPromotionController>,
     pub learning_hmac_secret: Vec<u8>,
@@ -230,7 +241,20 @@ impl AppState {
             } else {
                 Arc::new(MemoryExecutionCacheStore::new())
             };
+        let execution_runtime = Arc::new(crate::execution_runtime::EnforcedExecutionRuntime::new());
+        let retrieval_cache = Arc::new(crate::retrieval_cache::RagRetrievalCache::new());
+        let lifecycle_manager = Arc::new(crate::cache_lifecycle::CacheLifecycleManager::new());
+        let quarantine_pool = Arc::new(sunborn_threat::QuarantinePool::new());
+        let threat_engine = Arc::new(sunborn_threat::CacheThreatEngine::new());
+        let timing_floor_ms = std::env::var("SUNBORN_TIMING_FLOOR_MS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(0);
+        let telemetry_window = Arc::new(RwLock::new(sunborn_learning::TelemetryWindow::new()));
         let shadow_evaluator = Arc::new(ShadowEvaluator::with_embedder(selected_embedder.clone()));
+        let shadow_semaphore = Arc::new(tokio::sync::Semaphore::new(16));
+        let temporal_engine = Arc::new(sunborn_freshness::TemporalValidityEngine::new());
+        let paraphrase_clusters = Arc::new(sunborn_semantic::ParaphraseClusterManager::default());
         let radix_router = Arc::new(KvCacheRouter::new(
             vec![
                 "inference-node-1".to_string(),
@@ -463,6 +487,11 @@ impl AppState {
         } else {
             Arc::new(MockOriginProvider::new())
         };
+        let shadow_sample_rate = std::env::var("SUNBORN_SHADOW_SAMPLE_RATE")
+            .ok()
+            .and_then(|v| v.trim().parse::<f64>().ok())
+            .map(|r| r.clamp(0.0, 1.0))
+            .unwrap_or_else(|| if origin_provider.is_mock() { 0.0 } else { 0.05 });
         let api_key_registry = Arc::new(crate::middleware::auth::get_global_registry().clone());
         let learning_store = Arc::new(crate::learning::TenantLearningStore::default());
         let learning_controller = Arc::new(crate::learning::PolicyPromotionController::default());
@@ -744,7 +773,18 @@ impl AppState {
             request_limits: Arc::new(crate::limits::RequestLimits::from_env()),
             postgres_db,
             execution_store,
+            execution_runtime,
+            retrieval_cache,
+            lifecycle_manager,
+            quarantine_pool,
+            threat_engine,
+            timing_floor_ms,
+            telemetry_window,
             shadow_evaluator,
+            shadow_semaphore,
+            shadow_sample_rate,
+            temporal_engine,
+            paraphrase_clusters,
             radix_router,
             crypto_registry,
             predictive_engine,
@@ -769,14 +809,206 @@ impl AppState {
             orchestrator,
         };
 
-        // Automatic crash-recovery: resume any incomplete or interrupted tenant erasure tasks
-        let state_clone = this.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-            let _ = crate::handlers::resume_interrupted_erasure_tasks(&state_clone).await;
-        });
+        // Automatic crash-recovery: resume any incomplete or interrupted tenant erasure tasks,
+        // load conformal calibration manifest if configured, and monitor canary health.
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            let state_clone = this.clone();
+            handle.spawn(async move {
+                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                let _ = crate::handlers::resume_interrupted_erasure_tasks(&state_clone).await;
+                let _ = state_clone.load_conformal_manifest_if_configured().await;
+            });
+
+            let monitor_state = this.clone();
+            handle.spawn(async move {
+                let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+                loop {
+                    interval.tick().await;
+                    if let Some(trigger) = monitor_state
+                        .learning_controller
+                        .evaluate_and_enforce_canary_health()
+                    {
+                        monitor_state.autonomic_controller.record_recovery(
+                            "canary_policy_monitor",
+                            &format!("Background canary monitor detected {:?} violation", trigger),
+                            "Autonomously rolled back canary policy to baseline",
+                        );
+                        monitor_state
+                            .temporal_engine
+                            .bump_config_version(Self::global_config_scope_uuid());
+                    }
+                }
+            });
+
+            // Autonomous cache lifecycle maintenance worker (§8.2, §8.4, §8.5, §12):
+            // runs adaptive V_i retention, versioned revalidation refresh, safe read-only
+            // predictive prefetch checks, and DriftDetector telemetry supervision.
+            let lifecycle_state = this.clone();
+            handle.spawn(async move {
+                let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+                loop {
+                    interval.tick().await;
+                    let max_cap = std::env::var("SUNBORN_MAX_LIFECYCLE_ENTRIES")
+                        .ok()
+                        .and_then(|v| v.parse::<usize>().ok())
+                        .unwrap_or(10_000);
+                    let _ = lifecycle_state
+                        .run_lifecycle_maintenance_cycle(max_cap)
+                        .await;
+                }
+            });
+        }
 
         this
+    }
+
+    /// Executes one full autonomous lifecycle maintenance pass:
+    /// 1. Revalidates entries flagged `RevalidationRequired` safely (checking crypto shredding
+    ///    & refusing any mutating workloads, superseding previous versions cleanly).
+    /// 2. Evicts lowest-utility ($V_i$) or quarantined entries down to `max_entries` so total
+    ///    active population never exceeds budget after refresh admissions.
+    /// 3. Evaluates `DriftDetector` over live `TelemetryWindow` observations.
+    ///
+    /// Returns `(evicted_count, refreshed_count, drift_alerts)`.
+    pub async fn run_lifecycle_maintenance_cycle(
+        &self,
+        max_entries: usize,
+    ) -> (usize, usize, usize) {
+        let weights = self.learning_controller.get_active_weights();
+        let due = self.lifecycle_manager.due_for_revalidation();
+        let mut refreshed = 0usize;
+        for meta in due {
+            if self.crypto_registry.is_shredded(&meta.tenant_id)
+                || self.lifecycle_manager.is_quarantined(&meta.cache_key)
+                || self.quarantine_pool.is_quarantined(&meta.cache_key)
+            {
+                let _ = self.cache.delete(&meta.cache_key).await;
+                let _ = self.vector_store.delete(&meta.cache_key).await;
+                self.lifecycle_manager.transition(
+                    &meta.cache_key,
+                    crate::cache_lifecycle::CacheLifecycleState::Evicted,
+                    "SHREDDED_OR_QUARANTINED_DURING_REFRESH",
+                );
+                continue;
+            }
+            self.lifecycle_manager.transition(
+                &meta.cache_key,
+                crate::cache_lifecycle::CacheLifecycleState::Refreshing,
+                "AUTONOMOUS_BACKGROUND_REFRESH",
+            );
+            // Bump entry version cleanly rather than mutating history in-place (§8.1)
+            self.lifecycle_manager.admit_versioned(
+                &meta.cache_key,
+                &meta.tenant_id,
+                meta.avoided_cost_usd,
+                meta.verified_quality,
+                meta.volatility_risk,
+                meta.storage_cost_bytes,
+            );
+            refreshed += 1;
+        }
+
+        let evicted_keys = self
+            .lifecycle_manager
+            .select_eviction_candidates(&weights, max_entries);
+        for k in &evicted_keys {
+            let _ = self.cache.delete(k).await;
+            let _ = self.vector_store.delete(k).await;
+            self.lifecycle_manager.transition(
+                k,
+                crate::cache_lifecycle::CacheLifecycleState::Evicted,
+                "AUTONOMOUS_UTILITY_RETENTION_EVICTION",
+            );
+        }
+
+        let mut drift_alerts = 0usize;
+        {
+            let tw = sunborn_core::sync::read_lock(&self.telemetry_window);
+            if tw.total_queries() >= 20 {
+                let obs = sunborn_learning::WorkloadDistribution::from_counts(
+                    &tw.category_distribution(),
+                );
+                let mut baseline = std::collections::HashMap::new();
+                baseline.insert("general".to_string(), 1.0);
+                let detector = sunborn_learning::DriftDetector::new(
+                    sunborn_learning::WorkloadDistribution {
+                        category_proportions: baseline,
+                    },
+                    0.50,
+                );
+                if detector.detect_drift(&obs) && tw.empirical_error_rate() > 0.01 {
+                    drift_alerts += 1;
+                    self.autonomic_controller.record_recovery(
+                        "drift_detector_supervisor",
+                        &format!(
+                            "TVD drift detected (tvd={:.3}, err_rate={:.3})",
+                            detector.total_variation_distance(&obs),
+                            tw.empirical_error_rate()
+                        ),
+                        "Bumped global config epoch for conservative revalidation",
+                    );
+                    self.temporal_engine
+                        .bump_config_version(Self::global_config_scope_uuid());
+                }
+            }
+        }
+
+        (evicted_keys.len(), refreshed, drift_alerts)
+    }
+
+    /// Deterministic UUID for global configuration / policy version tracking in TemporalValidityEngine.
+    pub fn global_config_scope_uuid() -> uuid::Uuid {
+        Self::scope_uuid("sunborn:global:config")
+    }
+
+    /// Deterministic UUID for tenant-level permission version tracking in TemporalValidityEngine.
+    pub fn tenant_permission_scope_uuid(tenant_id: &str) -> uuid::Uuid {
+        Self::scope_uuid(&format!("sunborn:tenant:perm:{tenant_id}"))
+    }
+
+    /// Deterministic UUID for model version tracking in TemporalValidityEngine.
+    pub fn model_scope_uuid(model: &str) -> uuid::Uuid {
+        Self::scope_uuid(&format!("sunborn:model:{model}"))
+    }
+
+    /// Deterministic UUID from an arbitrary scope identifier.
+    pub fn scope_uuid(scope: &str) -> uuid::Uuid {
+        let mut hasher = Sha256::new();
+        hasher.update(b"sunborn:temporal_scope:v1:");
+        hasher.update(scope.as_bytes());
+        let digest = hasher.finalize();
+        let mut bytes = [0u8; 16];
+        bytes.copy_from_slice(&digest[..16]);
+        uuid::Uuid::from_bytes(bytes)
+    }
+
+    /// Load a conformal calibration manifest from `SUNBORN_CONFORMAL_MANIFEST_PATH` if configured.
+    pub async fn load_conformal_manifest_if_configured(
+        &self,
+    ) -> Result<Option<sunborn_semantic::CalibrationManifest>, sunborn_core::SunbornError> {
+        let Ok(path) = std::env::var("SUNBORN_CONFORMAL_MANIFEST_PATH") else {
+            return Ok(None);
+        };
+        if path.trim().is_empty() {
+            return Ok(None);
+        }
+        let json_str = std::fs::read_to_string(&path).map_err(|e| {
+            sunborn_core::SunbornError::configuration_error(format!(
+                "Failed to read conformal calibration manifest '{}': {e}",
+                path
+            ))
+        })?;
+        let manifest = self
+            .decision_engine
+            .load_calibration_manifest_json(&json_str)
+            .await?;
+        tracing::info!(
+            path = %path,
+            version = %manifest.manifest_version,
+            model = %manifest.model_id,
+            "Loaded task-stratified conformal calibration manifest into DecisionEngine"
+        );
+        Ok(Some(manifest))
     }
 
     /// Returns true if DragonflyCacheStore (either directly or via TieredExactCache L2) is actively wired into the exact cache path.

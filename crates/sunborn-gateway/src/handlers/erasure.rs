@@ -277,6 +277,10 @@ pub async fn delete_tenant(
             .learning_store
             .purge_tenant(&tenant)
             .map_err(AppError::from)?;
+        let _clusters_purged = state.paraphrase_clusters.purge_tenant(&tenant);
+        state
+            .temporal_engine
+            .bump_permission_version(AppState::tenant_permission_scope_uuid(&tenant_id));
         task.deleted_learning_events += learning_deleted as i32;
         task.current_step = "LEARNING_STORE_PURGED".to_string();
         state

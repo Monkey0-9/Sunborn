@@ -22,8 +22,13 @@ sunborn-cache = { path = "../sunborn-cache" }
 sunborn-semantic = { path = "../sunborn-semantic" }
 sunborn-invalidation = { path = "../sunborn-invalidation" }
 sunborn-db = { path = "../sunborn-db" }
+sunborn-effects = { path = "../sunborn-effects" }
 sunborn-execution = { path = "../sunborn-execution" }
+sunborn-freshness = { path = "../sunborn-freshness" }
+sunborn-learning = { path = "../sunborn-learning" }
+sunborn-threat = { path = "../sunborn-threat" }
 ed25519-dalek.workspace = true
+subtle.workspace = true
 tokio.workspace = true
 axum.workspace = true
 tower.workspace = true

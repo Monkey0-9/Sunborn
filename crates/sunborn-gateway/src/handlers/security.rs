@@ -115,15 +115,75 @@ pub async fn record_learning_feedback(
         .into());
     }
 
+    let rollback_trigger =
+        if event.verified_outcome.is_unsafe_reuse() && event.decision_type.contains("canary") {
+            state
+                .learning_controller
+                .record_canary_observation(true, event.latency_ms, false, true)
+        } else {
+            None
+        };
+
+    // Detect contradictory verified feedback for the same cache_key (§13.1)
+    let prior_events = state.learning_store.get_tenant_events(&event.tenant_id);
+    let contradictory_feedback = prior_events.iter().any(|prev| {
+        prev.cache_key == event.cache_key
+            && ((prev.verified_outcome.is_admissible_hit()
+                && event.verified_outcome.is_unsafe_reuse())
+                || (prev.verified_outcome.is_unsafe_reuse()
+                    && event.verified_outcome.is_admissible_hit()))
+    });
+
+    let unsafe_quarantine_key =
+        if event.verified_outcome.is_unsafe_reuse() || contradictory_feedback {
+            Some((
+                event.cache_key.clone(),
+                if contradictory_feedback {
+                    "CONTRADICTORY_FEEDBACK_CONFLICT".to_string()
+                } else {
+                    event.verified_outcome.as_canonical_str().to_string()
+                },
+            ))
+        } else {
+            None
+        };
+
     state
         .learning_store
         .record_event(event)
         .map_err(AppError::from)?;
 
+    if let Some((ref q_key, ref q_cat)) = unsafe_quarantine_key {
+        state.lifecycle_manager.transition(
+            q_key,
+            crate::cache_lifecycle::CacheLifecycleState::Quarantined,
+            q_cat,
+        );
+        state
+            .quarantine_pool
+            .quarantine(sunborn_threat::quarantine::QuarantineEntry {
+                key: q_key.clone(),
+                original_query: "verified_feedback_report".to_string(),
+                attack_query: q_cat.clone(),
+                threat_category: q_cat.clone(),
+                anomaly_score: 1.0,
+                quarantined_at: Utc::now(),
+            });
+    }
+
+    if let Some(ref trigger) = rollback_trigger {
+        state.autonomic_controller.record_recovery(
+            "canary_policy_monitor",
+            &format!("Verified unsafe feedback triggered {:?} rollback", trigger),
+            "Autonomously rolled back canary policy to baseline",
+        );
+    }
+
     Ok((
         StatusCode::CREATED,
         Json(json!({
             "status": "FEEDBACK_RECORDED",
+            "canary_rollback_triggered": rollback_trigger.is_some(),
             "timestamp": Utc::now()
         })),
     ))
@@ -135,15 +195,53 @@ pub async fn get_learning_policies(
 ) -> impl IntoResponse {
     let active = state.learning_controller.get_active_policy();
     let canary = state.learning_controller.get_canary_status();
+    let canary_metrics = state.learning_controller.get_canary_metrics();
     let tenant_events_count = state.learning_store.tenant_event_count(&sec_ctx.tenant_id);
     let total_events = state.learning_store.total_events();
     let audit_trail = state.learning_controller.get_audit_trail();
+    let paraphrase_clusters_count = state
+        .paraphrase_clusters
+        .list_tenant_clusters(&sec_ctx.tenant_id)
+        .len();
+    let (telemetry_observations, telemetry_hit_rate, tvd_drift, drift_detected) = {
+        let tw = sunborn_core::sync::read_lock(&state.telemetry_window);
+        let obs_dist =
+            sunborn_learning::WorkloadDistribution::from_counts(&tw.category_distribution());
+        let mut baseline_map = std::collections::HashMap::new();
+        baseline_map.insert("general".to_string(), 1.0);
+        let detector = sunborn_learning::DriftDetector::new(
+            sunborn_learning::WorkloadDistribution {
+                category_proportions: baseline_map,
+            },
+            0.35,
+        );
+        (
+            tw.total_queries(),
+            tw.hit_rate(),
+            detector.total_variation_distance(&obs_dist),
+            tw.total_queries() >= 10 && detector.detect_drift(&obs_dist),
+        )
+    };
 
     Json(json!({
         "tenant_id": sec_ctx.tenant_id.0,
-        "storage_tier": "process-local-ephemeral",
+        "storage_tier": state.learning_store.storage_tier(),
+        "learning_store_durable": state.learning_store.is_durable(),
+        "policy_storage_tier": state.learning_controller.storage_tier(),
+        "policy_registry_durable": state.learning_controller.is_durable(),
         "active_policy": active,
         "canary_policy": canary.as_ref().map(|(p, pct)| json!({ "policy": p, "percentage": pct })),
+        "canary_metrics": canary_metrics,
+        "shadow_conformal_observations": state.shadow_evaluator.observation_count(),
+        "shadow_conformal_threshold": state.shadow_evaluator.calibrated_threshold(),
+        "paraphrase_clusters_count": paraphrase_clusters_count,
+        "telemetry_observations": telemetry_observations,
+        "telemetry_hit_rate": telemetry_hit_rate,
+        "workload_tvd_drift": tvd_drift,
+        "workload_drift_detected": drift_detected,
+        "retrieval_cache_entries": state.retrieval_cache.entry_count(),
+        "quarantined_entries": state.quarantine_pool.len(),
+        "timing_summary": state.lifecycle_manager.timing_summary(),
         "tenant_feedback_events": tenant_events_count,
         "total_feedback_events": total_events,
         "audit_trail": audit_trail
@@ -153,6 +251,10 @@ pub async fn get_learning_policies(
 #[derive(Deserialize)]
 pub struct CalibrateRequest {
     pub version: u32,
+    #[serde(default)]
+    pub target_alpha: Option<f64>,
+    #[serde(default)]
+    pub confidence_level: Option<f64>,
 }
 
 pub async fn calibrate_learning_policy(
@@ -161,8 +263,20 @@ pub async fn calibrate_learning_policy(
     Json(payload): Json<CalibrateRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let events = state.learning_store.get_tenant_events(&sec_ctx.tenant_id);
-    let candidate = crate::learning::OfflineCalibrator::calibrate_policy(&events, payload.version)
-        .map_err(AppError::from)?;
+    let candidate = if let Some(alpha) = payload.target_alpha {
+        let cfg = crate::learning::CalibrationConfig::for_target_alpha(
+            alpha,
+            payload.confidence_level.unwrap_or(0.95),
+        );
+        crate::learning::OfflineCalibrator::calibrate_policy_with_config(
+            &events,
+            payload.version,
+            &cfg,
+        )
+    } else {
+        crate::learning::OfflineCalibrator::calibrate_policy(&events, payload.version)
+    }
+    .map_err(AppError::from)?;
 
     Ok(Json(json!({
         "status": "POLICY_CALIBRATED",
@@ -237,6 +351,9 @@ pub async fn promote_learning_policy(
         .learning_controller
         .complete_promotion(&sec_ctx.tenant_id.0)
         .map_err(AppError::from)?;
+    state
+        .temporal_engine
+        .bump_config_version(AppState::global_config_scope_uuid());
 
     Ok(Json(json!({
         "status": "POLICY_FULLY_PROMOTED",
@@ -266,6 +383,9 @@ pub async fn rollback_learning_policy(
             &payload.reason,
         )
         .map_err(AppError::from)?;
+    state
+        .temporal_engine
+        .bump_config_version(AppState::global_config_scope_uuid());
 
     Ok(Json(json!({
         "status": "POLICY_ROLLED_BACK",

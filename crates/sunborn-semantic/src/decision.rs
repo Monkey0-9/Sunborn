@@ -1,5 +1,8 @@
-use crate::conformal::{StreamingOODDetector, TaskStratifiedConformalCalibrator, TaskStratum};
+use crate::conformal::{
+    CalibrationManifest, StreamingOODDetector, TaskStratifiedConformalCalibrator, TaskStratum,
+};
 use crate::embedding::EmbeddingProvider;
+use crate::grounding::SourceGroundingVerifier;
 use crate::guardrails::{CrossEncoderBackend, StructuralEntailmentScorer, StructuralFingerprint};
 use crate::vector_store::VectorStore;
 use serde::{Deserialize, Serialize};
@@ -243,6 +246,37 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
         self
     }
 
+    /// Load a calibrated conformal manifest into the verification cascade.
+    pub async fn load_calibration_manifest(&self, manifest: &CalibrationManifest) {
+        self.cascade.calibrator.load_manifest(manifest).await;
+    }
+
+    /// Load a calibrated conformal manifest from JSON into the verification cascade.
+    pub async fn load_calibration_manifest_json(
+        &self,
+        json_str: &str,
+    ) -> Result<CalibrationManifest> {
+        self.cascade.calibrator.load_from_json(json_str).await
+    }
+
+    /// Record a verified match observation so task-stratified conformal thresholds
+    /// continuously adapt from live verified evaluations.
+    pub async fn record_verified_observation(&self, prompt: &str, similarity: f64) {
+        let risk = Self::assess_risk(prompt);
+        let stratum = TaskStratum::from_risk_and_prompt(risk, prompt);
+        self.cascade
+            .calibrator
+            .record_observation(stratum, similarity)
+            .await;
+    }
+
+    /// Retrieve the current calibrated similarity threshold for a prompt's task stratum.
+    pub async fn get_stratum_threshold(&self, prompt: &str) -> f64 {
+        let risk = Self::assess_risk(prompt);
+        let stratum = TaskStratum::from_risk_and_prompt(risk, prompt);
+        self.cascade.calibrator.get_threshold(stratum).await
+    }
+
     /// Evaluates semantic risk for prompt (e.g. presence of mutating commands, PII, financial terms, or security overrides)
     pub fn assess_risk(prompt: &str) -> f32 {
         let lower = prompt.to_lowercase();
@@ -332,6 +366,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                         latency_saved_ms: None,
                         policy_version: None,
                         policy_id: None,
+                        five_gate_evidence: None,
                     },
                     matched_content: None,
                     matched_id: None,
@@ -353,22 +388,18 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                 .get("certificate")
                 .and_then(|v| serde_json::from_value(v.clone()).ok());
 
-            // Independent Causal Freshness Verification:
+            // Independent Causal Freshness & Source Content-Hash Verification:
             // Check candidate's source snapshots against request snapshots and knowledge epoch
             let mut causal_snapshots_valid = true;
             if let Some(ref cert) = candidate_cert {
-                for req_snap in &req.dependency_snapshots {
-                    for cand_snap in &cert.source_snapshots {
-                        if req_snap.source_id == cand_snap.source_id
-                            && req_snap.snapshot_epoch > cand_snap.snapshot_epoch
-                        {
-                            causal_snapshots_valid = false;
-                            break;
-                        }
-                    }
-                    if !causal_snapshots_valid {
-                        break;
-                    }
+                if !req.dependency_snapshots.is_empty()
+                    && SourceGroundingVerifier::verify_source_snapshots(
+                        &req.dependency_snapshots,
+                        &cert.source_snapshots,
+                    )
+                    .is_err()
+                {
+                    causal_snapshots_valid = false;
                 }
                 if let Some(req_ke) = req.knowledge_epoch {
                     if req_ke > cert.validity_window.monotonic_epoch_lease {
@@ -402,6 +433,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                                 latency_saved_ms: None,
                                 policy_version: None,
                                 policy_id: None,
+                                five_gate_evidence: None,
                             },
                             matched_content: Some(best.entry.content.clone()),
                             matched_id: Some(best.entry.id.clone()),
@@ -421,6 +453,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                                 latency_saved_ms: None,
                                 policy_version: None,
                                 policy_id: None,
+                                five_gate_evidence: None,
                             },
                             matched_content: Some(best.entry.content.clone()),
                             matched_id: Some(best.entry.id.clone()),
@@ -432,27 +465,94 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                 }
             }
 
-            // Tier C2 Context-Lineage Binding Verification:
-            // If request and candidate specify ContextDigest, they must match exactly.
-            let req_context_digest = req.metadata.get("context_digest").and_then(|v| v.as_str());
+            // Tier C2 Context-Lineage, Config & Embedding Fingerprint Verification (§3.3, §3.4, §10):
+            let computed_req_cd = sunborn_identity::IdentityEngine::compute_context_digest(req);
+            let req_context_digest = computed_req_cd.as_deref();
             let candidate_context_digest = best
                 .entry
                 .metadata
                 .get("context_digest")
                 .and_then(|v| v.as_str());
+            let allow_context_free_share = req
+                .metadata
+                .get("context_free_share")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+                && req.messages.is_empty();
 
-            if let (Some(req_cd), Some(cand_cd)) = (req_context_digest, candidate_context_digest) {
-                if req_cd != cand_cd {
+            let context_mismatch = match (req_context_digest, candidate_context_digest) {
+                (Some(req_cd), Some(cand_cd)) => req_cd != cand_cd,
+                (Some(_), None) | (None, Some(_)) => !allow_context_free_share,
+                (None, None) => false,
+            };
+            if context_mismatch {
+                return Ok(DecisionOutcome {
+                    decision: DecisionRecord {
+                        action: DecisionAction::Revalidate,
+                        cache_path: CachePath::Semantic,
+                        confidence,
+                        risk_score,
+                        reason_code: "CONTEXT_DIGEST_MISMATCH".to_string(),
+                        latency_saved_ms: None,
+                        policy_version: None,
+                        policy_id: None,
+                        five_gate_evidence: None,
+                    },
+                    matched_content: Some(best.entry.content.clone()),
+                    matched_id: Some(best.entry.id.clone()),
+                    matched_certificate: candidate_cert,
+                    safety_evidence: Some(cascade_res.safety_evidence),
+                    matched_metadata: Some(best.entry.metadata.clone()),
+                });
+            }
+
+            if let Some(cand_cfg) = best
+                .entry
+                .metadata
+                .get("config_fingerprint")
+                .and_then(|v| v.as_str())
+            {
+                let req_cfg = sunborn_identity::IdentityEngine::compute_config_fingerprint(req);
+                if cand_cfg != req_cfg {
                     return Ok(DecisionOutcome {
                         decision: DecisionRecord {
                             action: DecisionAction::Revalidate,
                             cache_path: CachePath::Semantic,
                             confidence,
                             risk_score,
-                            reason_code: "CONTEXT_DIGEST_MISMATCH".to_string(),
+                            reason_code: "CONFIG_FINGERPRINT_MISMATCH".to_string(),
                             latency_saved_ms: None,
                             policy_version: None,
                             policy_id: None,
+                            five_gate_evidence: None,
+                        },
+                        matched_content: Some(best.entry.content.clone()),
+                        matched_id: Some(best.entry.id.clone()),
+                        matched_certificate: candidate_cert,
+                        safety_evidence: Some(cascade_res.safety_evidence),
+                        matched_metadata: Some(best.entry.metadata.clone()),
+                    });
+                }
+            }
+
+            if let Some(cand_emb) = best
+                .entry
+                .metadata
+                .get("embedding_fingerprint")
+                .and_then(|v| v.as_str())
+            {
+                if cand_emb != self.embedder.embedding_fingerprint() {
+                    return Ok(DecisionOutcome {
+                        decision: DecisionRecord {
+                            action: DecisionAction::Revalidate,
+                            cache_path: CachePath::Semantic,
+                            confidence,
+                            risk_score,
+                            reason_code: "EMBEDDING_FINGERPRINT_MISMATCH".to_string(),
+                            latency_saved_ms: None,
+                            policy_version: None,
+                            policy_id: None,
+                            five_gate_evidence: None,
                         },
                         matched_content: Some(best.entry.content.clone()),
                         matched_id: Some(best.entry.id.clone()),
@@ -474,6 +574,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                         latency_saved_ms: None,
                         policy_version: None,
                         policy_id: None,
+                        five_gate_evidence: None,
                     },
                     matched_content: Some(best.entry.content.clone()),
                     matched_id: Some(best.entry.id.clone()),
@@ -495,6 +596,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                         latency_saved_ms: None,
                         policy_version: None,
                         policy_id: None,
+                        five_gate_evidence: None,
                     },
                     matched_content: Some(best.entry.content.clone()),
                     matched_id: Some(best.entry.id.clone()),
@@ -516,6 +618,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                         latency_saved_ms: Some(180),
                         policy_version: None,
                         policy_id: None,
+                        five_gate_evidence: None,
                     },
                     matched_content: Some(best.entry.content.clone()),
                     matched_id: Some(best.entry.id.clone()),
@@ -536,6 +639,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                     latency_saved_ms: None,
                     policy_version: None,
                     policy_id: None,
+                    five_gate_evidence: None,
                 },
                 matched_content: Some(best.entry.content.clone()),
                 matched_id: Some(best.entry.id.clone()),
@@ -555,6 +659,7 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
                     latency_saved_ms: None,
                     policy_version: None,
                     policy_id: None,
+                    five_gate_evidence: None,
                 },
                 matched_content: None,
                 matched_id: None,

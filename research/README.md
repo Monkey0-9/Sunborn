@@ -12,6 +12,7 @@
 * `results/run_manifest.json`: Immutable execution manifest for SemanticCacheBench-T (19 stateful temporal mutation scenarios).
 * `results/reproduction_certificate.json`: Local integrity record. The checked-in certificate is explicitly unauthenticated and tied to its recorded repository revision.
 * `verify_certificate.py`: Independent certificate and artifact provenance verifier with explicit 4-state outcome semantics.
+* `calibration/external_unseen_eval_dataset.json`: Frozen-rule unseen evaluation split ($N=160$ multi-domain, multilingual/code-mixed, and factual-vs-similarity traps) paired with `crates/sunborn-semantic/tests/external_generalization_eval.rs`.
 * `tests/test_verifier_negative.py`: Negative verification test suite proving strict rejection of offline artifacts, corrupted traces, and mismatched keys.
 * `../benchmarks/semantic_cache_bench.py`: SemanticCacheBench dataset runner (uses a lightweight embedding backend by default; `--use-fastembed` explicitly opts into loading FastEmbed; supports strict live gateway RPC via `--require-live` and developer offline simulation via `--allow-offline`).
 * `benchmark_credentials.py`: Generates test-only least-privilege API credentials, one per benchmark application, so live cases retain tenant/application isolation without using a credential scoped to a different app.

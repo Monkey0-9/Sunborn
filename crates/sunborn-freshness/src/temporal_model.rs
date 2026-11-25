@@ -88,6 +88,14 @@ impl TemporalValidityEngine {
         }
     }
 
+    pub fn get_state(&self, id: &Uuid) -> Option<TemporalState> {
+        self.states.get(id).map(|s| *s)
+    }
+
+    pub fn get_or_init_state(&self, id: Uuid) -> TemporalState {
+        *self.states.entry(id).or_default()
+    }
+
     pub fn register_state(&self, id: Uuid, state: TemporalState) {
         self.states.insert(id, state);
     }
@@ -109,6 +117,12 @@ impl TemporalValidityEngine {
         if let Some(mut entry) = self.states.get_mut(&id) {
             entry.permission_version = version;
             entry.epoch += 1;
+        } else {
+            let state = TemporalState {
+                permission_version: version,
+                ..Default::default()
+            };
+            self.states.insert(id, state);
         }
     }
 
@@ -116,6 +130,12 @@ impl TemporalValidityEngine {
         if let Some(mut entry) = self.states.get_mut(&id) {
             entry.config_version = version;
             entry.epoch += 1;
+        } else {
+            let state = TemporalState {
+                config_version: version,
+                ..Default::default()
+            };
+            self.states.insert(id, state);
         }
     }
 
@@ -123,6 +143,61 @@ impl TemporalValidityEngine {
         if let Some(mut entry) = self.states.get_mut(&id) {
             entry.model_version = version;
             entry.epoch += 1;
+        } else {
+            let state = TemporalState {
+                model_version: version,
+                ..Default::default()
+            };
+            self.states.insert(id, state);
+        }
+    }
+
+    pub fn bump_permission_version(&self, id: Uuid) -> u64 {
+        let mut entry = self.states.entry(id).or_default();
+        entry.permission_version += 1;
+        entry.epoch += 1;
+        entry.permission_version
+    }
+
+    pub fn bump_config_version(&self, id: Uuid) -> u64 {
+        let mut entry = self.states.entry(id).or_default();
+        entry.config_version += 1;
+        entry.epoch += 1;
+        entry.config_version
+    }
+
+    pub fn bump_model_version(&self, id: Uuid) -> u64 {
+        let mut entry = self.states.entry(id).or_default();
+        entry.model_version += 1;
+        entry.epoch += 1;
+        entry.model_version
+    }
+
+    /// Evaluates multi-dimensional freshness AND confidence decay against current state.
+    #[allow(clippy::too_many_arguments)]
+    pub fn evaluate_freshness_with_decay(
+        &self,
+        id: &Uuid,
+        vector: &FreshnessVector,
+        current_epoch: u64,
+        created_at: DateTime<Utc>,
+        now: DateTime<Utc>,
+        policy: ConfidenceDecayPolicy,
+        min_confidence: f32,
+    ) -> CausalEvaluationResult {
+        let base = self.evaluate_freshness(id, vector, current_epoch);
+        if !base.is_fresh() {
+            return base;
+        }
+        let confidence = Self::compute_confidence(created_at, now, policy);
+        if confidence < min_confidence {
+            return CausalEvaluationResult::DecayedConfidence {
+                score: confidence,
+                threshold: min_confidence,
+            };
+        }
+        CausalEvaluationResult::Fresh {
+            confidence_score: confidence,
         }
     }
 

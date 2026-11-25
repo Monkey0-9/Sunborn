@@ -18,13 +18,16 @@ pub mod conformal;
 pub mod context_digest;
 pub mod decision;
 pub mod embedding;
+pub mod grounding;
 pub mod guardrails;
 pub mod microbatch;
+pub mod paraphrase_cluster;
 pub mod vector_store;
 
 pub use conformal::{
-    wilson_score_interval, NonExchangeableConformalCalibrator, RollingWindowConformalEngine,
-    ShadowObservation, StreamingOODDetector, TaskStratifiedConformalCalibrator, TaskStratum,
+    wilson_score_interval, CalibrationManifest, NonExchangeableConformalCalibrator,
+    RollingWindowConformalEngine, ShadowObservation, StratumCalibration, StreamingOODDetector,
+    TaskStratifiedConformalCalibrator, TaskStratum,
 };
 pub use context_digest::ContextDigest;
 
@@ -36,11 +39,16 @@ pub use embedding::{
     cosine_similarity, DeterministicEmbeddingProvider, EmbeddingProvider, HttpEmbeddingProvider,
     LshRandomProjectionEmbeddingProvider, Vector,
 };
+pub use grounding::{
+    EvidenceBundle, GroundedClaim, GroundingAttestation, GroundingOutcome, SourceEvidence,
+    SourceGroundingVerifier,
+};
 pub use guardrails::{
     ConformalRiskController, CrossEncoderVerifier, EntailmentScores, StructuralEntailmentScorer,
     StructuralFingerprint,
 };
 pub use microbatch::MicroBatchedEmbedder;
+pub use paraphrase_cluster::{ClusterMember, ParaphraseCluster, ParaphraseClusterManager};
 pub use vector_store::{
     MemoryVectorStore, QdrantVectorStore, ScoredVectorEntry, VectorEntry, VectorStore,
 };

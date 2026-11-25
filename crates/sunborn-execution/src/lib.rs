@@ -24,8 +24,8 @@ pub use merkle::{
     ToolPurity,
 };
 pub use model::{
-    ExecutionNode, ExecutionPlan, NodeExecutionStatus, PlanEvaluation, ToolCall, ToolDefinition,
-    ToolResult,
+    ExecutionEffect, ExecutionNode, ExecutionPlan, NodeExecutionStatus, PlanEvaluation, ToolCall,
+    ToolDefinition, ToolResult,
 };
 pub use planner::ExecutionPlanner;
 pub use signature::ToolSignatureEngine;

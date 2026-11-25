@@ -32,6 +32,46 @@ pub enum RollbackTrigger {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanarySafetyThresholds {
+    pub min_samples_for_rate_check: u64,
+    pub max_false_hit_rate: f64,
+    pub max_absolute_false_hits: u64,
+    pub max_error_rate: f64,
+    pub latency_sla_ms: f64,
+    pub max_latency_violation_rate: f64,
+}
+
+impl Default for CanarySafetyThresholds {
+    fn default() -> Self {
+        Self {
+            min_samples_for_rate_check: 20,
+            max_false_hit_rate: 0.01,
+            max_absolute_false_hits: 2,
+            max_error_rate: 0.05,
+            latency_sla_ms: 5000.0,
+            max_latency_violation_rate: 0.10,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CanaryLiveMetrics {
+    pub total_requests: u64,
+    pub false_hits: u64,
+    pub errors: u64,
+    pub latency_violations: u64,
+    pub total_latency_ms: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct PolicySelection {
+    pub policy_id: String,
+    pub version: u32,
+    pub weights: PolicyWeights,
+    pub is_canary: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistedPolicyState {
     pub active_policy: CandidatePolicy,
     pub canary_policy: Option<(CandidatePolicy, u8)>,
@@ -41,6 +81,8 @@ pub struct PersistedPolicyState {
 pub struct PolicyPromotionController {
     active_policy: RwLock<CandidatePolicy>,
     canary_policy: RwLock<Option<(CandidatePolicy, u8)>>, // (policy, canary_percent)
+    canary_metrics: RwLock<CanaryLiveMetrics>,
+    canary_thresholds: RwLock<CanarySafetyThresholds>,
     audit_logs: RwLock<Vec<PromotionAuditLog>>,
     persist_path: Option<PathBuf>,
 }
@@ -49,6 +91,7 @@ impl Default for PolicyPromotionController {
     fn default() -> Self {
         let default_path = std::env::var("SUNBORN_POLICY_REGISTRY_PATH")
             .ok()
+            .filter(|s| !s.trim().is_empty())
             .map(PathBuf::from);
         Self::new_with_persistence(default_path)
     }
@@ -59,6 +102,8 @@ impl PolicyPromotionController {
         Self {
             active_policy: RwLock::new(Self::baseline_policy()),
             canary_policy: RwLock::new(None),
+            canary_metrics: RwLock::new(CanaryLiveMetrics::default()),
+            canary_thresholds: RwLock::new(CanarySafetyThresholds::default()),
             audit_logs: RwLock::new(Vec::new()),
             persist_path: None,
         }
@@ -84,8 +129,22 @@ impl PolicyPromotionController {
         Self {
             active_policy: RwLock::new(initial_active),
             canary_policy: RwLock::new(initial_canary),
+            canary_metrics: RwLock::new(CanaryLiveMetrics::default()),
+            canary_thresholds: RwLock::new(CanarySafetyThresholds::default()),
             audit_logs: RwLock::new(initial_logs),
             persist_path,
+        }
+    }
+
+    pub fn is_durable(&self) -> bool {
+        self.persist_path.is_some()
+    }
+
+    pub fn storage_tier(&self) -> &'static str {
+        if self.is_durable() {
+            "durable-registry-json"
+        } else {
+            "process-local-ephemeral"
         }
     }
 
@@ -99,8 +158,15 @@ impl PolicyPromotionController {
                 total_samples: 0,
                 training_samples: 0,
                 held_out_samples: 0,
+                held_out_evaluated: 0,
+                held_out_admitted: 0,
+                held_out_false_hits: 0,
+                held_out_stale_hits: 0,
+                held_out_ground_truth_mismatches: 0,
                 training_false_hit_rate: 0.0,
                 held_out_false_hit_rate: 0.0,
+                held_out_false_hit_upper_bound_95: 0.0,
+                held_out_wilson_upper_bound_95: 0.0,
                 held_out_abstention_rate: 0.0,
                 estimated_cost_reduction_pct: 0.0,
                 is_statistically_sound: true,
@@ -127,6 +193,7 @@ impl PolicyPromotionController {
             {
                 if let Ok(json_bytes) = serde_json::to_vec_pretty(&state) {
                     let _ = file.write_all(&json_bytes);
+                    let _ = file.sync_all();
                 }
             }
         }
@@ -147,16 +214,128 @@ impl PolicyPromotionController {
         read_lock(&self.canary_policy).clone()
     }
 
-    /// Select which policy to apply for a given request based on request hash and canary split
+    /// Retrieve live telemetry metrics for the active canary window
+    pub fn get_canary_metrics(&self) -> CanaryLiveMetrics {
+        read_lock(&self.canary_metrics).clone()
+    }
+
+    /// Update canary monitoring thresholds
+    pub fn set_canary_thresholds(&self, thresholds: CanarySafetyThresholds) {
+        *write_lock(&self.canary_thresholds) = thresholds;
+    }
+
+    /// Select which policy weights to apply for a given request based on request hash and canary split
     pub fn select_policy_for_request(&self, request_hash: u64) -> PolicyWeights {
+        self.select_policy_decision_for_request(request_hash)
+            .weights
+    }
+
+    /// Select policy weights and full attribution metadata (policy_id, version, is_canary)
+    pub fn select_policy_decision_for_request(&self, request_hash: u64) -> PolicySelection {
         let canary_guard = read_lock(&self.canary_policy);
         if let Some((canary, pct)) = canary_guard.as_ref() {
             let bucket = (request_hash % 100) as u8;
             if bucket < *pct {
-                return canary.weights.clone();
+                return PolicySelection {
+                    policy_id: canary.policy_id.clone(),
+                    version: canary.version,
+                    weights: canary.weights.clone(),
+                    is_canary: true,
+                };
             }
         }
-        read_lock(&self.active_policy).weights.clone()
+        let active = read_lock(&self.active_policy);
+        PolicySelection {
+            policy_id: active.policy_id.clone(),
+            version: active.version,
+            weights: active.weights.clone(),
+            is_canary: false,
+        }
+    }
+
+    /// Record a live request or shadow evaluation outcome and automatically trigger
+    /// canary rollback if safety thresholds (false hits, error rate, latency SLA) are breached.
+    pub fn record_canary_observation(
+        &self,
+        is_canary: bool,
+        latency_ms: f64,
+        is_error: bool,
+        is_false_hit: bool,
+    ) -> Option<RollbackTrigger> {
+        if !is_canary || read_lock(&self.canary_policy).is_none() {
+            return None;
+        }
+
+        let thresholds = read_lock(&self.canary_thresholds).clone();
+        {
+            let mut m = write_lock(&self.canary_metrics);
+            m.total_requests += 1;
+            if is_false_hit {
+                m.false_hits += 1;
+            }
+            if is_error {
+                m.errors += 1;
+            }
+            if latency_ms.is_finite() && latency_ms >= 0.0 {
+                m.total_latency_ms += latency_ms;
+                if latency_ms > thresholds.latency_sla_ms {
+                    m.latency_violations += 1;
+                }
+            }
+        }
+
+        self.evaluate_and_enforce_canary_health()
+    }
+
+    /// Evaluate live canary metrics against safety thresholds and automatically roll back on breach.
+    pub fn evaluate_and_enforce_canary_health(&self) -> Option<RollbackTrigger> {
+        if read_lock(&self.canary_policy).is_none() {
+            return None;
+        }
+        let m = read_lock(&self.canary_metrics).clone();
+        let t = read_lock(&self.canary_thresholds).clone();
+
+        if m.false_hits >= t.max_absolute_false_hits
+            || (m.total_requests >= t.min_samples_for_rate_check
+                && (m.false_hits as f64 / m.total_requests as f64) > t.max_false_hit_rate)
+        {
+            let reason = format!(
+                "Automated monitor detected canary false hits ({}/{} requests, limit {:.2}% / max {})",
+                m.false_hits,
+                m.total_requests,
+                t.max_false_hit_rate * 100.0,
+                t.max_absolute_false_hits
+            );
+            let _ = self.trigger_rollback(RollbackTrigger::FalseHitDetected, &reason);
+            return Some(RollbackTrigger::FalseHitDetected);
+        }
+
+        if m.total_requests >= t.min_samples_for_rate_check
+            && (m.errors as f64 / m.total_requests as f64) > t.max_error_rate
+        {
+            let reason = format!(
+                "Automated monitor detected canary error rate spike ({}/{} requests, limit {:.2}%)",
+                m.errors,
+                m.total_requests,
+                t.max_error_rate * 100.0
+            );
+            let _ = self.trigger_rollback(RollbackTrigger::ErrorRateSpike, &reason);
+            return Some(RollbackTrigger::ErrorRateSpike);
+        }
+
+        if m.total_requests >= t.min_samples_for_rate_check
+            && (m.latency_violations as f64 / m.total_requests as f64)
+                > t.max_latency_violation_rate
+        {
+            let reason = format!(
+                "Automated monitor detected canary latency SLA violations ({}/{} > {:.1}ms)",
+                m.latency_violations, m.total_requests, t.latency_sla_ms
+            );
+            let _ = self.trigger_rollback(RollbackTrigger::LatencySlaViolation, &reason);
+            return Some(RollbackTrigger::LatencySlaViolation);
+        }
+
+        None
     }
 
     /// Start a staged canary rollout for a validated candidate policy
@@ -169,7 +348,7 @@ impl PolicyPromotionController {
         // Enforce Adaptive Closed-Loop Safety Gating:
         if !candidate.evaluation_report.is_statistically_sound {
             return Err(SunbornError::forbidden(
-                "Promotion rejected: candidate policy failed statistical soundness gate (held-out false hit rate > 1%)",
+                "Promotion rejected: candidate policy failed statistical soundness gate (insufficient sample size or confidence upper bound exceeds limit)",
             ));
         }
 
@@ -188,6 +367,7 @@ impl PolicyPromotionController {
             let mut canary_guard = write_lock(&self.canary_policy);
             *canary_guard = Some((candidate, clamped_pct));
         }
+        *write_lock(&self.canary_metrics) = CanaryLiveMetrics::default();
 
         let log = PromotionAuditLog {
             policy_id,
@@ -218,6 +398,7 @@ impl PolicyPromotionController {
             *active_guard = c.clone();
             (c, pid)
         };
+        *write_lock(&self.canary_metrics) = CanaryLiveMetrics::default();
 
         let log = PromotionAuditLog {
             policy_id: canary.policy_id.clone(),
@@ -261,6 +442,7 @@ impl PolicyPromotionController {
                 "CANARY_ROLLED_BACK: Emergency rollback restored active baseline policy"
             );
 
+            *write_lock(&self.canary_metrics) = CanaryLiveMetrics::default();
             write_lock(&self.audit_logs).push(log);
             self.save_state();
         }

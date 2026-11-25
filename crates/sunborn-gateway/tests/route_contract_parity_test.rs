@@ -319,6 +319,16 @@ const ROUTES: &[Route] = &[
         path: "/v1/learning/rollback",
         access: Access::Admin,
     },
+    Route {
+        method: "POST",
+        path: "/v1/lifecycle/retain",
+        access: Access::Admin,
+    },
+    Route {
+        method: "POST",
+        path: "/v1/retrieval/cache",
+        access: Access::Tenant,
+    },
     // Local BYOK desktop control.
     Route {
         method: "GET",

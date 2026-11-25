@@ -46,7 +46,21 @@ pub async fn trigger_invalidation(
         .purge_sources(&tenant_id, &[payload.source_id])
         .await
     {
-        Ok(report) => report,
+        Ok(report) => {
+            state
+                .temporal_engine
+                .update_document_version(payload.source_id, report.bumped_epoch);
+            for purged_key in &report.purged_cache_keys {
+                let cluster_siblings = state.paraphrase_clusters.invalidate_by_member(purged_key);
+                for sibling_key in cluster_siblings {
+                    if sibling_key != *purged_key {
+                        let _ = state.cache.delete(&sibling_key).await;
+                        let _ = state.vector_store.delete(&sibling_key).await;
+                    }
+                }
+            }
+            report
+        }
         Err(err) => {
             if let Err(mark_err) = state
                 .db
@@ -251,11 +265,14 @@ pub async fn invalidate_graph_rtc(
     for src in &payload.source_ids {
         // Fence before deletion: bump the authoritative epoch and write-back watermark
         // first so a concurrent completion cannot repopulate the entry mid-purge.
-        state
+        let bumped_epoch = state
             .epoch_lease_manager
             .bump_epoch(*src)
             .await
             .map_err(AppError::from)?;
+        state
+            .temporal_engine
+            .update_document_version(*src, bumped_epoch);
         state.watermark_fencer.advance_watermark(&src.to_string());
 
         // A dependency-graph outage must fail the invalidation rather than look
@@ -287,6 +304,13 @@ pub async fn invalidate_graph_rtc(
             if !key_failed {
                 successfully_deleted_for_src.push(k.clone());
                 purged_keys.push(k.clone());
+                let siblings = state.paraphrase_clusters.invalidate_by_member(k);
+                for sib in siblings {
+                    if sib != *k {
+                        let _ = state.cache.delete(&sib).await;
+                        let _ = state.vector_store.delete(&sib).await;
+                    }
+                }
                 // Remove individual dependency edge upon confirmed multi-tier deletion
                 if let Err(e) = state.dependency_graph.remove_dependency(src, k).await {
                     tracing::error!(source_id = %src, key = %k, error = %e, "Graph edge removal failed");
@@ -413,6 +437,9 @@ pub async fn delete_cache(
             false
         }
     };
+    state
+        .paraphrase_clusters
+        .remove_member_and_recalibrate(&key);
     Ok(Json(
         json!({ "key": key, "deleted": deleted, "vector_deleted": vector_deleted }),
     ))

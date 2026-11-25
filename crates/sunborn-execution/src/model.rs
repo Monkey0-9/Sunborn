@@ -135,6 +135,10 @@ pub enum NodeExecutionStatus {
         signature: String,
         output: serde_json::Value,
     },
+    UnknownOutcome {
+        idempotency_key: String,
+        reason: String,
+    },
     Failed {
         error: String,
     },

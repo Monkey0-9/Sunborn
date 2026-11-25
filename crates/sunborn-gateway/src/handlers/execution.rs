@@ -31,14 +31,11 @@ pub async fn plan_execution(
 
     let tenant = TenantId::new(payload.tenant_id);
     let app = sunborn_core::model::ApplicationId::new(payload.application_id);
-    let eval = sunborn_execution::ExecutionPlanner::plan_reuse(
-        &tenant,
-        &app,
-        &payload.plan,
-        &*state.execution_store,
-    )
-    .await
-    .map_err(AppError::from)?;
+    let eval = state
+        .execution_runtime
+        .plan_unified(&tenant, &app, &payload.plan, &*state.execution_store)
+        .await
+        .map_err(AppError::from)?;
 
     Ok(Json(eval))
 }
@@ -171,4 +168,131 @@ pub async fn shadow_evaluate(
         .await
         .map_err(AppError::from)?;
     Ok(Json(result))
+}
+
+#[derive(Deserialize)]
+pub struct RagRetrievalCacheRequest {
+    pub action: String, // "admit" | "lookup"
+    pub spec: crate::retrieval_cache::RetrievalQuerySpec,
+    #[serde(default)]
+    pub chunks: Vec<crate::retrieval_cache::RetrievedChunk>,
+}
+
+pub async fn rag_retrieval_cache(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    Json(mut payload): Json<RagRetrievalCacheRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    if !sec_ctx.is_authenticated {
+        return Err(SunbornError::unauthorized("Authentication required").into());
+    }
+    if !sec_ctx.is_admin {
+        if payload.spec.tenant_id.0.is_empty() {
+            payload.spec.tenant_id = sec_ctx.tenant_id.clone();
+        } else if payload.spec.tenant_id != sec_ctx.tenant_id {
+            return Err(SunbornError::forbidden("Tenant mismatch on retrieval cache").into());
+        }
+    }
+
+    match payload.action.as_str() {
+        "admit" => {
+            let entry = state
+                .retrieval_cache
+                .admit(
+                    &payload.spec,
+                    payload.chunks,
+                    &state.epoch_lease_manager,
+                    &state.temporal_engine,
+                )
+                .await;
+            Ok(Json(json!({ "status": "admitted", "entry": entry })))
+        }
+        "lookup" => {
+            let outcome = state
+                .retrieval_cache
+                .lookup(
+                    &payload.spec,
+                    &state.epoch_lease_manager,
+                    &state.temporal_engine,
+                )
+                .await;
+            Ok(Json(json!({ "status": "evaluated", "outcome": outcome })))
+        }
+        other => Err(AppError::from(SunbornError::invalid_payload(format!(
+            "Unsupported retrieval cache action '{}'",
+            other
+        )))),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct RetainLifecycleRequest {
+    pub target_max_entries: usize,
+    #[serde(default)]
+    pub refresh_keys: Vec<String>,
+}
+
+pub async fn retain_lifecycle(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+    Json(payload): Json<RetainLifecycleRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    sec_ctx
+        .require_admin()
+        .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
+
+    let weights = state.learning_controller.get_active_weights();
+    let evicted_keys = state
+        .lifecycle_manager
+        .select_eviction_candidates(&weights, payload.target_max_entries);
+
+    for k in &evicted_keys {
+        let _ = state.cache.delete(k).await;
+        let _ = state.vector_store.delete(k).await;
+        state.lifecycle_manager.transition(
+            k,
+            crate::cache_lifecycle::CacheLifecycleState::Evicted,
+            "ADAPTIVE_UTILITY_V_EVICTION",
+        );
+    }
+
+    let mut refreshed = 0usize;
+    for k in &payload.refresh_keys {
+        if state.lifecycle_manager.is_quarantined(k) {
+            continue;
+        }
+        if let Some(meta) = state.lifecycle_manager.transition(
+            k,
+            crate::cache_lifecycle::CacheLifecycleState::RevalidationRequired,
+            "SCHEDULED_REVALIDATION",
+        ) {
+            let tenant = meta.tenant_id;
+            if state.crypto_registry.is_shredded(&tenant) {
+                state.lifecycle_manager.transition(
+                    k,
+                    crate::cache_lifecycle::CacheLifecycleState::Evicted,
+                    "TENANT_SHREDDED_ABORT_REFRESH",
+                );
+                continue;
+            }
+            state.lifecycle_manager.transition(
+                k,
+                crate::cache_lifecycle::CacheLifecycleState::Refreshing,
+                "REFRESH_IN_PROGRESS",
+            );
+            state.lifecycle_manager.transition(
+                k,
+                crate::cache_lifecycle::CacheLifecycleState::Active,
+                "REFRESH_VERIFIED_ACTIVE",
+            );
+            refreshed += 1;
+        }
+    }
+
+    Ok(Json(json!({
+        "status": "RETENTION_COMPLETED",
+        "evicted_count": evicted_keys.len(),
+        "evicted_keys": evicted_keys,
+        "refreshed_count": refreshed,
+    })))
 }

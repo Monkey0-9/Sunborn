@@ -18,13 +18,17 @@
 //! ```
 
 pub mod autonomic;
+pub mod cache_lifecycle;
+pub mod execution_runtime;
 pub mod finops;
+pub mod five_gates;
 pub mod handlers;
 pub mod learning;
 pub mod limits;
 pub mod middleware;
 pub mod origin;
 pub mod quota;
+pub mod retrieval_cache;
 pub mod routing;
 pub mod shadow;
 pub mod state;
@@ -260,10 +264,12 @@ pub fn create_router(state: AppState) -> Router {
         .route("/v1/routing/radix/inspect", get(handlers::radix_inspect))
         .route("/v1/routing/radix/route", post(handlers::radix_route))
         .route("/v1/lifecycle/sweep", post(handlers::sweep_lifecycle))
+        .route("/v1/lifecycle/retain", post(handlers::retain_lifecycle))
         .route(
             "/v1/lifecycle/outbox/replay",
             post(handlers::replay_outbox_dlq),
         )
+        .route("/v1/retrieval/cache", post(handlers::rag_retrieval_cache))
         .route("/v1/security/evaluate", post(handlers::security_evaluate))
         .route("/v1/security/audit", get(handlers::security_audit))
         .route(

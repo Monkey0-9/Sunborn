@@ -60,6 +60,10 @@ impl ShadowEvaluator {
         read_lock(&self.calibrator).calibrated_threshold() as f32
     }
 
+    pub fn observation_count(&self) -> usize {
+        read_lock(&self.calibrator).window_len()
+    }
+
     pub fn record_observation(&self, similarity: f64, semantic_loss: f64) {
         write_lock(&self.calibrator).record_shadow_evaluation(similarity, semantic_loss);
     }
@@ -71,6 +75,22 @@ impl ShadowEvaluator {
         req: &ShadowEvaluationRequest,
         cache_store: &Arc<C>,
         vector_store: &Arc<V>,
+    ) -> Result<ShadowEvaluationResult, SunbornError> {
+        self.evaluate_drift_with_options(req, cache_store, vector_store, true)
+            .await
+    }
+
+    /// Evaluates semantic divergence between cached content and origin execution with
+    /// explicit control over whether drift triggers cache/vector eviction.
+    pub async fn evaluate_drift_with_options<
+        C: ExactCacheStore + ?Sized,
+        V: VectorStore + ?Sized,
+    >(
+        &self,
+        req: &ShadowEvaluationRequest,
+        cache_store: &Arc<C>,
+        vector_store: &Arc<V>,
+        evict_on_drift: bool,
     ) -> Result<ShadowEvaluationResult, SunbornError> {
         SHADOW_EVALUATIONS_TOTAL.fetch_add(1, Ordering::Relaxed);
         let threshold = req.similarity_threshold.unwrap_or(0.85);
@@ -87,19 +107,23 @@ impl ShadowEvaluator {
 
         let status = if is_drift_detected {
             SHADOW_DRIFT_DETECTED_TOTAL.fetch_add(1, Ordering::Relaxed);
-            tracing::warn!(
-                tenant = %req.tenant_id.0,
-                cache_key = %req.cache_key,
-                similarity = %similarity,
-                threshold = %threshold,
-                "SHADOW_DRIFT_DETECTED: Semantic divergence exceeded threshold. Evicting stale entry."
-            );
+            if evict_on_drift {
+                tracing::warn!(
+                    tenant = %req.tenant_id.0,
+                    cache_key = %req.cache_key,
+                    similarity = %similarity,
+                    threshold = %threshold,
+                    "SHADOW_DRIFT_DETECTED: Semantic divergence exceeded threshold. Evicting stale entry."
+                );
 
-            // Auto-evict stale cache entry
-            let _ = cache_store.delete(&req.cache_key).await;
-            let _ = vector_store.delete(&req.cache_key).await;
+                // Auto-evict stale cache entry
+                let _ = cache_store.delete(&req.cache_key).await;
+                let _ = vector_store.delete(&req.cache_key).await;
 
-            "EVICTED_STALE_CACHE".to_string()
+                "EVICTED_STALE_CACHE".to_string()
+            } else {
+                "DRIFT_OBSERVED_REVALIDATED".to_string()
+            }
         } else {
             tracing::info!(
                 tenant = %req.tenant_id.0,

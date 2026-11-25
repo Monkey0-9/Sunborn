@@ -22,12 +22,15 @@ pub struct CounterfactualMetrics {
 pub struct CounterfactualShadowEvaluator;
 
 impl CounterfactualShadowEvaluator {
-    /// Evaluates candidate policy against active policy on an empirical event trace
+    /// Evaluates candidate policy against active policy on an empirical event trace.
+    /// Explicitly classifies `VerifiedFalseHit`, `VerifiedStale`, and `GroundTruthMismatch`
+    /// as unsafe reuses, and excludes `UnverifiedOpinion` from hit-credit accounting.
     pub fn evaluate_counterfactual(
         events: &[VerifiedFeedbackEvent],
         active_weights: &PolicyWeights,
         candidate_policy: &CandidatePolicy,
     ) -> CounterfactualMetrics {
+        let mut total_evaluated = 0;
         let mut active_false_hits = 0;
         let mut candidate_false_hits = 0;
         let mut active_abstentions = 0;
@@ -36,7 +39,11 @@ impl CounterfactualShadowEvaluator {
         let mut candidate_cost_saved_usd = 0.0f64;
 
         for ev in events {
+            if ev.verified_outcome == VerifiedOutcome::UnverifiedOpinion {
+                continue;
+            }
             if let Some(sim) = ev.similarity_score {
+                total_evaluated += 1;
                 let risk = ev.conformal_risk_score.unwrap_or(0.0);
 
                 // Active policy decision
@@ -44,7 +51,7 @@ impl CounterfactualShadowEvaluator {
                     && risk <= active_weights.max_risk_threshold;
 
                 if active_admitted {
-                    if ev.verified_outcome == VerifiedOutcome::VerifiedFalseHit {
+                    if ev.verified_outcome.is_unsafe_reuse() {
                         active_false_hits += 1;
                     }
                 } else {
@@ -56,9 +63,9 @@ impl CounterfactualShadowEvaluator {
                     && risk <= candidate_policy.weights.max_risk_threshold;
 
                 if candidate_admitted {
-                    if ev.verified_outcome == VerifiedOutcome::VerifiedFalseHit {
+                    if ev.verified_outcome.is_unsafe_reuse() {
                         candidate_false_hits += 1;
-                    } else {
+                    } else if ev.verified_outcome.is_admissible_hit() {
                         candidate_tokens_saved += ev.tokens_saved;
                         candidate_cost_saved_usd += ev.cost_saved_usd;
                     }
@@ -82,7 +89,7 @@ impl CounterfactualShadowEvaluator {
             && candidate_policy.evaluation_report.is_statistically_sound;
 
         CounterfactualMetrics {
-            total_evaluated: events.len(),
+            total_evaluated,
             active_policy_false_hits: active_false_hits,
             candidate_policy_false_hits: candidate_false_hits,
             active_abstentions,

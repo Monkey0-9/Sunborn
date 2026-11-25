@@ -299,6 +299,7 @@ pub async fn invalidate_graph_causal(
                 .bump_epoch(uuid)
                 .await
                 .map_err(AppError::from)?;
+            state.temporal_engine.update_document_version(uuid, bumped);
             if bumped > highest_epoch {
                 highest_epoch = bumped;
             }
@@ -346,6 +347,13 @@ pub async fn invalidate_graph_causal(
 
         if !key_failed {
             purged_keys.push(key.to_string());
+            let siblings = state.paraphrase_clusters.invalidate_by_member(key);
+            for sib in siblings {
+                if sib != key {
+                    let _ = state.cache.delete(&sib).await;
+                    let _ = state.vector_store.delete(&sib).await;
+                }
+            }
         }
     }
 

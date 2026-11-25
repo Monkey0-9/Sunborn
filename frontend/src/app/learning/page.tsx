@@ -24,6 +24,10 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { sunbornApi } from "@/lib/api";
+import {
+  ControlPlaneMatrix,
+  type ControlPlanePolicyData,
+} from "@/components/cockpit/control-plane-matrix";
 
 interface CandidatePolicy {
   policy_id: string;
@@ -66,6 +70,7 @@ export default function LearningControllerPage() {
   const [totalFeedbackEvents, setTotalFeedbackEvents] = useState<number>(0);
   const [tenantEvents, setTenantEvents] = useState<number>(0);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [fullPolicyData, setFullPolicyData] = useState<ControlPlanePolicyData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
@@ -86,6 +91,7 @@ export default function LearningControllerPage() {
     setActionError(null);
     try {
       const data = await sunbornApi.getLearningPolicies();
+      setFullPolicyData(data);
       setActivePolicy(data.active_policy);
       setCanaryPolicy(data.canary_policy);
       setTotalFeedbackEvents(data.total_feedback_events || 0);
@@ -518,6 +524,8 @@ export default function LearningControllerPage() {
           </Card>
         </div>
       </div>
+
+      <ControlPlaneMatrix policyData={fullPolicyData} />
     </div>
   );
 }

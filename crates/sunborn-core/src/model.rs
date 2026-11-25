@@ -217,6 +217,60 @@ impl RequestEnvelope {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GateCheckResult {
+    pub passed: bool,
+    pub reason_code: String,
+}
+
+impl GateCheckResult {
+    pub fn pass(reason_code: impl Into<String>) -> Self {
+        Self {
+            passed: true,
+            reason_code: reason_code.into(),
+        }
+    }
+
+    pub fn fail(reason_code: impl Into<String>) -> Self {
+        Self {
+            passed: false,
+            reason_code: reason_code.into(),
+        }
+    }
+}
+
+/// Auditable record of the unified five-gate eligibility contract:
+/// `EligibleReuse = G1 && G2 && G3 && G4 && G5`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FiveGateEvidence {
+    pub g1_identity_equivalence: GateCheckResult,
+    pub g2_context_authorization: GateCheckResult,
+    pub g3_dependency_freshness: GateCheckResult,
+    pub g4_execution_effects: GateCheckResult,
+    pub g5_evidence_policy: GateCheckResult,
+    pub eligible_reuse: bool,
+}
+
+impl FiveGateEvidence {
+    pub fn evaluate(
+        g1: GateCheckResult,
+        g2: GateCheckResult,
+        g3: GateCheckResult,
+        g4: GateCheckResult,
+        g5: GateCheckResult,
+    ) -> Self {
+        let eligible_reuse = g1.passed && g2.passed && g3.passed && g4.passed && g5.passed;
+        Self {
+            g1_identity_equivalence: g1,
+            g2_context_authorization: g2,
+            g3_dependency_freshness: g3,
+            g4_execution_effects: g4,
+            g5_evidence_policy: g5,
+            eligible_reuse,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DecisionRecord {
     pub action: DecisionAction,
@@ -229,6 +283,8 @@ pub struct DecisionRecord {
     pub policy_version: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub five_gate_evidence: Option<FiveGateEvidence>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -2915,13 +2915,18 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "subtle",
  "sunborn-cache",
  "sunborn-core",
  "sunborn-db",
+ "sunborn-effects",
  "sunborn-execution",
+ "sunborn-freshness",
  "sunborn-identity",
  "sunborn-invalidation",
+ "sunborn-learning",
  "sunborn-semantic",
+ "sunborn-threat",
  "thiserror",
  "tokio",
  "tower",
@@ -3037,6 +3042,7 @@ dependencies = [
  "sunborn-identity",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

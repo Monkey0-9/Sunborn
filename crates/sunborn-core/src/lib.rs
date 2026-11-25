@@ -35,7 +35,7 @@ pub use finops::{
     MicroPaise, MicroUnits, ModelPricing, SpendVelocityController,
 };
 pub use model::{
-    ApplicationId, CachePath, CorrectnessTier, DecisionAction, DecisionRecord, RequestEnvelope,
-    RequestId, ResponseEnvelope, TenantId, ToolDefinition,
+    ApplicationId, CachePath, CorrectnessTier, DecisionAction, DecisionRecord, FiveGateEvidence,
+    GateCheckResult, RequestEnvelope, RequestId, ResponseEnvelope, TenantId, ToolDefinition,
 };
 pub use telemetry::init_tracing;

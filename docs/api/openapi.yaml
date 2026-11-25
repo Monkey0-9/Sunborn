@@ -2087,6 +2087,38 @@ paths:
         '403':
           description: Administrative privileges required
 
+  /v1/lifecycle/retain:
+    post:
+      summary: Execute Adaptive Utility Eviction
+      description: Evaluates utility scores V_i using active policy weights and evicts lowest-utility entries down to target_max_entries.
+      tags:
+        - Operations
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Retention evaluation completed
+        '401':
+          description: Unauthorized
+        '403':
+          description: Administrative privileges required
+
+  /v1/retrieval/cache:
+    post:
+      summary: Separate RAG Retrieval-Result Cache (Admit or Lookup)
+      description: Admits or looks up retrieved document chunks independently of answer caching with index, filter, embedding, ACL, and epoch checks.
+      tags:
+        - Operations
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Retrieval cache outcome returned
+        '401':
+          description: Unauthorized
+
   /v1/lifecycle/outbox/replay:
     post:
       summary: Replay Outbox Dead-Letter Events

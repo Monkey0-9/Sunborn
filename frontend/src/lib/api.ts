@@ -245,8 +245,23 @@ export const sunbornApi = {
       () =>
         request<{
           tenant_id: string;
+          storage_tier?: string;
+          policy_storage_tier?: string;
+          learning_store_durable?: boolean;
+          policy_registry_durable?: boolean;
           active_policy: any;
           canary_policy: any;
+          canary_metrics?: any;
+          shadow_conformal_observations?: number;
+          shadow_conformal_threshold?: number;
+          paraphrase_clusters_count?: number;
+          telemetry_observations?: number;
+          telemetry_hit_rate?: number;
+          workload_tvd_drift?: number;
+          workload_drift_detected?: boolean;
+          retrieval_cache_entries?: number;
+          quarantined_entries?: number;
+          timing_summary?: Record<string, [number, number, number]>;
           tenant_feedback_events: number;
           total_feedback_events: number;
           audit_trail: any[];

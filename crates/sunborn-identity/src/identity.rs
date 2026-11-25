@@ -154,6 +154,14 @@ impl IdentityEngine {
             hasher.update(b"|msgs=none");
         }
 
+        // State-Complete Dimension 11: Principal & Session Scope Isolation (when supplied)
+        if let Some(session_id) = req.metadata.get("session_id").and_then(|v| v.as_str()) {
+            hasher.update(format!("|session={}", session_id).as_bytes());
+        }
+        if let Some(user_id) = req.metadata.get("user_id").and_then(|v| v.as_str()) {
+            hasher.update(format!("|user={}", user_id).as_bytes());
+        }
+
         let hash_bytes = hasher.finalize();
         let hash = hex::encode(hash_bytes);
         let key = format!(
@@ -166,6 +174,118 @@ impl IdentityEngine {
             hash,
             policy_version: policy_version.to_string(),
         }
+    }
+
+    /// Server-derived canonical conversation & context digest (§10).
+    /// Returns `None` only for stateless/context-free requests unless `context_free_share=true`.
+    pub fn compute_context_digest(req: &RequestEnvelope) -> Option<String> {
+        if let Some(explicit) = req.metadata.get("context_digest").and_then(|v| v.as_str()) {
+            return Some(explicit.to_string());
+        }
+        let context_free_share = req
+            .metadata
+            .get("context_free_share")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        if context_free_share && req.messages.is_empty() {
+            return None;
+        }
+
+        let session_id = req.metadata.get("session_id").and_then(|v| v.as_str());
+        let user_id = req.metadata.get("user_id").and_then(|v| v.as_str());
+        let summary_ver = req.metadata.get("summary_version").and_then(|v| v.as_str());
+
+        let has_context = !req.messages.is_empty()
+            || req.system_prompt.is_some()
+            || !req.tools.is_empty()
+            || !req.retrieval_context_hashes.is_empty()
+            || session_id.is_some()
+            || user_id.is_some()
+            || summary_ver.is_some();
+        if !has_context {
+            return None;
+        }
+
+        let mut h = Sha256::new();
+        h.update(req.tenant_id.0.as_bytes());
+        h.update(b"|");
+        h.update(req.application_id.0.as_bytes());
+        if let Some(sid) = session_id {
+            h.update(format!("|sid={sid}").as_bytes());
+        }
+        if let Some(uid) = user_id {
+            h.update(format!("|uid={uid}").as_bytes());
+        }
+        if let Some(sv) = summary_ver {
+            h.update(format!("|sumv={sv}").as_bytes());
+        }
+        if let Some(ref sys) = req.system_prompt {
+            h.update(format!("|sys={}", canonicalize_text(sys)).as_bytes());
+        }
+        for msg in &req.messages {
+            h.update(msg.role.as_bytes());
+            h.update(b":");
+            if let Some(ref c) = msg.content {
+                h.update(canonicalize_text(c).as_bytes());
+            }
+            if let Some(ref tc) = msg.tool_calls {
+                h.update(serde_json::to_string(tc).unwrap_or_default().as_bytes());
+            }
+            if let Some(ref tcid) = msg.tool_call_id {
+                h.update(tcid.as_bytes());
+            }
+            h.update(b"\n");
+        }
+        if !req.tools.is_empty() {
+            let mut tools = req.tools.clone();
+            tools.sort_by(|a, b| a.name.cmp(&b.name));
+            h.update(serde_json::to_string(&tools).unwrap_or_default().as_bytes());
+        }
+        if !req.retrieval_context_hashes.is_empty() {
+            let mut ctx = req.retrieval_context_hashes.clone();
+            ctx.sort();
+            h.update(ctx.join(",").as_bytes());
+        }
+        Some(format!("ctxv1:{}", hex::encode(h.finalize())))
+    }
+
+    /// Canonical application config & model parameter fingerprint (§3.3 & §3.4).
+    pub fn compute_config_fingerprint(req: &RequestEnvelope) -> String {
+        let mut h = Sha256::new();
+        h.update(req.model.as_bytes());
+        if let Some(ref sys) = req.system_prompt {
+            h.update(format!("|sys={}", canonicalize_text(sys)).as_bytes());
+        }
+        h.update(
+            format!(
+                "|t={:.4}|p={:.4}",
+                req.temperature.unwrap_or(0.0),
+                req.top_p.unwrap_or(1.0)
+            )
+            .as_bytes(),
+        );
+        if let Some(m) = req.max_tokens {
+            h.update(format!("|m={m}").as_bytes());
+        }
+        if !req.stop_sequences.is_empty() {
+            let mut stops = req.stop_sequences.clone();
+            stops.sort();
+            h.update(format!("|stop={}", stops.join(",")).as_bytes());
+        }
+        if !req.tools.is_empty() {
+            let mut tools = req.tools.clone();
+            tools.sort_by(|a, b| a.name.cmp(&b.name));
+            h.update(serde_json::to_string(&tools).unwrap_or_default().as_bytes());
+        }
+        if let Some(ref rf) = req.response_format {
+            h.update(format!("|rf={rf}").as_bytes());
+        }
+        for k in ["app_config_version", "safety_policy", "retrieval_config"] {
+            if let Some(val) = req.metadata.get(k) {
+                h.update(format!("|{k}={val}").as_bytes());
+            }
+        }
+        format!("cfgv1:{}", hex::encode(h.finalize()))
     }
 }
 

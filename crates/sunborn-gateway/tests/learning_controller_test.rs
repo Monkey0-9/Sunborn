@@ -21,27 +21,51 @@ fn test_layer1_feedback_hmac_signature_verification_and_tamper_detection() {
     let secret = b"test-secret-key-for-hmac";
     let event_id = "ev-1001";
     let tenant_id = TenantId::new("tenant-learning-1");
+    let app_id = ApplicationId::new("app-test");
     let cache_key = "cache:key:sha256:123";
+    let decision_type = "exact_hit";
+    let prompt_hash = "hash_abc";
+    let similarity_score = Some(0.95);
+    let conformal_risk_score = Some(0.01);
+    let latency_ms = 1.2;
+    let tokens_saved = 50;
+    let cost_saved_usd = 0.001;
     let outcome = VerifiedOutcome::VerifiedCorrect;
+    let verification_source = "origin_execution";
     let ts = Utc::now();
 
-    let valid_signature =
-        VerifiedFeedbackEvent::sign(event_id, &tenant_id, cache_key, &outcome, &ts, secret);
+    let valid_signature = VerifiedFeedbackEvent::sign(
+        event_id,
+        &tenant_id,
+        &app_id,
+        cache_key,
+        decision_type,
+        prompt_hash,
+        similarity_score,
+        conformal_risk_score,
+        latency_ms,
+        tokens_saved,
+        cost_saved_usd,
+        &outcome,
+        verification_source,
+        &ts,
+        secret,
+    );
 
     let mut event = VerifiedFeedbackEvent {
         event_id: event_id.to_string(),
         tenant_id: tenant_id.clone(),
-        application_id: ApplicationId::new("app-test"),
+        application_id: app_id.clone(),
         cache_key: cache_key.to_string(),
-        decision_type: "exact_hit".to_string(),
-        prompt_hash: "hash_abc".to_string(),
-        similarity_score: Some(0.95),
-        conformal_risk_score: Some(0.01),
-        latency_ms: 1.2,
-        tokens_saved: 50,
-        cost_saved_usd: 0.001,
+        decision_type: decision_type.to_string(),
+        prompt_hash: prompt_hash.to_string(),
+        similarity_score,
+        conformal_risk_score,
+        latency_ms,
+        tokens_saved,
+        cost_saved_usd,
         verified_outcome: outcome,
-        verification_source: "origin_execution".to_string(),
+        verification_source: verification_source.to_string(),
         hmac_signature: valid_signature.clone(),
         timestamp: ts,
     };
@@ -69,7 +93,28 @@ fn test_layer1_feedback_hmac_signature_verification_and_tamper_detection() {
     assert!(event.verify_signature(secret).is_err());
     event.tenant_id = tenant_id;
 
-    // 5. Verify untrusted sources and opinions
+    // 5. Tamper with previously unsigned fields (application_id, similarity_score, prompt_hash, verification_source, cost_saved_usd)
+    event.application_id = ApplicationId::new("app-tampered");
+    assert!(event.verify_signature(secret).is_err());
+    event.application_id = app_id;
+
+    event.similarity_score = Some(0.50);
+    assert!(event.verify_signature(secret).is_err());
+    event.similarity_score = similarity_score;
+
+    event.prompt_hash = "tampered_prompt_hash".to_string();
+    assert!(event.verify_signature(secret).is_err());
+    event.prompt_hash = prompt_hash.to_string();
+
+    event.verification_source = "human_audit".to_string();
+    assert!(event.verify_signature(secret).is_err());
+    event.verification_source = verification_source.to_string();
+
+    event.cost_saved_usd = 999.0;
+    assert!(event.verify_signature(secret).is_err());
+    event.cost_saved_usd = cost_saved_usd;
+
+    // 6. Verify untrusted sources and opinions
     event.hmac_signature = valid_signature;
     event.verified_outcome = VerifiedOutcome::UnverifiedOpinion;
     assert!(!event.is_trustworthy());
@@ -272,8 +317,9 @@ fn test_layer3_offline_calibration_on_held_out_splits() {
     let tenant_id = TenantId::new("tenant-calib");
     let mut events = Vec::new();
 
-    for i in 0..100 {
-        let is_false_hit = i < 5; // 5% false hits in dataset
+    // 1000 events -> 700 train, 300 held-out (meets strict 95% Clopper-Pearson <= 1% bound)
+    for i in 0..1000 {
+        let is_false_hit = i < 50; // 5% false hits in training slice only (high risk / low sim)
         events.push(VerifiedFeedbackEvent {
             event_id: format!("ev-{}", i),
             tenant_id: tenant_id.clone(),
@@ -301,11 +347,62 @@ fn test_layer3_offline_calibration_on_held_out_splits() {
         .expect("offline calibration should succeed on >=10 samples");
 
     assert_eq!(candidate.version, 2);
-    assert_eq!(candidate.evaluation_report.total_samples, 100);
-    assert_eq!(candidate.evaluation_report.training_samples, 70);
-    assert_eq!(candidate.evaluation_report.held_out_samples, 30);
+    assert_eq!(candidate.evaluation_report.total_samples, 1000);
+    assert_eq!(candidate.evaluation_report.training_samples, 700);
+    assert_eq!(candidate.evaluation_report.held_out_samples, 300);
     assert!(candidate.evaluation_report.is_statistically_sound);
+    assert!(
+        candidate
+            .evaluation_report
+            .held_out_false_hit_upper_bound_95
+            <= 1.0
+    );
     assert!(candidate.weights.min_similarity_threshold >= 0.85);
+
+    // Small dataset (100 samples -> 30 held-out) must NOT pass strict 1% soundness gate
+    let small_candidate = OfflineCalibrator::calibrate_policy(&events[900..1000], 3)
+        .expect("calibration computes report");
+    assert!(
+        !small_candidate.evaluation_report.is_statistically_sound,
+        "30 held-out samples cannot certify a <=1% false-hit bound"
+    );
+
+    // VerifiedStale and GroundTruthMismatch must be classified as unsafe hits, never VerifiedCorrect
+    let mut mixed_outcomes = Vec::new();
+    for i in 0..100 {
+        let outcome = match i % 10 {
+            0 => VerifiedOutcome::VerifiedStale,
+            1 => VerifiedOutcome::GroundTruthMismatch,
+            _ => VerifiedOutcome::VerifiedCorrect,
+        };
+        mixed_outcomes.push(VerifiedFeedbackEvent {
+            event_id: format!("ev-mixed-{}", i),
+            tenant_id: tenant_id.clone(),
+            application_id: ApplicationId::new("app-calib"),
+            cache_key: format!("key-mixed-{}", i),
+            decision_type: "semantic_hit".to_string(),
+            prompt_hash: format!("prompt-mixed-{}", i),
+            similarity_score: Some(0.95),
+            conformal_risk_score: Some(0.05),
+            latency_ms: 2.0,
+            tokens_saved: 50,
+            cost_saved_usd: 0.001,
+            verified_outcome: outcome,
+            verification_source: "origin_execution".to_string(),
+            hmac_signature: "sig".to_string(),
+            timestamp: Utc::now(),
+        });
+    }
+    let mixed_candidate = OfflineCalibrator::calibrate_policy(&mixed_outcomes, 4).unwrap();
+    assert!(mixed_candidate.evaluation_report.held_out_stale_hits > 0);
+    assert!(
+        mixed_candidate
+            .evaluation_report
+            .held_out_ground_truth_mismatches
+            > 0
+    );
+    assert!(mixed_candidate.evaluation_report.held_out_false_hit_rate > 1.0);
+    assert!(!mixed_candidate.evaluation_report.is_statistically_sound);
 }
 
 #[test]
@@ -427,6 +524,7 @@ fn test_layer4_counterfactual_shadow_evaluator() {
             held_out_abstention_rate: 0.1,
             estimated_cost_reduction_pct: 12.5,
             is_statistically_sound: true,
+            ..Default::default()
         },
         is_promoted: false,
     };
@@ -488,6 +586,7 @@ fn test_layer5_canary_rollout_invariants_and_routing() {
             held_out_abstention_rate: 0.0,
             estimated_cost_reduction_pct: 0.0,
             is_statistically_sound: false,
+            ..Default::default()
         },
         is_promoted: false,
     };
@@ -517,6 +616,7 @@ fn test_layer5_canary_rollout_invariants_and_routing() {
             held_out_abstention_rate: 0.0,
             estimated_cost_reduction_pct: 10.0,
             is_statistically_sound: true,
+            ..Default::default()
         },
         is_promoted: false,
     };
@@ -547,6 +647,7 @@ fn test_layer5_canary_rollout_invariants_and_routing() {
             held_out_abstention_rate: 0.02,
             estimated_cost_reduction_pct: 12.0,
             is_statistically_sound: true,
+            ..Default::default()
         },
         is_promoted: false,
     };
@@ -589,6 +690,7 @@ fn test_layer5_canary_rollout_promotion_and_automated_rollback() {
             held_out_abstention_rate: 0.05,
             estimated_cost_reduction_pct: 15.0,
             is_statistically_sound: true,
+            ..Default::default()
         },
         is_promoted: false,
     };
@@ -761,55 +863,71 @@ async fn test_learning_http_api_endpoints_full_lifecycle() {
 
     assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
 
-    // 3. Record 12 verified feedback events for admin_tenant to enable calibration
+    // 3. Record 1000 verified feedback events for admin_tenant to satisfy strict 95% Clopper-Pearson <= 1% bound
     let secret = &state.learning_hmac_secret;
-    for i in 0..12 {
+    let admin_app = ApplicationId::new("app-admin");
+    for i in 0..1000 {
         let event_id = format!("ev-api-{}", i);
         let cache_key = format!("cache:test:{}", i);
+        let decision_type = "semantic_hit";
+        let prompt_hash = format!("hash_{}", i);
         let outcome = VerifiedOutcome::VerifiedCorrect;
         let ts = Utc::now();
         let sig = VerifiedFeedbackEvent::sign(
             &event_id,
             &admin_tenant,
+            &admin_app,
             &cache_key,
+            decision_type,
+            &prompt_hash,
+            Some(0.96),
+            Some(0.01),
+            1.5,
+            40,
+            0.001,
             &outcome,
+            "origin_execution",
             &ts,
             secret,
         );
 
-        let fb_payload = json!({
-            "event_id": event_id,
-            "tenant_id": "tenant-system",
-            "application_id": "app-admin",
-            "cache_key": cache_key,
-            "decision_type": "semantic_hit",
-            "prompt_hash": format!("hash_{}", i),
-            "similarity_score": 0.96,
-            "conformal_risk_score": 0.01,
-            "latency_ms": 1.5,
-            "tokens_saved": 40,
-            "cost_saved_usd": 0.001,
-            "verified_outcome": "VerifiedCorrect",
-            "verification_source": "origin_execution",
-            "hmac_signature": sig,
-            "timestamp": ts
-        });
+        let event = VerifiedFeedbackEvent {
+            event_id,
+            tenant_id: admin_tenant.clone(),
+            application_id: admin_app.clone(),
+            cache_key,
+            decision_type: decision_type.to_string(),
+            prompt_hash,
+            similarity_score: Some(0.96),
+            conformal_risk_score: Some(0.01),
+            latency_ms: 1.5,
+            tokens_saved: 40,
+            cost_saved_usd: 0.001,
+            verified_outcome: outcome,
+            verification_source: "origin_execution".to_string(),
+            hmac_signature: sig,
+            timestamp: ts,
+        };
 
-        let res = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/v1/learning/feedback")
-                    .header("Authorization", admin_auth)
-                    .header("Content-Type", "application/json")
-                    .body(Body::from(fb_payload.to_string()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(res.status(), StatusCode::CREATED);
+        if i < 5 {
+            // Exercise live HTTP POST /v1/learning/feedback endpoint for full HMAC & validation coverage
+            let res = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/v1/learning/feedback")
+                        .header("Authorization", admin_auth)
+                        .header("Content-Type", "application/json")
+                        .body(Body::from(serde_json::to_string(&event).unwrap()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(res.status(), StatusCode::CREATED);
+        } else {
+            state.learning_store.record_event(event).unwrap();
+        }
     }
 
     // 4. POST /v1/learning/calibrate
@@ -1055,6 +1173,7 @@ async fn test_live_policy_driven_decision_engine_dynamic_threshold_evaluation() 
             held_out_abstention_rate: 0.05,
             estimated_cost_reduction_pct: 10.0,
             is_statistically_sound: true,
+            ..Default::default()
         },
         is_promoted: false,
     };
@@ -1108,6 +1227,7 @@ async fn test_live_policy_driven_decision_engine_dynamic_threshold_evaluation() 
             held_out_abstention_rate: 0.02,
             estimated_cost_reduction_pct: 35.0,
             is_statistically_sound: true,
+            ..Default::default()
         },
         is_promoted: false,
     };

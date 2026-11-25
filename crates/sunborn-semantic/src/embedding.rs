@@ -97,6 +97,9 @@ pub trait EmbeddingProvider: Send + Sync {
     fn is_deterministic(&self) -> bool {
         false
     }
+    fn embedding_fingerprint(&self) -> String {
+        "emb:unknown".to_string()
+    }
     async fn health_check(&self) -> Result<()> {
         Ok(())
     }
@@ -109,6 +112,9 @@ impl EmbeddingProvider for std::sync::Arc<dyn EmbeddingProvider> {
     }
     fn is_deterministic(&self) -> bool {
         (**self).is_deterministic()
+    }
+    fn embedding_fingerprint(&self) -> String {
+        (**self).embedding_fingerprint()
     }
     async fn health_check(&self) -> Result<()> {
         (**self).health_check().await
@@ -233,6 +239,10 @@ impl EmbeddingProvider for DeterministicEmbeddingProvider {
         true
     }
 
+    fn embedding_fingerprint(&self) -> String {
+        format!("lsh-v1:dim={}", self.inner.dimension)
+    }
+
     async fn embed(&self, text: &str) -> Result<Vector> {
         self.inner.embed(text).await
     }
@@ -272,6 +282,10 @@ impl HttpEmbeddingProvider {
 
 #[async_trait]
 impl EmbeddingProvider for HttpEmbeddingProvider {
+    fn embedding_fingerprint(&self) -> String {
+        format!("http:{}", self.model)
+    }
+
     async fn embed(&self, text: &str) -> Result<Vector> {
         let mut url = self.endpoint_url.trim_end_matches('/').to_string();
         if !url.ends_with("/embeddings") {
@@ -470,5 +484,50 @@ mod tests {
         let is_simd = has_hardware_simd();
         // Function must evaluate safely without CPU exception or crash
         let _ = is_simd;
+    }
+
+    #[tokio::test]
+    async fn test_http_embedding_provider_roundtrip_and_health_check() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let server = tokio::spawn(async move {
+            for _ in 0..2 {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut buf = [0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap();
+                let req_str = String::from_utf8_lossy(&buf[..n]).to_string();
+                assert!(req_str.contains("/embeddings"));
+                assert!(req_str
+                    .to_lowercase()
+                    .contains("authorization: bearer test-embed-key"));
+
+                let body = serde_json::json!({
+                    "data": [{ "embedding": [0.6, 0.8, 0.0] }]
+                })
+                .to_string();
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                socket.write_all(resp.as_bytes()).await.unwrap();
+            }
+        });
+
+        let provider = HttpEmbeddingProvider::new(
+            format!("http://{}", addr),
+            "text-embedding-3-small",
+            Some("test-embed-key".to_string()),
+        );
+        provider.health_check().await.unwrap();
+        let vec = provider.embed("semantic caching test").await.unwrap();
+        assert_eq!(vec, vec![0.6, 0.8, 0.0]);
+        assert!(!provider.is_deterministic());
+
+        server.await.unwrap();
     }
 }
