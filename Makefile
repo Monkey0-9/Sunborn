@@ -49,8 +49,7 @@ build-frontend:
 	npm run build --prefix frontend
 
 test-sdk:
-	PYTHONPATH=sdk/python $(PYTHON) -m unittest sdk/python/test_sunborn_agent.py
-	PYTHONPATH=sdk/python $(PYTHON) -m unittest discover -s sdk/python/tests -v
+	cd sdk/python && $(PYTHON) -m pytest tests test_sunborn_agent.py -q
 
 lint-python:
 	cd sdk/python && $(PYTHON) -m ruff check .

@@ -2,7 +2,7 @@
 
 **Total Tracked Items:** 61 (47 Audit Defects + 14 Phase 6 Five-Gate Architecture Epics)
 
-**Remediated & Verified In-Tree:** 61 / 61 (100% Phase 1–6 Hardening; note external Windows 11 clean-host/Authenticode release steps #21/#23 and external DB/neural staging endpoints remain outside the local runner boundary)
+**Remediated & Verified In-Tree:** 59 / 61 (Phase 1–6 in-tree hardening complete; Issue #21 clean Windows 11 acceptance and Issue #23 certificate-signed artifact remain **PARTIAL** and are not counted as verified)
 
 **Open P0 / P1 In-Tree Defects:** 0
 
@@ -115,7 +115,7 @@ Issue #19 P1 High   CLOSED  FinOps Routing   Separated speculative prefetch pred
                                              measured execution; zero synthetic savings claims
 Issue #20 P1 High   CLOSED  Release Policy   Reconciled README release wording and claims with  scripts/check_launch_docs.py
                                              authoritative STATUS.md pilot gate (SSOT)
-Issue #21 P1 High   CLOSED  Distribution     Published clean-machine Windows desktop package    scripts/package-distribution.ps1
+Issue #21 P1 High   PARTIAL Distribution     CI release smoke job exists; independent clean Windows 11 acceptance still outstanding    scripts/package-distribution.ps1
                                              with SHA-256 sums and CI release workflow job
 Issue #22 P1 High   CLOSED  Security CI      Upgraded Semgrep SAST action, resolved severity    scripts/test_semgrep_gate.py
                                              incompatibility and added fail-closed verification
@@ -193,11 +193,11 @@ Issue #17 P1 High   CLOSED  Deployment       Configured KMS provider & persisten
                                              in production Compose manifests                    
 Issue #20 P1 High   CLOSED  Documentation    Reconciled README & launch docs to authoritative   verify_public_launch.py
                                              Stage 0 Controlled Pilot SSOT (80.8% recall)
-Issue #21 P1 High   CLOSED  Distribution     Published clean-machine Windows desktop package    scripts/package-distribution.ps1
+Issue #21 P1 High   PARTIAL Distribution     CI release smoke job exists; independent clean Windows 11 acceptance still outstanding    scripts/package-distribution.ps1
                                              with SHA-256 & SHA-512, verified via test script   scripts/verify-desktop-package.ps1
 Issue #22 P1 High   CLOSED  Security CI      Pinned Semgrep CLI to semgrep==1.178.0 in          .github/workflows/security.yml
                                              workflow to eliminate version drift
-Issue #23 P1 High   CLOSED  Provenance       Deterministic CycloneDX v1.5 SBOM, dual hashes    scripts/verify-desktop-package.ps1
+Issue #23 P1 High   PARTIAL Provenance       Deterministic CycloneDX v1.5 SBOM, dual hashes; no signed artifact yet    scripts/verify-desktop-package.ps1
                                              SHA-256/SHA-512, BUILD-METADATA.json bundled       generate_sbom.py
 =========================================================================================================
 ```

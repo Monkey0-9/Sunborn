@@ -290,7 +290,7 @@ each artifact; the ratios between configurations travel better than the absolute
 | **Gateway stack, 16 concurrent workers** | 11,116.0 req/s · P50 1.368 ms · P99 2.398 ms over 10,000 requests · 0 failures                                                          | [`benchmarks/production_soak_results.json`](benchmarks/production_soak_results.json)                     |
 | **Guardrail benchmark, N = 320**         | 97 correct reuses · **0 false hits on 200 hard negatives** · precision 100% [95% Wilson 96.2–100] · recall 80.8% [72.9–86.9]            | [`research/results/heldout_generalization_run.json`](research/results/heldout_generalization_run.json)   |
 | **Comparative evaluation, 25 queries**   | 32.0% verified hit rate · 0.0% false hits · 0.0% stale reads · 31.97% net spend reduction                                               | [`benchmarks/results/competitive_benchmark_run.json`](benchmarks/results/competitive_benchmark_run.json) |
-| **Test surface**                         | 431 Rust + 67 frontend + 4 TypeScript SDK + 65 Python tests · 10 routes with 0 serious/critical axe violations · 271 verified tab stops | [`docs/STATUS.md`](docs/STATUS.md)                                                                       |
+| **Test surface**                         | 463 Rust (455 tests + 8 doctests) + 67 frontend + 4 TypeScript SDK + 65 Python tests · 10 routes with 0 serious/critical axe violations · 271 verified tab stops | [`docs/STATUS.md`](docs/STATUS.md)                                                                       |
 | **21 Enterprise Quality Attributes**     | 21/21 verified with architectural invariants, formal proofs, and audit commands                                                         | [`docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`](docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md)               |
 | **8 In-Tree Pre-Flight Launch Gates**    | 8/8 automated gates verified passing in strict mode                                                                                     | [`scripts/verify_public_launch.py`](scripts/verify_public_launch.py)                                     |
 | **Formal models**                        | 3 TLC configurations, no errors (2,245 / 601 / 21 states explored)                                                                      | [`formal/`](formal/), [`scripts/run_tlaplus.sh`](scripts/run_tlaplus.sh)                                 |
@@ -478,7 +478,7 @@ The Sunborn Control Plane (`frontend/`) is a Next.js 15 App Router cockpit engin
   - `/security` — Adversarial Prompt Injection Defense & Structural AST Negation Guardrails
   - `/ceremony` — Ed25519 Public Key Ceremony & Hardware Security Module Attestation
   - `/login` — Secure Session Management & BYOK Session Credentials
-- **Accessibility & Compliance**: 100% WCAG 2.2 AA verified (0 axe violations across all 10 routes) with 250+ tab stops, visible focus rings, and skip links.
+- **Accessibility**: WCAG 2.2 AA target. The automated axe check reports 0 violation groups across the 10 control-plane routes, and the keyboard audit verifies visible focus rings and skip links. This is automated evidence, not a third-party WCAG certification.
 
 **Launch the Cockpit**:
 ```bash
@@ -597,11 +597,11 @@ settled ledger row, zero dangling reservations).
 | **DPDP Act 2023 (India)** | Section 6 Notice & Consent management with salted SHA-256 zero-PII audit trail, Section 12(3) Right to Erasure / Right to be Forgotten with cryptographic purge across exact cache, vector memory, and lineage graph. Endpoints: `POST /v1/governance/dpdp/consent`, `POST /v1/governance/dpdp/erasure`, `GET /v1/governance/dpdp/audit`. |
 | **CERT-In Cyber Security Directions** | Rule 20(1) Annexure 1 incident logging format with NTP-synchronized microsecond timestamps, 6-hour reporting window format. Endpoint: `GET /v1/governance/cert-in/incidents`. |
 | **RBI Data Localization Directive** | Verified data residency in sovereign Indian cloud regions (`ap-south-1` Mumbai & `ap-south-2` Hyderabad), refusing off-shore data replication. Endpoint: `GET /v1/governance/rbi/localization`. |
-| **ISO/IEC/IEEE 29119** | Test process and evidence: 12-gate build pipeline, 8-gate launch verification, 567 automated tests (431 Rust + 67 frontend + 65 Python SDK + 4 TS SDK), TLA+ models. |
+| **ISO/IEC/IEEE 29119** | Test process and evidence: 12-gate build pipeline, 8-gate launch verification, 599 automated tests (463 Rust + 67 frontend + 65 Python SDK + 4 TS SDK), TLA+ models. |
 | **IEEE 1012 / 730 / 42010 / 754** | Verification and validation gate, zero-warning lint policy, as-built architecture description, strict floating-point edge handling with micro-unit ledger. |
 | **NIST SP 800-218 (SSDF)** | Deterministic CycloneDX SBOM (369 components), `cargo audit` in CI, pinned toolchain. |
 | **OWASP API Top 10 / ASVS L3** | Route-by-route authorization contract enforced in the build, CSRF origin pinning, path-traversal rejection, rate-limit lockout, STRIDE threat model in [`docs/security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md`](docs/security/SECURITY_ASSESSMENT_AND_THREAT_MODEL.md). |
-| **WCAG 2.2 AA** | 10 control-plane routes, 0 serious/critical axe violations, keyboard and focus audit with 250+ tab stops. |
+| **WCAG 2.2 AA (automated evidence)** | 10 control-plane routes, 0 serious/critical axe violations, keyboard and focus audit with 250+ tab stops; manual screen-reader conformance and third-party certification are not claimed. |
 
 Two guarantees enforced by the build rather than by discipline:
 
@@ -750,8 +750,8 @@ python scripts/verify_public_launch.py --strict
 
 | | |
 | :--- | :--- |
-| **Release verdict** | **STAGE 0 PILOT APPROVED — 100% In-Tree & CI Verified**; Stage 1 Private Beta & Stage 2 Public Launch Gated on External Staging ([`docs/launch/05_PRELAUNCH_CHECKLIST.md`](docs/launch/05_PRELAUNCH_CHECKLIST.md)) |
-| **Verification status** | **567 automated tests passing** (431 Rust + 67 frontend + 65 Python SDK + 4 TS SDK), 10 routes tested (0 axe violations, 271 tab stops), 11/11 CI quality gates passed, 8/8 pre-flight launch gates passed |
+| **Release verdict** | **STAGE 0 PILOT APPROVED — all in-tree gates pass**; #21 clean Windows 11 acceptance and #23 certificate-signed artifact remain external partials. Stage 1 Private Beta & Stage 2 Public Launch Gated on External Staging ([`docs/launch/05_PRELAUNCH_CHECKLIST.md`](docs/launch/05_PRELAUNCH_CHECKLIST.md)) |
+| **Verification status** | **599 automated tests passing** (463 Rust + 67 frontend + 65 Python SDK + 4 TS SDK), 10 routes tested (0 serious/critical axe violations, 271 tab stops), 11/11 CI quality gates passed, 8/8 pre-flight launch gates passed |
 | **Security mode** | Fail-closed in production; fail-open only in explicit `development` |
 | **Known high/critical CVEs** | 0 |
 | **Current-status authority** | [`docs/STATUS.md`](docs/STATUS.md) — supersedes every badge, score, or readiness claim in older audit documents |

@@ -2,7 +2,7 @@
 
 **Effective:** 2026-11-25
 **Baseline:** `46e8c73` (on top of `6e5b823` and `b2a9476`, including §2.1–§2.4 and Phase 6 `SB-01`–`SB-14` five-gate runtime hardening)
-**Release decision:** **STAGE 0 CONTROLLED PILOT APPROVED — 100% IN-TREE & CI VERIFIED.** All in-tree checks
+**Release decision:** **STAGE 0 CONTROLLED PILOT APPROVED — ALL IN-TREE GATES PASS; TWO EXTERNAL P1 PARTIALS DISCLOSED.** All in-tree checks
 listed in §1 pass on this tree (the full Rust workspace suite across all targets, 67 frontend tests, 4 TypeScript SDK tests, 65 Python SDK tests with ruff/mypy/coverage gates, 8/8 pre-flight launch verification gates, 11/11 CI quality gates), and all
 P0/P1/P2 defects found in the 2026-11-17 audit and 2026-11-20 security audit (Issues #3-#10) are fixed with regression tests. All 21 enterprise system quality attributes are empirically documented and verified in `docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`.
 Two reopened P1 items are **partially met and are not claimed as closed**: Issue #21 (an independent clean Windows 11 installer acceptance run; the CI runner still ships developer toolchains) and Issue #23 (a certificate-signed Windows artifact; CI now requests a real SLSA attestation, but no signing certificate is configured and no signed artifact exists). See `docs/audit/DEFECT_REGISTER.md` §4.
@@ -27,7 +27,7 @@ the actual runs.
 |---|---|---|
 | Formatting | `cargo fmt --all` | exit 0 |
 | Workspace compile | `cargo check --workspace --all-targets` | exit 0, no warnings |
-| Rust tests & doctests | `cargo test --workspace --all-targets -- --test-threads=4` + `cargo test --doc --workspace` | **458 passed, 0 failed, 0 ignored** (86 suites/doctests, exit 0; verified in-tree) |
+| Rust tests & doctests | `cargo test --workspace --all-targets -- --test-threads=4` + `cargo test --doc --workspace` | **463 passed, 0 failed, 0 ignored** (86 suites/doctests, exit 0; verified in-tree) |
 | Lints | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | exit 0, no warnings |
 | Epoch fencing model | `bash scripts/run_tlaplus.sh` | TLC: 2,245 states, 512 distinct, no error |
 | Outbox safety model | same | TLC: 601 states, 134 distinct, no error |
@@ -39,7 +39,7 @@ the actual runs.
 | Python SDK lint & format | `cd sdk/python && python -m ruff check . && python -m ruff format --check .` | exit 0, 0 findings |
 | Python SDK types | `cd sdk/python && python -m mypy --config-file pyproject.toml` | exit 0, 14 source files, 0 errors |
 | Python SDK, Benchmarks & Research tests | `python -m pytest sdk/python/tests sdk/python/test_sunborn_agent.py benchmarks/tests research/tests` | **110 passed, 0 failed** (`65` Python SDK tests at 80.0% coverage + `13` Bench-X + `1` credentials + `8` expand + `23` negative verifier) |
-| Repository hygiene | `python scripts/check_repo_hygiene.py` | **602 tracked files**; 0 scratch, cache, environment, key, or oversized artifacts |
+| Repository hygiene | `python scripts/check_repo_hygiene.py` | **603 tracked files**; 0 scratch, cache, environment, key, or oversized artifacts |
 | Pre-flight launch gates | `python scripts/verify_public_launch.py --strict` | **8/8 audit gates PASS (doc paths, claims, OpenAPI drift, 6 pillars, Python SDK, SBOM, Grafana, K8s manifests)** |
 | 21 Quality Attributes | [`docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`](21_QUALITY_ATTRIBUTES_VERIFICATION.md) | **21/21 Enterprise system quality attributes formally attested and empirically verified** |
 | OpenAPI drift | `python scripts/check_openapi_drift.py` | **79/79 operations match** (including `/v1/retrieval/cache`, `/v1/lifecycle/retain`, `/v1/graph/*`, `/v1/governance/*`, and `/version`) |

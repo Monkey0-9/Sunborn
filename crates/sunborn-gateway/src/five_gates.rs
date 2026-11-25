@@ -53,8 +53,26 @@ impl FiveGateEvaluator {
     /// G4 — Execution-Effect Safety gate.
     /// Evaluates declared `effect_class`, `execution_plan`, and tool annotations through
     /// `sunborn-effects::SubgraphPlanner`. Mutating, non-idempotent, or unknown effects
-    /// prohibit whole-response cache reuse.
+    /// prohibit whole-response cache reuse. A request carrying tools must declare an
+    /// effect class, an execution plan, or an explicit `tools_have_side_effects` value;
+    /// otherwise the effect is unknown and reuse is refused (fail-closed).
     pub fn evaluate_g4_effects(req: &RequestEnvelope) -> GateCheckResult {
+        if !req.tools.is_empty() {
+            let declared_effect = req.metadata.get("effect_class").and_then(|v| v.as_str());
+            let declared_side_effect = req
+                .metadata
+                .get("tools_have_side_effects")
+                .and_then(|v| v.as_bool());
+            let has_execution_plan = req.metadata.get("execution_plan").is_some();
+
+            if declared_side_effect == Some(true) {
+                return GateCheckResult::fail("G4_SIDE_EFFECTING_TOOLS_PRESENT");
+            }
+            if declared_effect.is_none() && declared_side_effect.is_none() && !has_execution_plan {
+                return GateCheckResult::fail("G4_EFFECT_UNCLASSIFIED");
+            }
+        }
+
         if let Some(effect_str) = req.metadata.get("effect_class").and_then(|v| v.as_str()) {
             let parsed = match effect_str {
                 "Pure" => EffectClass::Pure,
@@ -86,16 +104,6 @@ impl FiveGateEvaluator {
                     return GateCheckResult::fail("G4_MALFORMED_EXECUTION_PLAN_ABSTAIN");
                 }
             }
-        }
-
-        if !req.tools.is_empty()
-            && req
-                .metadata
-                .get("tools_have_side_effects")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false)
-        {
-            return GateCheckResult::fail("G4_SIDE_EFFECTING_TOOLS_PRESENT");
         }
 
         GateCheckResult::pass("G4_EFFECT_SAFE")
@@ -165,5 +173,67 @@ impl FiveGateEvaluator {
         g5: GateCheckResult,
     ) -> FiveGateEvidence {
         FiveGateEvidence::evaluate(g1, g2, g3, g4, g5)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn envelope(tool_count: usize, metadata: serde_json::Value) -> RequestEnvelope {
+        let tools: Vec<serde_json::Value> = (0..tool_count)
+            .map(|i| json!({ "name": format!("tool_{i}") }))
+            .collect();
+        serde_json::from_value(json!({
+            "request_id": "00000000-0000-0000-0000-000000000000",
+            "tenant_id": "tenant-a",
+            "application_id": "app-a",
+            "model": "test-model",
+            "prompt": "hello",
+            "tools": tools,
+            "metadata": metadata,
+        }))
+        .expect("test envelope must deserialize")
+    }
+
+    #[test]
+    fn g4_rejects_undeclared_tool_effects() {
+        let result = FiveGateEvaluator::evaluate_g4_effects(&envelope(1, json!({})));
+        assert!(!result.passed);
+        assert_eq!(result.reason_code, "G4_EFFECT_UNCLASSIFIED");
+    }
+
+    #[test]
+    fn g4_accepts_explicitly_pure_tools() {
+        let result =
+            FiveGateEvaluator::evaluate_g4_effects(&envelope(1, json!({ "effect_class": "Pure" })));
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn g4_rejects_declared_side_effecting_tools() {
+        let result = FiveGateEvaluator::evaluate_g4_effects(&envelope(
+            1,
+            json!({ "tools_have_side_effects": true }),
+        ));
+        assert!(!result.passed);
+        assert_eq!(result.reason_code, "G4_SIDE_EFFECTING_TOOLS_PRESENT");
+    }
+
+    #[test]
+    fn g4_rejects_unknown_effect_class() {
+        let result = FiveGateEvaluator::evaluate_g4_effects(&envelope(
+            1,
+            json!({ "effect_class": "MysteryEffect" }),
+        ));
+        assert!(!result.passed);
+        assert!(result.reason_code.contains("G4_EFFECT_PROHIBITS_REUSE"));
+    }
+
+    #[test]
+    fn g4_allows_plain_requests_without_effects() {
+        let result = FiveGateEvaluator::evaluate_g4_effects(&envelope(0, json!({})));
+        assert!(result.passed);
     }
 }
