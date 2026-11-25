@@ -282,3 +282,13 @@ The local working tree on `main` contains untracked production crates (`crates/s
 > - [Issue #38](https://github.com/Monkey0-9/Sunborn/issues/38): `[P2][SDK Parity] TypeScript SDK Lacks Streaming SSE Generator & Covers Only 3 of 77 OpenAPI Operations`
 > - [Issue #39](https://github.com/Monkey0-9/Sunborn/issues/39): `[P2][Database Resilience] PostgreSQL Connection Pool Lacks Configurable Pool Bounds, Max Lifetime, and Idle Timeouts`
 > - [Issue #40](https://github.com/Monkey0-9/Sunborn/issues/40): `[P2][Infrastructure/State] Kubernetes Gateway Deployment Mounts Ephemeral emptyDir Volume for Write-Ahead Log`
+>
+> **Status on `main` (`46e8c73`)**: Issues #31–#40 are implemented and verified in-tree (`DEFECT_REGISTER.md` §6).
+
+---
+
+# Phase 6: Unified Five-Gate Architecture & Enterprise Completeness Epics (SB-01 through SB-14)
+
+> **Status on `main`**: All 14 Phase 6 epics (`SB-01` through `SB-14`) are implemented, wired into the gateway runtime, and verified in-tree (`DEFECT_REGISTER.md` §7). Remote GitHub web issue state synchronization via `gh` requires interactive `gh auth login` / `GH_TOKEN` (not configured on this host).
+> - `SB-01`–`SB-04` (P0): Unified `FiveGateEvaluator` contract, synchronous stale-eviction ordering, feedback HMAC integrity, 5D temporal validity runtime integration, session/context/config/embedding binding, and `EnforcedExecutionRuntime` with `UnknownOutcome` external mutation reconciliation.
+> - `SB-05`–`SB-14` (P1/P2): Claim-level `EvidenceBundle` grounding, separate `RagRetrievalCache` tier (`POST /v1/retrieval/cache`), autonomous background refresh + adaptive utility eviction (`POST /v1/lifecycle/retain`), `CacheThreatEngine` & contradictory feedback quarantine, timing equalizer floor, independent `--state`/`--evidence` checks in `apps/sunborn-verify/src/main.rs`, live unsimulated B0–B6 + leave-one-out benchmarks, frozen-rule unseen `N=160` evaluation, and Control Plane telemetry UI.

@@ -1,14 +1,12 @@
-# Master Defect Register (Remediation Tracking D-01 through D-12 and Issues #3 through #40)
+# Master Defect Register (D-01 through D-12, Issues #3 through #40, and Phase 6 Epics SB-01 through SB-14)
 
-**Total Audit Defects:** 47
+**Total Tracked Items:** 61 (47 Audit Defects + 14 Phase 6 Five-Gate Architecture Epics)
 
-**Remediated & Verified In-Tree:** 47 / 47 (100% Phase 1, Phase 2, Phase 3, Phase 4, and Phase 5 Hardening)
+**Remediated & Verified In-Tree:** 61 / 61 (100% Phase 1–6 Hardening; note external Windows 11 clean-host/Authenticode release steps #21/#23 and external DB/neural staging endpoints remain outside the local runner boundary)
 
-**Open P0 / P1 Defects:** 0
+**Open P0 / P1 In-Tree Defects:** 0
 
-**Active External/Staging Scaling Issues:** 0 (All 47 In-Tree Architectural, Security, Concurrency, and Scale Defects Closed)
-
-**Authoritative Status:** Stage 0 Controlled Pilot Approved; Phase 4 & Phase 5 Extreme-Scale Hardening Verified; Full In-Tree Code Cleanliness & Production Hardening Complete.
+**Authoritative Status:** Stage 0 Controlled Pilot Approved; Phase 4–6 Five-Gate Safety, Lifecycle, Grounding, and Ablation Hardening Verified; GitHub remote issue closing requires external `gh auth` outside this host.
 
 ---
 
@@ -381,3 +379,24 @@ Issue #40 P2 Med    RESOLVED  Infra/State      Kubernetes WAL persistent storage
 - **G1–G5 Unified Five-Gate Contract, Execution Lifecycle & Independent State Verification**:
   - *Remediation*: Added `FiveGateEvidence` / `GateCheckResult` in `sunborn-core`, enforced `EligibleReuse = G1 && G2 && G3 && G4 && G5` inside `crates/sunborn-gateway/src/handlers/execute.rs` (including synchronous stale eviction before origin writeback to eliminate spawn-delete races), fixed asymmetric `Some`/`None` `context_digest` + config/embedding fingerprint checks in `crates/sunborn-semantic/src/decision.rs`, upgraded `crates/sunborn-semantic/src/grounding.rs` with `EvidenceBundle`, claim contradiction/ACL/fail-closed checks, built `crates/sunborn-gateway/src/retrieval_cache.rs` (`POST /v1/retrieval/cache`) and `crates/sunborn-gateway/src/cache_lifecycle.rs` (`POST /v1/lifecycle/retain`) + quarantine wiring, added `UnknownOutcome` external mutation reconciliation to `crates/sunborn-gateway/src/execution_runtime.rs`, added session/user scope isolation (Dimension 11 in `crates/sunborn-identity/src/identity.rs`), wired `sunborn_learning::TelemetryWindow` + `DriftDetector` into `handlers/security.rs`, upgraded `apps/sunborn-verify/src/main.rs` with `--state` / `--evidence` authoritative verification, and authored `research/calibration/external_unseen_eval_dataset.json` (N=160) with frozen `StructuralFingerprint` rules.
   - *Verification*: Verified in-tree by `remediation_e2e_test`, `execution_lifecycle_test`, `permission_freshness_adversarial_test`, `five_gate_benchmark_test`, `enterprise_completeness_test`, `external_generalization_eval`, `route_contract_parity_test`, and `sunborn-verify` unit tests. Multi-node Postgres/Redis/Qdrant cluster execution and live neural embedding provider (`SUNBORN_REAL_EMBEDDING_URL`) benchmarking remain environment-gated outside this Windows host.
+
+---
+
+## 7. Phase 6 Five-Gate Architecture & Research Completeness Epics (SB-01 through SB-14)
+
+| Epic | Scope | Priority | In-Tree Status | Verified Code & Tests |
+|---|---|---|---|---|
+| `SB-01` | Unified five-gate request admission contract | P0 | **RESOLVED (In-Tree)** | `crates/sunborn-gateway/src/five_gates.rs`, `handlers/execute.rs`, `apps/sunborn-verify/src/main.rs` |
+| `SB-02` | Security & feedback HMAC integrity remediation | P0 | **RESOLVED (In-Tree)** | `learning/feedback.rs`, `learning/calibration.rs`, `learning_controller_test.rs` |
+| `SB-03` | Unified 5D temporal freshness integration | P0 | **RESOLVED (In-Tree)** | `sunborn-freshness::TemporalValidityEngine`, `execute.rs`, `permission_freshness_adversarial_test.rs` |
+| `SB-04` | Unified execution-effect & `UNKNOWN_OUTCOME` runtime | P0 | **RESOLVED (In-Tree)** | `crates/sunborn-gateway/src/execution_runtime.rs`, `execution_lifecycle_test.rs`, `enterprise_completeness_test.rs` |
+| `SB-05` | Adaptive threshold, conformal floor & canary safety | P1 | **RESOLVED (In-Tree)** | `shadow.rs`, `learning/controller.rs`, `remediation_e2e_test.rs` |
+| `SB-06` | Claim-level `EvidenceBundle` grounded verification | P1 | **RESOLVED (In-Tree)** | `crates/sunborn-semantic/src/grounding.rs`, `enterprise_completeness_test.rs` |
+| `SB-07` | Automated shadow sampling, drift & canary rollback | P1 | **RESOLVED (In-Tree)** | `execute.rs`, `handlers/security.rs`, `state.rs::run_lifecycle_maintenance_cycle` |
+| `SB-08` | Versioned cache refresh worker & adaptive $V_i$ retention | P1 | **RESOLVED (In-Tree)** | `crates/sunborn-gateway/src/cache_lifecycle.rs`, `POST /v1/lifecycle/retain`, `state.rs` |
+| `SB-09` | Separate RAG retrieval-result cache tier | P1/P2 | **RESOLVED (In-Tree)** | `crates/sunborn-gateway/src/retrieval_cache.rs`, `POST /v1/retrieval/cache`, `enterprise_completeness_test.rs` |
+| `SB-10` | Persistent paraphrase clustering & cascade purge | P2 | **RESOLVED (In-Tree)** | `crates/sunborn-semantic/src/paraphrase_cluster.rs`, `handlers/invalidation.rs`, `remediation_e2e_test.rs` |
+| `SB-11` | Safe read-only predictive prefetch & utility retention | P2 | **RESOLVED (In-Tree)** | `cache_lifecycle.rs::filter_safe_prefetch_candidates`, `enterprise_completeness_test.rs` |
+| `SB-12` | Poisoning quarantine, context digest & timing floor | P0/P1 | **RESOLVED (In-Tree)** | `sunborn-threat::CacheThreatEngine`, `decision.rs`, `execute.rs`, `enterprise_completeness_test.rs` |
+| `SB-13` | Live unsimulated B0–B6 ablations & unseen N=160 eval | P1 | **RESOLVED (In-Tree)** | `five_gate_benchmark_test.rs`, `external_generalization_eval.rs`, `research/calibration/external_unseen_eval_dataset.json` |
+| `SB-14` | Control Plane UI matrix, OpenAPI 79-op parity & launch | P1 | **RESOLVED (In-Tree)** | `frontend/src/components/cockpit/control-plane-matrix.tsx`, `docs/api/openapi.yaml`, `verify_public_launch.py --strict` |

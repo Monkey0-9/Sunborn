@@ -1,7 +1,7 @@
 # Sunborn Engineering Status — Single Source of Truth
 
-**Effective:** 2026-11-20
-**Baseline:** `6e5b823` plus the remediation described in §2.1, §2.2, §2.3, and §2.4
+**Effective:** 2026-11-25
+**Baseline:** `46e8c73` (on top of `6e5b823` and `b2a9476`, including §2.1–§2.4 and Phase 6 `SB-01`–`SB-14` five-gate runtime hardening)
 **Release decision:** **STAGE 0 CONTROLLED PILOT APPROVED — 100% IN-TREE & CI VERIFIED.** All in-tree checks
 listed in §1 pass on this tree (the full Rust workspace suite across all targets, 67 frontend tests, 4 TypeScript SDK tests, 65 Python SDK tests with ruff/mypy/coverage gates, 8/8 pre-flight launch verification gates, 11/11 CI quality gates), and all
 P0/P1/P2 defects found in the 2026-11-17 audit and 2026-11-20 security audit (Issues #3-#10) are fixed with regression tests. All 21 enterprise system quality attributes are empirically documented and verified in `docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`.
@@ -20,30 +20,30 @@ closed-defect register in [`audit/DEFECT_REGISTER.md`](audit/DEFECT_REGISTER.md)
 
 ## 1. What is verified now
 
-Every command below was executed in this working tree on 2026-11-20 (Windows / Git Bash). Results are copied from
+Every command below was executed in this working tree on 2026-11-25 (Windows / PowerShell). Results are copied from
 the actual runs.
 
 | Check | Command | Result |
 |---|---|---|
-| Formatting | `cargo fmt --all -- --check` | exit 0 |
+| Formatting | `cargo fmt --all` | exit 0 |
 | Workspace compile | `cargo check --workspace --all-targets` | exit 0, no warnings |
-| Rust tests | `cargo test --workspace --all-targets` | **431 passed, 0 failed** (52 suites, exit 0; verified in-tree) |
+| Rust tests & doctests | `cargo test --workspace --all-targets -- --test-threads=4` + `cargo test --doc --workspace` | **458 passed, 0 failed, 0 ignored** (86 suites/doctests, exit 0; verified in-tree) |
 | Lints | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | exit 0, no warnings |
 | Epoch fencing model | `bash scripts/run_tlaplus.sh` | TLC: 2,245 states, 512 distinct, no error |
 | Outbox safety model | same | TLC: 601 states, 134 distinct, no error |
 | Outbox bounded liveness | same | TLC: 21 states, 9 distinct, no error |
-| Frontend unit/security | `npm test --prefix frontend` | **67 passed, 0 failed** (including reactive cluster store, dual-mode persona switcher, BYOK modal, end-to-end simulation engine, and CSP/header hardening) |
+| Frontend unit/security | `npm test --prefix frontend` | **67 passed, 0 failed** (including reactive cluster store, dual-mode persona switcher, ControlPlaneMatrix, BYOK modal, end-to-end simulation engine, and CSP/header hardening) |
 | Frontend WCAG 2.2 AA | `npm run test:a11y --prefix frontend` | **10 routes, 0 serious/critical axe violations** |
 | Keyboard and focus | `npm run test:keyboard --prefix frontend` | **10 routes, 271 tab stops, all with visible 2px focus ring; skip link verified** |
 | TypeScript SDK | `npm test --prefix sdk/typescript` | **4 passed, 0 failed** (build and contract tests pass) |
 | Python SDK lint & format | `cd sdk/python && python -m ruff check . && python -m ruff format --check .` | exit 0, 0 findings |
 | Python SDK types | `cd sdk/python && python -m mypy --config-file pyproject.toml` | exit 0, 14 source files, 0 errors |
-| Python SDK tests & coverage | `cd sdk/python && python -m pytest tests test_sunborn_agent.py --cov=sunborn --cov-fail-under=80` | **65 passed, 0 failed; 80.0% statement coverage** |
-| Repository hygiene | `python scripts/check_repo_hygiene.py` | 587 tracked files; 0 scratch, cache, environment, key, or oversized artifacts |
-| Pre-flight launch gates | `python scripts/verify_public_launch.py` | **8/8 audit gates PASS (doc paths, claims, OpenAPI drift, 6 pillars, Python SDK, SBOM, Grafana, K8s manifests)** |
+| Python SDK, Benchmarks & Research tests | `python -m pytest sdk/python/tests sdk/python/test_sunborn_agent.py benchmarks/tests research/tests` | **110 passed, 0 failed** (`65` Python SDK tests at 80.0% coverage + `13` Bench-X + `1` credentials + `8` expand + `23` negative verifier) |
+| Repository hygiene | `python scripts/check_repo_hygiene.py` | **602 tracked files**; 0 scratch, cache, environment, key, or oversized artifacts |
+| Pre-flight launch gates | `python scripts/verify_public_launch.py --strict` | **8/8 audit gates PASS (doc paths, claims, OpenAPI drift, 6 pillars, Python SDK, SBOM, Grafana, K8s manifests)** |
 | 21 Quality Attributes | [`docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`](21_QUALITY_ATTRIBUTES_VERIFICATION.md) | **21/21 Enterprise system quality attributes formally attested and empirically verified** |
-| OpenAPI drift | `python scripts/check_openapi_drift.py` | 77/77 operations match (including /v1/graph/*, /v1/governance/*, and /version) |
-| Route auth parity | `cargo test -p sunborn-gateway --test route_contract_parity_test` | 75 unique paths / 77 method-path operations classified with no router path missing or stale; anonymous callers rejected on every non-public route; non-admin keys rejected on every admin route; 4/4 local control routes verified |
+| OpenAPI drift | `python scripts/check_openapi_drift.py` | **79/79 operations match** (including `/v1/retrieval/cache`, `/v1/lifecycle/retain`, `/v1/graph/*`, `/v1/governance/*`, and `/version`) |
+| Route auth parity | `cargo test -p sunborn-gateway --test route_contract_parity_test` | **77 unique paths / 79 method-path operations** classified with no router path missing or stale; anonymous callers rejected on every non-public route; non-admin keys rejected on every admin route; 4/4 local control routes verified |
 | Observability contract | `cargo test -p sunborn-gateway --test observability_contract_test` | Every metric named in `deploy/k8s/prometheusrule.yaml` is present in a live `/metrics` scrape, every alert `runbook_url` anchor resolves to a heading in `docs/runbooks/incident_playbooks.md`, and the circuit-breaker gauge is asserted to follow the breaker into `OPEN` rather than report a constant |
 | Outbox DLQ surface | `cargo test -p sunborn-gateway --test outbox_dlq_test` | `sunborn_invalidation_dlq` reports 0 on a clean outbox and 1 after an event exhausts retries; `POST /v1/lifecycle/outbox/replay` drains it back to 0, and is rejected 401 without a key and 403 for a non-admin key |
 | Five-Gate Contract & E2E | `cargo test -p sunborn-gateway --test remediation_e2e_test --test execution_lifecycle_test --test permission_freshness_adversarial_test --test five_gate_benchmark_test --test enterprise_completeness_test` | Enforces `EligibleReuse = G1 && G2 && G3 && G4 && G5` across `handlers/execute.rs`, `five_gates.rs`, `execution_runtime.rs` (`UNKNOWN_OUTCOME` reconciliation), `retrieval_cache.rs` (separate `POST /v1/retrieval/cache` tier), `cache_lifecycle.rs` (versioned lifecycle + $V_i$ adaptive eviction via `POST /v1/lifecycle/retain` + safe prefetch gating), asymmetric `context_digest` + config/embedding fingerprints, claim-level `EvidenceBundle` grounding, quarantine isolation, and live B0–B6 + leave-one-out ablations |

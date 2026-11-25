@@ -8,7 +8,7 @@ _One place in the request path that decides, in microseconds, whether an answer 
 and refuses to serve it when the reuse cannot be proven safe._
 
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-blue.svg?logo=rust&logoColor=white)](Cargo.toml)
-[![Rust tests](https://img.shields.io/badge/Rust%20tests-431%20passing-brightgreen.svg)](docs/STATUS.md)
+[![Rust tests](https://img.shields.io/badge/Rust%20tests-458%20passing-brightgreen.svg)](docs/STATUS.md)
 [![Frontend tests](https://img.shields.io/badge/Frontend%20tests-67%20passing-brightgreen.svg)](docs/STATUS.md)
 [![TypeScript SDK](https://img.shields.io/badge/TypeScript%20SDK-4%20passing-brightgreen.svg)](docs/STATUS.md)
 [![Python SDK](https://img.shields.io/badge/Python%20SDK-65%20passing%20%C2%B7%2080%25%20coverage-brightgreen.svg)](docs/STATUS.md)
