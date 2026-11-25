@@ -1,5 +1,5 @@
 //! Comprehensive Verification Suite covering Remaining Gaps (§6, §8, §9, §10, §11.4, §13):
-//! 1. Grounding EvidenceBundle & 11-scenario matrix (partial, contradiction, ACL, missing required)
+//! 1. Grounding EvidenceBundle scenario matrix (supported, contradicted, ACL-denied, partial, missing source)
 //! 2. Asymmetric context digest (Some vs None) & config/embedding fingerprint enforcement
 //! 3. Separate RAG retrieval-result cache tier via `POST /v1/retrieval/cache`
 //! 4. Versioned cache lifecycle, adaptive $V_i$ eviction (`POST /v1/lifecycle/retain`), safe prefetch
@@ -13,11 +13,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
-use std::collections::HashMap;
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Mutex,
-};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use sunborn_core::model::ChatMessage;
 use sunborn_core::{AppConfig, ApplicationId, RequestEnvelope, ResponseEnvelope, TenantId};
 use sunborn_execution::{
@@ -445,7 +441,6 @@ async fn test_versioned_lifecycle_adaptive_retention_safe_prefetch_and_quarantin
     let env2: ResponseEnvelope =
         serde_json::from_slice(&r2.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert!(!env2.cached, "Quarantined cache key must not serve hits");
-    let _ = poison_req.prompt.len();
 }
 
 struct AmbiguousMutationExecutor {
@@ -554,8 +549,6 @@ async fn test_unknown_outcome_external_mutation_reconciliation_prevents_double_c
     );
     assert!(!runtime.is_unknown_outcome(&tenant, &app, "pay-inv-77"));
     assert_eq!(rep.node_outcomes["charge_node"].output["reconciled"], true);
-    let _ = HashMap::<String, usize>::new();
-    let _ = Mutex::new(());
 }
 
 #[tokio::test]
