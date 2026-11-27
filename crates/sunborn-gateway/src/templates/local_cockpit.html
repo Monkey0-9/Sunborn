@@ -146,6 +146,19 @@
       </div>
       <div class="sandbox-result" id="probeOutput" style="display: none;"></div>
     </div>
+
+    <!-- Gateway v2 Control Plane & Protocol Viewer -->
+    <div class="card full-width">
+      <h2>Gateway v2 Control Plane &amp; Protocol Viewer</h2>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+        Inspect live Virtual Keys, Content Guardrails, Lazy CEL Policies, MCP Multiplexed Servers, and A2A Agent Discovery.
+      </p>
+      <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px;">
+        <input type="text" id="viewerApiKey" placeholder="API Key (optional for /.well-known/agent.json)" value="local-user" style="margin-bottom: 0; max-width: 280px;">
+        <button onclick="refreshProtocolViewer()" style="margin-top: 0;">Refresh Gateway v2 Inspector</button>
+      </div>
+      <div class="sandbox-result" id="v2ViewerOutput" style="display: block;">Click "Refresh Gateway v2 Inspector" to load live control-plane state.</div>
+    </div>
   </div>
 
   <script>
@@ -266,6 +279,33 @@
         out.textContent = JSON.stringify(data, null, 2);
       } catch (e) {
         out.textContent = 'Query completed. Note: Configure upstream provider key to enable origin passthrough on cache misses.';
+      }
+    }
+
+    async function refreshProtocolViewer() {
+      const out = document.getElementById('v2ViewerOutput');
+      const key = document.getElementById('viewerApiKey').value.trim();
+      const headers = key ? { 'x-api-key': key } : {};
+      out.textContent = 'Loading Gateway v2 state...';
+      try {
+        const [a2a, models, vkeys, guardrails, cel, mcp] = await Promise.all([
+          fetch('/.well-known/agent.json').then(r => r.json()).catch(e => ({ error: String(e) })),
+          fetch('/v1/models', { headers }).then(r => r.json()).catch(e => ({ error: String(e) })),
+          fetch('/v1/virtual-keys', { headers }).then(r => r.json()).catch(e => ({ error: String(e) })),
+          fetch('/v1/guardrails/config', { headers }).then(r => r.json()).catch(e => ({ error: String(e) })),
+          fetch('/v1/policies/cel', { headers }).then(r => r.json()).catch(e => ({ error: String(e) })),
+          fetch('/v1/mcp/servers', { headers }).then(r => r.json()).catch(e => ({ error: String(e) })),
+        ]);
+        out.textContent = JSON.stringify({
+          a2a_well_known: a2a,
+          models,
+          virtual_keys: vkeys,
+          guardrails,
+          cel_policies: cel,
+          mcp_servers: mcp,
+        }, null, 2);
+      } catch (e) {
+        out.textContent = 'Failed to load Gateway v2 state: ' + e;
       }
     }
 

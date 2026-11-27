@@ -50,5 +50,6 @@ pub use guardrails::{
 pub use microbatch::MicroBatchedEmbedder;
 pub use paraphrase_cluster::{ClusterMember, ParaphraseCluster, ParaphraseClusterManager};
 pub use vector_store::{
-    MemoryVectorStore, QdrantVectorStore, ScoredVectorEntry, VectorEntry, VectorStore,
+    embedding_model_parts, MemoryVectorStore, QdrantVectorStore, ScoredVectorEntry, VectorEntry,
+    VectorStore,
 };

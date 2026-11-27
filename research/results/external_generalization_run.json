@@ -1,0 +1,89 @@
+{
+  "dataset": "research/calibration/external_unseen_eval_dataset.json",
+  "dataset_pairs": 160,
+  "dataset_sha256": "02010f14318be775435fd227f87f0a2896af7cf60594f734fe41e11951d04689",
+  "protocol": "Rules frozen before dataset authoring; no tuning on this split.",
+  "providers": {
+    "deterministic_lsh": {
+      "frozen_guardrails": {
+        "abstention_rate": 0.475,
+        "category_fp_fn": {
+          "entity_swap": [
+            3,
+            0
+          ],
+          "multilingual_codemixed": [
+            0,
+            7
+          ],
+          "semantic_paraphrase": [
+            0,
+            33
+          ],
+          "temporal_and_factual_trap": [
+            1,
+            0
+          ]
+        },
+        "cp95_false_positive_upper": 1.0,
+        "f1": 0.0,
+        "fn": 40,
+        "fp": 4,
+        "precision": 0.0,
+        "recall": 0.0,
+        "tn": 116,
+        "tp": 0
+      },
+      "raw_similarity": {
+        "f1": 0.0,
+        "fn": 40,
+        "fp": 62,
+        "precision": 0.0,
+        "recall": 0.0,
+        "tn": 58,
+        "tp": 0
+      }
+    },
+    "http_trigram_local": {
+      "frozen_guardrails": {
+        "abstention_rate": 0.91875,
+        "category_fp_fn": {
+          "entity_swap": [
+            3,
+            0
+          ],
+          "multilingual_codemixed": [
+            0,
+            7
+          ],
+          "semantic_paraphrase": [
+            0,
+            31
+          ],
+          "temporal_and_factual_trap": [
+            3,
+            0
+          ]
+        },
+        "cp95_false_positive_upper": 0.9536107360203889,
+        "f1": 0.08333333333333334,
+        "fn": 38,
+        "fp": 6,
+        "precision": 0.25,
+        "recall": 0.05,
+        "tn": 114,
+        "tp": 2
+      },
+      "raw_similarity": {
+        "f1": 0.11428571428571428,
+        "fn": 32,
+        "fp": 92,
+        "precision": 0.08,
+        "recall": 0.2,
+        "tn": 28,
+        "tp": 8
+      }
+    }
+  },
+  "scope": "Measured external-unseen abstention behaviour. Low recall means the guardrails avoid false reuse by admitting little; this is not paraphrase generalization evidence and not a production error rate."
+}

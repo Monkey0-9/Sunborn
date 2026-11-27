@@ -37,9 +37,14 @@ pub struct SecurityContext {
 
 impl SecurityContext {
     pub fn allows_model(&self, model: &str) -> bool {
-        self.allowed_models
-            .iter()
-            .any(|allowed| allowed == "*" || allowed == model)
+        self.allowed_models.iter().any(|allowed| {
+            allowed == "*"
+                || allowed == model
+                || allowed
+                    .strip_suffix('*')
+                    .map(|prefix| model.starts_with(prefix))
+                    .unwrap_or(false)
+        })
     }
 
     pub fn require_admin(&self) -> Result<(), &'static str> {
@@ -405,7 +410,25 @@ pub fn get_global_registry() -> &'static ApiKeyRegistry {
     })
 }
 
-pub async fn auth_middleware(headers: HeaderMap, mut req: Request, next: Next) -> Response {
+pub async fn auth_middleware(headers: HeaderMap, req: Request, next: Next) -> Response {
+    auth_inner(None, headers, req, next).await
+}
+
+pub async fn auth_middleware_with_state(
+    axum::extract::State(state): axum::extract::State<crate::state::AppState>,
+    headers: HeaderMap,
+    req: Request,
+    next: Next,
+) -> Response {
+    auth_inner(Some(&state), headers, req, next).await
+}
+
+async fn auth_inner(
+    state: Option<&crate::state::AppState>,
+    headers: HeaderMap,
+    mut req: Request,
+    next: Next,
+) -> Response {
     let path = req.uri().path();
     let is_prod = sunborn_core::is_production_mode();
 
@@ -416,6 +439,7 @@ pub async fn auth_middleware(headers: HeaderMap, mut req: Request, next: Next) -
         || path == "/version"
         || path == "/v1/auth/login"
         || path == "/v1/ceremony/public-keys"
+        || path == "/.well-known/agent.json"
         || (!is_prod && (path == "/" || path == "/cockpit" || path.starts_with("/v1/local/")))
     {
         return next.run(req).await;
@@ -434,8 +458,8 @@ pub async fn auth_middleware(headers: HeaderMap, mut req: Request, next: Next) -
     let registry = get_global_registry();
 
     match api_key {
-        Some(key) => match registry.validate_key(key) {
-            Some(cred) => {
+        Some(key) => {
+            if let Some(cred) = registry.validate_key(key) {
                 req.extensions_mut().insert(SecurityContext {
                     tenant_id: cred.tenant_id,
                     application_id: cred.application_id,
@@ -444,9 +468,24 @@ pub async fn auth_middleware(headers: HeaderMap, mut req: Request, next: Next) -
                     is_authenticated: true,
                     is_admin: cred.is_admin,
                 });
-                next.run(req).await
+                return next.run(req).await;
             }
-            None => (
+            if key.starts_with("sb-vk-") {
+                if let Some(st) = state {
+                    if let Ok(vk) = st.virtual_keys.validate_credential(key) {
+                        req.extensions_mut().insert(SecurityContext {
+                            tenant_id: TenantId::new(vk.tenant_id),
+                            application_id: ApplicationId::new(vk.application_id),
+                            api_key_hash: vk.key_hash,
+                            allowed_models: vk.allowed_models,
+                            is_authenticated: true,
+                            is_admin: false,
+                        });
+                        return next.run(req).await;
+                    }
+                }
+            }
+            (
                 StatusCode::UNAUTHORIZED,
                 Json(json!({
                     "type": "https://sunborn.ai/errors/unauthorized",
@@ -455,8 +494,8 @@ pub async fn auth_middleware(headers: HeaderMap, mut req: Request, next: Next) -
                     "detail": "Invalid or unregistered API key"
                 })),
             )
-                .into_response(),
-        },
+                .into_response()
+        }
         None => (
             StatusCode::UNAUTHORIZED,
             Json(json!({

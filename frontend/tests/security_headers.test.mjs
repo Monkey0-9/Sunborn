@@ -1,8 +1,16 @@
-// Verifies the headers Next.js actually serves, without starting a server.
-// `next.config.mjs` reads NODE_ENV at module load, so each case imports a fresh
-// copy via a cache-busting query string.
+// Verifies the security headers Next.js actually serves, without starting a
+// server. The CSP moved from `next.config.mjs` to the middleware so it can carry
+// a per-request nonce; these tests exercise the same builder the middleware
+// calls and assert the config no longer emits a competing policy.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+
+import {
+  CSP_NONCE_HEADER,
+  applyContentSecurityPolicy,
+  buildContentSecurityPolicy,
+  generateNonce,
+} from '../src/lib/csp.mjs';
 
 const CONFIG_URL = new URL('../next.config.mjs', import.meta.url);
 
@@ -29,23 +37,98 @@ async function headersFor(env) {
   return Object.fromEntries(entry.headers.map(({ key, value }) => [key, value]));
 }
 
-test('production CSP does not permit eval', async () => {
-  const headers = await headersFor('production');
-  const csp = headers['Content-Security-Policy'];
+/** Splits a CSP into `{ directive: [sources] }`. */
+function directives(policy) {
+  return Object.fromEntries(
+    policy
+      .split(';')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const [name, ...sources] = part.split(/\s+/);
+        return [name, sources];
+      }),
+  );
+}
 
-  assert.ok(csp, 'production must send a Content-Security-Policy');
-  assert.ok(!csp.includes("'unsafe-eval'"), `production CSP must not allow eval: ${csp}`);
-  assert.ok(csp.includes("script-src 'self'"), 'scripts must be restricted to same origin');
-  assert.ok(csp.includes("object-src 'none'"), 'plugins must be blocked');
-  assert.ok(csp.includes("frame-ancestors 'none'"), 'framing must be blocked');
-  assert.ok(csp.includes("base-uri 'self'"), 'base-uri must be restricted');
+test('production CSP uses a nonce instead of unsafe-inline for scripts', () => {
+  const policy = buildContentSecurityPolicy({ nonce: 'test-nonce-value' });
+  const parsed = directives(policy);
+  const scriptSrc = parsed['script-src'];
+
+  assert.ok(scriptSrc, 'script-src must be present');
+  assert.ok(
+    scriptSrc.includes("'nonce-test-nonce-value'"),
+    `the nonce must be in script-src: ${policy}`,
+  );
+  assert.ok(
+    scriptSrc.includes("'strict-dynamic'"),
+    'strict-dynamic lets the trusted bootstrap load its own chunks without a host list',
+  );
+  assert.ok(
+    !scriptSrc.includes("'unsafe-inline'"),
+    `production script-src must not allow inline injection: ${policy}`,
+  );
+  assert.ok(
+    !scriptSrc.includes("'unsafe-eval'"),
+    `production CSP must not allow eval: ${policy}`,
+  );
+
+  assert.deepEqual(parsed['default-src'], ["'self'"]);
+  assert.deepEqual(parsed['object-src'], ["'none'"]);
+  assert.deepEqual(parsed['frame-ancestors'], ["'none'"]);
+  assert.deepEqual(parsed['base-uri'], ["'self'"]);
+  assert.deepEqual(parsed['form-action'], ["'self'"]);
 });
 
-test('development CSP keeps eval so React Refresh works', async () => {
-  const headers = await headersFor('development');
-  const csp = headers['Content-Security-Policy'];
+test('development CSP keeps eval so React Refresh works', () => {
+  const policy = buildContentSecurityPolicy({
+    nonce: 'dev-nonce',
+    isDevelopment: true,
+  });
+  assert.ok(
+    directives(policy)['script-src'].includes("'unsafe-eval'"),
+    'development CSP must allow eval for HMR',
+  );
+});
 
-  assert.ok(csp.includes("'unsafe-eval'"), 'development CSP must allow eval for HMR');
+test('a nonce is required and is not caller-supplied empty', () => {
+  assert.throws(
+    () => buildContentSecurityPolicy({ nonce: '' }),
+    /non-empty nonce/,
+  );
+  assert.throws(() => buildContentSecurityPolicy({}), /non-empty nonce/);
+});
+
+test('each nonce is 128 bits of base64 and differs per call', () => {
+  const first = generateNonce();
+  const second = generateNonce();
+
+  assert.notEqual(first, second, 'nonces must not repeat between responses');
+  assert.match(first, /^[A-Za-z0-9+/]+={0,2}$/, 'nonce must be base64');
+  assert.equal(
+    Buffer.from(first, 'base64').length,
+    16,
+    'nonce must decode to 16 random bytes',
+  );
+});
+
+test('the middleware header helper writes the nonce and policy', () => {
+  const headers = new Headers();
+  const policy = applyContentSecurityPolicy(headers, { nonce: 'abc123' });
+
+  assert.equal(headers.get(CSP_NONCE_HEADER), 'abc123');
+  assert.equal(headers.get('Content-Security-Policy'), policy);
+  assert.ok(policy.includes("'nonce-abc123'"));
+});
+
+test('the static config does not emit a second, nonce-less CSP', async () => {
+  const headers = await headersFor('production');
+  assert.equal(
+    headers['Content-Security-Policy'],
+    undefined,
+    'CSP must come only from the middleware; a second policy would intersect and block the nonce scripts',
+  );
 });
 
 test('deprecated XSS auditor is explicitly disabled', async () => {

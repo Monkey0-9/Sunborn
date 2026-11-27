@@ -2929,6 +2929,7 @@ dependencies = [
  "sunborn-threat",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "tower",
  "tower-http",
  "tracing",

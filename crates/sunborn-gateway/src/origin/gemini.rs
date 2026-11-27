@@ -53,6 +53,7 @@ impl LlmOriginProvider for GeminiProvider {
         let prompt_text = if !req.messages.is_empty() {
             req.messages
                 .iter()
+                .filter(|m| m.role != "system")
                 .map(|m| format!("{}: {}", m.role, m.content.as_deref().unwrap_or("")))
                 .collect::<Vec<_>>()
                 .join("\n")
@@ -60,7 +61,7 @@ impl LlmOriginProvider for GeminiProvider {
             req.prompt.clone()
         };
 
-        let payload = serde_json::json!({
+        let mut payload = serde_json::json!({
             "contents": [
                 {
                     "parts": [
@@ -69,6 +70,11 @@ impl LlmOriginProvider for GeminiProvider {
                 }
             ]
         });
+        if let Some(sys) = &req.system_prompt {
+            payload["systemInstruction"] = serde_json::json!({
+                "parts": [{ "text": sys }]
+            });
+        }
 
         let mut http_req = self.client.post(&target_url).json(&payload);
         if let Some(key) = &self.api_key {

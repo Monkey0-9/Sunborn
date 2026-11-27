@@ -18,6 +18,7 @@ Authoritative PostgreSQL database schema definitions and versioned migrations fo
 | `0010_financial_precision_micro_units.sql` | 64-bit integer micro-unit ($10^{-6}$ USD) and MicroPaise ($10^{-4}$ INR) accounting. |
 | `0011_micro_units_non_negative_checks.sql` | Check constraints guaranteeing non-negative spend ledgers and token bounds. |
 | `0012_durable_erasure_and_learning.sql` | Cryptographic shredding logs (DPDP/GDPR Art. 17) and dual-shadow policy tables. |
+| `0013_tenant_tier_defaults.sql` | Applied tier defaults: retention window, support level, identity attestation, inviter, and default model allowlist, plus an invitation-recency index. |
 
 ## Execution & Rollout
 
@@ -27,3 +28,10 @@ Migrations are applied automatically by `crates/sunborn-db` using SQLx embedded 
 # Manual migration verification using sqlx-cli
 sqlx migrate run --source migrations
 ```
+
+## Down scripts
+
+Migrations that add columns also ship a matching script under `down/`
+(`0013_tenant_tier_defaults.down.sql`). These are the documented back path for an
+authorised rollback; they are not applied automatically, and the forward/back pair has
+yet to be executed against a live PostgreSQL instance in this environment.

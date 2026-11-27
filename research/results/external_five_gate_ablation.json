@@ -1,0 +1,69 @@
+{
+  "certificate_probes_injected": [
+    "stale_epoch",
+    "mutating_plan",
+    "tampered_signature"
+  ],
+  "dataset": "research/calibration/external_unseen_eval_dataset.json",
+  "dataset_pairs": 160,
+  "dataset_sha256": "02010f14318be775435fd227f87f0a2896af7cf60594f734fe41e11951d04689",
+  "levels": [
+    {
+      "equivalence_only_false_hits": 65,
+      "false_hits": 545,
+      "level": "B2 (raw similarity)",
+      "misses": 95,
+      "safe_hits": 0
+    },
+    {
+      "equivalence_only_false_hits": 0,
+      "false_hits": 462,
+      "level": "B3 (G1 only)",
+      "misses": 178,
+      "safe_hits": 0
+    },
+    {
+      "equivalence_only_false_hits": 0,
+      "false_hits": 308,
+      "level": "B4 (G1+G3)",
+      "misses": 332,
+      "safe_hits": 0
+    },
+    {
+      "equivalence_only_false_hits": 0,
+      "false_hits": 154,
+      "level": "B5 (G1+G3+G4)",
+      "misses": 486,
+      "safe_hits": 0
+    },
+    {
+      "equivalence_only_false_hits": 0,
+      "false_hits": 0,
+      "level": "B6 (G1+G3+G4+G5)",
+      "misses": 640,
+      "safe_hits": 0
+    }
+  ],
+  "probes_per_pair": 4,
+  "raw_similarity_equivalence_false_hit_categories": {
+    "entity_swap": [
+      18,
+      0
+    ],
+    "negation_flip": [
+      14,
+      0
+    ],
+    "numeric_flip": [
+      30,
+      0
+    ],
+    "temporal_and_factual_trap": [
+      3,
+      0
+    ]
+  },
+  "residual_equivalence_false_hit_rate_pct": 0.0,
+  "residual_equivalence_false_hits": 0,
+  "scope": "Gate mechanism coverage on external prompt text. Probe types 2-4 are injected threats; only equivalence probes measure the corpus as authored. Not a population false-hit rate and not production evidence."
+}

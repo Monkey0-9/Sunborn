@@ -333,15 +333,17 @@ impl<E: EmbeddingProvider, V: VectorStore> DecisionEngine<E, V> {
         // 1. Generate query embedding
         let query_vec = self.embedder.embed(&req.prompt).await?;
 
-        // 2. Query vector candidates for the specific tenant and application
+        // 2. Query vector candidates for the specific tenant, application, and pinned embedding model
+        let emb_fp = self.embedder.embedding_fingerprint();
         let candidates = self
             .vector_store
-            .search(
+            .search_pinned(
                 &req.tenant_id,
                 &req.application_id,
                 &query_vec,
                 self.config.candidate_limit.max(1),
                 min_similarity_threshold - self.config.revalidation_band,
+                &emb_fp,
             )
             .await?;
 

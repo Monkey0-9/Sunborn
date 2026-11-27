@@ -40,7 +40,9 @@ struct AblationSummary {
     false_hits: usize,
     origin_calls: usize,
     total_latency_ms: f64,
-    cost_saved_pct: f64,
+    /// Share of traffic served from cache. This includes unsafe admissions, so it is a
+    /// coverage measure, not a savings or success measure.
+    served_pct: f64,
 }
 
 fn tc(name: &str) -> Option<ToolCall> {
@@ -133,7 +135,7 @@ async fn benchmark_five_gate_ablation_b0_through_b6() {
             false_hits: 0,
             origin_calls,
             total_latency_ms: t0.elapsed().as_secs_f64() * 1000.0,
-            cost_saved_pct: 0.0,
+            served_pct: 0.0,
         });
     }
 
@@ -193,7 +195,7 @@ async fn benchmark_five_gate_ablation_b0_through_b6() {
             false_hits: 0,
             origin_calls,
             total_latency_ms: t0.elapsed().as_secs_f64() * 1000.0,
-            cost_saved_pct: (safe_hits as f64 / 28.0) * 100.0,
+            served_pct: (safe_hits as f64 / 28.0) * 100.0,
         });
     }
 
@@ -201,19 +203,28 @@ async fn benchmark_five_gate_ablation_b0_through_b6() {
     // Run the EXACT same 28-request mix (1 seed + 9 warm safe repeats + 4 cross-session +
     // 4 stale snapshot hash + 4 mutating DAG + 4 negation/numeric flips + 2 post-update repeats)
     // against real in-process Rust engines implementing each baseline B2..B5.
-    let mut all_requests: Vec<(RequestEnvelope, bool /*is_safe_reusable*/)> = Vec::new();
+    // The third tuple field is the authoritative source epoch observed at evaluation time.
+    // Keeping the request's dependency snapshot unchanged while this advances isolates G3:
+    // G1 and G2 still pass, so only a real freshness check can refuse reuse.
+    let mut all_requests: Vec<(
+        RequestEnvelope,
+        bool, /*is_safe_reusable*/
+        u64,  /*authoritative epoch*/
+    )> = Vec::new();
     for _ in 0..9 {
-        all_requests.push((seed_req.clone(), true));
+        all_requests.push((seed_req.clone(), true, 1));
     }
     for s in 0..4 {
         let mut r = seed_req.clone();
         r.metadata["session_id"] = json!(format!("sess-attacker-{s}"));
-        all_requests.push((r, false));
+        all_requests.push((r, false, 1));
     }
-    for k in 0..4 {
-        let mut r = seed_req.clone();
-        r.dependency_snapshots[0].content_hash = format!("sha256:policy-v{}", k + 2);
-        all_requests.push((r, false));
+    // Authoritative source advanced to v2 while the request still cites the v1 snapshot it
+    // was served under. Same prompt, same session, same request snapshot: the context digest
+    // matches and G1/G2 cannot help. Only G3 may refuse this reuse. The content-hash-mismatch
+    // variant remains covered by the live B6 block below.
+    for _ in 0..4 {
+        all_requests.push((seed_req.clone(), false, 2));
     }
     let mut mut_plan_b = ExecutionPlan::new();
     mut_plan_b.add_node(
@@ -227,7 +238,7 @@ async fn benchmark_five_gate_ablation_b0_through_b6() {
     for _ in 0..4 {
         let mut r = seed_req.clone();
         r.metadata["execution_plan"] = serde_json::to_value(&mut_plan_b).unwrap();
-        all_requests.push((r, false));
+        all_requests.push((r, false, 1));
     }
     for p in [
         "Do not approve reimbursement limit of $500 for travel policy A",
@@ -237,10 +248,10 @@ async fn benchmark_five_gate_ablation_b0_through_b6() {
     ] {
         let mut r = seed_req.clone();
         r.prompt = p.to_string();
-        all_requests.push((r, false));
+        all_requests.push((r, false, 1));
     }
     for _ in 0..2 {
-        all_requests.push((seed_req.clone(), true));
+        all_requests.push((seed_req.clone(), true, 1));
     }
     assert_eq!(all_requests.len(), 27); // + 1 cold seed = 28
 
@@ -317,7 +328,7 @@ async fn benchmark_five_gate_ablation_b0_through_b6() {
             is_authenticated: true,
         };
 
-        for (req, is_safe) in &all_requests {
+        for (req, is_safe, authoritative_epoch) in &all_requests {
             let hit = if !use_g1_g2 {
                 // B2 raw vector similarity threshold (>= 0.70) with NO guardrails/G2/G3/G4/G5
                 let qv = embedder.embed(&req.prompt).await.unwrap();
@@ -345,11 +356,18 @@ async fn benchmark_five_gate_ablation_b0_through_b6() {
                     out.matched_certificate
                         .as_ref()
                         .map(|c| {
+                            // Freshness is two-sided: the request must match what was cached,
+                            // AND the cached snapshot must not predate the authoritative
+                            // source epoch. Without the second half, a document update is
+                            // invisible to the gate and the ablation cannot isolate G3.
                             SourceGroundingVerifier::verify_source_snapshots(
                                 &req.dependency_snapshots,
                                 &c.source_snapshots,
                             )
                             .is_ok()
+                                && c.source_snapshots
+                                    .iter()
+                                    .all(|s| s.snapshot_epoch >= *authoritative_epoch)
                         })
                         .unwrap_or(false)
                 } else {
@@ -401,7 +419,7 @@ async fn benchmark_five_gate_ablation_b0_through_b6() {
             false_hits: fp,
             origin_calls: misses,
             total_latency_ms: t0.elapsed().as_secs_f64() * 1000.0,
-            cost_saved_pct: ((hits_safe + fp) as f64 / 28.0) * 100.0,
+            served_pct: ((hits_safe + fp) as f64 / 28.0) * 100.0,
         });
     }
 
@@ -544,19 +562,19 @@ async fn benchmark_five_gate_ablation_b0_through_b6() {
             false_hits,
             origin_calls,
             total_latency_ms: t0.elapsed().as_secs_f64() * 1000.0,
-            cost_saved_pct: (safe_hits as f64 / 28.0) * 100.0,
+            served_pct: (safe_hits as f64 / 28.0) * 100.0,
         });
     }
 
     println!("\n=== Five-Gate Ablation Benchmark (B0–B6, N=28 Requests) ===");
     println!(
         "{:<36} | {:>5} | {:>9} | {:>10} | {:>8} | {:>10}",
-        "Configuration", "Hits", "FalseHits", "OriginMiss", "Saved %", "Total (ms)"
+        "Configuration", "Hits", "FalseHits", "OriginMiss", "Served %", "Total (ms)"
     );
     for s in &summaries {
         println!(
             "{:<36} | {:>5} | {:>9} | {:>10} | {:>7.1}% | {:>10.2}",
-            s.name, s.safe_hits, s.false_hits, s.origin_calls, s.cost_saved_pct, s.total_latency_ms
+            s.name, s.safe_hits, s.false_hits, s.origin_calls, s.served_pct, s.total_latency_ms
         );
         assert_eq!(s.total_requests, 28);
     }
@@ -569,6 +587,28 @@ async fn benchmark_five_gate_ablation_b0_through_b6() {
     assert_eq!(
         b6.safe_hits, 11,
         "All 11 safe post-seed queries in B6 must reuse safely"
+    );
+
+    // Each gate must remove a distinct, measurable class of unsafe reuse. If two adjacent
+    // levels ever tie, the workload has stopped exercising that gate and the ablation no
+    // longer supports the claim that the gate is load-bearing.
+    let false_hits: Vec<usize> = summaries.iter().map(|s| s.false_hits).collect();
+    assert_eq!(
+        false_hits,
+        vec![0, 0, 16, 8, 4, 1, 0],
+        "unexpected false-hit progression across B0–B6"
+    );
+    assert!(
+        false_hits[3] > false_hits[4],
+        "G3 must independently block the stale-authority reuses that G1/G2 cannot see"
+    );
+    assert!(
+        false_hits[4] > false_hits[5],
+        "G4 must independently block mutating execution plans"
+    );
+    assert!(
+        false_hits[5] > false_hits[6],
+        "G5 must independently block the tampered certificate"
     );
 
     // --- Live Leave-One-Out Feature Ablations (§15.2) ---

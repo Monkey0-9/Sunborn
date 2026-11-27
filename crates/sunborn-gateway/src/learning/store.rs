@@ -171,6 +171,16 @@ impl TenantLearningStore {
         let mut map = write_lock(&self.events);
         let queue = map.entry(event.tenant_id.clone()).or_default();
 
+        // Replay defense: a signed event is valid within the endpoint's freshness window,
+        // so without this check the same signature could be submitted repeatedly to inflate
+        // the observation count that calibration and promotion thresholds depend on.
+        if queue.iter().any(|e| e.event_id == event.event_id) {
+            return Err(SunbornError::validation_error(format!(
+                "Replay defense triggered: feedback event '{}' has already been recorded",
+                event.event_id
+            )));
+        }
+
         // Poison defense: Check if this specific cache_key already received contradictory labels
         let contradictory_count = queue
             .iter()
@@ -258,5 +268,61 @@ impl TenantLearningStore {
             }
         }
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::learning::feedback::VerifiedOutcome;
+    use chrono::Utc;
+
+    fn event(tenant: &str, event_id: &str, cache_key: &str) -> VerifiedFeedbackEvent {
+        VerifiedFeedbackEvent {
+            event_id: event_id.to_string(),
+            tenant_id: TenantId::new(tenant),
+            application_id: sunborn_core::ApplicationId::new("app-test"),
+            cache_key: cache_key.to_string(),
+            decision_type: "exact_hit".to_string(),
+            prompt_hash: "prompt-hash".to_string(),
+            similarity_score: Some(0.99),
+            conformal_risk_score: Some(0.01),
+            latency_ms: 1.5,
+            tokens_saved: 10,
+            cost_saved_usd: 0.0001,
+            verified_outcome: VerifiedOutcome::VerifiedCorrect,
+            verification_source: "origin_execution".to_string(),
+            hmac_signature: "00".to_string(),
+            timestamp: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn duplicate_signed_event_is_rejected_without_inflating_observations() {
+        let store = TenantLearningStore::new(100);
+        let tenant = TenantId::new("tenant-replay");
+
+        store
+            .record_event(event("tenant-replay", "evt-1", "key-1"))
+            .unwrap();
+        let err = store
+            .record_event(event("tenant-replay", "evt-1", "key-1"))
+            .expect_err("replayed event must be rejected");
+        assert!(err.to_string().contains("Replay defense"));
+
+        assert_eq!(store.get_tenant_events(&tenant).len(), 1);
+        assert_eq!(store.total_events(), 1);
+    }
+
+    #[test]
+    fn distinct_events_for_same_cache_key_are_still_accepted() {
+        let store = TenantLearningStore::new(100);
+        store
+            .record_event(event("tenant-replay", "evt-1", "key-1"))
+            .unwrap();
+        store
+            .record_event(event("tenant-replay", "evt-2", "key-1"))
+            .unwrap();
+        assert_eq!(store.total_events(), 2);
     }
 }

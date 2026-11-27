@@ -117,8 +117,8 @@ Set-ItemProperty -Path $UninstallRegKey -Name "DisplayName" -Value "Sunborn AI L
 Set-ItemProperty -Path $UninstallRegKey -Name "DisplayVersion" -Value "1.0.0"
 Set-ItemProperty -Path $UninstallRegKey -Name "Publisher" -Value "Sunborn Platform"
 Set-ItemProperty -Path $UninstallRegKey -Name "InstallLocation" -Value $TargetDir
-Set-ItemProperty -Path $UninstallRegKey -Name "UninstallString" -Value "powershell.exe -ExecutionPolicy Bypass -File `"$TargetDir\uninstall.ps1`""
-Set-ItemProperty -Path $UninstallRegKey -Name "QuietUninstallString" -Value "powershell.exe -ExecutionPolicy Bypass -File `"$TargetDir\uninstall.ps1`" -Silent"
+Set-ItemProperty -Path $UninstallRegKey -Name "UninstallString" -Value "powershell.exe -ExecutionPolicy Bypass -File `"$TargetDir\uninstall.ps1`" -TargetDir `"$TargetDir`""
+Set-ItemProperty -Path $UninstallRegKey -Name "QuietUninstallString" -Value "powershell.exe -ExecutionPolicy Bypass -File `"$TargetDir\uninstall.ps1`" -TargetDir `"$TargetDir`" -Silent"
 
 # Post-install verification: configuration must load, and the binary must
 # actually answer /health before the install is reported as successful.
@@ -135,6 +135,13 @@ $SmokePort = if ($env:SUNBORN_SMOKE_PORT) { [int]$env:SUNBORN_SMOKE_PORT } else 
 $SmokeLog = Join-Path $DataDir "install-smoke.log"
 $SmokeOk = $false
 $env:SUNBORN_ENV = "development"
+# A desktop install has no Dragonfly/Postgres/Qdrant. Without these the gateway
+# attempts broker discovery and the smoke test fails on every clean machine.
+$env:SUNBORN_CACHE_BACKEND = "memory"
+$env:SUNBORN_DB_BACKEND = "memory"
+$env:SUNBORN_VECTOR_BACKEND = "memory"
+$env:SUNBORN_STRICT_DURABILITY = "false"
+if (-not $env:SUNBORN_KMS_PROVIDER) { $env:SUNBORN_KMS_PROVIDER = "local-aead" }
 $env:HOST = "127.0.0.1"
 $env:PORT = "$SmokePort"
 $SmokeProc = Start-Process -FilePath $InstalledExe -PassThru -WindowStyle Hidden -RedirectStandardOutput $SmokeLog -RedirectStandardError "$SmokeLog.err"

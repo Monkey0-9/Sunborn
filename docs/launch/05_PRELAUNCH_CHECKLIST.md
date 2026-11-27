@@ -94,6 +94,10 @@ Entry gate: N1–N4 complete and a new verdict recorded.
 ### 2.1 Free-tier mechanics
 
 - [ ] Tenant `tier` and quota schema migrated and forward/back tested.
+      Migration `0013_tenant_tier_defaults.sql` and its `down/` script are checked in
+      and the crate compiles against them, but neither direction has been executed
+      against a live PostgreSQL instance here (no database was available), so this
+      box stays open.
 - [x] Cluster-wide rate limiter replaces the per-process bucket for free tenants.
       Local two-replica check: 2 rps admitted two requests across replicas, then rejected
       both replicas; see `benchmarks/results/local_quota_rehearsal.json`.
@@ -103,12 +107,27 @@ Entry gate: N1–N4 complete and a new verdict recorded.
 - [x] Prompt-size and completion-token caps are enforced, not client-supplied.
       `limits::tests` and `oversized_prompt_is_rejected_before_origin_dispatch`.
 - [ ] Global free-pool counter exists and is checked at settlement.
-- [ ] Tier defaults apply at provisioning: model allowlist, retention, support level.
-- [ ] Invitation cap and verified-identity requirement are enforced.
+- [x] Tier defaults apply at provisioning: model allowlist, retention, support level.
+      Applied as one unit with quota enrollment; a caller-supplied allowlist is
+      ceiling-checked against the tier instead of widening it. Verified by
+      `free_tier_defaults_are_returned_and_enrolled` and
+      `provisioning_without_a_tier_keeps_the_generous_pilot_default` in
+      [`tenant_tier_test.rs`](../../crates/sunborn-gateway/tests/tenant_tier_test.rs).
+- [x] Verified-identity requirement is enforced for identity-gated tiers.
+      Unverified provisioning returns `403` before any key is issued; see
+      `identity_gated_tier_refuses_unverified_provisioning`.
+- [x] Invitation cap is enforced.
+      A durable 30-day count per inviter, with an in-memory ledger so the cap is
+      exercised without PostgreSQL. Five free invitations are admitted and the sixth
+      returns `429`; a second inviter is unaffected. See
+      `the_invitation_cap_refuses_the_sixth_free_tenant`.
 - [x] Kill switches tested: revoke keys, suspend tenant, empty allowlist, lower
       ceiling, disable free signup.
       Verified in `crates/sunborn-gateway/tests/kill_switch_test.rs`.
-- [ ] Upgrade path exercised on a test tenant without data migration.
+- [x] Upgrade path exercised on a test tenant without data migration.
+      A tier-only `POST /v1/governance/tenant-quota` raises limits on the same tenant
+      and admits it again under the same identity (`applied: "tier_policy"`); see
+      `a_tier_only_update_raises_limits_on_the_same_tenant`.
 
 Design reference: [`02_FREE_TIER_ARCHITECTURE.md`](02_FREE_TIER_ARCHITECTURE.md).
 

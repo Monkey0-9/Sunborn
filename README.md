@@ -525,6 +525,18 @@ stream. Streaming responses are multiplexed through a panic-safe singleflight gu
 if a leader task aborts, followers are released and the in-flight map is cleaned up by RAII rather than
 left dangling.
 
+### 10.1 Gateway v2 Control Plane & Agentic Protocols
+
+Sunborn also includes unified LLM, MCP, and A2A gateway capabilities in [`crates/sunborn-gateway`](crates/sunborn-gateway):
+
+* **Pass-Through Streaming & OpenResponses:** Incremental SSE byte-stream pass-through with `tool_calls` and `finish_reason` preservation, plus `POST /v1/responses` and `GET /v1/models` ([`handlers/llm.rs`](crates/sunborn-gateway/src/handlers/llm.rs)).
+* **Enterprise Cloud Adapters:** Native adapters for Azure OpenAI, Google Vertex AI, and AWS Bedrock Converse ([`origin/cloud_providers.rs`](crates/sunborn-gateway/src/origin/cloud_providers.rs)) auto-wired from environment configuration into `MultiProviderArbitrageRouter`.
+* **Two-Phase Token-Aware Rate Limiting:** RAII `TokenReservation` guard enforcing RPM, RPD, TPM, TPD, and concurrency limits across both non-streaming and live streaming paths ([`token_limits.rs`](crates/sunborn-gateway/src/token_limits.rs), `/v1/governance/token-limits`).
+* **Virtual Keys (`sb-vk-*`):** Scoped keys with model prefix allowlists, budget ceilings, and revocation ([`virtual_keys.rs`](crates/sunborn-gateway/src/virtual_keys.rs), `/v1/virtual-keys`) authenticated directly by `auth_middleware_with_state`.
+* **Input/Output Guardrails & Lazy CEL Policies:** Opt-in PII/secrets redaction, keyword blocklists, prompt-injection shield ([`guardrails.rs`](crates/sunborn-gateway/src/guardrails.rs), `/v1/guardrails/config`), and compile-time `ContextRequirements` CEL policy evaluation ([`cel_policy.rs`](crates/sunborn-gateway/src/cel_policy.rs), `/v1/policies/cel`).
+* **MCP Multiplexing & A2A Discovery:** N-server MCP JSON-RPC 2.0 multiplexing with `{server}__{tool}` namespacing, tool-level RBAC, vaulted bearer injection, and SSRF IP validation ([`mcp_gateway.rs`](crates/sunborn-gateway/src/mcp_gateway.rs), `/mcp`, `/v1/mcp/servers`), plus A2A agent card discovery and task forwarding ([`a2a_gateway.rs`](crates/sunborn-gateway/src/a2a_gateway.rs), `/.well-known/agent.json`, `/v1/a2a/agents`, `/a2a/tasks/send`).
+* **Built-In Gateway Viewer:** Embedded local control plane and protocol inspector served at `/` and `/cockpit` ([`templates/local_cockpit.html`](crates/sunborn-gateway/src/templates/local_cockpit.html)).
+
 ---
 
 ## 11. Safety: guardrails, then abstention

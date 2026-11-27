@@ -150,8 +150,10 @@ pub struct CreateCredentialRequest {
     pub application_id: String,
     #[serde(default)]
     pub raw_key: Option<String>,
-    #[serde(default = "default_allowed_models")]
-    pub allowed_models: Vec<String>,
+    /// Omitted means "use the tenant tier's default allowlist". A supplied list
+    /// is a ceiling check against that default, not an override of it.
+    #[serde(default)]
+    pub allowed_models: Option<Vec<String>>,
     #[serde(default)]
     pub is_admin: bool,
     #[serde(default = "default_rate_limit")]
@@ -160,12 +162,91 @@ pub struct CreateCredentialRequest {
     pub expires_in_secs: Option<u64>,
 }
 
-fn default_allowed_models() -> Vec<String> {
-    vec!["*".to_string()]
+/// Resolves the effective allowlist for a new credential.
+///
+/// A tier default of `["*"]` is unrestricted, so a requested list (or the
+/// implicit `*`) is accepted unchanged. A restricted tier list is a ceiling: an
+/// operator cannot widen a free tenant to a premium model by asking for `*`, and
+/// a model outside the tier is refused rather than silently dropped.
+fn resolve_allowed_models(
+    requested: Option<Vec<String>>,
+    tier_defaults: Option<(String, Vec<String>)>,
+) -> Result<Vec<String>, SunbornError> {
+    let Some((_, defaults)) = tier_defaults else {
+        return Ok(requested.unwrap_or_else(|| vec!["*".to_string()]));
+    };
+    if defaults.iter().any(|model| model == "*") {
+        return Ok(requested.unwrap_or_else(|| vec!["*".to_string()]));
+    }
+    let effective = requested.unwrap_or_else(|| defaults.clone());
+    for model in &effective {
+        if model == "*" || !defaults.iter().any(|allowed| allowed == model) {
+            return Err(SunbornError::forbidden(format!(
+                "model '{model}' is not permitted by the tenant's tier"
+            )));
+        }
+    }
+    Ok(effective)
 }
 
 fn default_rate_limit() -> i32 {
     100
+}
+
+#[cfg(test)]
+mod allowlist_tests {
+    use super::*;
+
+    fn restricted(models: &[&str]) -> Option<(String, Vec<String>)> {
+        Some((
+            "free".to_string(),
+            models.iter().map(|model| (*model).to_string()).collect(),
+        ))
+    }
+
+    #[test]
+    fn unrestricted_tier_accepts_any_request() {
+        let defaults = Some(("standard".to_string(), vec!["*".to_string()]));
+        assert_eq!(
+            resolve_allowed_models(None, defaults.clone()).expect("implicit default"),
+            vec!["*".to_string()]
+        );
+        assert_eq!(
+            resolve_allowed_models(Some(vec!["gpt-4o".to_string()]), defaults)
+                .expect("explicit model"),
+            vec!["gpt-4o".to_string()]
+        );
+    }
+
+    #[test]
+    fn restricted_tier_inherits_its_defaults_when_unspecified() {
+        let resolved =
+            resolve_allowed_models(None, restricted(&["gpt-4o-mini", "gemini-1.5-flash"]))
+                .expect("tier defaults apply");
+        assert_eq!(resolved, vec!["gpt-4o-mini", "gemini-1.5-flash"]);
+    }
+
+    #[test]
+    fn restricted_tier_refuses_to_be_widened() {
+        let defaults = restricted(&["gpt-4o-mini"]);
+        assert!(
+            resolve_allowed_models(Some(vec!["*".to_string()]), defaults.clone()).is_err(),
+            "a wildcard request must not escape a restricted tier"
+        );
+        assert!(
+            resolve_allowed_models(Some(vec!["gpt-4o".to_string()]), defaults.clone()).is_err(),
+            "a premium model must be refused, not silently dropped"
+        );
+        assert!(resolve_allowed_models(Some(vec!["gpt-4o-mini".to_string()]), defaults).is_ok());
+    }
+
+    #[test]
+    fn missing_tenant_row_keeps_the_legacy_unrestricted_default() {
+        assert_eq!(
+            resolve_allowed_models(None, None).expect("pre-migration tenant"),
+            vec!["*".to_string()]
+        );
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -188,8 +269,10 @@ pub struct RotateCredentialRequest {
     pub application_id: String,
     #[serde(default)]
     pub new_raw_key: Option<String>,
-    #[serde(default = "default_allowed_models")]
-    pub allowed_models: Vec<String>,
+    /// Omitted means "use the tenant tier's default allowlist". A supplied list
+    /// is a ceiling check against that default, not an override of it.
+    #[serde(default)]
+    pub allowed_models: Option<Vec<String>>,
     #[serde(default)]
     pub is_admin: bool,
     #[serde(default = "default_rate_limit")]
@@ -223,12 +306,19 @@ pub async fn create_api_credential(
         .expires_in_secs
         .map(|s| Utc::now() + chrono::Duration::seconds(s as i64));
 
+    let tier_defaults = state
+        .postgres_db
+        .get_tenant_tier_defaults(&payload.tenant_id)
+        .await
+        .map_err(AppError::from)?;
+    let allowed_models = resolve_allowed_models(payload.allowed_models, tier_defaults)?;
+
     let new_rec = sunborn_db::NewApiCredentialRecord {
         key_hash: key_hash.clone(),
         tenant_id: payload.tenant_id.clone(),
         application_id: payload.application_id.clone(),
         rate_limit_rps: payload.rate_limit_rps,
-        allowed_models: payload.allowed_models.clone(),
+        allowed_models: allowed_models.clone(),
         is_admin: payload.is_admin,
         expires_at,
     };
@@ -245,7 +335,7 @@ pub async fn create_api_credential(
             application_id: sunborn_core::ApplicationId::new(&payload.application_id),
             key_hash: key_hash.clone(),
             rate_limit_rps: payload.rate_limit_rps as u32,
-            allowed_models: payload.allowed_models,
+            allowed_models,
             is_admin: payload.is_admin,
             expires_at,
         });
@@ -364,12 +454,19 @@ pub async fn rotate_api_credential(
         .expires_in_secs
         .map(|s| Utc::now() + chrono::Duration::seconds(s as i64));
 
+    let tier_defaults = state
+        .postgres_db
+        .get_tenant_tier_defaults(&payload.tenant_id)
+        .await
+        .map_err(AppError::from)?;
+    let allowed_models = resolve_allowed_models(payload.allowed_models, tier_defaults)?;
+
     let new_rec = sunborn_db::NewApiCredentialRecord {
         key_hash: new_hash.clone(),
         tenant_id: payload.tenant_id.clone(),
         application_id: payload.application_id.clone(),
         rate_limit_rps: payload.rate_limit_rps,
-        allowed_models: payload.allowed_models.clone(),
+        allowed_models: allowed_models.clone(),
         is_admin: payload.is_admin,
         expires_at,
     };
@@ -386,7 +483,7 @@ pub async fn rotate_api_credential(
             application_id: sunborn_core::ApplicationId::new(&payload.application_id),
             key_hash: new_hash.clone(),
             rate_limit_rps: payload.rate_limit_rps as u32,
-            allowed_models: payload.allowed_models,
+            allowed_models,
             is_admin: payload.is_admin,
             expires_at,
         });

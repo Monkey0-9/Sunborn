@@ -104,6 +104,106 @@ const ROUTES: &[Route] = &[
         access: Access::Tenant,
     },
     Route {
+        method: "POST",
+        path: "/v1/responses",
+        access: Access::Tenant,
+    },
+    Route {
+        method: "GET",
+        path: "/v1/models",
+        access: Access::Tenant,
+    },
+    Route {
+        method: "GET",
+        path: "/v1/virtual-keys",
+        access: Access::Tenant,
+    },
+    Route {
+        method: "POST",
+        path: "/v1/virtual-keys",
+        access: Access::Admin,
+    },
+    Route {
+        method: "DELETE",
+        path: "/v1/virtual-keys/{id}",
+        access: Access::Admin,
+    },
+    Route {
+        method: "GET",
+        path: "/v1/guardrails/config",
+        access: Access::Tenant,
+    },
+    Route {
+        method: "POST",
+        path: "/v1/guardrails/config",
+        access: Access::Admin,
+    },
+    Route {
+        method: "GET",
+        path: "/v1/policies/cel",
+        access: Access::Tenant,
+    },
+    Route {
+        method: "POST",
+        path: "/v1/policies/cel",
+        access: Access::Admin,
+    },
+    Route {
+        method: "DELETE",
+        path: "/v1/policies/cel/{id}",
+        access: Access::Admin,
+    },
+    Route {
+        method: "POST",
+        path: "/v1/governance/token-limits",
+        access: Access::Admin,
+    },
+    Route {
+        method: "GET",
+        path: "/v1/governance/token-limits/{tenant_id}",
+        access: Access::Admin,
+    },
+    Route {
+        method: "POST",
+        path: "/mcp",
+        access: Access::Tenant,
+    },
+    Route {
+        method: "GET",
+        path: "/v1/mcp/servers",
+        access: Access::Tenant,
+    },
+    Route {
+        method: "POST",
+        path: "/v1/mcp/servers",
+        access: Access::Admin,
+    },
+    Route {
+        method: "DELETE",
+        path: "/v1/mcp/servers/{name}",
+        access: Access::Admin,
+    },
+    Route {
+        method: "GET",
+        path: "/.well-known/agent.json",
+        access: Access::Public,
+    },
+    Route {
+        method: "GET",
+        path: "/v1/a2a/agents",
+        access: Access::Tenant,
+    },
+    Route {
+        method: "POST",
+        path: "/v1/a2a/agents",
+        access: Access::Admin,
+    },
+    Route {
+        method: "POST",
+        path: "/a2a/tasks/send",
+        access: Access::Tenant,
+    },
+    Route {
         method: "GET",
         path: "/v1/caches/{*key}",
         access: Access::Admin,
@@ -266,6 +366,11 @@ const ROUTES: &[Route] = &[
         method: "POST",
         path: "/v1/governance/free-pool",
         access: Access::Admin,
+    },
+    Route {
+        method: "GET",
+        path: "/v1/governance/shadow-report",
+        access: Access::Tenant,
     },
     // Speculation and routing.
     Route {

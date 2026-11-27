@@ -32,9 +32,32 @@ pub struct ShadowEvaluationResult {
     pub status: String,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ShadowRouteStats {
+    pub tenant_id: String,
+    pub model: String,
+    pub total_shadow_candidates: u64,
+    pub verified_consistent: u64,
+    pub drift_detected: u64,
+    pub potential_saved_micropaises: u64,
+    pub false_hit_risk_rate: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShadowCalibrationReport {
+    pub shadow_mode_enabled: bool,
+    pub calibrated_similarity_threshold: f32,
+    pub calibration_observations: usize,
+    pub total_evaluations: u64,
+    pub total_drift_detected: u64,
+    pub routes: Vec<ShadowRouteStats>,
+}
+
 pub struct ShadowEvaluator {
     embedder: Arc<dyn EmbeddingProvider>,
     calibrator: Arc<std::sync::RwLock<sunborn_semantic::NonExchangeableConformalCalibrator>>,
+    route_stats:
+        Arc<std::sync::RwLock<std::collections::HashMap<(String, String), ShadowRouteStats>>>,
 }
 
 impl ShadowEvaluator {
@@ -44,6 +67,7 @@ impl ShadowEvaluator {
             calibrator: Arc::new(std::sync::RwLock::new(
                 sunborn_semantic::NonExchangeableConformalCalibrator::new(1000, 0.995, 0.005),
             )),
+            route_stats: Arc::new(std::sync::RwLock::new(std::collections::HashMap::new())),
         }
     }
 
@@ -53,6 +77,58 @@ impl ShadowEvaluator {
             calibrator: Arc::new(std::sync::RwLock::new(
                 sunborn_semantic::NonExchangeableConformalCalibrator::new(1000, 0.995, 0.005),
             )),
+            route_stats: Arc::new(std::sync::RwLock::new(std::collections::HashMap::new())),
+        }
+    }
+
+    pub fn record_route_shadow_outcome(
+        &self,
+        tenant_id: &str,
+        model: &str,
+        is_drift: bool,
+        potential_saved_micropaises: u64,
+    ) {
+        let mut map = write_lock(&self.route_stats);
+        let entry = map
+            .entry((tenant_id.to_string(), model.to_string()))
+            .or_insert_with(|| ShadowRouteStats {
+                tenant_id: tenant_id.to_string(),
+                model: model.to_string(),
+                ..Default::default()
+            });
+        entry.total_shadow_candidates += 1;
+        if is_drift {
+            entry.drift_detected += 1;
+        } else {
+            entry.verified_consistent += 1;
+            entry.potential_saved_micropaises += potential_saved_micropaises;
+        }
+        entry.false_hit_risk_rate = if entry.total_shadow_candidates > 0 {
+            entry.drift_detected as f64 / entry.total_shadow_candidates as f64
+        } else {
+            0.0
+        };
+    }
+
+    pub fn calibration_report(
+        &self,
+        shadow_mode_enabled: bool,
+        tenant_filter: Option<&str>,
+    ) -> ShadowCalibrationReport {
+        let map = read_lock(&self.route_stats);
+        let mut routes: Vec<ShadowRouteStats> = map
+            .values()
+            .filter(|r| tenant_filter.map(|t| r.tenant_id == t).unwrap_or(true))
+            .cloned()
+            .collect();
+        routes.sort_by(|a, b| a.tenant_id.cmp(&b.tenant_id).then(a.model.cmp(&b.model)));
+        ShadowCalibrationReport {
+            shadow_mode_enabled,
+            calibrated_similarity_threshold: self.calibrated_threshold(),
+            calibration_observations: self.observation_count(),
+            total_evaluations: SHADOW_EVALUATIONS_TOTAL.load(Ordering::Relaxed),
+            total_drift_detected: SHADOW_DRIFT_DETECTED_TOTAL.load(Ordering::Relaxed),
+            routes,
         }
     }
 

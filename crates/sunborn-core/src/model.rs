@@ -300,4 +300,12 @@ pub struct ResponseEnvelope {
     pub duration_ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub certificate: Option<crate::certificate::ReuseCertificate>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_tokens: Option<u32>,
 }

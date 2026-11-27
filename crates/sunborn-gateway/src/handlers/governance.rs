@@ -211,3 +211,20 @@ pub async fn verify_rbi_data_localization(
         "timestamp": Utc::now().to_rfc3339(),
     })))
 }
+
+/// GET /v1/governance/shadow-report
+/// Returns per-tenant/per-model shadow-mode calibration savings vs. false-hit risk.
+pub async fn get_shadow_calibration_report(
+    State(state): State<AppState>,
+    Extension(sec_ctx): Extension<SecurityContext>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let tenant_filter = if sec_ctx.is_admin {
+        None
+    } else {
+        Some(sec_ctx.tenant_id.0.as_str())
+    };
+    let report = state
+        .shadow_evaluator
+        .calibration_report(state.shadow_mode, tenant_filter);
+    Ok(Json(serde_json::json!(report)))
+}

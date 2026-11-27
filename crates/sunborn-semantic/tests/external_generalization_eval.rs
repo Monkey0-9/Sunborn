@@ -419,4 +419,46 @@ async fn evaluate_frozen_rules_on_external_unseen_dataset_and_compare_providers(
         0,
         "Zero HTTP numeric_flip false positives expected"
     );
+
+    if std::env::var("SUNBORN_WRITE_EVIDENCE").as_deref() == Ok("1") {
+        use sha2::{Digest, Sha256};
+        let mut h = Sha256::new();
+        h.update(raw_json.as_bytes());
+        let sha = hex::encode(h.finalize());
+
+        let row = |raw: &EvalStats,
+                   guarded: &EvalStats,
+                   cats: &BTreeMap<String, (usize, usize)>,
+                   cp_upper: f64| {
+            json!({
+                "raw_similarity": {
+                    "tp": raw.tp, "fp": raw.fp, "tn": raw.tn, "fn": raw.fn_count,
+                    "precision": raw.precision(), "recall": raw.recall(), "f1": raw.f1()
+                },
+                "frozen_guardrails": {
+                    "tp": guarded.tp, "fp": guarded.fp, "tn": guarded.tn, "fn": guarded.fn_count,
+                    "precision": guarded.precision(), "recall": guarded.recall(), "f1": guarded.f1(),
+                    "abstention_rate": guarded.abstention_rate(pairs.len()),
+                    "cp95_false_positive_upper": cp_upper,
+                    "category_fp_fn": cats
+                }
+            })
+        };
+
+        let artifact = json!({
+            "dataset": "research/calibration/external_unseen_eval_dataset.json",
+            "dataset_sha256": sha,
+            "dataset_pairs": pairs.len(),
+            "protocol": "Rules frozen before dataset authoring; no tuning on this split.",
+            "providers": {
+                "deterministic_lsh": row(&det_raw, &det_guarded, &det_cats, cp_upper_det),
+                "http_trigram_local": row(&http_raw, &http_guarded, &http_cats, cp_upper_http),
+            },
+            "scope": "Measured external-unseen abstention behaviour. Low recall means the guardrails avoid false reuse by admitting little; this is not paraphrase generalization evidence and not a production error rate."
+        });
+        let out = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../research/results/external_generalization_run.json");
+        std::fs::write(&out, serde_json::to_vec_pretty(&artifact).unwrap()).unwrap();
+        println!("Wrote {}", out.display());
+    }
 }

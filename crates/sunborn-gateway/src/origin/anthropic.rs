@@ -68,7 +68,15 @@ impl LlmOriginProvider for AnthropicMessagesProvider {
         });
 
         if let Some(sys) = &req.system_prompt {
-            payload["system"] = serde_json::Value::String(sys.clone());
+            // Preserve system prefix boundary with Anthropic native prompt caching
+            // so cache misses still benefit from provider-side prefix discounts.
+            payload["system"] = serde_json::json!([
+                {
+                    "type": "text",
+                    "text": sys,
+                    "cache_control": { "type": "ephemeral" }
+                }
+            ]);
         }
         if let Some(temp) = req.temperature {
             payload["temperature"] = serde_json::json!(temp);
@@ -79,6 +87,9 @@ impl LlmOriginProvider for AnthropicMessagesProvider {
             http_req = http_req.header("x-api-key", key);
         }
         http_req = http_req.header("anthropic-version", "2023-06-01");
+        if req.system_prompt.is_some() {
+            http_req = http_req.header("anthropic-beta", "prompt-caching-2024-07-31");
+        }
 
         let resp = http_req.send().await.map_err(|e| {
             SunbornError::origin(format!("Anthropic upstream connection error: {e}"))

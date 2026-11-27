@@ -10,7 +10,10 @@
 param(
     [string]$Version = "1.0.0",
     [string]$OutputDir = "$PSScriptRoot\..\target\dist",
-    [switch]$SkipBuild = $false
+    [switch]$SkipBuild = $false,
+    # Offline/air-gapped signing: RFC 3161 timestamping requires network access and
+    # blocks indefinitely when the timestamp authority is unreachable.
+    [switch]$NoTimestamp = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -66,9 +69,30 @@ if (Test-Path (Join-Path $ProjectRoot "sbom.cyclonedx.json")) {
 # Optional code-signing for production release distribution
 if ($env:SIGNING_CERT_PFX -and (Test-Path $env:SIGNING_CERT_PFX)) {
     Write-Host "Signing executable with release certificate..." -ForegroundColor Cyan
-    $certPass = if ($env:SIGNING_CERT_PASSWORD) { ConvertTo-SecureString $env:SIGNING_CERT_PASSWORD -AsPlainText -Force } else { $null }
-    $cert = Get-PfxCertificate -FilePath $env:SIGNING_CERT_PFX
-    Set-AuthenticodeSignature -FilePath (Join-Path $StageDir "bin\sunborn-gateway.exe") -Certificate $cert -TimestampServer "http://timestamp.digicert.com"
+    # Load the PFX directly with its password. `Get-PfxCertificate` prompts
+    # interactively for a password-protected PFX and blocks unattended CI runs.
+    if ($env:SIGNING_CERT_PASSWORD) {
+        $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(
+            $env:SIGNING_CERT_PFX,
+            $env:SIGNING_CERT_PASSWORD,
+            [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
+        )
+    } else {
+        $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($env:SIGNING_CERT_PFX)
+    }
+    $signArgs = @{
+        FilePath = (Join-Path $StageDir "bin\sunborn-gateway.exe")
+        Certificate = $cert
+    }
+    if (-not $NoTimestamp) {
+        $signArgs.TimestampServer = "http://timestamp.digicert.com"
+    }
+    $sig = Set-AuthenticodeSignature @signArgs
+    if (-not $sig.SignerCertificate) {
+        Write-Error "Code signing failed: $($sig.StatusMessage)"
+        exit 1
+    }
+    Write-Host "[+] Authenticode signature applied (status: $($sig.Status)); timestamp: $(if ($NoTimestamp) { 'omitted' } else { 'requested' })" -ForegroundColor Green
 }
 
 # Generate build provenance metadata

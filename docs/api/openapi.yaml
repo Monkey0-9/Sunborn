@@ -1523,6 +1523,22 @@ paths:
             application/json:
               schema:
                 type: object
+  /v1/governance/shadow-report:
+    get:
+      summary: Shadow Mode Calibration Report
+      description: Returns per-tenant and per-model shadow-mode potential savings versus drift/false-hit risk.
+      tags:
+        - Governance
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
                 properties:
                   status:
                     type: object
@@ -2460,3 +2476,232 @@ paths:
             text/html:
               schema:
                 type: string
+
+  /v1/responses:
+    post:
+      summary: OpenResponses API
+      tags: [LLM]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OpenResponses completion
+
+  /v1/models:
+    get:
+      summary: List available models
+      tags: [LLM]
+      responses:
+        '200':
+          description: Model list
+
+  /v1/virtual-keys:
+    get:
+      summary: List virtual keys
+      tags: [Governance]
+      responses:
+        '200':
+          description: Virtual key list
+    post:
+      summary: Create virtual key
+      tags: [Governance]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Created virtual key
+
+  /v1/virtual-keys/{id}:
+    delete:
+      summary: Revoke virtual key
+      tags: [Governance]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Revoked
+
+  /v1/guardrails/config:
+    get:
+      summary: Get guardrails configuration
+      tags: [Security]
+      responses:
+        '200':
+          description: Guardrails configuration
+    post:
+      summary: Update guardrails configuration
+      tags: [Security]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated configuration
+
+  /v1/policies/cel:
+    get:
+      summary: List CEL policies
+      tags: [Security]
+      responses:
+        '200':
+          description: Policy list
+    post:
+      summary: Add CEL policy
+      tags: [Security]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Added policy
+
+  /v1/policies/cel/{id}:
+    delete:
+      summary: Delete CEL policy
+      tags: [Security]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+
+  /v1/governance/token-limits:
+    post:
+      summary: Set tenant token rate limits
+      tags: [Governance]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated token limits
+
+  /v1/governance/token-limits/{tenant_id}:
+    get:
+      summary: Get tenant token rate limit status
+      tags: [Governance]
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Token rate limit status
+
+  /mcp:
+    post:
+      summary: MCP JSON-RPC 2.0 multiplexing endpoint
+      tags: [MCP]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: JSON-RPC response
+
+  /v1/mcp/servers:
+    get:
+      summary: List registered MCP servers
+      tags: [MCP]
+      responses:
+        '200':
+          description: MCP server list
+    post:
+      summary: Register upstream MCP server
+      tags: [MCP]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Registered MCP server
+
+  /v1/mcp/servers/{name}:
+    delete:
+      summary: Remove MCP server
+      tags: [MCP]
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Removed
+
+  /.well-known/agent.json:
+    get:
+      summary: A2A Gateway well-known agent card
+      tags: [A2A]
+      security: []
+      responses:
+        '200':
+          description: Agent card
+
+  /v1/a2a/agents:
+    get:
+      summary: List registered A2A agents
+      tags: [A2A]
+      responses:
+        '200':
+          description: Agent list
+    post:
+      summary: Register A2A agent
+      tags: [A2A]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Registered agent
+
+  /a2a/tasks/send:
+    post:
+      summary: Send A2A task to registered agent
+      tags: [A2A]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: A2A task response

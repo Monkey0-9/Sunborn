@@ -197,7 +197,7 @@ Issue #21 P1 High   PARTIAL Distribution     CI release smoke job exists; indepe
                                              with SHA-256 & SHA-512, verified via test script   scripts/verify-desktop-package.ps1
 Issue #22 P1 High   CLOSED  Security CI      Pinned Semgrep CLI to semgrep==1.178.0 in          .github/workflows/security.yml
                                              workflow to eliminate version drift
-Issue #23 P1 High   PARTIAL Provenance       Deterministic CycloneDX v1.5 SBOM, dual hashes; no signed artifact yet    scripts/verify-desktop-package.ps1
+Issue #23 P1 High   PARTIAL Provenance       CycloneDX v1.5 SBOM, dual hashes; self-signed pipeline test only, no CA-signed artifact    scripts/verify-desktop-package.ps1
                                              SHA-256/SHA-512, BUILD-METADATA.json bundled       generate_sbom.py
 =========================================================================================================
 ```
@@ -223,7 +223,8 @@ Issue #23 P1 High   PARTIAL Provenance       Deterministic CycloneDX v1.5 SBOM, 
 - **Issue #21 (Clean-Machine Desktop Release Smoke Testing)**:
   - *Hardening*: `.github/workflows/release.yml` now checks the installer exit code, verifies the installed binary with `--version`, and exercises `uninstall.ps1 -Silent -PurgeData`; `scripts/install-sunborn.ps1` gained `-Silent`.
   - *Remaining gap*: the `windows-latest` runner already ships Rust and Node, so this is not a tool-free acceptance environment. An independent clean Windows 11 x64 run remains outstanding.
-  - *Verification*: workflow definition reviewed; not executed on a clean host here.
+  - *Local acceptance (2026-11-25)*: extracted the packaged zip, removed `cargo`/`node` from `PATH`, installed with `-Silent`, and confirmed exit 0, `/health` on 127.0.0.1:18081, and `--version` = `1.0.0 (release)`; `-TargetDir` uninstall with `-PurgeData` removed the install. Two defects were found and fixed: broker-default smoke failure and an uninstaller that ignored `-TargetDir`. This host is not an independent clean image, so the item stays PARTIAL. Evidence: `docs/audit/RELEASE_ACCEPTANCE_EVIDENCE.md`.
+  - *Verification*: workflow definition reviewed; local clean-toolchain run recorded; not executed on an independent clean host.
 
 - **Issue #22 (Pinned Semgrep SAST Version)**:
   - *Hardening*: Pinned Semgrep CLI installation in `.github/workflows/security.yml` to `semgrep==1.178.0`.
@@ -231,8 +232,9 @@ Issue #23 P1 High   PARTIAL Provenance       Deterministic CycloneDX v1.5 SBOM, 
 
 - **Issue #23 (Windows Package Signing, Provenance & SBOM)**:
   - *Hardening*: `scripts/package-distribution.ps1` now bundles `sbom.cyclonedx.json`, writes an explicitly unsigned `BUILD-METADATA.json` (manifest type `sunborn-build-metadata-v1`, binary SHA-256, commit SHA, code-signing state), and supports Authenticode via `$env:SIGNING_CERT_PFX`. `.github/workflows/release.yml` calls `actions/attest-build-provenance@v2` with `id-token`/`attestations` write permissions, which is the real SLSA provenance mechanism (the local JSON is not SLSA provenance).
-  - *Remaining gap*: no signing certificate is configured in CI and no signed artifact has been produced. A GitHub attestation only exists after the release workflow runs.
-  - *Verification*: workflow YAML parsed; provenance/manifest wording corrected. Not executed against a signing certificate.
+  - *Remaining gap*: no publicly trusted signing certificate is configured in CI, and no production-signed artifact has been produced. A GitHub attestation only exists after the release workflow runs.
+  - *Local signing run (2026-11-25)*: the packaging pipeline was executed end-to-end with a self-signed certificate (`CN=Sunborn Dev Self-Signed (NOT FOR PRODUCTION)`, thumbprint `3C8F48D0…B003B092`) and produced a signed zip. `Get-AuthenticodeSignature` reports `UnknownError`/untrusted root, which is expected and is **not** a trusted release signature. Two blocking defects were fixed: interactive PFX password prompting and an unreachable timestamp authority. The item stays PARTIAL pending a CA-issued certificate.
+  - *Verification*: `docs/audit/RELEASE_ACCEPTANCE_EVIDENCE.md`; signature inspected locally. Not a production-signed release.
 
 ---
 

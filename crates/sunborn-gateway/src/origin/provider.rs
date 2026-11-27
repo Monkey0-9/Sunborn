@@ -16,9 +16,60 @@ pub struct OriginExecutionResult {
     pub tool_calls: Option<Vec<sunborn_core::model::ToolCall>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OriginStreamChunk {
+    pub delta_content: String,
+    #[serde(default)]
+    pub delta_tool_calls: Option<Vec<serde_json::Value>>,
+    #[serde(default)]
+    pub finish_reason: Option<String>,
+    #[serde(default)]
+    pub prompt_tokens: Option<u32>,
+    #[serde(default)]
+    pub completion_tokens: Option<u32>,
+    #[serde(default)]
+    pub model: Option<String>,
+}
+
 #[async_trait]
 pub trait LlmOriginProvider: Send + Sync {
     async fn execute(&self, req: &RequestEnvelope) -> Result<OriginExecutionResult>;
+    async fn execute_stream(
+        &self,
+        req: &RequestEnvelope,
+    ) -> Result<tokio::sync::mpsc::Receiver<Result<OriginStreamChunk>>> {
+        let res = self.execute(req).await?;
+        let (tx, rx) = tokio::sync::mpsc::channel(16);
+        tokio::spawn(async move {
+            let tool_calls_json = res.tool_calls.as_ref().map(|tcs| {
+                tcs.iter()
+                    .enumerate()
+                    .map(|(idx, tc)| {
+                        serde_json::json!({
+                            "index": idx,
+                            "id": tc.id,
+                            "type": tc.r#type,
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            }
+                        })
+                    })
+                    .collect()
+            });
+            let _ = tx
+                .send(Ok(OriginStreamChunk {
+                    delta_content: res.content,
+                    delta_tool_calls: tool_calls_json,
+                    finish_reason: res.finish_reason.or_else(|| Some("stop".to_string())),
+                    prompt_tokens: Some(res.prompt_tokens),
+                    completion_tokens: Some(res.completion_tokens),
+                    model: Some(res.model),
+                }))
+                .await;
+        });
+        Ok(rx)
+    }
     fn is_mock(&self) -> bool {
         false
     }
@@ -73,20 +124,16 @@ impl HttpLlmOriginProvider {
     pub fn for_grok(api_key: Option<String>) -> Self {
         Self::new("https://api.x.ai/v1", api_key)
     }
-}
 
-#[async_trait]
-impl LlmOriginProvider for HttpLlmOriginProvider {
-    async fn execute(&self, req: &RequestEnvelope) -> Result<OriginExecutionResult> {
-        let start = Instant::now();
-
-        // 1. Determine upstream URL (support /chat/completions suffix normalization)
+    fn build_target_url(&self) -> String {
         let mut target_url = self.endpoint_url.trim_end_matches('/').to_string();
         if !target_url.ends_with("/chat/completions") {
             target_url.push_str("/chat/completions");
         }
+        target_url
+    }
 
-        // 2. Build OpenAI-compatible request payload
+    fn build_openai_payload(&self, req: &RequestEnvelope, stream: bool) -> serde_json::Value {
         let messages: Vec<serde_json::Value> = if !req.messages.is_empty() {
             req.messages
                 .iter()
@@ -121,6 +168,16 @@ impl LlmOriginProvider for HttpLlmOriginProvider {
             "model": req.model,
             "messages": messages,
         });
+        // Preserve system-prefix caching synergy on OpenAI-compatible upstreams
+        if let Some(sys) = &req.system_prompt {
+            use sha2::{Digest, Sha256};
+            let mut h = Sha256::new();
+            h.update(req.tenant_id.0.as_bytes());
+            h.update(b":");
+            h.update(sys.as_bytes());
+            let prefix_hash = hex::encode(h.finalize());
+            payload["prompt_cache_key"] = serde_json::json!(format!("sb-{}", &prefix_hash[..24]));
+        }
 
         if let Some(temp) = req.temperature {
             payload["temperature"] = serde_json::json!(temp);
@@ -161,6 +218,20 @@ impl LlmOriginProvider for HttpLlmOriginProvider {
                 payload["response_format"] = serde_json::json!({ "type": rf });
             }
         }
+        if stream {
+            payload["stream"] = serde_json::json!(true);
+            payload["stream_options"] = serde_json::json!({ "include_usage": true });
+        }
+        payload
+    }
+}
+
+#[async_trait]
+impl LlmOriginProvider for HttpLlmOriginProvider {
+    async fn execute(&self, req: &RequestEnvelope) -> Result<OriginExecutionResult> {
+        let start = Instant::now();
+        let target_url = self.build_target_url();
+        let payload = self.build_openai_payload(req, false);
 
         // 3. Dispatch HTTP request with retries and exponential backoff
         let mut last_error = None;
@@ -255,6 +326,129 @@ impl LlmOriginProvider for HttpLlmOriginProvider {
         Err(SunbornError::origin(last_error.unwrap_or_else(|| {
             "Origin execution failed after maximum retries".to_string()
         })))
+    }
+
+    async fn execute_stream(
+        &self,
+        req: &RequestEnvelope,
+    ) -> Result<tokio::sync::mpsc::Receiver<Result<OriginStreamChunk>>> {
+        use tokio_stream::StreamExt;
+
+        let target_url = self.build_target_url();
+        let payload = self.build_openai_payload(req, true);
+        let mut request_builder = self.client.post(&target_url).json(&payload);
+        if let Some(key) = &self.api_key {
+            if !key.is_empty() {
+                request_builder = request_builder.bearer_auth(key);
+            }
+        }
+
+        let resp = request_builder.send().await.map_err(|err| {
+            SunbornError::origin(format!(
+                "HTTP stream connection failed to {}: {}",
+                target_url, err
+            ))
+        })?;
+        let status = resp.status();
+        if !status.is_success() {
+            let err_text = resp.text().await.unwrap_or_default();
+            return Err(SunbornError::origin(format!(
+                "LLM Origin stream returned HTTP {}: {}",
+                status, err_text
+            )));
+        }
+
+        let (tx, rx) = tokio::sync::mpsc::channel(64);
+        let fallback_model = req.model.clone();
+        tokio::spawn(async move {
+            let mut byte_stream = resp.bytes_stream();
+            let mut line_buf = String::new();
+            while let Some(item) = byte_stream.next().await {
+                let bytes = match item {
+                    Ok(b) => b,
+                    Err(e) => {
+                        let _ = tx
+                            .send(Err(SunbornError::origin(format!(
+                                "Upstream SSE stream read error: {}",
+                                e
+                            ))))
+                            .await;
+                        return;
+                    }
+                };
+                line_buf.push_str(&String::from_utf8_lossy(&bytes));
+                while let Some(pos) = line_buf.find('\n') {
+                    let raw_line = line_buf[..pos].trim_end_matches('\r').to_string();
+                    line_buf.drain(..=pos);
+                    let trimmed = raw_line.trim();
+                    if trimmed.is_empty() || trimmed.starts_with(':') {
+                        continue;
+                    }
+                    let Some(data) = trimmed.strip_prefix("data:") else {
+                        continue;
+                    };
+                    let data = data.trim();
+                    if data == "[DONE]" {
+                        return;
+                    }
+                    let Ok(val) = serde_json::from_str::<serde_json::Value>(data) else {
+                        continue;
+                    };
+                    let delta_content = val
+                        .pointer("/choices/0/delta/content")
+                        .and_then(|c| c.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let delta_tool_calls = val
+                        .pointer("/choices/0/delta/tool_calls")
+                        .and_then(|tc| tc.as_array())
+                        .cloned();
+                    let finish_reason = val
+                        .pointer("/choices/0/finish_reason")
+                        .and_then(|f| f.as_str())
+                        .map(|s| s.to_string());
+                    let prompt_tokens = val
+                        .pointer("/usage/prompt_tokens")
+                        .and_then(|u| u.as_u64())
+                        .map(|u| u as u32);
+                    let completion_tokens = val
+                        .pointer("/usage/completion_tokens")
+                        .and_then(|u| u.as_u64())
+                        .map(|u| u as u32);
+                    let model = val
+                        .get("model")
+                        .and_then(|m| m.as_str())
+                        .map(|s| s.to_string())
+                        .or_else(|| Some(fallback_model.clone()));
+
+                    if delta_content.is_empty()
+                        && delta_tool_calls.is_none()
+                        && finish_reason.is_none()
+                        && prompt_tokens.is_none()
+                        && completion_tokens.is_none()
+                    {
+                        continue;
+                    }
+
+                    if tx
+                        .send(Ok(OriginStreamChunk {
+                            delta_content,
+                            delta_tool_calls,
+                            finish_reason,
+                            prompt_tokens,
+                            completion_tokens,
+                            model,
+                        }))
+                        .await
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
+            }
+        });
+
+        Ok(rx)
     }
 
     async fn health_check(&self) -> Result<()> {
@@ -368,6 +562,48 @@ impl MultiProviderArbitrageRouter {
     pub fn providers(&self) -> &[ArbitrageProviderEntry] {
         &self.providers
     }
+
+    fn order_providers_for_model(&self, model: &str) -> Vec<ArbitrageProviderEntry> {
+        let mut ordered_providers = self.providers.clone();
+        if model.starts_with("claude-") {
+            ordered_providers.sort_by_key(|p| {
+                if p.name.to_lowercase().contains("anthropic")
+                    || p.name.to_lowercase().contains("claude")
+                {
+                    0
+                } else {
+                    p.priority + 1
+                }
+            });
+        } else if model.starts_with("gemini-") {
+            ordered_providers.sort_by_key(|p| {
+                if p.name.to_lowercase().contains("gemini")
+                    || p.name.to_lowercase().contains("google")
+                {
+                    0
+                } else {
+                    p.priority + 1
+                }
+            });
+        } else if model.starts_with("gpt-") || model.starts_with("o1") || model.starts_with("o3") {
+            ordered_providers.sort_by_key(|p| {
+                if p.name.to_lowercase().contains("openai") {
+                    0
+                } else {
+                    p.priority + 1
+                }
+            });
+        } else if model.starts_with("grok-") {
+            ordered_providers.sort_by_key(|p| {
+                if p.name.to_lowercase().contains("grok") || p.name.to_lowercase().contains("xai") {
+                    0
+                } else {
+                    p.priority + 1
+                }
+            });
+        }
+        ordered_providers
+    }
 }
 
 #[async_trait]
@@ -383,49 +619,7 @@ impl LlmOriginProvider for MultiProviderArbitrageRouter {
             ));
         }
 
-        // Intelligent Frontier Model Affinity Ordering:
-        // Prioritize providers matching the model family (Claude -> Anthropic, Gemini -> Google, GPT -> OpenAI)
-        let mut ordered_providers = self.providers.clone();
-        if req.model.starts_with("claude-") {
-            ordered_providers.sort_by_key(|p| {
-                if p.name.to_lowercase().contains("anthropic")
-                    || p.name.to_lowercase().contains("claude")
-                {
-                    0
-                } else {
-                    p.priority + 1
-                }
-            });
-        } else if req.model.starts_with("gemini-") {
-            ordered_providers.sort_by_key(|p| {
-                if p.name.to_lowercase().contains("gemini")
-                    || p.name.to_lowercase().contains("google")
-                {
-                    0
-                } else {
-                    p.priority + 1
-                }
-            });
-        } else if req.model.starts_with("gpt-")
-            || req.model.starts_with("o1")
-            || req.model.starts_with("o3")
-        {
-            ordered_providers.sort_by_key(|p| {
-                if p.name.to_lowercase().contains("openai") {
-                    0
-                } else {
-                    p.priority + 1
-                }
-            });
-        } else if req.model.starts_with("grok-") {
-            ordered_providers.sort_by_key(|p| {
-                if p.name.to_lowercase().contains("grok") || p.name.to_lowercase().contains("xai") {
-                    0
-                } else {
-                    p.priority + 1
-                }
-            });
-        }
+        let ordered_providers = self.order_providers_for_model(&req.model);
 
         let mut last_error = None;
         for entry in &ordered_providers {
@@ -454,6 +648,46 @@ impl LlmOriginProvider for MultiProviderArbitrageRouter {
         }
 
         Err(last_error.unwrap_or_else(|| SunbornError::origin("All arbitrage providers failed")))
+    }
+
+    async fn execute_stream(
+        &self,
+        req: &RequestEnvelope,
+    ) -> Result<tokio::sync::mpsc::Receiver<Result<OriginStreamChunk>>> {
+        if self.providers.is_empty() {
+            return Err(SunbornError::origin(
+                "No upstream LLM providers configured in arbitrage router",
+            ));
+        }
+
+        let ordered_providers = self.order_providers_for_model(&req.model);
+        let mut last_error = None;
+        for entry in &ordered_providers {
+            match entry.provider.execute_stream(req).await {
+                Ok(rx) => {
+                    tracing::info!(
+                        provider = %entry.name,
+                        model = %req.model,
+                        "Arbitrage router opened pass-through stream"
+                    );
+                    return Ok(rx);
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        provider = %entry.name,
+                        error = %err,
+                        "Primary provider stream initiation failed; cascading to next arbitrage provider"
+                    );
+                    last_error = Some(err);
+                    if !self.fallback_on_error {
+                        break;
+                    }
+                }
+            }
+        }
+
+        Err(last_error
+            .unwrap_or_else(|| SunbornError::origin("All arbitrage providers failed stream init")))
     }
 
     async fn health_check(&self) -> Result<()> {

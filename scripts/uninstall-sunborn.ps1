@@ -6,6 +6,7 @@
 #>
 
 param(
+    [string]$TargetDir = "$env:LOCALAPPDATA\Sunborn",
     [switch]$Silent = $false,
     [switch]$PurgeData = $false
 )
@@ -43,7 +44,6 @@ if (Test-Path $UninstallRegKey) {
 }
 
 # 4. Remove Binary & optionally Data
-$TargetDir = "$env:LOCALAPPDATA\Sunborn"
 $BinDir = Join-Path $TargetDir "bin"
 if (Test-Path $BinDir) {
     Remove-Item $BinDir -Recurse -Force -ErrorAction SilentlyContinue

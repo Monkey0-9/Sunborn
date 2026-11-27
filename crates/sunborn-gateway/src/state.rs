@@ -80,6 +80,7 @@ pub struct AppState {
     pub shadow_evaluator: Arc<ShadowEvaluator>,
     pub shadow_semaphore: Arc<tokio::sync::Semaphore>,
     pub shadow_sample_rate: f64,
+    pub shadow_mode: bool,
     pub temporal_engine: Arc<sunborn_freshness::TemporalValidityEngine>,
     pub paraphrase_clusters: Arc<sunborn_semantic::ParaphraseClusterManager>,
     pub radix_router: Arc<KvCacheRouter>,
@@ -114,6 +115,12 @@ pub struct AppState {
     /// Streams). In-memory fallback is never accepted in production.
     pub cluster_transport_durable: bool,
     pub orchestrator: Arc<InvalidationOrchestrator>,
+    pub token_limiter: Arc<crate::token_limits::TokenRateLimiter>,
+    pub virtual_keys: Arc<crate::virtual_keys::VirtualKeyStore>,
+    pub guardrail_chain: Arc<crate::guardrails::GuardrailChain>,
+    pub cel_engine: Arc<crate::cel_policy::CelPolicyEngine>,
+    pub mcp_gateway: Arc<crate::mcp_gateway::McpGateway>,
+    pub a2a_gateway: Arc<crate::a2a_gateway::A2aGateway>,
 }
 
 impl AppState {
@@ -461,6 +468,51 @@ impl AppState {
             });
         }
 
+        // 4b. Azure OpenAI, Google Vertex AI, AWS Bedrock enterprise cloud adapters
+        if let (Some(az_ep), Some(az_dep), Some(az_key)) = (
+            non_empty_env("SUNBORN_AZURE_OPENAI_ENDPOINT"),
+            non_empty_env("SUNBORN_AZURE_OPENAI_DEPLOYMENT"),
+            non_empty_env("SUNBORN_AZURE_OPENAI_API_KEY"),
+        ) {
+            let ver = non_empty_env("SUNBORN_AZURE_OPENAI_API_VERSION")
+                .unwrap_or_else(|| "2024-10-21".to_string());
+            arbitrage_entries.push(crate::origin::provider::ArbitrageProviderEntry {
+                name: "azure-openai".into(),
+                provider: Arc::new(crate::origin::AzureOpenAiProvider::new(
+                    az_ep, az_dep, ver, az_key,
+                )),
+                cost_per_million_input: 2.50,
+                cost_per_million_output: 10.00,
+                priority: 5,
+            });
+        }
+        if let (Some(vx_proj), Some(vx_tok)) = (
+            non_empty_env("SUNBORN_VERTEX_PROJECT_ID"),
+            non_empty_env("SUNBORN_VERTEX_ACCESS_TOKEN"),
+        ) {
+            let loc = non_empty_env("SUNBORN_VERTEX_LOCATION")
+                .unwrap_or_else(|| "us-central1".to_string());
+            arbitrage_entries.push(crate::origin::provider::ArbitrageProviderEntry {
+                name: "vertex-ai-gemini".into(),
+                provider: Arc::new(crate::origin::VertexAiProvider::new(vx_proj, loc, vx_tok)),
+                cost_per_million_input: 1.25,
+                cost_per_million_output: 5.00,
+                priority: 6,
+            });
+        }
+        if let (Some(br_reg), Some(br_tok)) = (
+            non_empty_env("SUNBORN_BEDROCK_REGION"),
+            non_empty_env("SUNBORN_BEDROCK_BEARER_TOKEN"),
+        ) {
+            arbitrage_entries.push(crate::origin::provider::ArbitrageProviderEntry {
+                name: "aws-bedrock".into(),
+                provider: Arc::new(crate::origin::BedrockConverseProvider::new(br_reg, br_tok)),
+                cost_per_million_input: 3.00,
+                cost_per_million_output: 15.00,
+                priority: 7,
+            });
+        }
+
         // 5. Secondary failover provider if explicitly configured
         if let Some(failover_url) = non_empty_env("SUNBORN_FAILOVER_ORIGIN_URL") {
             let failover_key = non_empty_env("SUNBORN_FAILOVER_ORIGIN_KEY");
@@ -783,6 +835,9 @@ impl AppState {
             shadow_evaluator,
             shadow_semaphore,
             shadow_sample_rate,
+            shadow_mode: std::env::var("SUNBORN_MODE")
+                .map(|v| v.trim().eq_ignore_ascii_case("shadow"))
+                .unwrap_or(false),
             temporal_engine,
             paraphrase_clusters,
             radix_router,
@@ -807,6 +862,12 @@ impl AppState {
             cluster_sync_engine,
             cluster_transport_durable,
             orchestrator,
+            token_limiter: Arc::new(crate::token_limits::TokenRateLimiter::new()),
+            virtual_keys: Arc::new(crate::virtual_keys::VirtualKeyStore::new()),
+            guardrail_chain: Arc::new(crate::guardrails::GuardrailChain::default()),
+            cel_engine: Arc::new(crate::cel_policy::CelPolicyEngine::new()),
+            mcp_gateway: Arc::new(crate::mcp_gateway::McpGateway::new()),
+            a2a_gateway: Arc::new(crate::a2a_gateway::A2aGateway::new()),
         };
 
         // Automatic crash-recovery: resume any incomplete or interrupted tenant erasure tasks,

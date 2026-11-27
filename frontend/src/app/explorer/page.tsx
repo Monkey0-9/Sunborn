@@ -112,7 +112,6 @@ export default function ExplorerPage() {
     tier: string;
     action: string;
     confidence: number;
-    risk: number;
     latencyUs: number;
     avoidedTokens: number;
     netSavings: number;
@@ -154,7 +153,6 @@ export default function ExplorerPage() {
         tier: tierName,
         action: isHit ? "SafeHit" : "OriginExecute",
         confidence: isHit ? 1.0 : 0.0,
-        risk: 0.0,
         latencyUs: Math.round(elapsedMs * 1000),
         avoidedTokens,
         netSavings,
@@ -186,10 +184,10 @@ export default function ExplorerPage() {
 
         <div className="flex items-center gap-3">
           <Badge variant="outline" className="font-mono">
-            GATEWAY: HTTP 8080
+            GATEWAY: CONFIGURED
           </Badge>
           <Badge variant="success" dot>
-            CONFORMAL RISK α ≤ 0.001
+            RISK BOUND: CALIBRATED PER POLICY
           </Badge>
         </div>
       </div>
@@ -499,7 +497,9 @@ export default function ExplorerPage() {
                       >
                         {copied ? "✓ Copied to clipboard" : "Copy Payload"}
                       </button>
-                      <span className="text-emerald-400">CONFORMAL RISK: 0.000 (SAFE)</span>
+                      <span className="text-emerald-400">
+                        {responseTrace.cached ? "REUSE ADMITTED BY GATEWAY" : "ORIGIN EXECUTED"}
+                      </span>
                     </div>
                   </div>
                   <div className="p-4 rounded-xl bg-slate-900/90 border border-white/10 text-xs font-sans text-slate-200 leading-relaxed max-h-48 overflow-y-auto">

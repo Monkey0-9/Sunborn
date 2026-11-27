@@ -169,6 +169,35 @@ impl CacheThreatEngine {
         AdmissionCheckResult::admitted_safe()
     }
 
+    /// Write-side poisoning defense: blocks adversarial/injected prompts or poisoned
+    /// responses from entering L1/L2 or vector caches on cache-miss writeback.
+    pub fn inspect_write_admission(
+        &self,
+        cache_key: &str,
+        prompt: &str,
+        response: &str,
+    ) -> AdmissionCheckResult {
+        if self.detector.contains_injection_payload(prompt)
+            || self.detector.contains_injection_payload(response)
+        {
+            let result = AdmissionCheckResult::quarantined(
+                "WRITE_SIDE_POISONING_BLOCKED",
+                0.99,
+                "Adversarial prompt or response injection payload blocked from cache writeback",
+            );
+            self.quarantine_pool.quarantine(QuarantineEntry {
+                key: cache_key.to_string(),
+                original_query: prompt.into(),
+                attack_query: response.into(),
+                threat_category: "WRITE_SIDE_POISONING_BLOCKED".into(),
+                anomaly_score: 0.99,
+                quarantined_at: Utc::now(),
+            });
+            return result;
+        }
+        AdmissionCheckResult::admitted_safe()
+    }
+
     /// Enforces strict tenant boundary invariant: zero cross-tenant cache access.
     pub fn verify_tenant_boundary(&self, req_tenant: &TenantId, entry_tenant: &TenantId) -> bool {
         req_tenant == entry_tenant

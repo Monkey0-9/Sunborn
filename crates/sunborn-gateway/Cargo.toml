@@ -46,6 +46,11 @@ sha2.workspace = true
 hex.workspace = true
 async-trait.workspace = true
 reqwest.workspace = true
+tokio-stream = "0.1"
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/sunborn-{ target }{ archive-suffix }"
+bin-dir = "sunborn-gateway{ binary-ext }"
 
 [dev-dependencies]
 http.workspace = true

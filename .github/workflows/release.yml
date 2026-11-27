@@ -124,6 +124,38 @@ jobs:
             target/dist/BUILD-METADATA.json
             target/dist/sbom.cyclonedx.json
 
+  package-unix-binaries:
+    name: Build Pre-Built Linux & macOS Release Binaries
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+      - name: Build release gateway & verifier binaries
+        run: |
+          cargo build --release --target ${{ matrix.target }} -p sunborn-gateway -p sunborn-verify
+          mkdir -p dist-unix
+          tar -czf "dist-unix/sunborn-${{ matrix.target }}.tar.gz" -C "target/${{ matrix.target }}/release" sunborn-gateway sunborn-verify
+          sha256sum "dist-unix/sunborn-${{ matrix.target }}.tar.gz" > "dist-unix/sunborn-${{ matrix.target }}.tar.gz.sha256" || shasum -a 256 "dist-unix/sunborn-${{ matrix.target }}.tar.gz" > "dist-unix/sunborn-${{ matrix.target }}.tar.gz.sha256"
+      - name: Upload Unix Release Archive
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4
+        with:
+          name: unix-binaries-${{ matrix.target }}
+          path: dist-unix/*
+
   build-and-publish:
     name: Build Containers, Package Helm Chart & Publish Release
     needs: [verify-ci, verify-security, verify-release-chart, package-windows-desktop]

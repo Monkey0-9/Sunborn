@@ -63,7 +63,28 @@ fn apply_request_scope_metadata(
     }
     meta["config_fingerprint"] =
         json!(sunborn_identity::IdentityEngine::compute_config_fingerprint(req));
-    meta["embedding_fingerprint"] = json!(state.selected_embedder.embedding_fingerprint());
+    let emb_fp = state.selected_embedder.embedding_fingerprint();
+    let (emb_model_id, emb_model_version) = sunborn_semantic::embedding_model_parts(&emb_fp);
+    meta["embedding_fingerprint"] = json!(emb_fp);
+    meta["embedding_model_id"] = json!(emb_model_id);
+    meta["embedding_model_version"] = json!(emb_model_version);
+}
+
+fn emit_otel_gate_telemetry(
+    ast_us: u64,
+    conformal_score: f32,
+    saved_micropaises: u64,
+    cache_tier: &str,
+    embedding_model_id: &str,
+) {
+    tracing::info!(
+        "sunborn.gate.ast_us" = ast_us,
+        "sunborn.gate.conformal_score" = conformal_score,
+        "sunborn.saved_micropaises" = saved_micropaises,
+        "sunborn.cache.tier" = cache_tier,
+        "sunborn.embedding.model_id" = embedding_model_id,
+        "OTel gate telemetry recorded"
+    );
 }
 
 fn record_learning_telemetry(
@@ -416,6 +437,62 @@ pub async fn execute_request_inner(
         }
     }
 
+    // Two-phase token-aware rate limiting (RPM/RPD/TPM/TPD/concurrency)
+    let token_reservation = state
+        .token_limiter
+        .pre_commit(&req.tenant_id.0)
+        .map_err(|err| {
+            RATE_LIMITED_TOTAL.fetch_add(1, Ordering::Relaxed);
+            AppError::from(SunbornError::rate_limit(err.to_string()))
+        })?;
+
+    // Declarative CEL policy evaluation
+    let cel_eval = state
+        .cel_engine
+        .evaluate(&crate::cel_policy::PolicyContext {
+            tenant_id: req.tenant_id.0.clone(),
+            application_id: req.application_id.0.clone(),
+            model: req.model.clone(),
+            is_admin: sec_ctx.is_admin,
+            mcp_tool_name: None,
+            mcp_server_name: None,
+            headers: std::collections::HashMap::new(),
+            body_text: if state.cel_engine.combined_requirements().needs_body {
+                Some(req.prompt.clone())
+            } else {
+                None
+            },
+        });
+    if !cel_eval.allowed {
+        return Err(SunbornError::forbidden(cel_eval.reason).into());
+    }
+
+    // Input-phase content guardrail & PII redaction
+    match state
+        .guardrail_chain
+        .evaluate(crate::guardrails::GuardrailPhase::Input, &req.prompt)
+    {
+        crate::guardrails::GuardrailOutcome::Allow => {}
+        crate::guardrails::GuardrailOutcome::Redact {
+            redacted_text,
+            findings,
+        } => {
+            tracing::info!(
+                tenant = %req.tenant_id.0,
+                ?findings,
+                "Input guardrail redacted sensitive PII/secrets before processing"
+            );
+            req.prompt = redacted_text;
+        }
+        crate::guardrails::GuardrailOutcome::Block { rule_id, reason } => {
+            return Err(SunbornError::forbidden(format!(
+                "Input blocked by guardrail '{}': {}",
+                rule_id, reason
+            ))
+            .into());
+        }
+    }
+
     // Snapshot fine-grained lineage watermark lease for transactional write-behind fencing
     let lineage_keys: Vec<String> = req
         .dependency_snapshots
@@ -457,9 +534,11 @@ pub async fn execute_request_inner(
     };
 
     // 3. Compute deterministic Cache Identity (C1) and pre-evaluate G1 & G4
+    let gate_eval_start = Instant::now();
     let identity = IdentityEngine::compute_identity(&req);
     let g1_identity = sunborn_core::GateCheckResult::pass("G1_CANONICAL_IDENTITY_VERIFIED");
     let g4_eval = crate::five_gates::FiveGateEvaluator::evaluate_g4_effects(&req);
+    let mut shadow_mode_hit: Option<(String, String, f32)> = None;
     tracing::info!(
         request_id = %req.request_id.0,
         tenant = %req.tenant_id.0,
@@ -673,63 +752,84 @@ pub async fn execute_request_inner(
                                         "Exact cache candidate rejected by unified five-gate contract"
                                     );
                                 } else {
-                                    EXACT_HITS.fetch_add(1, Ordering::Relaxed);
-                                    state
-                                        .lifecycle_manager
-                                        .record_timing("exact_hit", duration_ms as f64);
-                                    state
-                                        .spend_ledger
-                                        .release(&req.tenant_id.0, reservation_id)
-                                        .await;
-                                    REQUEST_DURATION_MS_SUM
-                                        .fetch_add(duration_ms, Ordering::Relaxed);
-                                    observe_request_latency(duration_ms);
-                                    record_learning_telemetry(
-                                        state,
-                                        &req,
+                                    let ast_us = gate_eval_start.elapsed().as_micros() as u64;
+                                    let saved_micropaises =
+                                        (estimated_cost * 85.0 * 1_000_000.0).round() as u64;
+                                    emit_otel_gate_telemetry(
+                                        ast_us,
                                         1.0,
-                                        true,
-                                        duration_ms as f64,
-                                        150.0,
+                                        saved_micropaises,
+                                        "exact",
+                                        &state.selected_embedder.embedding_fingerprint(),
                                     );
-                                    let eq_delay = crate::cache_lifecycle::CacheLifecycleManager::timing_equalizer_delay_ms(
-                                        state.timing_floor_ms,
-                                        duration_ms,
-                                    );
-                                    if eq_delay > 0 {
-                                        tokio::time::sleep(std::time::Duration::from_millis(
-                                            eq_delay,
-                                        ))
-                                        .await;
+                                    if state.shadow_mode {
+                                        shadow_mode_hit =
+                                            Some((identity.key.clone(), content.clone(), 1.0));
+                                    } else {
+                                        EXACT_HITS.fetch_add(1, Ordering::Relaxed);
+                                        state
+                                            .lifecycle_manager
+                                            .record_timing("exact_hit", duration_ms as f64);
+                                        state
+                                            .spend_ledger
+                                            .release(&req.tenant_id.0, reservation_id)
+                                            .await;
+                                        REQUEST_DURATION_MS_SUM
+                                            .fetch_add(duration_ms, Ordering::Relaxed);
+                                        observe_request_latency(duration_ms);
+                                        record_learning_telemetry(
+                                            state,
+                                            &req,
+                                            1.0,
+                                            true,
+                                            duration_ms as f64,
+                                            150.0,
+                                        );
+                                        let eq_delay = crate::cache_lifecycle::CacheLifecycleManager::timing_equalizer_delay_ms(
+                                            state.timing_floor_ms,
+                                            duration_ms,
+                                        );
+                                        if eq_delay > 0 {
+                                            tokio::time::sleep(std::time::Duration::from_millis(
+                                                eq_delay,
+                                            ))
+                                            .await;
+                                        }
+                                        return Ok(ResponseEnvelope {
+                                            request_id: req.request_id,
+                                            tenant_id: req.tenant_id,
+                                            application_id: req.application_id,
+                                            decision: DecisionRecord {
+                                                action: DecisionAction::SafeHit,
+                                                cache_path: CachePath::Exact,
+                                                confidence: 1.0,
+                                                risk_score: 0.0,
+                                                reason_code: "EXACT_CANONICAL_MATCH".to_string(),
+                                                latency_saved_ms: Some(150),
+                                                policy_version: Some(
+                                                    state
+                                                        .learning_controller
+                                                        .get_active_policy_version(),
+                                                ),
+                                                policy_id: Some(
+                                                    state
+                                                        .learning_controller
+                                                        .get_active_policy_id(),
+                                                ),
+                                                five_gate_evidence: Some(five_gates),
+                                            },
+                                            content,
+                                            cached: true,
+                                            cache_key: Some(identity.key),
+                                            created_at: Utc::now(),
+                                            duration_ms,
+                                            certificate,
+                                            tool_calls: None,
+                                            finish_reason: Some("stop".to_string()),
+                                            prompt_tokens: None,
+                                            completion_tokens: None,
+                                        });
                                     }
-                                    return Ok(ResponseEnvelope {
-                                        request_id: req.request_id,
-                                        tenant_id: req.tenant_id,
-                                        application_id: req.application_id,
-                                        decision: DecisionRecord {
-                                            action: DecisionAction::SafeHit,
-                                            cache_path: CachePath::Exact,
-                                            confidence: 1.0,
-                                            risk_score: 0.0,
-                                            reason_code: "EXACT_CANONICAL_MATCH".to_string(),
-                                            latency_saved_ms: Some(150),
-                                            policy_version: Some(
-                                                state
-                                                    .learning_controller
-                                                    .get_active_policy_version(),
-                                            ),
-                                            policy_id: Some(
-                                                state.learning_controller.get_active_policy_id(),
-                                            ),
-                                            five_gate_evidence: Some(five_gates),
-                                        },
-                                        content,
-                                        cached: true,
-                                        cache_key: Some(identity.key),
-                                        created_at: Utc::now(),
-                                        duration_ms,
-                                        certificate,
-                                    });
                                 }
                             }
                         }
@@ -1052,115 +1152,143 @@ pub async fn execute_request_inner(
                         }
                         decision.five_gate_evidence = Some(five_gates);
 
-                        SEMANTIC_HITS.fetch_add(1, Ordering::Relaxed);
-                        state
-                            .lifecycle_manager
-                            .record_timing("semantic_hit", duration_ms as f64);
-                        record_learning_telemetry(
-                            state,
-                            &req,
+                        let ast_us = gate_eval_start.elapsed().as_micros() as u64;
+                        let saved_micropaises =
+                            (estimated_cost * 85.0 * 1_000_000.0).round() as u64;
+                        emit_otel_gate_telemetry(
+                            ast_us,
                             decision.confidence,
-                            true,
-                            duration_ms as f64,
-                            150.0,
+                            saved_micropaises,
+                            "semantic",
+                            &state.selected_embedder.embedding_fingerprint(),
                         );
-                        tracing::info!(
-                            request_id = %req.request_id.0,
-                            confidence = decision.confidence,
-                            "Semantic cache HIT (C2)"
-                        );
-
-                        if let Some(trigger) = state.learning_controller.record_canary_observation(
-                            policy_sel.is_canary,
-                            duration_ms as f64,
-                            false,
-                            false,
-                        ) {
-                            state.autonomic_controller.record_recovery(
-                                "canary_policy_monitor",
-                                &format!("Canary semantic hit SLA violation ({:?})", trigger),
-                                "Autonomously rolled back canary policy to baseline",
+                        if state.shadow_mode {
+                            shadow_mode_hit = Some((
+                                outcome
+                                    .matched_id
+                                    .clone()
+                                    .unwrap_or_else(|| identity.key.clone()),
+                                decrypted_content.clone(),
+                                decision.confidence,
+                            ));
+                        } else {
+                            SEMANTIC_HITS.fetch_add(1, Ordering::Relaxed);
+                            state
+                                .lifecycle_manager
+                                .record_timing("semantic_hit", duration_ms as f64);
+                            record_learning_telemetry(
+                                state,
+                                &req,
+                                decision.confidence,
+                                true,
+                                duration_ms as f64,
+                                150.0,
                             );
-                        }
+                            tracing::info!(
+                                request_id = %req.request_id.0,
+                                confidence = decision.confidence,
+                                "Semantic cache HIT (C2)"
+                            );
 
-                        // Controlled background shadow sampling on semantic hits
-                        if state.shadow_sample_rate > 0.0
-                            && (req_hash % 1000) < ((state.shadow_sample_rate * 1000.0) as u64)
-                        {
-                            if let Some(ref matched_key) = outcome.matched_id {
-                                let state_bg = state.clone();
-                                let mut origin_probe_req = req.clone();
-                                state
-                                    .request_limits
-                                    .apply_completion_cap(&mut origin_probe_req);
-                                let cached_plain = decrypted_content.clone();
-                                let matched_key_bg = matched_key.clone();
-                                let req_hash_hex = identity.hash.clone();
-                                let is_canary = policy_sel.is_canary;
-                                let conf = decision.confidence;
-                                if let Ok(permit) =
-                                    state.shadow_semaphore.clone().try_acquire_owned()
-                                {
-                                    tokio::spawn(async move {
-                                        let _permit = permit;
-                                        let t0 = Instant::now();
-                                        if let Ok(origin_res) = state_bg
-                                            .origin_provider
-                                            .execute(&origin_probe_req)
-                                            .await
-                                        {
-                                            let lat = t0.elapsed().as_millis() as f64;
-                                            spawn_shadow_evaluation_pipeline(
-                                                state_bg,
-                                                origin_probe_req.tenant_id,
-                                                origin_probe_req.application_id,
-                                                matched_key_bg,
-                                                origin_probe_req.prompt,
-                                                req_hash_hex,
-                                                cached_plain,
-                                                origin_res.content,
-                                                if is_canary {
-                                                    "canary_semantic_hit".to_string()
-                                                } else {
-                                                    "semantic_hit".to_string()
-                                                },
-                                                is_canary,
-                                                lat,
-                                                Some(conf),
-                                                true,
-                                            );
-                                        }
-                                    });
+                            if let Some(trigger) =
+                                state.learning_controller.record_canary_observation(
+                                    policy_sel.is_canary,
+                                    duration_ms as f64,
+                                    false,
+                                    false,
+                                )
+                            {
+                                state.autonomic_controller.record_recovery(
+                                    "canary_policy_monitor",
+                                    &format!("Canary semantic hit SLA violation ({:?})", trigger),
+                                    "Autonomously rolled back canary policy to baseline",
+                                );
+                            }
+
+                            // Controlled background shadow sampling on semantic hits
+                            if state.shadow_sample_rate > 0.0
+                                && (req_hash % 1000) < ((state.shadow_sample_rate * 1000.0) as u64)
+                            {
+                                if let Some(ref matched_key) = outcome.matched_id {
+                                    let state_bg = state.clone();
+                                    let mut origin_probe_req = req.clone();
+                                    state
+                                        .request_limits
+                                        .apply_completion_cap(&mut origin_probe_req);
+                                    let cached_plain = decrypted_content.clone();
+                                    let matched_key_bg = matched_key.clone();
+                                    let req_hash_hex = identity.hash.clone();
+                                    let is_canary = policy_sel.is_canary;
+                                    let conf = decision.confidence;
+                                    if let Ok(permit) =
+                                        state.shadow_semaphore.clone().try_acquire_owned()
+                                    {
+                                        tokio::spawn(async move {
+                                            let _permit = permit;
+                                            let t0 = Instant::now();
+                                            if let Ok(origin_res) = state_bg
+                                                .origin_provider
+                                                .execute(&origin_probe_req)
+                                                .await
+                                            {
+                                                let lat = t0.elapsed().as_millis() as f64;
+                                                spawn_shadow_evaluation_pipeline(
+                                                    state_bg,
+                                                    origin_probe_req.tenant_id,
+                                                    origin_probe_req.application_id,
+                                                    matched_key_bg,
+                                                    origin_probe_req.prompt,
+                                                    req_hash_hex,
+                                                    cached_plain,
+                                                    origin_res.content,
+                                                    if is_canary {
+                                                        "canary_semantic_hit".to_string()
+                                                    } else {
+                                                        "semantic_hit".to_string()
+                                                    },
+                                                    is_canary,
+                                                    lat,
+                                                    Some(conf),
+                                                    true,
+                                                );
+                                            }
+                                        });
+                                    }
                                 }
                             }
-                        }
 
-                        state
-                            .spend_ledger
-                            .release(&req.tenant_id.0, reservation_id)
-                            .await;
+                            state
+                                .spend_ledger
+                                .release(&req.tenant_id.0, reservation_id)
+                                .await;
 
-                        REQUEST_DURATION_MS_SUM.fetch_add(duration_ms, Ordering::Relaxed);
-                        observe_request_latency(duration_ms);
-                        let eq_delay = crate::cache_lifecycle::CacheLifecycleManager::timing_equalizer_delay_ms(
-                            state.timing_floor_ms,
-                            duration_ms,
-                        );
-                        if eq_delay > 0 {
-                            tokio::time::sleep(std::time::Duration::from_millis(eq_delay)).await;
+                            REQUEST_DURATION_MS_SUM.fetch_add(duration_ms, Ordering::Relaxed);
+                            observe_request_latency(duration_ms);
+                            let eq_delay = crate::cache_lifecycle::CacheLifecycleManager::timing_equalizer_delay_ms(
+                                state.timing_floor_ms,
+                                duration_ms,
+                            );
+                            if eq_delay > 0 {
+                                tokio::time::sleep(std::time::Duration::from_millis(eq_delay))
+                                    .await;
+                            }
+                            return Ok(ResponseEnvelope {
+                                request_id: req.request_id,
+                                tenant_id: req.tenant_id,
+                                application_id: req.application_id,
+                                decision,
+                                content: decrypted_content,
+                                cached: true,
+                                cache_key: outcome.matched_id,
+                                created_at: Utc::now(),
+                                duration_ms,
+                                certificate,
+                                tool_calls: None,
+                                finish_reason: Some("stop".to_string()),
+                                prompt_tokens: None,
+                                completion_tokens: None,
+                            });
                         }
-                        return Ok(ResponseEnvelope {
-                            request_id: req.request_id,
-                            tenant_id: req.tenant_id,
-                            application_id: req.application_id,
-                            decision,
-                            content: decrypted_content,
-                            cached: true,
-                            cache_key: outcome.matched_id,
-                            created_at: Utc::now(),
-                            duration_ms,
-                            certificate,
-                        });
                     }
                 }
             }
@@ -1198,7 +1326,99 @@ pub async fn execute_request_inner(
             return Err(err.into());
         }
     };
-    let origin_content = origin_result.content;
+    let origin_tool_calls = origin_result.tool_calls.clone();
+    let origin_finish_reason = origin_result.finish_reason.clone();
+    let origin_prompt_tokens = origin_result.prompt_tokens;
+    let origin_completion_tokens = origin_result.completion_tokens;
+    let mut origin_content = origin_result.content;
+
+    // Commit actual token usage to two-phase TPM/TPD limiter
+    token_reservation.commit_tokens(origin_prompt_tokens, origin_completion_tokens);
+
+    // Output-phase content guardrail & PII redaction before cache admission
+    match state
+        .guardrail_chain
+        .evaluate(crate::guardrails::GuardrailPhase::Output, &origin_content)
+    {
+        crate::guardrails::GuardrailOutcome::Allow => {}
+        crate::guardrails::GuardrailOutcome::Redact {
+            redacted_text,
+            findings,
+        } => {
+            tracing::info!(
+                tenant = %req.tenant_id.0,
+                ?findings,
+                "Output guardrail redacted sensitive PII/secrets before cache admission"
+            );
+            origin_content = redacted_text;
+        }
+        crate::guardrails::GuardrailOutcome::Block { rule_id, reason } => {
+            return Err(SunbornError::forbidden(format!(
+                "Output blocked by guardrail '{}': {}",
+                rule_id, reason
+            ))
+            .into());
+        }
+    }
+
+    // Shadow Mode asynchronous comparison & per-tenant/per-route calibration accounting
+    let is_shadow_hit = shadow_mode_hit.is_some();
+    if let Some((shadow_key, shadow_cached, shadow_conf)) = shadow_mode_hit {
+        let shadow_state = state.clone();
+        let shadow_tenant = req.tenant_id.clone();
+        let shadow_app = req.application_id.clone();
+        let shadow_model = req.model.clone();
+        let shadow_prompt = req.prompt.clone();
+        let shadow_hash = identity.hash.clone();
+        let shadow_origin = origin_content.clone();
+        let potential_saved_micropaises = (estimated_cost * 85.0 * 1_000_000.0).round() as u64;
+        let shadow_lat = start.elapsed().as_millis() as f64;
+        if let Ok(permit) = state.shadow_semaphore.clone().try_acquire_owned() {
+            tokio::spawn(async move {
+                let _permit = permit;
+                let eval_req = crate::shadow::ShadowEvaluationRequest {
+                    tenant_id: shadow_tenant.clone(),
+                    application_id: shadow_app.clone(),
+                    cache_key: shadow_key.clone(),
+                    cached_content: shadow_cached.clone(),
+                    origin_content: shadow_origin.clone(),
+                    similarity_threshold: None,
+                };
+                if let Ok(res) = shadow_state
+                    .shadow_evaluator
+                    .evaluate_drift_with_options(
+                        &eval_req,
+                        &shadow_state.cache,
+                        &shadow_state.vector_store,
+                        false,
+                    )
+                    .await
+                {
+                    shadow_state.shadow_evaluator.record_route_shadow_outcome(
+                        &shadow_tenant.0,
+                        &shadow_model,
+                        res.is_drift_detected,
+                        potential_saved_micropaises,
+                    );
+                }
+                spawn_shadow_evaluation_pipeline(
+                    shadow_state,
+                    shadow_tenant,
+                    shadow_app,
+                    shadow_key,
+                    shadow_prompt,
+                    shadow_hash,
+                    shadow_cached,
+                    shadow_origin,
+                    "shadow_mode".to_string(),
+                    false,
+                    shadow_lat,
+                    Some(shadow_conf),
+                    true,
+                );
+            });
+        }
+    }
 
     // Automatic Shadow Evaluation on Revalidation Candidates (zero extra origin calls):
     if let Some((cand_id, cand_stored, cand_meta, cand_conf)) = shadow_revalidation_candidate {
@@ -1278,13 +1498,18 @@ pub async fn execute_request_inner(
         .validate_and_commit(&watermark_read_view);
 
     let mut origin_admitted = false;
-    if !is_lease_valid || !is_watermark_valid || !g4_eval.passed {
+    let write_threat =
+        state
+            .threat_engine
+            .inspect_write_admission(&identity.key, &req.prompt, &origin_content);
+    if !is_lease_valid || !is_watermark_valid || !g4_eval.passed || !write_threat.admitted {
         tracing::warn!(
             request_id = %req.request_id.0,
             is_lease_valid = %is_lease_valid,
             is_watermark_valid = %is_watermark_valid,
             g4_passed = %g4_eval.passed,
-            "Freshness fence or G4 effect safety blocked cache writeback -> Aborting cache admission"
+            write_threat_admitted = %write_threat.admitted,
+            "Freshness fence, G4 effect safety, or write-side poisoning defense blocked cache writeback -> Aborting cache admission"
         );
     } else {
         let prompt_risk = sunborn_semantic::DecisionEngine::<
@@ -1679,7 +1904,11 @@ pub async fn execute_request_inner(
             cache_path: CachePath::Miss,
             confidence: 1.0,
             risk_score: 0.0,
-            reason_code: "NO_CACHE_ENTRY_FOUND".to_string(),
+            reason_code: if is_shadow_hit {
+                "SHADOW_MODE_ORIGIN_EXECUTED".to_string()
+            } else {
+                "NO_CACHE_ENTRY_FOUND".to_string()
+            },
             latency_saved_ms: None,
             policy_version: Some(state.learning_controller.get_active_policy_version()),
             policy_id: Some(state.learning_controller.get_active_policy_id()),
@@ -1691,6 +1920,10 @@ pub async fn execute_request_inner(
         created_at: Utc::now(),
         duration_ms,
         certificate: None,
+        tool_calls: origin_tool_calls,
+        finish_reason: origin_finish_reason,
+        prompt_tokens: Some(origin_prompt_tokens),
+        completion_tokens: Some(origin_completion_tokens),
     };
     REQUEST_DURATION_MS_SUM.fetch_add(duration_ms, Ordering::Relaxed);
     observe_request_latency(duration_ms);

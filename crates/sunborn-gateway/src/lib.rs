@@ -17,14 +17,18 @@
 //! # }
 //! ```
 
+pub mod a2a_gateway;
 pub mod autonomic;
 pub mod cache_lifecycle;
+pub mod cel_policy;
 pub mod execution_runtime;
 pub mod finops;
 pub mod five_gates;
+pub mod guardrails;
 pub mod handlers;
 pub mod learning;
 pub mod limits;
+pub mod mcp_gateway;
 pub mod middleware;
 pub mod origin;
 pub mod quota;
@@ -32,6 +36,9 @@ pub mod retrieval_cache;
 pub mod routing;
 pub mod shadow;
 pub mod state;
+pub mod tiers;
+pub mod token_limits;
+pub mod virtual_keys;
 
 use axum::http::Request;
 use axum::middleware::Next;
@@ -129,6 +136,7 @@ pub fn create_router(state: AppState) -> Router {
         ]);
 
     let rate_limit_state = state.clone();
+    let auth_state = state.clone();
 
     Router::new()
         .route("/health", get(handlers::health))
@@ -152,6 +160,51 @@ pub fn create_router(state: AppState) -> Router {
         .route("/v1/requests", post(handlers::execute_request))
         .route("/v1/chat/completions", post(handlers::chat_completions))
         .route("/v1/messages", post(handlers::anthropic_messages))
+        .route("/v1/responses", post(handlers::open_responses))
+        .route("/v1/models", get(handlers::list_models))
+        .route(
+            "/v1/virtual-keys",
+            get(handlers::list_virtual_keys).post(handlers::create_virtual_key),
+        )
+        .route(
+            "/v1/virtual-keys/{id}",
+            axum::routing::delete(handlers::revoke_virtual_key),
+        )
+        .route(
+            "/v1/guardrails/config",
+            get(handlers::get_guardrails_config).post(handlers::set_guardrails_config),
+        )
+        .route(
+            "/v1/policies/cel",
+            get(handlers::list_cel_policies).post(handlers::add_cel_policy),
+        )
+        .route(
+            "/v1/policies/cel/{id}",
+            axum::routing::delete(handlers::delete_cel_policy),
+        )
+        .route(
+            "/v1/governance/token-limits",
+            post(handlers::set_token_limits),
+        )
+        .route(
+            "/v1/governance/token-limits/{tenant_id}",
+            get(handlers::get_token_limits),
+        )
+        .route("/mcp", post(handlers::mcp_rpc))
+        .route(
+            "/v1/mcp/servers",
+            get(handlers::list_mcp_servers).post(handlers::register_mcp_server),
+        )
+        .route(
+            "/v1/mcp/servers/{name}",
+            axum::routing::delete(handlers::delete_mcp_server),
+        )
+        .route("/.well-known/agent.json", get(handlers::a2a_well_known))
+        .route(
+            "/v1/a2a/agents",
+            get(handlers::list_a2a_agents).post(handlers::register_a2a_agent),
+        )
+        .route("/a2a/tasks/send", post(handlers::a2a_send_task))
         .route("/v1/invalidation", post(handlers::trigger_invalidation))
         .route("/v1/dependencies", post(handlers::record_dependency))
         .route("/v1/cache/graph/stats", get(handlers::get_graph_stats))
@@ -243,6 +296,10 @@ pub fn create_router(state: AppState) -> Router {
             get(handlers::verify_rbi_data_localization),
         )
         .route(
+            "/v1/governance/shadow-report",
+            get(handlers::get_shadow_calibration_report),
+        )
+        .route(
             "/v1/ceremony/public-keys",
             get(handlers::ceremony_public_keys),
         )
@@ -310,7 +367,10 @@ pub fn create_router(state: AppState) -> Router {
             rate_limit_state,
             middleware::rate_limit::rate_limit_middleware,
         ))
-        .layer(axum::middleware::from_fn(middleware::auth::auth_middleware))
+        .layer(axum::middleware::from_fn_with_state(
+            auth_state,
+            middleware::auth::auth_middleware_with_state,
+        ))
         // Must stay outside auth: it exists to charge requests that fail
         // authentication, which never reach the tenant limiter below. Axum
         // applies later layers outside earlier ones, so this placement is

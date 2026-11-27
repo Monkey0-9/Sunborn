@@ -10,6 +10,18 @@ pub struct ShredTenantPayload {
 #[derive(serde::Deserialize)]
 pub struct ProvisionTenantPayload {
     pub tenant_id: String,
+    /// Tier whose defaults are applied. Omitted means `pilot`: an existing
+    /// operator-driven caller keeps its generous limits instead of being
+    /// silently moved onto the free envelope.
+    #[serde(default)]
+    pub tier: Option<String>,
+    /// Attestation that identity verification completed. Required by
+    /// identity-gated tiers and ignored by the others.
+    #[serde(default)]
+    pub identity_verified: bool,
+    /// Who provisioned the tenant. The per-inviter cap is counted against it.
+    #[serde(default)]
+    pub invited_by: Option<String>,
 }
 
 pub async fn provision_tenant(
@@ -21,11 +33,22 @@ pub async fn provision_tenant(
         .require_admin()
         .map_err(|e| AppError::from(SunbornError::forbidden(e)))?;
 
+    if payload.tenant_id.trim().is_empty() {
+        return Err(SunbornError::invalid_payload("tenant_id is required").into());
+    }
+
+    let tier_name = payload.tier.as_deref().unwrap_or("pilot");
+    let policy =
+        crate::tiers::TierPolicy::resolve(tier_name).map_err(SunbornError::invalid_payload)?;
+
     let tenant = TenantId::new(&payload.tenant_id);
 
     // Idempotency: provisioning an existing tenant must not rotate its TDEK.
     // Rotating silently would make every previously encrypted cache entry and
-    // certificate unreadable on other replicas.
+    // certificate unreadable on other replicas. It must also not re-apply tier
+    // admission checks: an existing tenant is already authorized, and re-running
+    // provisioning should stay a no-op rather than start failing once an
+    // invitation window closes.
     if let Some((wrapped, provider_name)) = state
         .postgres_db
         .fetch_wrapped_tdek(&payload.tenant_id)
@@ -40,12 +63,43 @@ pub async fn provision_tenant(
                     "Existing tenant key could not be loaded: {e}"
                 )))
             })?;
+        let applied_tier = state
+            .postgres_db
+            .get_tenant_tier_defaults(&payload.tenant_id)
+            .await
+            .ok()
+            .flatten()
+            .map(|(tier, _)| tier);
         return Ok(Json(serde_json::json!({
             "status": "already_provisioned",
             "tenant_id": payload.tenant_id,
             "kms_provider": provider_name,
             "durable_persistence": true,
+            "tier": applied_tier,
         })));
+    }
+
+    if policy.requires_verified_identity && !payload.identity_verified {
+        return Err(SunbornError::forbidden(format!(
+            "tier '{}' requires identity_verified: true at provisioning",
+            policy.tier.as_str()
+        ))
+        .into());
+    }
+
+    if let (Some(cap), Some(inviter)) = (policy.invitation_cap, payload.invited_by.as_deref()) {
+        let since = Utc::now() - chrono::Duration::days(30);
+        let used = state
+            .postgres_db
+            .count_recent_invitations(inviter, since)
+            .await
+            .map_err(AppError::from)?;
+        if used >= i64::from(cap) {
+            return Err(SunbornError::rate_limit(format!(
+                "invitation cap reached for '{inviter}': {used}/{cap} in the last 30 days"
+            ))
+            .into());
+        }
     }
 
     state
@@ -68,12 +122,52 @@ pub async fn provision_tenant(
         .await
         .map_err(AppError::from)?;
 
+    // Apply the tier as one unit: the persisted defaults and the enrolled quota
+    // must agree. The durable tier write happens first, so a failure there never
+    // leaves the replica enforcing a limit the rest of the cluster cannot see.
+    state
+        .postgres_db
+        .apply_tenant_tier(&sunborn_db::TenantTierAssignment {
+            tenant_id: payload.tenant_id.clone(),
+            tier: policy.tier.as_str().to_string(),
+            retention_days: policy.retention_days,
+            support_level: policy.support_level.as_str().to_string(),
+            identity_verified: payload.identity_verified,
+            invited_by: payload.invited_by.clone(),
+            allowed_models: policy.allowed_models.clone(),
+        })
+        .await
+        .map_err(AppError::from)?;
+    state
+        .quota_ledger
+        .set_tenant_limits(policy.quota_limits(&payload.tenant_id))
+        .await
+        .map_err(tier_quota_error)?;
+
     Ok(Json(serde_json::json!({
         "status": "provisioned",
         "tenant_id": payload.tenant_id,
         "kms_provider": provider_name,
         "durable_persistence": true,
+        "tier": policy.tier.as_str(),
+        "daily_requests": policy.daily_requests,
+        "monthly_requests": policy.monthly_requests,
+        "allowed_models": policy.allowed_models,
+        "retention_days": policy.retention_days,
+        "support_level": policy.support_level.as_str(),
+        "identity_verified": payload.identity_verified,
+        "invitation_cap": policy.invitation_cap,
+        "quota_enforcement_scope": state.quota_ledger.enforcement_scope(),
     })))
+}
+
+fn tier_quota_error(err: QuotaError) -> AppError {
+    match err {
+        QuotaError::Unavailable(detail) => AppError::from(SunbornError::cache_unavailable(detail)),
+        QuotaError::Exceeded { .. } => AppError::from(SunbornError::invalid_payload(
+            "tier quota cannot be applied: the tenant already exceeds a limit",
+        )),
+    }
 }
 
 pub async fn crypto_shred_tenant(

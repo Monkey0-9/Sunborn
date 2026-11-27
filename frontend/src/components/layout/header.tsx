@@ -25,6 +25,7 @@ import {
   ShieldCheck,
   Sliders,
   ChevronDown,
+  Compass,
   Key as KeyIcon,
 } from "lucide-react";
 import { cn, extractVectorClockEpoch } from "@/lib/utils";
@@ -41,7 +42,7 @@ export function Header() {
   const [tempKey, setTempKey] = useState<string>("");
   const [gatewayStatus, setGatewayStatus] = useState<"live" | "offline">("offline");
   const [pingMs, setPingMs] = useState<number | null>(null);
-  const [epoch, setEpoch] = useState<number>(1);
+  const [epoch, setEpoch] = useState<number | null>(null);
   const [activeTenant, setActiveTenant] = useState<string>("tenant-enterprise-fintech");
   const [sessionAuth, setSessionAuth] = useState<boolean>(false);
   const [showDiagnostics, setShowDiagnostics] = useState<boolean>(false);
@@ -79,6 +80,7 @@ export function Header() {
   };
 
   useEffect(() => {
+    let cancelled = false;
     const checkGateway = async () => {
       const start = performance.now();
       try {
@@ -90,16 +92,6 @@ export function Header() {
         if (res.ok) {
           setGatewayStatus("live");
           setPingMs(elapsed);
-          try {
-            const clusterRes = await fetch(`${API_BASE_URL.replace(/\/+$/, "")}/v1/cluster/status`, {
-              cache: "no-store",
-            });
-            if (clusterRes.ok) {
-              const clusterData = await clusterRes.json();
-              const epochNum = extractVectorClockEpoch(clusterData?.vector_clock);
-              setEpoch(epochNum);
-            }
-          } catch {}
         } else {
           setGatewayStatus("offline");
           setPingMs(null);
@@ -110,25 +102,55 @@ export function Header() {
       }
     };
 
-    const checkSession = async () => {
+    // Cluster status is an authenticated endpoint. Asking for it with no credential
+    // produces a guaranteed 401 on every public page, so wait until we know the
+    // visitor is authenticated (cookie session or a key they supplied in this tab).
+    const loadClusterEpoch = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL.replace(/\/+$/, "")}/v1/cluster/status`, {
+          cache: "no-store",
+          headers: byokApiKey ? { "x-api-key": byokApiKey } : undefined,
+          signal: AbortSignal.timeout(1500),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setEpoch(extractVectorClockEpoch(data?.vector_clock));
+      } catch {
+        // Epoch stays unreported rather than showing an invented number.
+      }
+    };
+
+    const checkSession = async (): Promise<boolean> => {
       try {
         const res = await fetch("/api/auth", { cache: "no-store" });
         if (res.ok) {
           const data = await res.json();
-          setSessionAuth(!!data.authenticated);
+          const authenticated = !!data.authenticated;
+          setSessionAuth(authenticated);
+          return authenticated;
         }
       } catch {
         setSessionAuth(false);
       }
+      return false;
     };
 
-    checkGateway();
-    checkSession();
+    const bootstrap = async () => {
+      checkGateway();
+      const authenticated = await checkSession();
+      if (!cancelled && (authenticated || byokApiKey)) await loadClusterEpoch();
+    };
+
+    bootstrap();
     const interval = setInterval(checkGateway, 10000);
-    return () => clearInterval(interval);
-  }, []);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [byokApiKey]);
 
   const navItems = [
+    { name: "Start here", href: "/start", icon: Compass },
     { name: "Overview", href: "/", icon: Activity },
     { name: "Cache Explorer", href: "/explorer", icon: Search },
     { name: "Semantic Studio", href: "/knowledge", icon: Layers },
@@ -213,7 +235,7 @@ export function Header() {
                     ? "CIRCUIT OPEN"
                     : gatewayStatus === "live"
                     ? pingMs !== null
-                      ? `8080 (${pingMs}ms)`
+                      ? `ACTIVE · ${pingMs}ms`
                       : "ACTIVE"
                     : isSimulated
                     ? "SIMULATION"
@@ -227,7 +249,7 @@ export function Header() {
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/70 border border-white/10 text-xs font-mono text-slate-400">
                 <Globe className="w-3 h-3 text-violet-400" />
                 <span>EPOCH:</span>
-                <span className="text-white font-semibold">#{typeof epoch === "number" ? epoch : 1}</span>
+                <span className="text-white font-semibold">#{epoch ?? "—"}</span>
               </div>
             </div>
           </div>
@@ -417,7 +439,7 @@ export function Header() {
                 <span className={cn("w-2 h-2 rounded-full", gatewayStatus === "live" ? "bg-emerald-400" : "bg-amber-400")} />
                 <span className="text-slate-400">GATEWAY STATUS:</span>
                 <span className={cn("font-bold", gatewayStatus === "live" ? "text-emerald-400" : "text-amber-400")}>
-                  {gatewayStatus === "live" ? `ONLINE (${pingMs ?? 0.8}ms)` : "STANDBY"}
+                  {gatewayStatus === "live" && pingMs !== null ? `ONLINE (${pingMs}ms)` : gatewayStatus === "live" ? "ONLINE" : "STANDBY"}
                 </span>
               </div>
               <button
@@ -523,10 +545,10 @@ export function Header() {
                 <div className="space-y-0.5">
                   <div className="text-xs font-bold text-white flex items-center gap-2">
                     <span className={cn("w-2 h-2 rounded-full", gatewayStatus === "live" ? "bg-emerald-400 animate-pulse" : "bg-amber-400")} />
-                    Gateway Address: 127.0.0.1:8080
+                    Gateway endpoint: configured by SUNBORN_GATEWAY_URL
                   </div>
                   <div className="text-[11px] text-slate-400">
-                    High-precision loopback probe targeting authoritative proxy endpoint.
+                    Live probe through the server-side BFF. No endpoint is assumed here.
                   </div>
                 </div>
                 <button
@@ -555,7 +577,7 @@ export function Header() {
                   <div className="p-3.5 rounded-xl bg-slate-900/70 border border-white/10 space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="text-white font-semibold">Tier 0/1: Exact Cache</span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">ACTIVE</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-white/5 text-slate-300 border border-white/15">CONFIGURED</span>
                     </div>
                     <div className="text-[11px] text-slate-400">
                       FinOps-GDSF RAM + DragonflyDB (P99: Sub-ms target).
@@ -565,17 +587,17 @@ export function Header() {
                   <div className="p-3.5 rounded-xl bg-slate-900/70 border border-white/10 space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="text-white font-semibold">Tier 2: Semantic Vector</span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">CALIBRATED</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-white/5 text-slate-300 border border-white/15">CONFIGURED</span>
                     </div>
                     <div className="text-[11px] text-slate-400">
-                      Qdrant HNSW + Non-Exchangeable Conformal Risk (α ≤ 0.001).
+                      Qdrant HNSW with a risk bound calibrated per policy; enabled only when the vector backend is configured.
                     </div>
                   </div>
 
                   <div className="p-3.5 rounded-xl bg-slate-900/70 border border-white/10 space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="text-white font-semibold">Tier 3: Execution DAG</span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">PROOF ATTESTED</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-white/5 text-slate-300 border border-white/15">CONFIGURED</span>
                     </div>
                     <div className="text-[11px] text-slate-400">
                       RFC 6962 SHA-256 Merkle Inclusion Proofs.
@@ -585,7 +607,7 @@ export function Header() {
                   <div className="p-3.5 rounded-xl bg-slate-900/70 border border-white/10 space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="text-white font-semibold">Tier 4: Durable Authority</span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">POSTGRESQL WAL</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-white/5 text-slate-300 border border-white/15">CONFIGURED</span>
                     </div>
                     <div className="text-[11px] text-slate-400">
                       RPO=0 Transactional Outbox + Rebuild Hydration Engine.
@@ -611,7 +633,7 @@ export function Header() {
 
             {/* Modal Footer */}
             <div className="px-6 py-3.5 border-t border-white/10 bg-slate-900/60 flex items-center justify-between text-[11px] text-slate-400">
-              <span>Cluster Epoch #{typeof epoch === "number" ? epoch : 1} · Multi-Region Mesh</span>
+              <span>Cluster epoch: {epoch !== null ? `#${epoch}` : "not reported"}</span>
               <button
                 onClick={() => setShowDiagnostics(false)}
                 className="px-4 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white transition-colors font-semibold"

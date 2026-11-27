@@ -415,7 +415,7 @@ export default function KnowledgePage() {
             <h1 className="text-2xl font-bold text-white tracking-tight">
               Semantic Studio & Knowledge Dependency Graph
             </h1>
-            <Badge variant="purple">CONFORMAL RISK α ≤ 0.001</Badge>
+            <Badge variant="purple">RISK BOUND CALIBRATED PER POLICY</Badge>
           </div>
           <p className="text-xs text-slate-400 font-mono mt-1">
             Bi-directional source-to-cache dependency index, monotonic epoch fencing, and transactional outbox cascades.

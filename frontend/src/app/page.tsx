@@ -141,6 +141,28 @@ export default function OverviewPage() {
 
   return (
     <div className="space-y-12">
+      {/* Plain-English entry point. The cockpit is for operators; this is for everyone else. */}
+      <Link
+        href="/start"
+        className="group flex flex-col gap-3 rounded-2xl border border-cyan-500/25 bg-cyan-500/[0.06] px-5 py-4 transition-colors hover:bg-cyan-500/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="flex items-start gap-3">
+          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-cyan-400" aria-hidden="true" />
+          <div>
+            <p className="text-sm font-semibold text-white">
+              New here? Start with the plain-English explanation.
+            </p>
+            <p className="mt-0.5 text-xs leading-relaxed text-slate-400">
+              What Sunborn does, the five checks, and one real request you can run — without the jargon.
+            </p>
+          </div>
+        </div>
+        <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-cyan-300">
+          Open the guide
+          <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+        </span>
+      </Link>
+
       {/* Hallmark Hero Section */}
       <section className="relative flex flex-col items-start gap-6 pt-4 pb-2">
         <div className="flex flex-wrap items-center gap-3">
@@ -387,7 +409,7 @@ export default function OverviewPage() {
           </Badge>
         </div>
         <p className="text-xs text-slate-400 font-mono">
-          Empirical measurements on frozen benchmark dataset with two-sided 95% Wilson score confidence intervals.
+          Empirical measurements on the frozen 124-query suite with two-sided 95% Wilson intervals. These are in-sample results: zero observed false positives do not prove a zero population error rate, and the normalizer was developed with knowledge of this dataset.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
@@ -411,11 +433,11 @@ export default function OverviewPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">95% Wilson CI:</span>
-                  <span className="text-cyan-300 font-semibold">[88.3%, 100.0%]</span>
+                  <span className="text-cyan-300 font-semibold">[79.6%, 100.0%]</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Status:</span>
-                  <span className="text-cyan-400 font-semibold">Verified Benchmark</span>
+                  <span className="text-cyan-400 font-semibold">In-sample result (15 hits)</span>
                 </div>
               </div>
             </CardContent>
@@ -433,7 +455,7 @@ export default function OverviewPage() {
               <div className="text-[11px] font-mono text-slate-400 mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
                 <div className="flex justify-between">
                   <span className="text-slate-400">Source:</span>
-                  <span className="text-slate-300">Verification Cascade (α ≤ 0.001)</span>
+                  <span className="text-slate-300">Verification Cascade (policy-calibrated)</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Sample Size:</span>
@@ -445,7 +467,7 @@ export default function OverviewPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Status:</span>
-                  <span className="text-emerald-400 font-semibold">Verified Benchmark</span>
+                  <span className="text-emerald-400 font-semibold">In-sample · not a zero-error proof</span>
                 </div>
               </div>
             </CardContent>
@@ -510,6 +532,26 @@ export default function OverviewPage() {
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-amber-400/25 bg-amber-400/[0.05] p-4 text-xs font-mono text-slate-300 space-y-1.5">
+          <div className="font-semibold text-amber-200">
+            Held-out guardrail check — N=320 (120 equivalent pairs, 200 hard negatives)
+          </div>
+          <p className="leading-relaxed">
+            97 of 120 equivalent pairs were accepted (80.83% recall, 23 missed). 0 of 200 hard
+            negatives were accepted, but that is an observation, not a zero-error guarantee: the
+            false-positive rate has a 95% Wilson interval of [0.0%, 1.88%] and a 99.9%
+            Clopper–Pearson upper bound of 3.39%.
+          </p>
+          <p className="leading-relaxed text-amber-200/90">
+            Therefore the results do not support a 0.1% risk guarantee, and the normalizer was
+            developed with knowledge of the dataset, so this is not independent external
+            generalization evidence.
+          </p>
+          <p className="text-[10px] text-slate-400">
+            Source: research/results/heldout_generalization_run.json
+          </p>
         </div>
       </section>
 

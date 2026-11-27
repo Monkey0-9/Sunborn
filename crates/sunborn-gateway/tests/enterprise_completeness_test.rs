@@ -183,9 +183,18 @@ async fn test_context_digest_asymmetry_and_embedding_config_mismatch() {
         .evaluate_with_thresholds(&req_emb, 0.85, 0.25)
         .await
         .unwrap();
+    // The candidate's vector is identical to the query, so it would rank first if it
+    // were eligible. It is not: the vector store excludes vectors whose embedding
+    // fingerprint disagrees with the active embedder before ranking, so the request
+    // abstains one step earlier than the decision-level mismatch check in
+    // `DecisionEngine`. Both outcomes are safe; what must never happen is a reuse.
+    assert_ne!(
+        outcome_emb.decision.action,
+        sunborn_core::DecisionAction::SafeHit
+    );
     assert_eq!(
-        outcome_emb.decision.reason_code,
-        "EMBEDDING_FINGERPRINT_MISMATCH"
+        outcome_emb.decision.reason_code, "NO_SEMANTIC_CANDIDATE_FOUND",
+        "an incompatible embedding fingerprint must not yield a reusable candidate"
     );
 }
 

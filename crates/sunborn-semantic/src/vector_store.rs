@@ -24,6 +24,49 @@ pub struct ScoredVectorEntry {
     pub score: f32,
 }
 
+/// Splits an embedding fingerprint (e.g. `emb:fastembed:bge-small-en-v1.5` or `lsh:384@v1`)
+/// into `(embedding_model_id, embedding_model_version)`.
+pub fn embedding_model_parts(fingerprint: &str) -> (&str, &str) {
+    if let Some((model, version)) = fingerprint.rsplit_once('@') {
+        if !model.is_empty() && !version.is_empty() {
+            return (model, version);
+        }
+    }
+    if let Some((model, version)) = fingerprint.rsplit_once(':') {
+        if !model.is_empty() && !version.is_empty() {
+            return (model, version);
+        }
+    }
+    (fingerprint, "v1")
+}
+
+/// Checks whether a stored vector entry's metadata is compatible with the active embedding pin.
+/// Unpinned legacy entries (with no `embedding_fingerprint` or `embedding_model_id`) are skipped
+/// when `active_fingerprint` is non-empty so embedding upgrades partition cleanly without silent recall drift.
+pub fn embedding_model_metadata_matches(
+    metadata: &serde_json::Value,
+    active_fingerprint: &str,
+) -> bool {
+    if active_fingerprint.is_empty() {
+        return true;
+    }
+    if let Some(fp) = metadata
+        .get("embedding_fingerprint")
+        .and_then(|v| v.as_str())
+    {
+        return fp == active_fingerprint;
+    }
+    if let Some(model_id) = metadata.get("embedding_model_id").and_then(|v| v.as_str()) {
+        let (active_model, active_ver) = embedding_model_parts(active_fingerprint);
+        let entry_ver = metadata
+            .get("embedding_model_version")
+            .and_then(|v| v.as_str())
+            .unwrap_or("v1");
+        return model_id == active_model && entry_ver == active_ver;
+    }
+    false
+}
+
 #[async_trait]
 pub trait VectorStore: Send + Sync {
     async fn insert(&self, entry: VectorEntry) -> Result<()>;
@@ -35,6 +78,23 @@ pub trait VectorStore: Send + Sync {
         top_k: usize,
         min_score: f32,
     ) -> Result<Vec<ScoredVectorEntry>>;
+    async fn search_pinned(
+        &self,
+        tenant_id: &TenantId,
+        application_id: &ApplicationId,
+        query_vector: &[f32],
+        top_k: usize,
+        min_score: f32,
+        embedding_fingerprint: &str,
+    ) -> Result<Vec<ScoredVectorEntry>> {
+        let results = self
+            .search(tenant_id, application_id, query_vector, top_k, min_score)
+            .await?;
+        Ok(results
+            .into_iter()
+            .filter(|r| embedding_model_metadata_matches(&r.entry.metadata, embedding_fingerprint))
+            .collect())
+    }
     async fn delete(&self, id: &str) -> Result<bool>;
     async fn count(&self, tenant_id: &TenantId) -> Result<usize>;
     async fn delete_by_tenant(&self, tenant_id: &TenantId) -> Result<usize>;
@@ -57,6 +117,27 @@ impl VectorStore for Arc<dyn VectorStore> {
     ) -> Result<Vec<ScoredVectorEntry>> {
         (**self)
             .search(tenant_id, application_id, query_vector, top_k, min_score)
+            .await
+    }
+
+    async fn search_pinned(
+        &self,
+        tenant_id: &TenantId,
+        application_id: &ApplicationId,
+        query_vector: &[f32],
+        top_k: usize,
+        min_score: f32,
+        embedding_fingerprint: &str,
+    ) -> Result<Vec<ScoredVectorEntry>> {
+        (**self)
+            .search_pinned(
+                tenant_id,
+                application_id,
+                query_vector,
+                top_k,
+                min_score,
+                embedding_fingerprint,
+            )
             .await
     }
 
@@ -423,6 +504,22 @@ impl VectorStore for QdrantVectorStore {
 
         // Deterministic canonical UUID for Qdrant point from entry.id (P0-02)
         let point_uuid = canonical_qdrant_point_id(&entry.id);
+        let fp = entry
+            .metadata
+            .get("embedding_fingerprint")
+            .and_then(|v| v.as_str())
+            .unwrap_or("emb:unknown");
+        let (model_id, model_version) = embedding_model_parts(fp);
+        let pinned_model_id = entry
+            .metadata
+            .get("embedding_model_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or(model_id);
+        let pinned_model_version = entry
+            .metadata
+            .get("embedding_model_version")
+            .and_then(|v| v.as_str())
+            .unwrap_or(model_version);
 
         let payload = serde_json::json!({
             "points": [
@@ -435,6 +532,9 @@ impl VectorStore for QdrantVectorStore {
                         "application_id": entry.application_id.0,
                         "prompt": entry.prompt,
                         "content": entry.content,
+                        "embedding_fingerprint": fp,
+                        "embedding_model_id": pinned_model_id,
+                        "embedding_model_version": pinned_model_version,
                         "metadata": entry.metadata,
                         "created_at": entry.created_at.to_rfc3339()
                     }
@@ -820,6 +920,51 @@ mod tests {
         // Verify distinct keys produce distinct point IDs
         let id3 = canonical_qdrant_point_id("sunborn:tenant-beta:app-2:chat");
         assert_ne!(id1, id3);
+    }
+
+    #[tokio::test]
+    async fn test_embedding_model_pinning_partitions_incompatible_vectors() {
+        let store = MemoryVectorStore::new();
+        let tenant = TenantId::new("tenant-pin");
+        let app = ApplicationId::new("app-pin");
+
+        let mut v1_entry = VectorEntry {
+            id: "vec-v1".to_string(),
+            tenant_id: tenant.clone(),
+            application_id: app.clone(),
+            prompt: "what is the tax rate?".to_string(),
+            content: "18% GST".to_string(),
+            vector: vec![1.0, 0.0, 0.0],
+            metadata: serde_json::json!({
+                "embedding_fingerprint": "bge-small-en:v1.5",
+                "embedding_model_id": "bge-small-en",
+                "embedding_model_version": "v1.5"
+            }),
+            created_at: Utc::now(),
+        };
+        store.insert(v1_entry.clone()).await.unwrap();
+
+        v1_entry.id = "vec-v2".to_string();
+        v1_entry.metadata = serde_json::json!({
+            "embedding_fingerprint": "bge-large-en:v2.0",
+            "embedding_model_id": "bge-large-en",
+            "embedding_model_version": "v2.0"
+        });
+        store.insert(v1_entry).await.unwrap();
+
+        let hits_v1 = store
+            .search_pinned(&tenant, &app, &[1.0, 0.0, 0.0], 5, 0.8, "bge-small-en:v1.5")
+            .await
+            .unwrap();
+        assert_eq!(hits_v1.len(), 1);
+        assert_eq!(hits_v1[0].entry.id, "vec-v1");
+
+        let hits_v2 = store
+            .search_pinned(&tenant, &app, &[1.0, 0.0, 0.0], 5, 0.8, "bge-large-en:v2.0")
+            .await
+            .unwrap();
+        assert_eq!(hits_v2.len(), 1);
+        assert_eq!(hits_v2[0].entry.id, "vec-v2");
     }
 }
 

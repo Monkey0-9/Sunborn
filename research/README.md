@@ -12,7 +12,8 @@
 * `results/run_manifest.json`: Immutable execution manifest for SemanticCacheBench-T (19 stateful temporal mutation scenarios).
 * `results/reproduction_certificate.json`: Local integrity record. The checked-in certificate is explicitly unauthenticated and tied to its recorded repository revision.
 * `verify_certificate.py`: Independent certificate and artifact provenance verifier with explicit 4-state outcome semantics.
-* `calibration/external_unseen_eval_dataset.json`: Frozen-rule unseen evaluation split ($N=160$ multi-domain, multilingual/code-mixed, and factual-vs-similarity traps) paired with `crates/sunborn-semantic/tests/external_generalization_eval.rs`.
+* `calibration/external_unseen_eval_dataset.json`: Frozen-rule unseen evaluation split ($N=160$ multi-domain, multilingual/code-mixed, and factual-vs-similarity traps) paired with `crates/sunborn-semantic/tests/external_generalization_eval.rs`. Measured output: `results/external_generalization_run.json` (written with `SUNBORN_WRITE_EVIDENCE=1`).
+* `results/external_five_gate_ablation.json`: External-corpus B2–B6 gate ablation over the same 160 pairs with injected stale/effect/signature probes, produced by `crates/sunborn-gateway/tests/external_corpus_ablation_test.rs`.
 * `tests/test_verifier_negative.py`: Negative verification test suite proving strict rejection of offline artifacts, corrupted traces, and mismatched keys.
 * `../benchmarks/semantic_cache_bench.py`: SemanticCacheBench dataset runner (uses a lightweight embedding backend by default; `--use-fastembed` explicitly opts into loading FastEmbed; supports strict live gateway RPC via `--require-live` and developer offline simulation via `--allow-offline`).
 * `benchmark_credentials.py`: Generates test-only least-privilege API credentials, one per benchmark application, so live cases retain tenant/application isolation without using a credential scoped to a different app.
@@ -59,6 +60,23 @@ To preserve empirical integrity and prevent confabulation of offline research ar
    - The static artifact's 12.09% modeled savings and temporal artifact's 0% savings use an **explicit synthetic cost estimation model** ($0.00625 per origin call equivalent, $0.000001 per cache lookup).
    - Modeled cost reductions are algorithmic estimates under this pricing baseline; they must **never** be presented as audited commercial provider invoices or actual customer expenditure reductions.
 
-3. **Live Production Telemetry**:
+3. **Measured External-Unseen Results (2026-11-25)**:
+   - `cargo test -p sunborn-semantic --test external_generalization_eval` on the frozen
+     N=160 split reports, for the default deterministic LSH embedder: raw similarity
+     62 FP / 58 TN / 40 FN, and after frozen guardrails 4 FP / 116 TN / 40 FN —
+     **recall 0/80 and F1 0.000 at 47.5% abstention**. The local HTTP trigram baseline
+     reports 92 FP raw and 6 FP guarded, precision 0.250, recall 0.050. These results
+     show the guardrails remove false positives by abstaining; they do **not** show
+     paraphrase generalization.
+   - `cargo test -p sunborn-gateway --test external_corpus_ablation_test` runs the same
+     160 pairs with four probes each (equivalence, stale epoch, mutating plan, tampered
+     certificate). False hits: B2 545 → B3 462 → B4 308 → B5 154 → B6 0 of 640.
+     Under B6, equivalence false hits are 0/160 **and safe reuses are 0/160**: the full
+     contract admits nothing on this corpus with the default embedder. Zero false reuse
+     here is a safety-by-abstention result, not reuse capability. Probe types 2–4 are
+     injected threats and are not natural corpus labels. Artifact:
+     `results/external_five_gate_ablation.json`.
+
+4. **Live Production Telemetry**:
    - In production deployments, real-time cache hit ratios, token avoided counters, and P99 latency are gathered dynamically from active gateway ingress nodes via `/v1/finops/report` and Prometheus scrapers.
    - When live telemetry is unmeasured or Prometheus exporters are unattached, the UI and API truthfully report `Not measured` rather than displaying static demonstration values.

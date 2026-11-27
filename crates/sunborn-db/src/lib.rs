@@ -44,7 +44,7 @@ pub mod write_behind;
 
 pub use models::{
     AuditRecord, DurableApiCredentialRecord, DurableCacheRecord, FreePoolLimits,
-    NewApiCredentialRecord, OutboxRecord, TenantQuotaLimits, TenantRecord,
+    NewApiCredentialRecord, OutboxRecord, TenantQuotaLimits, TenantRecord, TenantTierAssignment,
 };
 pub use postgres::{
     PostgresDatabaseStore, QuotaReservationOutcome, RateLimitOutcome, SpendReservationOutcome,

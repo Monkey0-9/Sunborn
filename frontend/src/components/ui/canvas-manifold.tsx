@@ -75,7 +75,7 @@ export function CanvasManifold({
       "FinOps-GDSF",
       "DragonflyDB",
       "Qdrant HNSW",
-      "Conformal Risk α≤0.001",
+      "Conformal Calibration",
       "Merkle DAG Attest",
       "PostgreSQL Outbox",
       "Radix KV Route",

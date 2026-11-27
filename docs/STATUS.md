@@ -3,9 +3,9 @@
 **Effective:** 2026-11-25
 **Baseline:** `46e8c73` (on top of `6e5b823` and `b2a9476`, including §2.1–§2.4 and Phase 6 `SB-01`–`SB-14` five-gate runtime hardening)
 **Release decision:** **STAGE 0 CONTROLLED PILOT APPROVED — ALL IN-TREE GATES PASS; TWO EXTERNAL P1 PARTIALS DISCLOSED.** All in-tree checks
-listed in §1 pass on this tree (the full Rust workspace suite across all targets, 67 frontend tests, 4 TypeScript SDK tests, 65 Python SDK tests with ruff/mypy/coverage gates, 8/8 pre-flight launch verification gates, 11/11 CI quality gates), and all
+listed in §1 pass on this tree (the full Rust workspace suite across all targets, 84 frontend tests, 4 TypeScript SDK tests, 65 Python SDK tests with ruff/mypy/coverage gates, 8/8 pre-flight launch verification gates, 11/11 CI quality gates), and all
 P0/P1/P2 defects found in the 2026-11-17 audit and 2026-11-20 security audit (Issues #3-#10) are fixed with regression tests. All 21 enterprise system quality attributes are empirically documented and verified in `docs/21_QUALITY_ATTRIBUTES_VERIFICATION.md`.
-Two reopened P1 items are **partially met and are not claimed as closed**: Issue #21 (an independent clean Windows 11 installer acceptance run; the CI runner still ships developer toolchains) and Issue #23 (a certificate-signed Windows artifact; CI now requests a real SLSA attestation, but no signing certificate is configured and no signed artifact exists). See `docs/audit/DEFECT_REGISTER.md` §4.
+Two reopened P1 items remain **partially met and are not claimed as closed**: Issue #21 (a clean-toolchain install/uninstall acceptance now passes locally with `cargo`/`node` removed from `PATH`, but this host is not an independent clean Windows 11 image) and Issue #23 (the Authenticode pipeline was exercised end-to-end and produced a signed artifact with a **self-signed** certificate; no publicly trusted code-signing certificate is configured, so the artifact is not a production-signed release). See `docs/audit/DEFECT_REGISTER.md` §4 and `docs/audit/RELEASE_ACCEPTANCE_EVIDENCE.md`.
 Authoritative gate N1 (multi-node distributed invalidation harness) is 100% verified across all 6 modes (exact, semantic, outbox, replay, finops, crash) in containerized CI.
 Stage 1 (Private Beta) and Stage 2 (Public Launch) remain formally GATED on external staging requirements (B1 load testing and B2 billing cycle evidence) as tracked in [`docs/launch/05_PRELAUNCH_CHECKLIST.md`](launch/05_PRELAUNCH_CHECKLIST.md).
 This document is the only current-status authority. The historical audit and
@@ -27,12 +27,12 @@ the actual runs.
 |---|---|---|
 | Formatting | `cargo fmt --all` | exit 0 |
 | Workspace compile | `cargo check --workspace --all-targets` | exit 0, no warnings |
-| Rust tests & doctests | `cargo test --workspace --all-targets -- --test-threads=4` + `cargo test --doc --workspace` | **463 passed, 0 failed, 0 ignored** (86 suites/doctests, exit 0; verified in-tree) |
+| Rust tests & doctests | `cargo test --workspace --all-targets -- --test-threads=4` + `cargo test --doc --workspace` | **463 passed, 0 failed, 0 ignored** at the last full-workspace run. Three tests were added afterwards and verified individually: `external_corpus_ablation_test` (1) and `learning::store::tests` replay defense (2). The full-workspace count was not re-run after those additions. |
 | Lints | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | exit 0, no warnings |
 | Epoch fencing model | `bash scripts/run_tlaplus.sh` | TLC: 2,245 states, 512 distinct, no error |
 | Outbox safety model | same | TLC: 601 states, 134 distinct, no error |
 | Outbox bounded liveness | same | TLC: 21 states, 9 distinct, no error |
-| Frontend unit/security | `npm test --prefix frontend` | **67 passed, 0 failed** (including reactive cluster store, dual-mode persona switcher, ControlPlaneMatrix, BYOK modal, end-to-end simulation engine, and CSP/header hardening) |
+| Frontend unit/security | `npm test --prefix frontend` | **88 passed, 0 failed** (including reactive cluster store, dual-mode persona switcher, ControlPlaneMatrix, BYOK modal, end-to-end simulation engine, and nonce-based CSP/header hardening) |
 | Frontend WCAG 2.2 AA | `npm run test:a11y --prefix frontend` | **10 routes, 0 serious/critical axe violations** |
 | Keyboard and focus | `npm run test:keyboard --prefix frontend` | **10 routes, 271 tab stops, all with visible 2px focus ring; skip link verified** |
 | TypeScript SDK | `npm test --prefix sdk/typescript` | **4 passed, 0 failed** (build and contract tests pass) |
@@ -47,7 +47,9 @@ the actual runs.
 | Observability contract | `cargo test -p sunborn-gateway --test observability_contract_test` | Every metric named in `deploy/k8s/prometheusrule.yaml` is present in a live `/metrics` scrape, every alert `runbook_url` anchor resolves to a heading in `docs/runbooks/incident_playbooks.md`, and the circuit-breaker gauge is asserted to follow the breaker into `OPEN` rather than report a constant |
 | Outbox DLQ surface | `cargo test -p sunborn-gateway --test outbox_dlq_test` | `sunborn_invalidation_dlq` reports 0 on a clean outbox and 1 after an event exhausts retries; `POST /v1/lifecycle/outbox/replay` drains it back to 0, and is rejected 401 without a key and 403 for a non-admin key |
 | Five-Gate Contract & E2E | `cargo test -p sunborn-gateway --test remediation_e2e_test --test execution_lifecycle_test --test permission_freshness_adversarial_test --test five_gate_benchmark_test --test enterprise_completeness_test` | Enforces `EligibleReuse = G1 && G2 && G3 && G4 && G5` across `handlers/execute.rs`, `five_gates.rs`, `execution_runtime.rs` (`UNKNOWN_OUTCOME` reconciliation), `retrieval_cache.rs` (separate `POST /v1/retrieval/cache` tier), `cache_lifecycle.rs` (versioned lifecycle + $V_i$ adaptive eviction via `POST /v1/lifecycle/retain` + safe prefetch gating), asymmetric `context_digest` + config/embedding fingerprints, claim-level `EvidenceBundle` grounding, quarantine isolation, and live B0–B6 + leave-one-out ablations |
-| Frozen Unseen Generalization | `cargo test -p sunborn-semantic --test external_generalization_eval` | Evaluates frozen `StructuralFingerprint` rules on unseen `research/calibration/external_unseen_eval_dataset.json` (N=160); cuts LSH false positives from 62 to 4 (0 negation/numeric FPs) and local HTTP trigram FPs from 92 to 6 while honestly recording low paraphrase recall without an external neural embedding model |
+| Frozen Unseen Generalization | `cargo test -p sunborn-semantic --test external_generalization_eval` | Evaluates frozen `StructuralFingerprint` rules on unseen `research/calibration/external_unseen_eval_dataset.json` (N=160). LSH raw similarity: 62 FP → guardrails 4 FP, 116 TN, 40 FN, **recall 0/80, F1 0.000** at 47.5% abstention. Local HTTP trigram: 92 FP → 6 FP, 114 TN, 38 FN (precision 0.250, recall 0.050). **This is abstention, not generalization**: the default deterministic embedder reuses no external paraphrase correctly. |
+| External-Corpus Five-Gate Ablation | `cargo test -p sunborn-gateway --test external_corpus_ablation_test` (add `SUNBORN_WRITE_EVIDENCE=1` to write the artifact) | 160 external pairs × 4 probes = 640. False hits fall **B2 545 → B3 462 → B4 308 → B5 154 → B6 0**; B6's zero comprises 0/160 equivalence false hits **and 0/160 true paraphrase reuses**. G1 removes 65/160 raw-similarity equivalence errors; G3/G4/G5 each remove their injected threat class exactly. Probe types 2–4 are injected threats, not natural labels. Artifact: `research/results/external_five_gate_ablation.json`. |
+| Feedback replay defense | `cargo test -p sunborn-gateway --lib learning::store::tests` | A signed feedback event replayed within the 15-minute freshness window was previously accepted repeatedly, inflating the observation count used by calibration/promotion. `record_event` now rejects duplicate `event_id` per tenant; 2 tests cover replay rejection and distinct-event acceptance. |
 | Independent State Verifier | `cargo test -p sunborn-verify` | `apps/sunborn-verify/src/main.rs` verifies Ed25519 + Merkle root plus `--state` authoritative epochs/`content_hash`/revocations and `--evidence` `FiveGateEvidence` (`3/3` tests pass) |
 | Degradation observability | `cargo test -p sunborn-gateway --test degradation_observability_test` | With the embedding provider forced to fail, requests still return 200 from origin, `sunborn_semantic_eval_failures_total` increments, and exact-cache hits keep working |
 | Guardrail benchmark | `cargo test -p sunborn-semantic test_held_out_evaluation_dataset_precision_and_recall` | **N = 320 pairs (120 equivalent, 200 hard negatives): 0 false positives, 100% precision, recall 80.8% (97/120), Clopper-Pearson 99.9% upper bound on the false-positive rate < 3.4%.** Both precision and recall are reported; the dataset informed the verb-class normalizer, so this is regression evidence, not an unbiased holdout estimate. |
@@ -67,6 +69,30 @@ the actual runs.
 | Windows stdio portability | `python scripts/client_showcase.py --self-test`, `python scripts/verify_india_sovereign.py` | Both scripts print `✓` and previously raised `UnicodeEncodeError` under cp1252 whenever stdout was redirected to a file or pipe, which is how CI invokes them. They now reconfigure stdout/stderr to UTF-8 with `errors="replace"`; both exit 0 redirected. |
 | Architecture dossier | [`docs/ENTERPRISE_ARCHITECTURE_DOSSIER.md`](ENTERPRISE_ARCHITECTURE_DOSSIER.md) | Verified specification across 8 enterprise dimensions |
 | Incident playbooks | [`docs/runbooks/incident_playbooks.md`](runbooks/incident_playbooks.md) | Published runbooks for all 6 mission-critical failure scenarios |
+
+### Five-gate ablation evidence (live `/v1/requests`, N=28)
+
+`cargo test -p sunborn-gateway --test five_gate_benchmark_test -- --nocapture` executes one
+adversarial workload (safe repeats, cross-session, stale source, mutating DAG, negation/numeric
+inversion, post-update repeats) against each progressive gate set. The test asserts the exact
+false-hit vector, so the table cannot drift silently.
+
+| Configuration | Safe hits | False hits | Origin misses |
+|---|---:|---:|---:|
+| B0 Origin only | 0 | 0 | 28 |
+| B1 Exact cache only | 8 | 0 | 20 |
+| B2 Unfiltered semantic | 11 | 16 | 1 |
+| B3 G1+G2 | 11 | 8 | 9 |
+| B4 G1+G2+G3 | 11 | 4 | 13 |
+| B5 G1+G2+G3+G4 (no G5) | 10 | 1 | 17 |
+| B6 Full contract | 11 | 0 | 17 |
+
+The stale case advances the authoritative source epoch while the request keeps the snapshot it
+was served under. G1 and G2 therefore still pass, and only G3 can refuse the reuse. An earlier
+version of this workload changed the request's `content_hash`, which the G2 context digest
+already caught, so B3 and B4 tied and the ablation did not exercise freshness at all. The
+current workload makes each gate's marginal contribution measurable: G1+G2 remove 8 unsafe
+reuses, G3 removes 4, G4 removes 3, and G5 removes the last tampered-certificate reuse.
 
 ### Model-checked properties
 
@@ -109,7 +135,7 @@ corrected to the endpoints and return shapes the code actually implements.
 - **Motion & Accessibility Normalization**: Eliminated `transition: all` in favor of targeted composited property transitions (`transform`, `opacity`, `border-color`, `box-shadow`) with reduced-motion fallbacks. Removed `focus:outline-none` overrides to ensure visible 2px focus indicators on all interactive controls.
 - **Overview Decomposition**: Modularized the monolithic 1,693-line `page.tsx` down to 400 lines by extracting focused components: `MetricsRibbon`, `PromptProbePlayground`, `LiveDAGVisualizer`, and `ClusterMeshStatus` under `frontend/src/components/cockpit/`. Route bundle size decreased by 31% (16.9 kB vs 24.6 kB).
 - **SSR Hydration & Epoch Resilience**: Standardized CSS gradient shimmer animations in `text-shimmer.tsx` eliminating SSR webpack exceptions; hardened `extractVectorClockEpoch` in `utils.ts` to parse scalar epochs from nested multi-node vector clocks.
-- **Verification Gates**: 67 frontend tests pass (`npm test --prefix frontend`), 0 serious/critical axe WCAG 2.2 AA violations across all 10 routes (`npm run test:a11y`), and 271 tab stops verified with visible focus rings (`npm run test:keyboard`).
+- **Verification Gates**: 84 frontend tests pass (`npm test --prefix frontend`), 0 serious/critical axe WCAG 2.2 AA violations across all 10 routes (`npm run test:a11y`), and 271 tab stops verified with visible focus rings (`npm run test:keyboard`).
 
 
 ### Public free-tier admission hardening (2026-11-18)
@@ -300,7 +326,7 @@ corrected to the endpoints and return shapes the code actually implements.
 | Histogram correctness | Added a unit test proving Prometheus cumulative-bucket semantics: a 4 ms observation increments `le=0.005` and every larger bound but not `le=0.001`/`le=0.0025`; a 2 s observation increments only `le=2.5`/`le=5.0`; buckets are non-decreasing and `_count` matches observations. | `cargo test -p sunborn-gateway --lib metrics_tests` |
 | Probe throttle immunity | `/health`, `/ready`, `/metrics`, and `/version` bypass the pre-auth rate limiter. Previously a busy node's kubelet polling could be throttled into a restart loop. | `is_probe_path` helper + `middleware::rate_limit` unit coverage |
 | Body-limit coherence | The BFF rejected bodies over 10 MiB while the gateway caps at 4 MiB, so oversized requests were streamed and then refused. The BFF now enforces the gateway's 4 MiB limit at the edge. | `frontend/tests` (BFF suite) |
-| Frontend CSP | Production CSP no longer allows `'unsafe-eval'` (kept only for development HMR), `object-src` is `'none'`, the deprecated `X-XSS-Protection` auditor is explicitly disabled (`0`), and `X-Powered-By` is disabled. A nonce-based replacement for `'unsafe-inline'` remains open and is not claimed as done. | `frontend/tests/security_headers.test.mjs` (4 tests) |
+| Frontend CSP | The policy is built per request in `src/middleware.ts` from `src/lib/csp.mjs`. `script-src` carries a 128-bit nonce and `'strict-dynamic'`, with no `'unsafe-inline'` or `'unsafe-eval'` in production; `object-src` is `'none'`, `frame-ancestors` is `'none'`, and `base-uri`/`form-action` are `'self'`. `style-src` keeps `'unsafe-inline'` deliberately, because inline `style` attributes are not a script-execution vector. A per-request nonce cannot be embedded in a prerendered page, so the root layout is request-rendered (`force-dynamic`) and the static header was removed from `next.config.mjs` to avoid a second, intersecting policy. | `frontend/tests/security_headers.test.mjs` (8 tests). Built server inspected in Chromium: 19/19 script tags carried the header's nonce, `Cache-Control: no-store`, and **0 CSP violations** in the console. |
 | Build identity in images | `deploy/Dockerfile` stamps `SUNBORN_GIT_SHA` at compile time so `/version` and `sunborn_build_info` report the deployed commit; OCI label, Helm `appVersion`, and k8s image tags aligned to `1.0.0`. | `python scripts/check_k8s_manifests.py`, `python scripts/verify_doc_paths.py` |
 | Supply chain | `cargo audit` over 362 dependencies: 0 vulnerabilities, 1 allowed unmaintained-crate warning (`chrono`, tracked in `audit.toml`). | `cargo audit` |
 | Vector-store scaling | Qdrant collections were created with only `size` and `distance`, leaving HNSW at library defaults and payload in RAM. Collection creation now sends an explicit HNSW graph (`m=16`, `ef_construct=128`) and `on_disk_payload: true`; int8 scalar quantization is available behind `SUNBORN_QDRANT_QUANTIZATION` and stays **off** because its recall cost has not been measured on this corpus. | `vector_store::collection_tuning_tests::*` (3 tests) |
@@ -333,6 +359,26 @@ corrected to the endpoints and return shapes the code actually implements.
 | Local broker wiring, verified live (2026-11-23) | Ran `scripts/dev-up.sh` against Docker with Postgres 16, Dragonfly 1.20, and Qdrant 1.10. Postgres applied migrations 1–12 (**27 public tables**), Qdrant created `sunborn_vectors`, and `/ready` reported cache, database, and vector store all `connected`. Two identical requests then returned an origin miss followed by an exact cache hit (`cache_path: exact`, Ed25519 certificate, 175 ms → 11 ms); the exact key and `sunborn:invalidation:events` were present in Dragonfly. `make smoke` reproduces this and exits 0. | `bash scripts/dev-up.sh`, `make smoke`, `docker exec sunborn-dragonfly redis-cli`, `docker exec sunborn-postgres psql`, `curl /ready` |
 | Tenant isolation, verified live | Against the broker-wired gateway: tenant-owned root returned **200 purged**, a cross-tenant root returned **403**, and an omitted `tenant_id` returned **422**. | Live `curl` run recorded in the row above; also covered by the in-tree regression test |
 | Release provenance wording corrected | A hand-written JSON manifest had been labelled `SLSA-Build-Level-2`, which it was not. It is now `BUILD-METADATA.json` (`manifest_type: sunborn-build-metadata-v1`, `signed: false`), and real provenance is requested in CI via `actions/attest-build-provenance@v2` with `id-token`/`attestations` write permissions. Authenticode signing remains conditional on `SIGNING_CERT_PFX`. | `.github/workflows/release.yml` and `scripts/package-distribution.ps1` parsed locally; the release workflow has not been executed in this environment |
+
+### 2.7 Release acceptance and external evidence (2026-11-25)
+
+| Area | Change | Verification |
+|---|---|---|
+| Clean-toolchain install | The packaged installer smoke-tested the gateway without local broker settings, so it contacted `redis://dragonfly:6379` and failed on any desktop machine without Dragonfly. `install-sunborn.ps1` now sets memory cache/DB/vector backends, non-strict durability and a local KMS provider for the smoke run. | Installer exit 0 and `/health` answered with `PATH=C:\Windows\System32;C:\Windows` (`cargo`/`node` absent); `sunborn-gateway --version` printed `1.0.0 (release)`. Evidence: `docs/audit/RELEASE_ACCEPTANCE_EVIDENCE.md`. |
+| Custom-directory uninstall | `uninstall-sunborn.ps1` hardcoded `%LOCALAPPDATA%\Sunborn` and ignored the installer's `-TargetDir`, so a custom install could not be removed. It now takes `-TargetDir`, and the registered `UninstallString`/`QuietUninstallString` pass it through. | Install into a temp `-TargetDir`, uninstall with `-Silent -PurgeData`; `Test-Path` returned `False` and no `sunborn-gateway` process remained. |
+| Authenticode pipeline | `package-distribution.ps1` blocked indefinitely on `Get-PfxCertificate` (interactive password prompt) and on an unreachable RFC 3161 timestamp server. It now loads the PFX with `X509Certificate2` + password, fails when no signer certificate is applied, and supports `-NoTimestamp` for offline signing. | Produced `sunborn-desktop-v1.0.0-windows-x64.zip` with a self-signed signature (`CN=Sunborn Dev Self-Signed (NOT FOR PRODUCTION)`, thumbprint `3C8F48D0…B003B092`). `Get-AuthenticodeSignature` reports `UnknownError` because the root is untrusted — **not a production-signed release**. |
+| External-corpus evidence | Added `crates/sunborn-gateway/tests/external_corpus_ablation_test.rs` over the frozen 160-pair dataset, with injected stale-epoch, mutating-plan and tampered-certificate probes. Corrected the documented interpretation of the existing external evaluation. | See the two rows in §1; artifact `research/results/external_five_gate_ablation.json` is written with `SUNBORN_WRITE_EVIDENCE=1`. |
+
+### 2.6 Free-tier defaults and in-place upgrade (2026-11-27)
+
+| Area | Change | Verification |
+|---|---|---|
+| Tier policy | New `crates/sunborn-gateway/src/tiers.rs` defines the `free`, `pilot`, `standard`, and `enterprise` envelopes as code: request quotas, model allowlist, retention, support level, invitation cap, and identity requirement. `SUNBORN_TIER_FREE_MODELS` overrides the free allowlist. `0` always denies, and "unlimited" is `i64::MAX` because the quota columns are `BIGINT`. | `cargo test -p sunborn-gateway --lib` → 57 passed, including 6 tier-policy tests |
+| Provisioning | `POST /v1/governance/provision` applies the tier's defaults and enrolls its quota as one unit, refuses an identity-gated tier without `identity_verified` (403), and counts invitations per inviter over 30 days. An omitted tier stays `pilot`, so an existing operator-driven caller is not silently moved onto the free envelope. | `cargo test -p sunborn-gateway --test tenant_tier_test` → 7 passed |
+| Upgrade path | `POST /v1/governance/tenant-quota` accepts `{tenant_id, tier}` with no explicit limits and re-applies that tier's policy in place (`applied: "tier_policy"`), so an upgrade needs neither a new tenant nor a data migration. Explicit limits still work (`applied: "explicit_limits"`) but must be supplied as a complete daily+monthly pair, because a half-specified envelope would leave the other window silently unchanged. | same suite: `a_tier_only_update_raises_limits_on_the_same_tenant`, `a_half_specified_envelope_is_rejected` |
+| Model allowlist | A credential's `allowed_models` became optional: absent means the tenant tier's default, and a supplied list is checked against the tier ceiling, so a free tenant cannot be widened to `*` or a premium model. | `cargo test -p sunborn-gateway --lib allowlist_tests` → 4 passed |
+| Schema | `migrations/0013_tenant_tier_defaults.sql` adds retention, support level, identity attestation, inviter, and default-allowlist columns plus an invitation index; `migrations/down/0013_tenant_tier_defaults.down.sql` is the back path. | `cargo check -p sunborn-db --all-targets` exit 0. **Forward/back execution against a live PostgreSQL instance was NOT run — no database was available in this environment.** |
+| Invitation cap | Five free invitations per inviter in a rolling 30 days. The count is a durable query when PostgreSQL is present, with an in-memory ledger for single-replica development so the cap is exercised rather than silently disabled; re-provisioning a tenant cannot inflate it. | `the_invitation_cap_refuses_the_sixth_free_tenant` (5 admitted, 6th `429`, a different inviter unaffected) |
 
 ---
 

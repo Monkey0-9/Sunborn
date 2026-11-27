@@ -1,0 +1,12 @@
+{
+  "total_pairs": 2400,
+  "tp": 300,
+  "fp": 0,
+  "tn": 2000,
+  "fn_count": 100,
+  "precision": 1.0,
+  "recall": 0.75,
+  "fpr_observed": 0.0,
+  "clopper_pearson_999_upper_bound": 0.00344791986523163,
+  "false_positives": []
+}

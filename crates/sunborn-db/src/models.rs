@@ -35,6 +35,23 @@ impl TenantQuotaLimits {
     }
 }
 
+/// One tenant's applied tier defaults, persisted at provisioning and on tier
+/// change. Kept separate from `TenantQuotaLimits` because quota admission and
+/// retention/support/allowlist policy change on different schedules: a quota
+/// override must not silently re-scope retention.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TenantTierAssignment {
+    pub tenant_id: String,
+    pub tier: String,
+    pub retention_days: u32,
+    pub support_level: String,
+    pub identity_verified: bool,
+    pub invited_by: Option<String>,
+    /// `["*"]` means every model. A restricted list is enforced when new
+    /// credentials are created for the tenant.
+    pub allowed_models: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FreePoolLimits {
     pub daily_requests: u64,

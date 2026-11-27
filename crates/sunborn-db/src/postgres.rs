@@ -1,7 +1,7 @@
 use crate::models::{
     AuditRecord, DurableApiCredentialRecord, DurableCacheRecord, FinOpsLedgerRecord,
     FreePoolLimits, NewApiCredentialRecord, OutboxRecord, TenantErasureTaskRecord,
-    TenantQuotaLimits, TenantRecord,
+    TenantQuotaLimits, TenantRecord, TenantTierAssignment,
 };
 use crate::repository::{DatabaseStore, MemoryDatabaseStore};
 use async_trait::async_trait;
@@ -66,6 +66,7 @@ const MIGRATION_0011: &str =
     include_str!("../../../migrations/0011_micro_units_non_negative_checks.sql");
 const MIGRATION_0012: &str =
     include_str!("../../../migrations/0012_durable_erasure_and_learning.sql");
+const MIGRATION_0013: &str = include_str!("../../../migrations/0013_tenant_tier_defaults.sql");
 
 /// Outcome of a cluster-wide spend reservation attempt.
 #[derive(Debug, Clone, PartialEq)]
@@ -168,6 +169,8 @@ impl DbCircuitBreaker {
     }
 }
 
+type FallbackInvitationList = Arc<RwLock<Vec<(String, String, DateTime<Utc>)>>>;
+
 /// Production PostgreSQL database store adapter implementing DatabaseStore
 #[derive(Clone)]
 pub struct PostgresDatabaseStore {
@@ -176,6 +179,11 @@ pub struct PostgresDatabaseStore {
     pool_init_lock: Arc<tokio::sync::Mutex<()>>,
     fallback_store: Arc<MemoryDatabaseStore>,
     fallback_tdeks: FallbackTdekMap,
+    /// Invitations recorded by the in-memory fallback as `(tenant_id, inviter, at)`.
+    /// Used only when no PostgreSQL pool is present, so the invitation cap behaves
+    /// on a single-replica development node the way it does durably. Keyed by tenant
+    /// so re-provisioning cannot inflate the count; the durable path counts rows.
+    fallback_invitations: FallbackInvitationList,
     pub strict_durability: bool,
     circuit_breaker: Arc<RwLock<DbCircuitBreaker>>,
 }
@@ -199,6 +207,7 @@ impl PostgresDatabaseStore {
             pool_init_lock: Arc::new(tokio::sync::Mutex::new(())),
             fallback_store: Arc::new(MemoryDatabaseStore::new()),
             fallback_tdeks: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            fallback_invitations: Arc::new(RwLock::new(Vec::new())),
             strict_durability: strict,
             circuit_breaker: Arc::new(RwLock::new(DbCircuitBreaker::new(3, 5))),
         }
@@ -212,6 +221,7 @@ impl PostgresDatabaseStore {
             pool_init_lock: Arc::new(tokio::sync::Mutex::new(())),
             fallback_store: Arc::new(MemoryDatabaseStore::new()),
             fallback_tdeks: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            fallback_invitations: Arc::new(RwLock::new(Vec::new())),
             strict_durability: true,
             circuit_breaker: Arc::new(RwLock::new(DbCircuitBreaker::new(3, 5))),
         }
@@ -377,6 +387,7 @@ impl PostgresDatabaseStore {
             (10, "0010_financial_precision_micro_units", MIGRATION_0010),
             (11, "0011_micro_units_non_negative_checks", MIGRATION_0011),
             (12, "0012_durable_erasure_and_learning", MIGRATION_0012),
+            (13, "0013_tenant_tier_defaults", MIGRATION_0013),
         ];
 
         for (version, name, sql) in migrations {
@@ -733,6 +744,142 @@ impl PostgresDatabaseStore {
             .await
             .map_err(|e| SunbornError::database(e.to_string()))?;
         Ok(())
+    }
+
+    /// Persists the tier defaults that provisioning or a tier change applied.
+    ///
+    /// The upsert creates the tenant row if it does not exist yet, because
+    /// provisioning writes the TDEK and the tier in separate statements and an
+    /// older tenant may predate this migration.
+    ///
+    /// `identity_verified` and `invited_by` are monotonic: a later tier change
+    /// never revokes a completed verification, and never rewrites the original
+    /// inviter that the invitation cap is counted against.
+    pub async fn apply_tenant_tier(&self, assignment: &TenantTierAssignment) -> Result<()> {
+        let Some(pool) = self.get_pool().await else {
+            if self.strict_durability {
+                return Err(SunbornError::database(
+                    "PostgreSQL connection pool unavailable for tenant tier assignment",
+                ));
+            }
+            if let Some(inviter) = assignment.invited_by.as_deref() {
+                let mut invitations = self.fallback_invitations.write().await;
+                let already_recorded = invitations
+                    .iter()
+                    .any(|(tenant, _, _)| tenant == &assignment.tenant_id);
+                if !already_recorded {
+                    invitations.push((
+                        assignment.tenant_id.clone(),
+                        inviter.to_string(),
+                        Utc::now(),
+                    ));
+                }
+            }
+            return Ok(());
+        };
+        let res = sqlx::query(
+            "INSERT INTO tenants (id, name, status, rate_limit_rps, tier, retention_days,
+                                  support_level, identity_verified, invited_by,
+                                  default_allowed_models, created_at)
+             VALUES ($1, $1, 'active', 100, $2, $3, $4, $5, $6, $7, NOW())
+             ON CONFLICT (id) DO UPDATE
+             SET tier = EXCLUDED.tier,
+                 retention_days = EXCLUDED.retention_days,
+                 support_level = EXCLUDED.support_level,
+                 identity_verified = tenants.identity_verified OR EXCLUDED.identity_verified,
+                 invited_by = COALESCE(tenants.invited_by, EXCLUDED.invited_by),
+                 default_allowed_models = EXCLUDED.default_allowed_models,
+                 updated_at = NOW()",
+        )
+        .bind(&assignment.tenant_id)
+        .bind(&assignment.tier)
+        .bind(assignment.retention_days as i32)
+        .bind(&assignment.support_level)
+        .bind(assignment.identity_verified)
+        .bind(assignment.invited_by.as_deref())
+        .bind(serde_json::json!(assignment.allowed_models))
+        .execute(&pool)
+        .await;
+
+        match res {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                tracing::error!(error = %err, "PostgreSQL apply_tenant_tier failed");
+                if self.strict_durability {
+                    return Err(SunbornError::database(format!(
+                        "Failed to persist tenant tier assignment: {err}"
+                    )));
+                }
+                Ok(())
+            }
+        }
+    }
+
+    /// Counts tenants provisioned by `inviter` since `since`, for the per-inviter
+    /// invitation cap.
+    ///
+    /// The cap cannot be counted across replicas from memory, so when the durable
+    /// store is unavailable this returns `0` and logs. Production requires the
+    /// durable store (strict durability refuses startup without it), so the
+    /// unenforced path exists only for single-process development.
+    pub async fn count_recent_invitations(
+        &self,
+        inviter: &str,
+        since: DateTime<Utc>,
+    ) -> Result<i64> {
+        let Some(pool) = self.get_pool().await else {
+            // Single-replica fallback: count what provisioning recorded in memory,
+            // so the cap is exercised rather than silently disabled.
+            let invitations = self.fallback_invitations.read().await;
+            let count = invitations
+                .iter()
+                .filter(|(_, who, at)| who == inviter && *at >= since)
+                .count();
+            return Ok(count as i64);
+        };
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM tenants WHERE invited_by = $1 AND created_at >= $2",
+        )
+        .bind(inviter)
+        .bind(since)
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| SunbornError::database(e.to_string()))?;
+        Ok(count)
+    }
+
+    /// The tenant's applied tier and model allowlist, if the row exists.
+    ///
+    /// A missing row returns `None` so callers can keep pre-migration behaviour;
+    /// a malformed allowlist is an error rather than a silent `*`, because
+    /// defaulting a corrupt policy to unrestricted would fail open on cost.
+    pub async fn get_tenant_tier_defaults(
+        &self,
+        tenant_id: &str,
+    ) -> Result<Option<(String, Vec<String>)>> {
+        let Some(pool) = self.get_pool().await else {
+            return Ok(None);
+        };
+        let row = sqlx::query("SELECT tier, default_allowed_models FROM tenants WHERE id = $1")
+            .bind(tenant_id)
+            .fetch_optional(&pool)
+            .await
+            .map_err(|e| SunbornError::database(e.to_string()))?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let tier: String = row
+            .try_get("tier")
+            .map_err(|e| SunbornError::database(e.to_string()))?;
+        let models_value: serde_json::Value = row
+            .try_get("default_allowed_models")
+            .map_err(|e| SunbornError::database(e.to_string()))?;
+        let models: Vec<String> = serde_json::from_value(models_value).map_err(|e| {
+            SunbornError::database(format!(
+                "tenant {tenant_id} has a malformed model allowlist: {e}"
+            ))
+        })?;
+        Ok(Some((tier, models)))
     }
 
     /// Sets the aggregate free-pool ceiling shared by every replica.
