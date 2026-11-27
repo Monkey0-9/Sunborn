@@ -310,6 +310,7 @@ async fn benchmark_five_gate_ablation_b0_through_b6() {
                     "session_id": "sess-owner",
                     "context_digest": sunborn_identity::IdentityEngine::compute_context_digest(&seed_req),
                     "certificate": stored_cert,
+                    "embedding_fingerprint": embedder.embedding_fingerprint(),
                 }),
                 created_at: chrono::Utc::now(),
             })

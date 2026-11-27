@@ -783,7 +783,9 @@ mod tests {
                     prompt: prompt.into(),
                     content: content.into(),
                     vector: query_vec.clone(),
-                    metadata: serde_json::json!({}),
+                    metadata: serde_json::json!({
+                        "embedding_fingerprint": embedder.embedding_fingerprint(),
+                    }),
                     created_at: Utc::now(),
                 })
                 .await
@@ -819,7 +821,9 @@ mod tests {
                 prompt: prompt.into(),
                 content: "Sunborn uses multi-tier caching (C0-C5) and exact hash lookups.".into(),
                 vector: vec,
-                metadata: serde_json::json!({}),
+                metadata: serde_json::json!({
+                    "embedding_fingerprint": embedder.embedding_fingerprint(),
+                }),
                 created_at: Utc::now(),
             })
             .await

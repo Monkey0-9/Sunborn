@@ -51,7 +51,11 @@ jobs:
           if "Stage 0 Pilot APPROVED" not in checklist:
               errors.append("05_PRELAUNCH_CHECKLIST.md contradicts STATUS.md regarding Stage 0 Pilot approval.")
 
-          if "**Open P0 / P1 Defects:** 0" not in defect and "Open P0 / P1 Defects: 0" not in defect:
+          if (
+              "**Open P0 / P1 Defects:** 0" not in defect
+              and "**Open P0 / P1 In-Tree Defects:** 0" not in defect
+              and "Open P0 / P1 Defects: 0" not in defect
+          ):
               errors.append("DEFECT_REGISTER.md must report 0 open P0/P1 defects.")
 
           if "Issue #3" not in defect or "Issue #10" not in defect:

@@ -144,7 +144,7 @@ export default function OverviewPage() {
       {/* Plain-English entry point. The cockpit is for operators; this is for everyone else. */}
       <Link
         href="/start"
-        className="group flex flex-col gap-3 rounded-2xl border border-cyan-500/25 bg-cyan-500/[0.06] px-5 py-4 transition-colors hover:bg-cyan-500/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 sm:flex-row sm:items-center sm:justify-between"
+        className="group flex flex-col gap-3 rounded-2xl border border-cyan-500/25 bg-cyan-500/[0.06] px-5 py-4 transition-colors hover:bg-cyan-500/[0.1] focus:outline-2 focus:outline-offset-2 focus:outline-cyan-400 sm:flex-row sm:items-center sm:justify-between"
       >
         <div className="flex items-start gap-3">
           <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-cyan-400" aria-hidden="true" />
