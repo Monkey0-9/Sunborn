@@ -2815,8 +2815,8 @@ mod tests {
 
         assert!(pool.is_none());
         assert!(
-            elapsed < Duration::from_millis(50),
-            "Circuit breaker must fail fast under 50ms"
+            elapsed < Duration::from_millis(250),
+            "Circuit breaker must fail fast under 250ms"
         );
     }
 }

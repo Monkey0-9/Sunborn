@@ -263,24 +263,30 @@ async fn test_shadow_mode_executes_origin_and_records_calibration_report() {
         "SHADOW_MODE_ORIGIN_EXECUTED"
     );
 
-    // Allow spawned shadow comparison task to complete
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-    let report_resp = app
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri("/v1/governance/shadow-report")
-                .header("x-api-key", "key-enterprise-fintech")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(report_resp.status(), StatusCode::OK);
-    let report: serde_json::Value =
-        serde_json::from_slice(&report_resp.into_body().collect().await.unwrap().to_bytes())
+    // Allow spawned shadow comparison task to complete without relying on a fixed sleep.
+    let mut report = serde_json::Value::Null;
+    for _ in 0..20 {
+        let report_resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/governance/shadow-report")
+                    .header("x-api-key", "key-enterprise-fintech")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
             .unwrap();
+        assert_eq!(report_resp.status(), StatusCode::OK);
+        report =
+            serde_json::from_slice(&report_resp.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
+        if report["total_evaluations"].as_u64().unwrap_or(0) >= 1 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
     assert_eq!(report["shadow_mode_enabled"], true);
     assert!(report["total_evaluations"].as_u64().unwrap_or(0) >= 1);
 }
